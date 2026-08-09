@@ -194,11 +194,11 @@ function Toast({
       role="alert"
       style={{
         pointerEvents: 'auto',
-        background: 'var(--bg-elevated, #111827)',
+        background: 'var(--bg-elevated, var(--bg-elevated))',
         border: '1px solid var(--error-border, rgba(239,68,68,0.5))',
         borderRadius: 'var(--radius-md, 8px)',
         padding: '12px 14px',
-        color: 'var(--text-primary, #f0f4ff)',
+        color: 'var(--text-primary, var(--text-primary))',
         fontFamily: 'var(--font-body, system-ui, sans-serif)',
         fontSize: 14,
         boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
@@ -207,7 +207,7 @@ function Toast({
     >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--error, #f87171)', flexShrink: 0 }}>
+        <span style={{ color: 'var(--error, var(--error))', flexShrink: 0 }}>
           <IconAlert />
         </span>
         <span
@@ -222,7 +222,7 @@ function Toast({
         </span>
         <span
           style={{
-            color: 'var(--text-muted, #5a6480)',
+            color: 'var(--text-muted, var(--text-muted))',
             fontSize: 12,
             marginLeft: 'auto',
             flexShrink: 0,
@@ -258,8 +258,8 @@ function Toast({
           style={{
             ...iconBtnStyle,
             color: copied
-              ? 'var(--success, #22c55e)'
-              : 'var(--text-muted, #5a6480)',
+              ? 'var(--success, var(--success))'
+              : 'var(--text-muted, var(--text-muted))',
           }}
         >
           {copied ? <IconCheck /> : <IconCopy />}
@@ -290,7 +290,7 @@ function Toast({
         style={{
           marginTop: 2,
           fontSize: 12,
-          color: 'var(--text-muted, #5a6480)',
+          color: 'var(--text-muted, var(--text-muted))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -305,7 +305,7 @@ function Toast({
           style={{
             marginTop: 8,
             padding: 10,
-            background: 'var(--bg-deep, #050810)',
+            background: 'var(--bg-deep, var(--bg-deep))',
             border: '1px solid var(--border, rgba(136,146,176,0.15))',
             borderRadius: 'var(--radius-md, 8px)',
             fontSize: 12,
@@ -315,7 +315,7 @@ function Toast({
             overflowY: 'auto',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            color: 'var(--text-secondary, #8892b0)',
+            color: 'var(--text-secondary, var(--text-secondary))',
           }}
         >
           {JSON.stringify(
@@ -347,7 +347,7 @@ const iconBtnStyle: React.CSSProperties = {
   border: 'none',
   cursor: 'pointer',
   padding: 4,
-  color: 'var(--text-muted, #5a6480)',
+  color: 'var(--text-muted, var(--text-muted))',
   display: 'flex',
   alignItems: 'center',
   flexShrink: 0,

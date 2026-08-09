@@ -92,7 +92,7 @@ function PrevScoreCard({ days }: WidgetCardProps) {
 
 type UsageMetric = 'activeUsers' | 'runs' | 'tokens' | 'cost';
 const segBtn = (active: boolean): React.CSSProperties => ({
-  padding: '4px 9px', borderRadius: 7, border: '1px solid var(--border-subtle)',
+  padding: '4px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
   background: active ? 'var(--coral-bright)' : 'var(--bg-base)', color: active ? '#fff' : 'var(--text-secondary)',
   fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer',
 });

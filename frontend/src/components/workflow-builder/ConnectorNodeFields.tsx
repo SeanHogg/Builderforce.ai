@@ -29,7 +29,7 @@ const inputStyle: React.CSSProperties = {
   padding: '7px 9px',
   fontSize: 12.5,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 7,
+  borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
   boxSizing: 'border-box',

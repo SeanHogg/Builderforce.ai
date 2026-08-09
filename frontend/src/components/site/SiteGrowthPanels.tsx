@@ -34,7 +34,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--surface, #ffffff)',
   border: '1px solid var(--border, #e5e7eb)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 'clamp(12px, 3vw, 20px)',
   marginTop: 16,
 };
@@ -51,19 +51,19 @@ const input: React.CSSProperties = {
   flex: '1 1 12rem',
   minWidth: 0,
   padding: '8px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #e5e7eb)',
   background: 'var(--surface-2, #f9fafb)',
-  color: 'var(--text-primary, #111827)',
+  color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
 };
 
 const button: React.CSSProperties = {
   padding: '8px 14px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #e5e7eb)',
   background: 'var(--surface-2, #f9fafb)',
-  color: 'var(--text-primary, #111827)',
+  color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
   cursor: 'pointer',
   minHeight: 36,
@@ -86,9 +86,9 @@ function DnsValue({ children }: { children: string }) {
         overflowX: 'auto',
         whiteSpace: 'nowrap',
         padding: '6px 8px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         background: 'var(--surface-2, #f3f4f6)',
-        color: 'var(--text-primary, #111827)',
+        color: 'var(--text-primary, var(--bg-elevated))',
         border: '1px solid var(--border, #e5e7eb)',
         fontSize: 12,
       }}
@@ -107,7 +107,7 @@ function Pill({ tone, children }: { tone: 'ok' | 'pending' | 'bad'; children: Re
   }[tone];
   return (
     <span style={{
-      background: palette.bg, color: palette.fg, borderRadius: 999,
+      background: palette.bg, color: palette.fg, borderRadius: 'var(--radius-full)',
       padding: '2px 10px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
     }}>
       {children}
@@ -163,7 +163,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
   return (
     <section style={card} aria-labelledby="site-domain-heading">
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-        <h3 id="site-domain-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, #111827)' }}>
+        <h3 id="site-domain-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, var(--bg-elevated))' }}>
           {t('title')}
         </h3>
         {state.hostname && <Pill tone={toneForDomain(state.status)}>{t(`status.${state.status}`)}</Pill>}
@@ -288,7 +288,7 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
 
   return (
     <section style={card} aria-labelledby="site-forms-heading">
-      <h3 id="site-forms-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, #111827)' }}>
+      <h3 id="site-forms-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, var(--bg-elevated))' }}>
         {t('title')}
       </h3>
       <p style={{ margin: '6px 0 12px', fontSize: 13, color: 'var(--text-muted, #6b7280)' }}>
@@ -298,11 +298,11 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
       <div style={{ display: 'grid', gap: 10 }}>
         {collections.map((collection) => (
           <div key={collection.id} style={{
-            border: '1px solid var(--border, #e5e7eb)', borderRadius: 10, padding: 12,
+            border: '1px solid var(--border, #e5e7eb)', borderRadius: 'var(--radius-lg)', padding: 12,
             background: 'var(--surface-2, #f9fafb)',
           }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-              <strong style={{ fontSize: 14, color: 'var(--text-primary, #111827)' }}>{collection.name}</strong>
+              <strong style={{ fontSize: 14, color: 'var(--text-primary, var(--bg-elevated))' }}>{collection.name}</strong>
               <span style={{ fontSize: 12, color: 'var(--text-muted, #6b7280)' }}>
                 {t('submissionCount', { count: collection.recordCount })}
               </span>
@@ -334,8 +334,8 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
                           <td style={{ padding: 6, color: 'var(--text-muted, #6b7280)', whiteSpace: 'nowrap' }}>
                             {new Date(record.createdAt).toLocaleString()}
                           </td>
-                          <td style={{ padding: 6, color: 'var(--text-primary, #111827)' }}>{record.email ?? '—'}</td>
-                          <td style={{ padding: 6, color: 'var(--text-primary, #111827)' }}>
+                          <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>{record.email ?? '—'}</td>
+                          <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>
                             {Object.entries(record.payload).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
                           </td>
                         </tr>
@@ -393,7 +393,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
   return (
     <section style={card} aria-labelledby="site-traffic-heading">
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-        <h3 id="site-traffic-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, #111827)' }}>
+        <h3 id="site-traffic-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, var(--bg-elevated))' }}>
           {t('title')}
         </h3>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -409,7 +409,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
                 minHeight: 30,
                 fontSize: 12,
                 background: days === option ? 'var(--accent, #2563eb)' : 'var(--surface-2, #f9fafb)',
-                color: days === option ? 'var(--text-on-accent, #ffffff)' : 'var(--text-primary, #111827)',
+                color: days === option ? 'var(--text-on-accent, #ffffff)' : 'var(--text-primary, var(--bg-elevated))',
                 borderColor: days === option ? 'var(--accent, #2563eb)' : 'var(--border, #e5e7eb)',
               }}
             >
@@ -442,7 +442,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
                 minWidth: 2,
                 height: `${Math.max(4, (day.pageViews / peak) * 100)}%`,
                 background: 'var(--accent, #2563eb)',
-                borderRadius: 2,
+                borderRadius: 'var(--radius-sm)',
                 opacity: 0.85,
               }}
             />
@@ -460,11 +460,11 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
 function Stat({ label: name, value }: { label: string; value: number }) {
   return (
     <div style={{
-      border: '1px solid var(--border, #e5e7eb)', borderRadius: 10, padding: 10,
+      border: '1px solid var(--border, #e5e7eb)', borderRadius: 'var(--radius-lg)', padding: 10,
       background: 'var(--surface-2, #f9fafb)',
     }}>
       <div style={label}>{name}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, #111827)' }}>
+      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, var(--bg-elevated))' }}>
         {value.toLocaleString()}
       </div>
     </div>

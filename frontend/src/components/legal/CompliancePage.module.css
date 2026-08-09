@@ -165,7 +165,7 @@
   min-height: 38px;
   padding: 7px 10px;
   color: var(--text-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.25;
@@ -188,7 +188,7 @@
   padding: clamp(20px, 4vw, 28px);
   background: color-mix(in srgb, var(--surface-card-strong) 94%, transparent);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
 }
 
 .section h2 { margin: 0 0 14px; }
@@ -203,7 +203,7 @@
   color: var(--text-secondary);
   background: linear-gradient(135deg, var(--surface-cyan-soft), color-mix(in srgb, var(--surface-cyan-soft) 35%, transparent));
   border: 1px solid color-mix(in srgb, var(--cyan-bright) 24%, var(--border-subtle));
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
 }
 
 .callout > span {
@@ -260,7 +260,7 @@
   padding: 24px;
   background: linear-gradient(135deg, var(--surface-card-strong), color-mix(in srgb, var(--surface-card-strong) 88%, var(--coral-bright)));
   border: 1px solid var(--border-accent);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
 }
 
@@ -315,7 +315,7 @@
     padding: 7px 12px;
     background: color-mix(in srgb, var(--surface-card-strong) 92%, transparent);
     border: 1px solid var(--border-subtle);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     scroll-snap-align: start;
     white-space: nowrap;
   }

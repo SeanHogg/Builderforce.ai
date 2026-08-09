@@ -71,7 +71,7 @@ export function ConnectToggleButton({
       style={{
         flexShrink: 0,
         padding: '6px 12px',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         fontSize: 12,
         fontWeight: 650,
         cursor: disabled || busy ? 'default' : 'pointer',

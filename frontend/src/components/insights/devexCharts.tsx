@@ -83,7 +83,7 @@ export function SentimentBar({ sentiment }: { sentiment: DevexDimensionSentiment
   const seg = (n: number, bg: string) =>
     n > 0 ? <div style={{ width: `${(n / total) * 100}%`, background: bg, height: '100%' }} /> : null;
   return (
-    <div style={{ display: 'flex', width: 160, height: 12, borderRadius: 4, overflow: 'hidden', background: 'var(--border-subtle)' }}>
+    <div style={{ display: 'flex', width: 160, height: 12, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--border-subtle)' }}>
       {seg(sentiment.negative, '#d9776b')}
       {seg(sentiment.neutral, '#cbd0d6')}
       {seg(sentiment.positive, '#3f9e6f')}
@@ -120,7 +120,7 @@ export function DevexIndexCard({
 }: { score: number; trendDelta: number | null; benchmarkDelta: number | null; percentile: BenchmarkPercentile }) {
   const t = useTranslations('insights');
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 18, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 }}>
       <ScoreRing score={score} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{t('devex.index')}</div>
@@ -161,7 +161,7 @@ export function TopicTable({ rows, dimLabel }: { rows: DevexDimensionScore[]; di
               <td style={{ ...td, color: 'var(--text-muted)' }}>#{r.rank}</td>
               <td style={{ ...td, fontWeight: 600 }}>{dimLabel(r.dimension)}</td>
               <td style={td}>
-                <span style={{ display: 'inline-block', minWidth: 34, textAlign: 'center', padding: '2px 8px', borderRadius: 6, background: scoreColor(r.avgScore), color: TILE_INK, fontWeight: 700 }}>
+                <span style={{ display: 'inline-block', minWidth: 34, textAlign: 'center', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: scoreColor(r.avgScore), color: TILE_INK, fontWeight: 700 }}>
                   {Math.round(r.avgScore)}
                 </span>
               </td>
@@ -183,7 +183,7 @@ export function TopicTable({ rows, dimLabel }: { rows: DevexDimensionScore[]; di
 function SegmentKindToggle({ value, onChange, available }: { value: DevexSegmentKind; onChange: (k: DevexSegmentKind) => void; available: DevexSegmentKind[] }) {
   const t = useTranslations('insights');
   return (
-    <div style={{ display: 'inline-flex', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ display: 'inline-flex', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
       {DEVEX_SEGMENT_KINDS.map((k) => {
         const on = k === value;
         const enabled = available.includes(k);
@@ -223,7 +223,7 @@ export function SegmentHeatmap({
     padding: '10px 6px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 600,
     color: score == null ? 'var(--text-muted)' : TILE_INK,
     background: score == null ? 'transparent' : scoreColor(score),
-    borderRadius: 6,
+    borderRadius: 'var(--radius-sm)',
   });
   const everyoneByDim = new Map(everyone.map((d) => [d.dimension, d.avgScore]));
   const everyoneOverall = everyone.length ? Math.round(everyone.reduce((a, d) => a + d.avgScore, 0) / everyone.length) : 0;
@@ -282,7 +282,7 @@ export function SegmentHeatmap({
 export function AnonymityNote({ threshold }: { threshold: number }) {
   const t = useTranslations('insights');
   return (
-    <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+    <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
       <span style={{ fontWeight: 600 }}>🛡 {t('devex.anonymityTitle', { n: threshold })}</span>
       <div style={{ marginTop: 4 }}>{t('devex.anonymityBody', { n: threshold })}</div>
     </div>
@@ -326,7 +326,7 @@ export function ParticipationBySegment({ bySegment }: { bySegment: Partial<Recor
         {rows.map((r) => (
           <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ width: 90, fontSize: '0.8rem', textAlign: 'right', color: 'var(--text-secondary)' }}>{r.label}</span>
-            <div style={{ flex: 1, height: 14, background: 'var(--border-subtle)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ flex: 1, height: 14, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
               <div style={{ width: `${(r.count / max) * 100}%`, height: '100%', background: '#2563eb' }} />
             </div>
             <span style={{ width: 32, fontSize: '0.8rem', fontWeight: 600 }}>{r.count}</span>
@@ -402,7 +402,7 @@ export function BenchmarkModal({
       onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
     >
-      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 24, width: 'min(560px, 92vw)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 24, width: 'min(560px, 92vw)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>{t('devex.benchmarkModalTitle')}</h3>
           <button type="button" onClick={onClose} aria-label={t('common.close')} style={{ background: 'transparent', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
@@ -414,7 +414,7 @@ export function BenchmarkModal({
             <button
               key={p} type="button" onClick={() => setSel(p)}
               style={{
-                padding: '10px 22px', borderRadius: 10, cursor: 'pointer', fontWeight: 600,
+                padding: '10px 22px', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontWeight: 600,
                 border: `1.5px solid ${sel === p ? 'var(--accent, #7c3aed)' : 'var(--border-subtle)'}`,
                 background: sel === p ? 'color-mix(in srgb, var(--accent, #7c3aed) 12%, transparent)' : 'transparent',
                 color: 'var(--text-primary)',
@@ -426,8 +426,8 @@ export function BenchmarkModal({
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('devex.benchmarkFootnote', { companies })}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>{t('common.cancel')}</button>
-          <button type="button" onClick={() => onApply(sel)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent, #7c3aed)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>{t('devex.setBenchmark')}</button>
+          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>{t('common.cancel')}</button>
+          <button type="button" onClick={() => onApply(sel)} style={{ padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #7c3aed)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: 'pointer' }}>{t('devex.setBenchmark')}</button>
         </div>
       </div>
     </div>

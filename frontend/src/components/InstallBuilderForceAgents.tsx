@@ -25,11 +25,11 @@ export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAg
           style={{
             background: 'rgba(0,229,204,0.06)',
             border: '1px solid rgba(0,229,204,0.2)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             padding: '10px 14px',
             marginBottom: 20,
             fontSize: 12,
-            color: 'var(--cyan-bright, #00e5cc)',
+            color: 'var(--cyan-bright, var(--cyan-bright))',
           }}
         >
           {t('tokenPreconfigured')}

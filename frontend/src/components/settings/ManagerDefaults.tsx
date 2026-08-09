@@ -36,7 +36,7 @@ import {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 const sectionTitle: React.CSSProperties = {

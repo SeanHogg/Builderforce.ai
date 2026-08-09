@@ -57,7 +57,7 @@ export default function AgentExecutionControl() {
     <div style={{
       background: disabled ? 'rgba(244,114,94,0.08)' : 'var(--bg-base)',
       border: `1px solid ${disabled ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
-      borderRadius: 12, padding: 20, marginTop: 20,
+      borderRadius: 'var(--radius-lg)', padding: 20, marginTop: 20,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 420px' }}>
@@ -76,7 +76,7 @@ export default function AgentExecutionControl() {
             disabled={saving || enabled == null}
             onClick={() => void change(disabled)}
             style={{
-              minHeight: 40, padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+              minHeight: 40, padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 700,
               border: `1px solid ${disabled ? 'var(--accent, #6366f1)' : 'var(--coral-bright, #f4726e)'}`,
               background: disabled ? 'var(--accent, #6366f1)' : 'rgba(244,114,94,0.1)',
               color: disabled ? '#fff' : 'var(--coral-bright, #f4726e)',

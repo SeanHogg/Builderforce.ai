@@ -37,7 +37,7 @@ interface Props {
 
 type StatusTone = { fg: string; bg: string; icon: string };
 const TONE: Record<string, StatusTone> = {
-  pass: { fg: 'var(--success, #22c55e)', bg: 'rgba(34,197,94,0.12)', icon: '✓' },
+  pass: { fg: 'var(--success, var(--success))', bg: 'rgba(34,197,94,0.12)', icon: '✓' },
   fail: { fg: 'var(--error, #ef4444)', bg: 'rgba(239,68,68,0.12)', icon: '✕' },
   skip: { fg: 'var(--text-muted)', bg: 'var(--bg-elevated)', icon: '–' },
 };
@@ -120,7 +120,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('subtitle')}</p>
 
         {!hasBuild ? (
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px' }}>
             {t('noBuildNodes')}
           </div>
         ) : (
@@ -135,7 +135,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                   padding: '8px 16px', fontSize: 13, fontWeight: 700,
                   background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, #f4726e)',
                   color: running ? 'var(--text-muted)' : '#fff',
-                  border: '1px solid var(--border-subtle)', borderRadius: 8,
+                  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                   cursor: running || stepCount === 0 ? 'default' : 'pointer', opacity: running || stepCount === 0 ? 0.7 : 1,
                 }}
               >
@@ -153,8 +153,8 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                   {rows.map((r) => {
                     const tone = TONE[r.status] ?? TONE.skip;
                     return (
-                      <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '7px 10px' }}>
-                        <span aria-hidden style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 5, background: tone.bg, color: tone.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '7px 10px' }}>
+                        <span aria-hidden style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 'var(--radius-sm)', background: tone.bg, color: tone.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
                           {tone.icon}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -180,9 +180,9 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
               <div
                 role="status"
                 style={{
-                  fontSize: 12.5, borderRadius: 10, padding: '10px 12px',
+                  fontSize: 12.5, borderRadius: 'var(--radius-lg)', padding: '10px 12px',
                   background: result.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                  border: `1px solid ${result.ok ? 'var(--success, #22c55e)' : 'var(--error, #ef4444)'}`,
+                  border: `1px solid ${result.ok ? 'var(--success, var(--success))' : 'var(--error, #ef4444)'}`,
                   color: 'var(--text-primary)',
                 }}
               >
@@ -207,7 +207,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                   <>
                     <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>📦 {t('artifactReady')}</div>
                     {seededVersion != null && (
-                      <div style={{ fontSize: 12.5, color: 'var(--success, #22c55e)' }}>✓ {t('seeded', { version: seededVersion })}</div>
+                      <div style={{ fontSize: 12.5, color: 'var(--success, var(--success))' }}>✓ {t('seeded', { version: seededVersion })}</div>
                     )}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button
@@ -217,7 +217,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                         title={projectId == null ? t('seedNeedsProject') : undefined}
                         style={{
                           padding: '7px 14px', fontSize: 12.5, fontWeight: 600,
-                          background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8,
+                          background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
                           cursor: !canSeed || seeding ? 'not-allowed' : 'pointer', opacity: !canSeed || seeding ? 0.55 : 1,
                         }}
                       >
@@ -226,7 +226,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                       <button
                         type="button"
                         onClick={download}
-                        style={{ padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
+                        style={{ padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                       >
                         ⬇ {t('download')}
                       </button>
@@ -242,7 +242,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
         )}
 
         {error && (
-          <div role="alert" style={{ fontSize: 12.5, color: 'var(--error-text, #fca5a5)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border, #ef4444)', borderRadius: 8, padding: '8px 12px' }}>
+          <div role="alert" style={{ fontSize: 12.5, color: 'var(--error-text, #fca5a5)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border, #ef4444)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
             ⚠ {error}
           </div>
         )}
@@ -294,7 +294,7 @@ function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
     <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('metricsTitle')}</span>
-        {converged && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success, #22c55e)' }}>✓ {t('mConverged')}</span>}
+        {converged && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success, var(--success))' }}>✓ {t('mConverged')}</span>}
       </div>
 
       {spark && (
@@ -313,7 +313,7 @@ function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
       {tiles.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 8 }}>
           {tiles.map((tile) => (
-            <div key={tile.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '7px 10px' }}>
+            <div key={tile.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '7px 10px' }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{tile.label}</div>
               <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{tile.value}</div>
             </div>

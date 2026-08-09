@@ -85,7 +85,7 @@ export function IdeProjectsContent({
       <div
         style={{
           border: '1px dashed var(--border-subtle)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           padding: '28px 16px',
           textAlign: 'center',
           color: 'var(--text-secondary)',
@@ -99,9 +99,9 @@ export function IdeProjectsContent({
           style={{
             display: 'inline-block',
             padding: '8px 16px',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             background: 'var(--coral-bright)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             textDecoration: 'none',
             fontSize: 14,
             fontWeight: 600,
@@ -131,7 +131,7 @@ export function IdeProjectsContent({
             key={p.id}
             style={
               highlightStorageProjectId != null && p.storageProjectId === highlightStorageProjectId
-                ? { borderRadius: 12, boxShadow: '0 0 0 2px var(--coral-bright)' }
+                ? { borderRadius: 'var(--radius-lg)', boxShadow: '0 0 0 2px var(--coral-bright)' }
                 : undefined
             }
           >

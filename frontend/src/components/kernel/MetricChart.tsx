@@ -101,7 +101,7 @@ export function MetricChart({
               {delta !== null ? (
                 <p
                   className="m-0 text-xs tabular-nums"
-                  style={{ color: delta >= 0 ? 'var(--success, #22c55e)' : 'var(--danger-text, var(--error-text))' }}
+                  style={{ color: delta >= 0 ? 'var(--success, var(--success))' : 'var(--danger-text, var(--error-text))' }}
                 >
                   {delta >= 0 ? '+' : ''}{delta.toFixed(1)}%
                 </p>

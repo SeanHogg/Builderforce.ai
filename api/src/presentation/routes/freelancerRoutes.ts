@@ -79,18 +79,18 @@ const profileWithUserColumns = {
  *  columns that the Drizzle `freelancerReviews` model does not declare yet, so the
  *  correlated aggregates stay as SQL fragments (still parameter-safe). */
 const ratingColumns = {
-  avg_rating: sql<string | null>`(SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles.userId} AND r.direction = 'employer_to_freelancer')`,
-  rating_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles.userId} AND r.direction = 'employer_to_freelancer')::int`,
+  avg_rating: sql<string | null>`(SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer')`,
+  rating_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer')::int`,
 } as const;
 
 /** Extra reputation inputs the browse card's derived badge/JSS needs (list only). */
 const reputationColumns = {
-  again_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles.userId} AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int`,
-  distinct_clients: sql<number>`(SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles.userId} AND e.hired_at IS NOT NULL)::int`,
-  repeat_clients: sql<number>`(SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles.userId} AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int`,
-  awarded: sql<number>`(SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles.userId} AND e.hired_at IS NOT NULL)::int`,
-  activity_signals: sql<number>`(SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = ${freelancerProfiles.userId} AND s.occurred_at >= now() - interval '90 days')::int`,
-  earned_cents: sql<string>`(SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = ${freelancerProfiles.userId} AND i.status = 'paid')::bigint`,
+  again_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int`,
+  distinct_clients: sql<number>`(SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
+  repeat_clients: sql<number>`(SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int`,
+  awarded: sql<number>`(SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
+  activity_signals: sql<number>`(SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = ${freelancerProfiles}.user_id AND s.occurred_at >= now() - interval '90 days')::int`,
+  earned_cents: sql<string>`(SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = ${freelancerProfiles}.user_id AND i.status = 'paid')::bigint`,
 } as const;
 
 /** `freelancer_engagements.*` under the snake_case keys `mapEngagement` reads. */

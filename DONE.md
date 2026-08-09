@@ -6917,3 +6917,29 @@ Confirmation pass over the "VS Code extension" roadmap section. Fixed the genuin
 - **API compile breakages from concurrent edits** cleared (2026-07-03) — duplicate `timeEntries` / missing hired-video SDK / Neon typing / stale fixtures.
 - **Multi-track gap-burndown sweeps** (2026-06-14 & 2026-06-21) — closed the code-actionable subset across T1–T10 (Select component, canonical footer, `/v1/messages` cap, PR-dispatch repo resolution, host-auth dual-branch, `runtime_support` enforcement, async credential writes, webhook retry, board-sync poller, orphaned-task reassign, migration renumber/transaction, track-scope guard, i18n leaf pages, PWA toast stack, slim `list_tasks`, metadata-driven schema strip, `pr_opened` claim, on-prem `ask_human`, embed error reporter, `workitem.released`, host BI config, feedback triage).
 - **Global tenant→project scope** — `ProjectScopeContext` + TopBar switcher (null=All); `usePmScope` follows it; IDE projects as first-class child of Project (mig 0224); voice/repo/LLM modalities.
+## ✅ RESOLVED 2026-08-08 — Roadmap verification cleanup
+
+- Cloud auto-run now classifies platform/infrastructure failures separately and excludes them from the ticket failure breaker.
+- The shared on-prem Node capability registry advertises `human`, `ask_human` is implemented, and dispatched task context supplies `taskId`.
+- Gateway vendor modules declare schema dialects, image pools carry vendor-qualified IDs, and image-vendor health probing is implemented.
+- Studio has its MP4 dependency, an Advanced refinement override, IDE modality-render coverage, and persisted voice-consent enforcement.
+- Embed theme/deep-link handling and the pre-built embedded distribution are present; governance schema, policy packs, and effective-gate routes are present.
+- QA-generated specs pass an explicit allow/deny validation gate; aggregation is keyset-paged with visible truncation; navigation, exploration dispatch, and opt-in staffed fix routing are wired.
+- Pitch competition object/group labels exist in all five locale catalogs.
+- `ROADMAP.md` is now T9-stewarded, has an exact-count CI guard, and links to the generated isolation manifest instead of carrying a divergent hand-maintained table.
+## ✅ RESOLVED 2026-08-08 — Agentic-platform residual safety pass
+
+The July bounded-context review was revalidated against PRD 21's unified IDEA-to-REAL
+experience and the consolidated PRD 20 model. The compatible, concrete residuals that
+could reuse existing owners shipped without adding parallel concepts: containers now
+relay the same lease/blackboard capability as Worker agents; a thrown run releases its
+leases immediately; cached memory is rechecked at wall-clock expiry; ticket-scoped
+memory is tenant-validated and reclaimed with its ticket; inactive Workforce agents
+are enforced as a per-agent quarantine beside the existing workspace fleet stop;
+accepted code-completion claims carry immutable tool-audit evidence edges; and the
+layering/roadmap guards now measure runtime dependencies and register integrity.
+
+The intentionally unimplemented remainder stays in ROADMAP: immutable definition
+versions, scoped credential delegation, trust-tiered context and outbound DLP,
+typed evidence contracts beyond code completion, global/per-run blast limits, semantic cloud recall, unified
+legacy memory stores, multi-repo leases, contention views, and rehearsal comparison.

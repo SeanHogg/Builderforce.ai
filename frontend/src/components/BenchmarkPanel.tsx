@@ -131,7 +131,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
   const accuracyBars: BarDatum[] = useMemo(() => {
     if (!result) return [];
     return [
-      { key: 'top1', label: t('metric.top1'), value: result.top1Accuracy * 100, color: 'var(--coral-bright, #4d9eff)' },
+      { key: 'top1', label: t('metric.top1'), value: result.top1Accuracy * 100, color: 'var(--coral-bright, var(--coral-bright))' },
       { key: 'topk', label: t('metric.topK', { k: result.topK }), value: result.topKAccuracy * 100, color: 'var(--success-text)' },
     ];
   }, [result, t]);
@@ -150,7 +150,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
     <div
       style={{
         background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-        borderRadius: 10, padding: '10px 12px', minWidth: 0,
+        borderRadius: 'var(--radius-lg)', padding: '10px 12px', minWidth: 0,
       }}
     >
       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -174,9 +174,9 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
       aria-pressed={mode === m}
       style={{
         fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem',
-        background: mode === m ? 'var(--coral-bright, #4d9eff)' : 'var(--bg-elevated)',
+        background: mode === m ? 'var(--coral-bright, var(--coral-bright))' : 'var(--bg-elevated)',
         color: mode === m ? '#fff' : 'var(--text-secondary)',
-        border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 12px',
+        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 12px',
         cursor: mode === m ? 'default' : 'pointer',
       }}
     >
@@ -215,7 +215,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
               disabled={models === null}
               style={{
                 width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', fontSize: '0.8rem',
+                border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
               }}
             >
               {models === null && <option>{t('running')}</option>}
@@ -247,7 +247,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           style={{
             width: '100%', resize: 'vertical', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.76rem',
             lineHeight: 1.5, background: 'var(--bg-deep)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px',
           }}
         />
       </div>
@@ -270,7 +270,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
               onChange={(e) => setEpochs(Math.max(5, Math.min(100, parseInt(e.target.value, 10) || 25)))}
               style={{
                 width: 88, background: 'var(--bg-deep)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px', fontSize: '0.8rem',
+                border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '0.8rem',
               }}
             />
           </div>
@@ -281,9 +281,9 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           disabled={runDisabled}
           style={{
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem',
-            background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, #4d9eff)',
+            background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, var(--coral-bright))',
             color: running ? 'var(--text-muted)' : '#fff',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 16px',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
             cursor: runDisabled ? 'default' : 'pointer', opacity: runDisabled ? 0.6 : 1,
           }}
         >
@@ -299,7 +299,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           role="alert"
           style={{
             background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: 'var(--error-text)',
-            borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
           ⚠ {error}
@@ -334,7 +334,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           {/* Accuracy bars */}
           <div
             style={{
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px 14px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px',
             }}
           >
             <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginBottom: 10, fontWeight: 600 }}>
@@ -364,8 +364,8 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
             <div
               style={{
                 background: verdict === 'strong' ? 'rgba(34,197,94,0.12)' : verdict === 'good' ? 'rgba(77,158,255,0.12)' : 'var(--warning-bg, rgba(245,158,11,0.12))',
-                border: `1px solid ${verdict === 'strong' ? '#22c55e' : verdict === 'good' ? 'var(--coral-bright, #4d9eff)' : '#f59e0b'}`,
-                borderRadius: 10, padding: '10px 14px',
+                border: `1px solid ${verdict === 'strong' ? 'var(--success)' : verdict === 'good' ? 'var(--coral-bright, var(--coral-bright))' : 'var(--warning)'}`,
+                borderRadius: 'var(--radius-lg)', padding: '10px 14px',
               }}
             >
               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -386,7 +386,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
             <div
               style={{
                 fontFamily: "'JetBrains Mono', monospace", fontSize: '0.76rem', color: 'var(--text-primary)',
-                background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px',
+                background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px',
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}
             >

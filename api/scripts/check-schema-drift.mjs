@@ -224,6 +224,12 @@ for (const file of sqlFiles) {
   // Apply this migration's renames AFTER its creates, in file order, so a later
   // migration's rename mutates columns/tables added by earlier ones.
   applyRenames(raw, text);
+
+  // Re-apply drops after renames as well. This handles `RENAME TO new; DROP COLUMN`
+  // sequences in one migration without requiring a full SQL statement parser.
+  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+DROP COLUMN(?:\s+IF EXISTS)?\s+([a-z_][a-z_0-9]*)/gi)) {
+    migratedColumns.get(m[1].toLowerCase())?.delete(m[2].toLowerCase());
+  }
 }
 
 return migratedColumns;

@@ -19,7 +19,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -37,7 +37,7 @@ const buttonPrimary: React.CSSProperties = {
   background: 'var(--surface-interactive)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
 };
 
@@ -48,7 +48,7 @@ const buttonDanger: React.CSSProperties = {
   background: 'none',
   color: 'var(--coral-bright, #f4726e)',
   border: '1px solid var(--coral-bright, #f4726e)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   cursor: 'pointer',
 };
 
@@ -206,7 +206,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
           style={{
             width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
             background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             boxSizing: 'border-box',
           }}
         />
@@ -252,7 +252,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
                 <div
                   key={k.id}
                   style={{
-                    padding: '10px 12px', borderRadius: 8,
+                    padding: '10px 12px', borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)',
                     opacity: revoked ? 0.5 : 1,
@@ -270,7 +270,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
                         <span>{k.name}</span>
                         <AllowedOriginsBadge allowedOrigins={k.allowedOrigins} />
                         {revoked && (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
                             {t('revoked')}
                           </span>
                         )}

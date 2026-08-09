@@ -38,16 +38,16 @@ import {
  */
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '7px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '7px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '5px 9px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const sectionPad: React.CSSProperties = { padding: 20 };
 
@@ -208,7 +208,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
       </div>
       {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noLanes')}</div>}
       {lanes.map((lane, index) => (
-        <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+        <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title={t('moveLeft')} onClick={() => moveLane(index, -1)}>▲</button>
@@ -372,7 +372,7 @@ function LaneRequirementsRow({ board, lane, patchLane }: {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
               {reqs.map((r) => (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px' }}>
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 10px' }}>
                   <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{kindLabel(r.kind)}</span>
                   <span style={{ color: 'var(--text-primary)' }}>{r.ref}</span>
                   {r.responsibility && <span style={{ color: 'var(--text-muted)' }}>· {t(r.responsibility === 'owner' ? 'respOwner' : r.responsibility === 'reviewer' ? 'respReviewer' : 'respContributor')}</span>}
@@ -449,7 +449,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
       {agents.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
           <span style={{ fontWeight: 600 }}>{a.name ?? a.role}</span>
-          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, textTransform: 'capitalize' }} title={t('roleTitle')}>
+          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 'var(--radius-sm)', textTransform: 'capitalize' }} title={t('roleTitle')}>
             {a.role}
           </span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>

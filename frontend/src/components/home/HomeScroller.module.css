@@ -80,13 +80,13 @@
   height: 2px;
   margin-top: 4px;
   background: var(--border-subtle);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .progressBar {
   height: 100%;
   background: var(--coral-bright);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   transition: width 160ms ease, transform 160ms ease;
   transform-origin: left;
 }

@@ -16,17 +16,17 @@ import { PmCard, PmEmpty, PmError } from './pmShared';
  * same source as the Gantt, so the books and the timeline never disagree.
  */
 const chip = (color: string): React.CSSProperties => ({
-  display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: '0.7rem',
-  fontWeight: 700, color: '#fff', background: color, whiteSpace: 'nowrap',
+  display: 'inline-block', padding: '2px 9px', borderRadius: 'var(--radius-full)', fontSize: '0.7rem',
+  fontWeight: 700, color: 'var(--text-on-accent)', background: color, whiteSpace: 'nowrap',
 });
 const btn = (active: boolean, color: string): React.CSSProperties => ({
-  padding: '4px 9px', borderRadius: 7, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+  padding: '4px 9px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
   border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
   background: active ? color : 'transparent', color: active ? '#fff' : 'var(--text-secondary)',
 });
 const primaryBtn: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
 };
 
 const KIND_ICON: Record<SpineNode['kind'], string> = {
@@ -97,7 +97,7 @@ export function PmoCostReconciliation() {
       {rows.length === 0 ? (
         <PmEmpty message={t('allClear')} />
       ) : (
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           {rows.map((n) => {
             const cls = n.effectiveCostClass;
             const inheritedConflict = n.anomaly;

@@ -450,7 +450,7 @@ function RegressionBadge({ evalPoint }: { evalPoint: ProjectEvermindEvalPoint | 
   const pct = Math.abs(frac) * 100;
   const tone: 'up' | 'down' | 'flat' = pct < 0.5 ? 'flat' : frac > 0 ? 'up' : 'down';
   const arrow = tone === 'up' ? '▲' : tone === 'down' ? '▼' : '≈';
-  const color = tone === 'up' ? '#22c55e' : tone === 'down' ? '#f87171' : 'var(--text-muted)';
+  const color = tone === 'up' ? 'var(--success)' : tone === 'down' ? 'var(--error)' : 'var(--text-muted)';
   const label = tone === 'flat' ? t('regFlat') : t('regDelta', { pct: pct.toFixed(1) });
   const title = t('regTooltip', {
     version: evalPoint.version,
@@ -464,7 +464,7 @@ function RegressionBadge({ evalPoint }: { evalPoint: ProjectEvermindEvalPoint | 
       aria-label={title}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.66rem', fontWeight: 700,
-        color, border: `1px solid ${color}`, borderRadius: 999, padding: '0px 6px',
+        color, border: `1px solid ${color}`, borderRadius: 'var(--radius-full)', padding: '0px 6px',
         fontVariantNumeric: 'tabular-nums',
       }}
     >
@@ -542,7 +542,7 @@ function Centered({ children, tone }: { children: React.ReactNode; tone?: 'error
   return (
     <div style={{
       position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      textAlign: 'center', padding: 24, color: tone === 'error' ? '#f87171' : 'var(--text-muted)', fontSize: '0.85rem',
+      textAlign: 'center', padding: 24, color: tone === 'error' ? 'var(--error)' : 'var(--text-muted)', fontSize: '0.85rem',
     }}>
       <span>{children}</span>
     </div>
@@ -554,10 +554,10 @@ function Centered({ children, tone }: { children: React.ReactNode; tone?: 'error
 const rootStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0,
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-  borderRadius: 14, padding: '16px 18px', color: 'var(--text-primary)',
+  borderRadius: 'var(--radius-lg)', padding: '16px 18px', color: 'var(--text-primary)',
 };
 const statStripStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, flexShrink: 0 };
-const statStyle: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '8px 12px' };
+const statStyle: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '8px 12px' };
 const legendStyle: React.CSSProperties = {
   display: 'flex', flexWrap: 'wrap', gap: '10px 20px', flexShrink: 0,
   borderTop: '1px solid var(--border-subtle)', paddingTop: 10,
@@ -591,21 +591,21 @@ const BRAINMAP_CSS = `
 .ev-brainmap .ev-region-badge { fill: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ev-brainmap .ev-core-label { fill: #fff; font-size: 11px; font-weight: 700; font-family: var(--font-display, system-ui); }
 .ev-brainmap .ev-core-emoji { dominant-baseline: middle; }
-.ev-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); }
-.ev-status-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
+.ev-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-subtle); background: var(--bg-elevated); }
+.ev-status-dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: currentColor; }
 .ev-status-live { color: var(--success-text); }
 .ev-status-frozen, .ev-status-dormant { color: var(--text-muted); }
 .ev-legend-tier { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ev-legend-heading { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 .ev-legend-rows { display: flex; flex-direction: column; gap: 3px; }
-.ev-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; max-width: 320px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: 0; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
+.ev-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; max-width: 320px; background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 2px 6px; margin: 0; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
 .ev-legend-item:hover { background: var(--bg-elevated, rgba(148,163,184,0.12)); }
 .ev-legend-item-on { border-color: var(--border-subtle, rgba(148,163,184,0.4)); background: var(--bg-elevated, rgba(148,163,184,0.14)); }
-.ev-legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.ev-legend-swatch { width: 11px; height: 11px; border-radius: var(--radius-sm); flex-shrink: 0; }
 .ev-legend-name { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
 .ev-legend-cap { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ev-retry { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 1px 9px; font-size: 0.74rem; cursor: pointer; margin-left: 4px; }
-.ev-brainmap .ev-training { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+.ev-retry { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: var(--radius-sm); padding: 1px 9px; font-size: 0.74rem; cursor: pointer; margin-left: 4px; }
+.ev-brainmap .ev-training { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 10px 12px; }
 .ev-brainmap .ev-training-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .ev-brainmap .ev-training-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ev-neocortex); }
 .ev-brainmap .ev-training-sub { font-size: 0.72rem; color: var(--text-muted); }

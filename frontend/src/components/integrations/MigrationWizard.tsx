@@ -31,21 +31,21 @@ type Step = (typeof STEPS)[number];
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   padding: 14,
 };
 const inputStyle: React.CSSProperties = {
   padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)',
-  borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
+  borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
   width: '100%', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 export interface MigrationWizardProps {
@@ -210,7 +210,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {error && (
-          <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)', background: 'var(--surface-2, rgba(220,38,38,0.08))', padding: '8px 12px', borderRadius: 8 }}>
+          <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)', background: 'var(--surface-2, rgba(220,38,38,0.08))', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
             {error}
           </div>
         )}

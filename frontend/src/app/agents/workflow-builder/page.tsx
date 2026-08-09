@@ -100,7 +100,7 @@ export default function WorkflowBuilderMarketingPage() {
               <h3
                 style={{
                   fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                  color: group === 'LLM Logic' ? '#00e5cc' : 'var(--text-muted, #8a8f9c)', margin: '0 0 10px',
+                  color: group === 'LLM Logic' ? 'var(--cyan-bright)' : 'var(--text-muted, #8a8f9c)', margin: '0 0 10px',
                 }}
               >
                 {group}{group === 'LLM Logic' ? '  · the differentiator' : ''}
@@ -112,7 +112,7 @@ export default function WorkflowBuilderMarketingPage() {
                     style={{
                       display: 'flex', gap: 11, alignItems: 'flex-start', padding: '13px 14px',
                       background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)',
-                      borderLeft: `3px solid ${m.accent}`, borderRadius: 10,
+                      borderLeft: `3px solid ${m.accent}`, borderRadius: 'var(--radius-lg)',
                     }}
                   >
                     <span style={{ fontSize: 20, lineHeight: 1 }}>{m.icon}</span>
@@ -137,7 +137,7 @@ export default function WorkflowBuilderMarketingPage() {
             {INTEGRATION_CATEGORIES.slice().sort((a, b) => a.order - b.order).map((cat) => {
               const items = INTEGRATIONS.filter((i) => i.category === cat.id);
               return (
-                <div key={cat.id} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderLeft: `3px solid ${cat.accent}`, borderRadius: 12 }}>
+                <div key={cat.id} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderLeft: `3px solid ${cat.accent}`, borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary, #e2e5ec)' }}>{cat.icon} {cat.label}</span>
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: cat.accent }}>{items.length}</span>
@@ -156,8 +156,8 @@ export default function WorkflowBuilderMarketingPage() {
           <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> How it works</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {HOW_IT_WORKS.map((s) => (
-              <div key={s.n} style={{ padding: '18px 18px 20px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--coral-bright, #f4726e)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15 }}>{s.n}</div>
+              <div key={s.n} style={{ padding: '18px 18px 20px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-lg)' }}>
+                <div style={{ width: 30, height: 30, borderRadius: 'var(--radius-md)', background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15 }}>{s.n}</div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary, #e2e5ec)', margin: '12px 0 6px' }}>{s.title}</div>
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted, #8a8f9c)', lineHeight: 1.5 }}>{s.body}</div>
               </div>

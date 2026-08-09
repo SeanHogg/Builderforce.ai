@@ -19,7 +19,7 @@ const FLAG_COLOR: Record<ReconFlag, { bg: string; fg: string }> = {
 };
 
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 
@@ -53,7 +53,7 @@ export function RdReconciliationLens() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, background: flagColor.bg, color: flagColor.fg, fontSize: '0.8rem', fontWeight: 700 }}>
+        <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 'var(--radius-full)', background: flagColor.bg, color: flagColor.fg, fontSize: '0.8rem', fontWeight: 700 }}>
           {t(`recon.flag.${flag}`)}
         </span>
         <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>

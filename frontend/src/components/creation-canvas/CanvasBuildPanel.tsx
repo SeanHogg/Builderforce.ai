@@ -59,7 +59,7 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }
           <button
             type="button"
             onClick={onClose}
-            style={{ padding: '8px 16px', borderRadius: 10, border: '1px solid var(--border-subtle, #2a3346)', background: 'var(--bg-elevated, #1a2233)', color: 'var(--text-primary, #f4f6fb)', cursor: 'pointer' }}
+            style={{ padding: '8px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle, #2a3346)', background: 'var(--bg-elevated, #1a2233)', color: 'var(--text-primary, #f4f6fb)', cursor: 'pointer' }}
           >
             {t('close')}
           </button>

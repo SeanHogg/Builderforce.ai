@@ -35,7 +35,7 @@ export default function AccountTypeChooser({
             aria-checked={active}
             onClick={() => onChange(opt.key)}
             style={{
-              textAlign: 'left', cursor: 'pointer', borderRadius: 12, padding: '12px 14px',
+              textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-lg)', padding: '12px 14px',
               background: active ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
               border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
               boxShadow: active ? '0 0 0 3px var(--surface-coral-soft)' : 'none',

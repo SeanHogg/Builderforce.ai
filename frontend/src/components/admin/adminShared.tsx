@@ -168,7 +168,7 @@ export function ModelPoolBadges({
             key={`${keyPrefix}-${m.model}`}
             style={{
               padding: '4px 8px',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               fontSize: 12,
               background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
               color: m.available ? 'var(--success-text)' : 'var(--error-text)',

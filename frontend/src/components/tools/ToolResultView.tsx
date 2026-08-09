@@ -18,11 +18,11 @@ import { RadarChart } from '@/components/charts/RadarChart';
  * the project score view and the workspace rollup — upgrading it lifts them all.
  */
 
-const TIER_COLOR = ['#ef4444', '#f59e0b', '#eab308', '#3b82f6', '#22c55e'];
+const TIER_COLOR = ['#ef4444', 'var(--warning)', '#eab308', '#3b82f6', 'var(--success)'];
 const tierColor = (n: number) => TIER_COLOR[Math.max(1, Math.min(5, Math.round(n))) - 1];
 
 const card: CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 
 /** Compact 1..5 band ladder — where a score lands, coloured, active segment lit. */
@@ -33,7 +33,7 @@ function LevelLadder({ tier }: { tier: number }) {
         <span
           key={n}
           style={{
-            flex: 1, height: 8, borderRadius: 4,
+            flex: 1, height: 8, borderRadius: 'var(--radius-sm)',
             background: n <= tier ? tierColor(tier) : 'var(--border-subtle)',
             opacity: n <= tier ? 1 : 0.5,
           }}
@@ -52,8 +52,8 @@ function TierRow({ metric }: { metric: ToolMetric }) {
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metric.label}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', whiteSpace: 'nowrap' }}>{metric.value}</span>
       </div>
-      <div style={{ height: 8, borderRadius: 4, background: 'var(--border-subtle)', overflow: 'hidden' }}>
-        <div style={{ width: `${(tier / 5) * 100}%`, height: '100%', borderRadius: 4, background: tierColor(tier), transition: 'width .3s' }} />
+      <div style={{ height: 8, borderRadius: 'var(--radius-sm)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
+        <div style={{ width: `${(tier / 5) * 100}%`, height: '100%', borderRadius: 'var(--radius-sm)', background: tierColor(tier), transition: 'width .3s' }} />
       </div>
       {metric.hint && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{metric.hint}</span>}
     </div>
@@ -131,7 +131,7 @@ export function ToolResultView({ result }: { result: ToolResult }) {
           <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{t('breakdown')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             {plain.map((m) => (
-              <div key={m.label} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px 14px', background: 'var(--bg-elevated)' }}>
+              <div key={m.label} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', background: 'var(--bg-elevated)' }}>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{m.label}</div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-strong)' }}>{m.value}</div>
                 {m.hint && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{m.hint}</div>}
@@ -148,9 +148,9 @@ export function ToolResultView({ result }: { result: ToolResult }) {
           <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>{t('planSubtitle')}</p>
           <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {result.recommendations.map((r, i) => (
-              <li key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px 14px', background: 'var(--bg-elevated)' }}>
+              <li key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', background: 'var(--bg-elevated)' }}>
                 <span style={{
-                  flexShrink: 0, width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: '#fff',
+                  flexShrink: 0, width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: 'var(--text-on-accent)',
                   fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>{i + 1}</span>
                 <div>

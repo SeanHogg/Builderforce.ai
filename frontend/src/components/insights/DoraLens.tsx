@@ -23,7 +23,7 @@ import { hrs, pct } from './format';
 type TierKey = 'elite' | 'high' | 'medium' | 'low';
 const TIER_ORDER: TierKey[] = ['elite', 'high', 'medium', 'low'];
 const TIER_COLOR: Record<TierKey, string> = {
-  elite: '#15803d', high: '#22c55e', medium: '#f59e0b', low: '#ef4444',
+  elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: '#ef4444',
 };
 
 // ── DORA tier classification (index 0=Elite … 3=Low) ─────────────────────────
@@ -107,9 +107,9 @@ export function DoraLens() {
             <span
               aria-label={t('dora.tierAria')}
               style={{
-                fontSize: '0.76rem', fontWeight: 700, color: '#fff',
+                fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-on-accent)',
                 background: overall ? TIER_COLOR[overall] : 'var(--text-muted)',
-                padding: '2px 10px', borderRadius: 999,
+                padding: '2px 10px', borderRadius: 'var(--radius-full)',
               }}
             >
               {overall ? t(`dora.tier.${overall}`) : '—'}

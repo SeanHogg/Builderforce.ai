@@ -104,7 +104,7 @@ const unreadCount = (side: 'employer' | 'freelancer') => {
     ? freelancerConversations.employerLastReadAt
     : freelancerConversations.freelancerLastReadAt;
   return sql<number>`(SELECT COUNT(*) FROM ${freelancerMessages}
-      WHERE ${freelancerMessages.conversationId} = ${freelancerConversations.id}
+      WHERE ${freelancerMessages.conversationId} = ${freelancerConversations}.id
         AND ${direction}
         AND ${freelancerMessages.createdAt} > COALESCE(${watermark}, 'epoch'))::int`;
 };
@@ -524,12 +524,12 @@ async function getOrCreateConversation(db: Db, input: {
   const [created] = input.engagementId
     ? await insert.onConflictDoNothing({
         target: [freelancerConversations.tenantId, freelancerConversations.freelancerUserId, freelancerConversations.engagementId],
-        targetWhere: sql`${freelancerConversations.engagementId} IS NOT NULL`,
+        where: sql`${freelancerConversations.engagementId} IS NOT NULL`,
       }).returning()
     : input.jobId
       ? await insert.onConflictDoNothing({
           target: [freelancerConversations.tenantId, freelancerConversations.freelancerUserId, freelancerConversations.jobId],
-          targetWhere: sql`${freelancerConversations.jobId} IS NOT NULL AND ${freelancerConversations.engagementId} IS NULL`,
+          where: sql`${freelancerConversations.jobId} IS NOT NULL AND ${freelancerConversations.engagementId} IS NULL`,
         }).returning()
       : await insert.returning();
   if (created) return created;

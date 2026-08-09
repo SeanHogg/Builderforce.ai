@@ -42,7 +42,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -548,7 +548,7 @@ function MonitorPin({
           color: 'var(--text-primary)',
           background: 'var(--bg-base)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 6,
+          borderRadius: 'var(--radius-sm)',
           padding: '1px 6px',
           whiteSpace: 'nowrap',
           maxWidth: 140,

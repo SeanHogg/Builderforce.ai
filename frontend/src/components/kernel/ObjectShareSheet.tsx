@@ -87,7 +87,7 @@ export function ObjectShareSheet({
             // every browser, so both the select AND its options carry an opaque
             // pair — otherwise the list reads as white-on-white in one theme.
             background: 'var(--surface, #101624)',
-            color: 'var(--text-primary, #f0f4ff)',
+            color: 'var(--text-primary, var(--text-primary))',
             border: '1px solid var(--border-subtle, rgba(136,146,176,0.25))',
           }}
         >
@@ -95,7 +95,7 @@ export function ObjectShareSheet({
             <option
               key={s}
               value={s}
-              style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary, #f0f4ff)' }}
+              style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary, var(--text-primary))' }}
             >
               {t(`scope.${s}`)}
             </option>

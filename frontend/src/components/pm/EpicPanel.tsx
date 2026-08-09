@@ -33,7 +33,7 @@ const labelStyle: React.CSSProperties = {
   fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block',
 };
 const fieldStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+  width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14,
 };
 
@@ -151,7 +151,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
                 onClick={() => convertTo('objective')}
                 disabled={busy}
                 style={{
-                  padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                  padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
                   background: 'transparent', color: 'var(--text-primary)', fontWeight: 600,
                   cursor: busy ? 'default' : 'pointer', fontSize: 13,
                 }}
@@ -163,7 +163,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
                 onClick={() => convertTo('task')}
                 disabled={busy}
                 style={{
-                  padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                  padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
                   background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600,
                   cursor: busy ? 'default' : 'pointer', fontSize: 13,
                 }}
@@ -180,8 +180,8 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
             onClick={save}
             disabled={busy}
             style={{
-              padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)',
-              color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+              padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)',
+              color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
             }}
           >
             {isEdit ? t('epicSaveChanges') : t('epicCreate')}
@@ -190,7 +190,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
             type="button"
             onClick={onClose}
             style={{
-              padding: '8px 18px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+              padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
               background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
             }}
           >

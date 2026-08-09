@@ -76,7 +76,7 @@ export function IdeSettingsPanel({ open, onClose, projectId, onImported }: IdeSe
             style={{
               background: 'var(--bg-base)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               padding: '6px 10px',
               color: 'var(--text-secondary)',
               cursor: 'pointer',

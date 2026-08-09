@@ -534,7 +534,6 @@
       "calendar": "Agenda",
       "facts": "Faits",
       "snapshots": "Revues",
-      "persona": "Persona",
       "plan": "Planification",
       "incidents": "Incidents",
       "oncall": "Astreinte",
@@ -548,7 +547,8 @@
       "autonomy": "Autonomie",
       "coordination": "Coordination",
       "memory": "Mémoire",
-      "rehearsal": "Répétition"
+      "rehearsal": "Répétition",
+      "viewpoint": "Point de vue"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -1414,7 +1414,6 @@
       "error": "Impossible de mettre à jour votre disponibilité. Veuillez réessayer."
     },
     "accountTab": "Compte",
-    "sessionsTab": "Sessions",
     "subnavLabel": "Sections des paramètres",
     "emailTab": "E-mail",
     "logsTab": "Journaux",
@@ -10781,19 +10780,19 @@
     "sourcePlaceholder": "ex. appel d’intégration"
   },
   "personaLens": {
-    "pageTitle": "Persona de lentille",
-    "title": "Votre persona de lentille",
-    "subtitle": "Choisissez le rôle que vous jouez. Il réorganise et met en avant les lentilles d’analyse qui vous intéressent — sans jamais changer vos accès.",
+    "pageTitle": "Point de vue",
+    "title": "Votre point de vue",
+    "subtitle": "Choisissez le rôle que vous occupez. Cela réordonne et met en avant les vues d'analyse qui vous intéressent — sans jamais changer ce à quoi vous avez accès.",
     "loading": "Chargement…",
     "primary": "Principal",
-    "save": "Enregistrer le persona",
+    "save": "Enregistrer le point de vue",
     "saving": "Enregistrement…",
-    "saved": "Persona enregistré",
-    "saveFailed": "Impossible d’enregistrer le persona",
-    "highlightsFor": "Lentilles mises en avant pour {persona}",
+    "saved": "Point de vue enregistré",
+    "saveFailed": "Impossible d'enregistrer le point de vue",
+    "highlightsFor": "Vues mises en avant pour {persona}",
     "home": "Accueil",
     "viewingAs": "Vue en tant que",
-    "viewShapingNote": "Un persona ne façonne que votre vue. Chaque lentille respecte toujours votre rôle d’espace de travail — vous n’obtenez jamais un accès que vous n’auriez pas autrement.",
+    "viewShapingNote": "Un point de vue ne façonne que votre affichage. Chaque vue respecte toujours votre rôle dans l'espace de travail — vous n'obtenez jamais un accès que vous n'auriez pas autrement.",
     "personas": {
       "ceo": "PDG",
       "cfo": "Directeur financier",

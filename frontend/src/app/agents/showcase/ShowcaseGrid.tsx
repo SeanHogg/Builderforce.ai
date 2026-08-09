@@ -134,7 +134,7 @@ export default function ShowcaseGrid({
         }
         .cc-filter {
           padding: 8px 16px;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle);
           background: transparent;
           color: var(--text-secondary);
@@ -160,7 +160,7 @@ export default function ShowcaseGrid({
           gap: 12px;
           padding: 20px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           text-decoration: none;
           color: var(--text-primary);
@@ -208,7 +208,7 @@ export default function ShowcaseGrid({
         }
         .cc-tweet-image {
           width: 100%;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           object-fit: cover;
           max-height: 280px;
         }

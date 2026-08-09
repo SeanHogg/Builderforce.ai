@@ -8,7 +8,7 @@ type SessionWithName = ChatSession & { agentHostName?: string };
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -61,7 +61,7 @@ export function ChatsView() {
           style={{
             padding: '7px 14px', fontSize: 13, fontWeight: 600,
             background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer', flexShrink: 0,
           }}
         >
           {loading ? 'Loading…' : 'Refresh'}
@@ -94,7 +94,7 @@ export function ChatsView() {
                 onClick={() => void selectSession(s)}
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                  padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', width: '100%',
+                  padding: '8px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', width: '100%',
                   background: selected?.id === s.id ? 'var(--surface-interactive)' : 'transparent',
                   border: `1px solid ${selected?.id === s.id ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                 }}
@@ -103,7 +103,7 @@ export function ChatsView() {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
                     {s.sessionKey}
                   </span>
-                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-muted)', flexShrink: 0 }}>
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', flexShrink: 0 }}>
                     {s.msgCount} msgs
                   </span>
                 </div>
@@ -144,7 +144,7 @@ export function ChatsView() {
                         </div>
                         <div style={{
                           fontSize: 13, color: 'var(--text-primary)',
-                          background: 'var(--bg-elevated)', borderRadius: 8, padding: '8px 12px',
+                          background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', padding: '8px 12px',
                           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                         }}>
                           {m.content}

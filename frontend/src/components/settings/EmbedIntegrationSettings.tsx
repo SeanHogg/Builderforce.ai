@@ -28,7 +28,7 @@ const CAPABILITY_LABELS: Record<EmbedCapability, string> = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -152,8 +152,8 @@ export function EmbedIntegrationSettings() {
               disabled={saving}
               style={{
                 padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                background: 'var(--accent, #2563eb)', color: '#fff',
-                border: 'none', borderRadius: 8, cursor: saving ? 'default' : 'pointer',
+                background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)',
+                border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer',
               }}
             >
               {saving ? 'Saving…' : needsConsent ? 'Review & enable…' : 'Save'}

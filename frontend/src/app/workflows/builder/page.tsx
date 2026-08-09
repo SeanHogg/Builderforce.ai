@@ -28,7 +28,7 @@ function BuilderPageInner() {
   const projectIdParam = params.get('project') ?? params.get('projectId');
   const initialProjectId = projectIdParam ? Number(projectIdParam) : (scope?.currentProjectId ?? null);
   if (adaptToCanvas && !adapterFailed) return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Opening workflow on the creation canvas…</div>;
-  return <><WorkflowBuilder definitionId={id} initialProjectId={initialProjectId} />{adapterFailed && <div role="status" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 20, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>Canvas migration was unavailable. The workflow builder remains open.</div>}</>;
+  return <><WorkflowBuilder definitionId={id} initialProjectId={initialProjectId} />{adapterFailed && <div role="status" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 20, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>Canvas migration was unavailable. The workflow builder remains open.</div>}</>;
 }
 
 export default function WorkflowBuilderPage() {

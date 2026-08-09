@@ -92,7 +92,7 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -100,7 +100,7 @@ const inputStyle: React.CSSProperties = {
   padding: '8px 12px',
   fontSize: 13,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
   width: '100%',
@@ -109,14 +109,14 @@ const inputStyle: React.CSSProperties = {
 
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600,
-  background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600,
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 export interface IntegrationCredentialsManagerProps {
@@ -363,7 +363,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
       {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{editing ? t('editKeyTitle', { provider: meta.label }) : t('addKeyTitle')}</div>
           <Select
             value={provider}

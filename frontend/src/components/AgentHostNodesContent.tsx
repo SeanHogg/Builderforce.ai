@@ -12,7 +12,7 @@ interface AgentHostNodesContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -69,7 +69,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             cursor: 'pointer',
           }}
         >
@@ -121,7 +121,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                       fontWeight: 700,
                       textTransform: 'uppercase',
                       padding: '2px 6px',
-                      borderRadius: 4,
+                      borderRadius: 'var(--radius-sm)',
                       background: online ? 'rgba(34,197,94,0.12)' : 'var(--bg-elevated)',
                       color: online ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)',
                     }}
@@ -140,7 +140,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                         style={{
                           fontSize: 10,
                           padding: '2px 6px',
-                          borderRadius: 4,
+                          borderRadius: 'var(--radius-sm)',
                           background: 'var(--bg-elevated)',
                           color: 'var(--text-secondary)',
                           fontFamily: 'var(--font-mono)',
@@ -166,7 +166,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                   background: 'none',
                   color: 'var(--coral-bright, #f4726e)',
                   border: '1px solid var(--coral-bright, #f4726e)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   cursor: unpairing === node.id ? 'wait' : 'pointer',
                   flexShrink: 0,
                   opacity: unpairing === node.id ? 0.5 : 1,

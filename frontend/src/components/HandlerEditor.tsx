@@ -43,7 +43,7 @@ const SKELETON: HandlerSpecDocument = {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -60,7 +60,7 @@ const field: React.CSSProperties = {
   width: '100%',
   minWidth: 0,
   padding: '8px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated, transparent)',
   color: 'var(--text-primary)',
@@ -76,7 +76,7 @@ const option: React.CSSProperties = {
 
 const button: React.CSSProperties = {
   padding: '8px 14px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
   background: 'transparent',
   color: 'var(--text-primary)',

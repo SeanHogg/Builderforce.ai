@@ -15,15 +15,15 @@ const panel: React.CSSProperties = {
   padding: 24, overflowY: 'auto', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '7px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const pre: React.CSSProperties = {
-  background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12,
+  background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 12,
   fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
 };
 
@@ -174,7 +174,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
 
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div style={{ background: 'var(--bg-deep)', borderRadius: 8, padding: 10 }}>
+    <div style={{ background: 'var(--bg-deep)', borderRadius: 'var(--radius-md)', padding: 10 }}>
       <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
       <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</div>
     </div>

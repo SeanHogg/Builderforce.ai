@@ -337,7 +337,7 @@ export function MeetCarousel() {
          * inactive slides are simply invisible and the cell still sizes to the
          * tallest — acceptable, and never broken).
          */
-        .meet-carousel-viewport { position:relative; display:grid; overflow:hidden; border-radius:24px; transition:height .5s cubic-bezier(.22,.78,.25,1); }
+        .meet-carousel-viewport { position:relative; display:grid; overflow:hidden; border-radius:var(--radius-xl); transition:height .5s cubic-bezier(.22,.78,.25,1); }
         .meet-slide { grid-area:1/1; min-width:0; align-self:start; opacity:0; visibility:hidden; transform:translateY(14px) scale(.985); transform-origin:50% 0; transition:opacity .42s ease, transform .42s cubic-bezier(.22,.78,.25,1), visibility 0s .42s; }
         .meet-slide.is-active { opacity:1; visibility:visible; transform:none; pointer-events:auto; transition:opacity .42s ease, transform .42s cubic-bezier(.22,.78,.25,1), visibility 0s 0s; }
         .meet-slide:not(.is-active) { pointer-events:none; }
@@ -353,7 +353,7 @@ export function MeetCarousel() {
         .meet-carousel-arrow.is-next { right:6px; }
 
         /* ── Shared panel frame for all three slides ── */
-        .meet-panel { position:relative; overflow:hidden; display:flex; flex-direction:column; gap:26px; padding:40px clamp(20px,3vw,44px) 36px; border:1px solid var(--border-accent); border-radius:24px; background:var(--surface-card); box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
+        .meet-panel { position:relative; overflow:hidden; display:flex; flex-direction:column; gap:26px; padding:40px clamp(20px,3vw,44px) 36px; border:1px solid var(--border-accent); border-radius:var(--radius-xl); background:var(--surface-card); box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
         .meet-panel::before { content:''; position:absolute; top:0; left:clamp(20px,3vw,44px); width:96px; height:3px; background:var(--coral-bright); }
         .meet-panel-head { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); gap:clamp(24px,4vw,56px); align-items:end; padding-bottom:26px; border-bottom:1px solid var(--border-subtle); }
         .meet-panel h3 { margin:0 0 7px; color:var(--text-primary); font:650 .92rem/1.3 var(--font-display); }
@@ -368,12 +368,12 @@ export function MeetCarousel() {
         .meet-create-feature > span { color:var(--coral-bright); font:600 .66rem/1.5 var(--font-display); letter-spacing:.08em; }
         .meet-create-feature p { margin:0; font-size:.8rem; line-height:1.6; }
         .meet-create-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
-        .meet-create-board { display:flex; flex-direction:column; gap:12px; padding:16px; border:1px solid var(--border-subtle); border-radius:18px; background-color:var(--bg-surface); background-image:radial-gradient(var(--border-subtle) 1px, transparent 1px); background-size:20px 20px; box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
+        .meet-create-board { display:flex; flex-direction:column; gap:12px; padding:16px; border:1px solid var(--border-subtle); border-radius:var(--radius-xl); background-color:var(--bg-surface); background-image:radial-gradient(var(--border-subtle) 1px, transparent 1px); background-size:20px 20px; box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
         .meet-create-toolbar { display:flex; align-items:center; gap:6px; padding-bottom:11px; border-bottom:1px solid var(--border-subtle); color:var(--text-muted); font:600 .64rem/1 var(--font-display); letter-spacing:.04em; }
         .meet-create-toolbar i { width:7px; height:7px; border-radius:50%; background:var(--border-accent); }
         .meet-create-toolbar span { margin-left:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .meet-create-objects { display:grid; gap:9px; }
-        .meet-create-object { display:grid; grid-template-columns:auto 1fr; gap:2px 9px; padding:11px 13px; border:1px solid var(--border-subtle); border-radius:12px; background:var(--bg-elevated); box-shadow:0 8px 20px var(--shadow-coral-soft); }
+        .meet-create-object { display:grid; grid-template-columns:auto 1fr; gap:2px 9px; padding:11px 13px; border:1px solid var(--border-subtle); border-radius:var(--radius-lg); background:var(--bg-elevated); box-shadow:0 8px 20px var(--shadow-coral-soft); }
         .meet-create-object strong { color:var(--text-primary); font:650 .82rem/1.3 var(--font-display); }
         .meet-create-object small { grid-column:2; color:var(--text-muted); font-size:.72rem; line-height:1.45; }
         .meet-object-index { grid-row:span 2; color:var(--coral-bright); font:600 .64rem/1.4 var(--font-display); letter-spacing:.08em; }
@@ -386,7 +386,7 @@ export function MeetCarousel() {
         .meet-evermind-panel::before { background:var(--cyan-bright); }
         .meet-evermind-panel::after { content:'EM'; position:absolute; right:30px; bottom:-60px; color:color-mix(in srgb,var(--cyan-bright) 6%,transparent); font:800 17rem/1 var(--font-display); letter-spacing:-.09em; pointer-events:none; }
         .meet-evermind-body { position:relative; z-index:1; display:grid; grid-template-columns:minmax(0,1.55fr) minmax(220px,.45fr); gap:clamp(24px,3vw,44px); align-items:start; }
-        .meet-evermind-visual { min-width:0; margin:0; overflow:hidden; border:1px solid var(--border-subtle); border-radius:18px; background:color-mix(in srgb,var(--bg-surface) 72%,transparent); box-shadow:inset 0 1px 0 var(--surface-inset-highlight),0 20px 50px color-mix(in srgb,var(--cyan-bright) 8%,transparent); }
+        .meet-evermind-visual { min-width:0; margin:0; overflow:hidden; border:1px solid var(--border-subtle); border-radius:var(--radius-xl); background:color-mix(in srgb,var(--bg-surface) 72%,transparent); box-shadow:inset 0 1px 0 var(--surface-inset-highlight),0 20px 50px color-mix(in srgb,var(--cyan-bright) 8%,transparent); }
         .meet-evermind-visual-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:13px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text-muted); font:600 .61rem/1 var(--font-display); letter-spacing:.13em; }
         .meet-evermind-visual-head span { display:flex; align-items:center; gap:8px; }
         .meet-evermind-visual-head i,.meet-evermind-write-status i { width:6px; height:6px; border-radius:50%; background:var(--cyan-bright); box-shadow:0 0 0 4px color-mix(in srgb,var(--cyan-bright) 14%,transparent),0 0 16px var(--cyan-bright); animation:evermind-live 2.2s ease-in-out infinite; }
@@ -394,7 +394,7 @@ export function MeetCarousel() {
         .meet-evermind-map { position:relative; height:320px; background-image:linear-gradient(color-mix(in srgb,var(--cyan-bright) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--cyan-bright) 5%,transparent) 1px,transparent 1px); background-size:28px 28px; }
         .meet-evermind-connections { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
         .meet-evermind-connections path { fill:none; stroke:color-mix(in srgb,var(--cyan-bright) 42%,var(--border-subtle)); stroke-width:1.2; stroke-dasharray:5 7; animation:evermind-flow 9s linear infinite; }
-        .meet-evermind-pod { position:absolute; z-index:2; display:grid; grid-template-columns:24px 1fr; align-items:center; gap:8px; width:164px; min-height:54px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--cyan-bright) 28%,var(--border-subtle)); border-radius:11px; background:color-mix(in srgb,var(--surface-card-strong) 92%,transparent); box-shadow:0 10px 28px color-mix(in srgb,var(--cyan-bright) 8%,transparent); }
+        .meet-evermind-pod { position:absolute; z-index:2; display:grid; grid-template-columns:24px 1fr; align-items:center; gap:8px; width:164px; min-height:54px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--cyan-bright) 28%,var(--border-subtle)); border-radius:var(--radius-lg); background:color-mix(in srgb,var(--surface-card-strong) 92%,transparent); box-shadow:0 10px 28px color-mix(in srgb,var(--cyan-bright) 8%,transparent); }
         .meet-evermind-pod > span,.meet-principle > span,.meet-role > span { color:var(--cyan-bright); font:600 .61rem/1.5 var(--font-display); letter-spacing:.08em; }
         .meet-evermind-pod > strong { color:var(--text-primary); font:600 .69rem/1.35 var(--font-display); }
         .meet-evermind-pod::after { content:''; position:absolute; width:5px; height:5px; border:2px solid var(--cyan-bright); border-radius:50%; background:var(--bg-surface); }
@@ -444,7 +444,7 @@ export function MeetCarousel() {
         .meet-principles { display:grid; align-content:start; }
         .meet-principle { display:grid; grid-template-columns:32px 1fr; gap:12px; padding:18px 0; border-top:1px solid var(--border-subtle); }
         .meet-principle:first-child { border-top:0; padding-top:0; }
-        .meet-role-view { padding:22px 24px; background:color-mix(in srgb,var(--bg-surface) 55%,transparent); border:1px solid var(--border-subtle); border-radius:2px 18px 18px 18px; }
+        .meet-role-view { padding:22px 24px; background:color-mix(in srgb,var(--bg-surface) 55%,transparent); border:1px solid var(--border-subtle); border-radius:var(--radius-sm) var(--radius-xl) var(--radius-xl) var(--radius-xl); }
         .meet-role-heading { display:grid; grid-template-columns:.8fr 1.2fr; gap:24px; margin-bottom:16px; }
         .meet-role-heading h3 { margin:0; color:var(--text-primary); font:650 1rem/1.25 var(--font-display); }
         .meet-role-heading p { margin:0; font-size:.74rem; line-height:1.5; }
@@ -460,8 +460,8 @@ export function MeetCarousel() {
         .meet-carousel-nav button:hover { color:var(--text-secondary); }
         .meet-carousel-nav button > span { font:500 .62rem/1 var(--font-display); }
         .meet-carousel-nav button > strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:600 .72rem/1 var(--font-display); letter-spacing:.05em; text-transform:uppercase; }
-        .meet-carousel-nav button > i { grid-column:1/-1; height:2px; overflow:hidden; border-radius:999px; background:var(--border-subtle); }
-        .meet-carousel-nav button > i b { display:block; width:100%; height:100%; border-radius:999px; background:var(--coral-bright); transform-origin:left; animation:meet-progress ${ROTATION_MS}ms linear; }
+        .meet-carousel-nav button > i { grid-column:1/-1; height:2px; overflow:hidden; border-radius:var(--radius-full); background:var(--border-subtle); }
+        .meet-carousel-nav button > i b { display:block; width:100%; height:100%; border-radius:var(--radius-full); background:var(--coral-bright); transform-origin:left; animation:meet-progress ${ROTATION_MS}ms linear; }
         .meet-carousel-nav button.is-active { color:var(--text-primary); }
         .meet-carousel.is-paused .meet-carousel-nav button > i b { animation-play-state:paused; }
         @keyframes meet-progress { from{transform:scaleX(0)} to{transform:scaleX(1)} }
@@ -485,8 +485,8 @@ export function MeetCarousel() {
         @media (max-width:700px) {
           .meet-carousel { padding:0 14px 74px; scroll-margin-top:72px; }
           .meet-carousel-kicker { margin-bottom:10px; font-size:.62rem; letter-spacing:.12em; }
-          .meet-carousel-viewport { border-radius:18px; }
-          .meet-panel { gap:20px; padding:28px 18px 74px; border-radius:18px; }
+          .meet-carousel-viewport { border-radius:var(--radius-xl); }
+          .meet-panel { gap:20px; padding:28px 18px 74px; border-radius:var(--radius-xl); }
           .meet-panel::before { left:18px; width:64px; }
           .meet-slide .section-title { font-size:1.28rem; line-height:1.25; }
           .meet-slide-lead { font-size:.86rem; }

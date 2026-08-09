@@ -244,7 +244,7 @@ const menuPopStyle: React.CSSProperties = {
   zIndex: 50,
   minWidth: 224,
   padding: 5,
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)',
   boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
@@ -306,7 +306,7 @@ function MenuRow({ icon, label, hint, active, onClick }: {
     width: '100%',
     padding: '8px 9px',
     border: 'none',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     background: hover ? 'var(--surface-interactive, var(--bg-base))' : 'transparent',
     color: 'var(--text-primary)',
     fontSize: 13,
@@ -623,7 +623,7 @@ export function ChatInput({
         status={pendingAttachments.length > 0 && onRemoveAttachment ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {pendingAttachments.map((a) => (
-              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--surface-coral-soft)', fontSize: 12, color: 'var(--text-primary)' }}>
+              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 12, color: 'var(--text-primary)' }}>
                 📎 {a.name}
                 <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 0 }} aria-label={t('removeAttachment')}>×</button>
               </span>
@@ -714,7 +714,7 @@ export function ChatInput({
               flexShrink: 0,
               height: 'var(--chat-ctl-size, 32px)',
               padding: '0 10px',
-              borderRadius: 9999,
+              borderRadius: 'var(--radius-full)',
               fontSize: 12,
               cursor: disabled ? 'not-allowed' : 'pointer',
               border: `1px solid ${autoMode ? 'var(--coral-bright, #f4726e)' : 'var(--chat-input-border)'}`,

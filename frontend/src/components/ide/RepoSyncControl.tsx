@@ -17,12 +17,12 @@ import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceA
  * the IDE file tree after an import.
  */
 const btn: React.CSSProperties = {
-  padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+  padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
   border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
 };
-const btnPrimary: React.CSSProperties = { ...btn, background: 'var(--coral-bright)', color: '#fff', border: 'none' };
+const btnPrimary: React.CSSProperties = { ...btn, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none' };
 const input: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, boxSizing: 'border-box',
+  width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', boxSizing: 'border-box',
   border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
 
@@ -111,7 +111,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
           {!showCreate ? (
             <button type="button" style={btnPrimary} onClick={() => setShowCreate(true)}>+ Create repo</button>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
               <input style={input} placeholder="repository name" value={repoName} onChange={(e) => setRepoName(e.target.value)} />
               {creds.length > 0 ? (
                 <Select style={input} value={credId} onChange={(e) => setCredId(e.target.value)}>
@@ -119,7 +119,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
                   {creds.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--warning, #f59e0b)' }}>
+                <div style={{ fontSize: 12, color: 'var(--warning, var(--warning))' }}>
                   No GitHub credential found. Add one under Integrations first.
                 </div>
               )}

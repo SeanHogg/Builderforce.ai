@@ -8,10 +8,16 @@
  *
  *   - **A literal hex.** `#0a0f1a` renders identically in both themes, so a
  *     surface written that way is legible in the one the author had open and
- *     wrong in the other. 315 files carried one when this landed.
+ *     wrong in the other. 403 files carried one when this landed; 341 do now —
+ *     the sweep replaced every literal that was EXACTLY a declared token's value
+ *     in one of the two themes, which is the half that needs no judgement. What
+ *     is left needs a reading of the element (is this `#fff` ink, or a surface?)
+ *     and comes down per directory.
  *   - **An off-scale radius.** §2.4 documents five values (6 / 8 / 12 / 16 /
- *     full). 26 CSS modules carried 20+ distinct ones, which is what makes a
- *     product look assembled rather than designed.
+ *     full). 2,086 corners were off it; 9 are now, and each of those is a live
+ *     expression rather than a literal. Most of the debt turned out to be
+ *     `borderRadius: 8` — the right SIZE typed as a number, so the scale was
+ *     being followed and never named.
  *
  * SHRINK-ONLY, not zero. Both counts are far above zero today and a guard that
  * demands zero on the first run is a guard somebody deletes. This one fails when
@@ -35,12 +41,16 @@ const srcDir = resolve(here, '../src');
  * A number here is a debt, not a budget.
  */
 const BASELINE = {
-  literalHexFiles: 403,
-  offScaleRadii: 2086,
+  literalHexFiles: 341,
+  offScaleRadii: 9,
 };
 
-/** The five documented steps (§2.4), plus 0 and the pill value. */
-const ALLOWED_RADII = new Set(['0', '6px', '8px', '12px', '16px', '9999px', '50%', '100%']);
+/**
+ * The five documented steps (§2.4), plus 0, the circle/pill values, and
+ * `inherit` — which is not a size at all, it is "whatever my parent already
+ * chose", and is how a clipped child keeps its parent's corner.
+ */
+const ALLOWED_RADII = new Set(['0', '6px', '8px', '12px', '16px', '9999px', '50%', '100%', 'inherit']);
 
 /**
  * Files a literal colour is CORRECT in, each with a reason.
@@ -54,6 +64,14 @@ const COLOUR_EXEMPT = [
   /^app\/globals\.css$/,
   /^app\/[^/]*\.css$/,
   /\.test\.(tsx?|css)$/,
+  // §2.6 rule 9: "the board declares its own palette." This file is the board's
+  // `globals.css` — it declares the whole `--canvas-*` family for BOTH themes
+  // (light at the top, dark in the block near the end), for the reason recorded
+  // in its own header: derived from the shell's light tokens, the board, its
+  // cards and its panels collapsed into one flat sheet. Exempt on the same
+  // grounds as `globals.css`: a token has to be declared somewhere, and this is
+  // where the canvas's are.
+  /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
 ];
 
 const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
@@ -62,8 +80,30 @@ const LINE_COMMENT = /^\s*\/\/.*$/gm;
 /** A 3-, 4-, 6- or 8-digit hex colour, not part of a longer identifier. */
 const LITERAL_HEX = /(?<![\w&])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
 
-/** `border-radius: X` in CSS and `borderRadius: X` in an inline-style object. */
-const RADIUS = /border-?[Rr]adius:\s*([^;,}\n]+)/g;
+/**
+ * `border-radius: X` in CSS and `borderRadius: X` in an inline-style object.
+ *
+ * Paren-aware: a value may legally contain a comma inside `var(--x, 8px)`, and a
+ * naive `[^;,}\n]+` stopped there — reporting the perfectly correct
+ * `var(--radius-md, 8px)` as the off-scale value `'var(--radius-md`. A JS object
+ * property still ends at the first TOP-LEVEL comma, which is what this keeps.
+ */
+const RADIUS = /border-?[Rr]adius:\s*((?:var\([^)]*\)|[^;,}\n])+)/g;
+
+/**
+ * Files whose radii are not this product's UI, each with a reason.
+ *
+ * `DevicePreview` draws PHYSICAL devices — a phone's corner is 44px because the
+ * phone's corner is 44px, and snapping it to the UI scale would draw the wrong
+ * object. The deliverable builders emit standalone documents (a downloadable
+ * landing page, a SCORM package) that are opened OUTSIDE this app, where none of
+ * these tokens are declared: a `var(--radius-lg)` there resolves to nothing.
+ */
+const RADIUS_EXEMPT = [
+  /^components\/ide\/DevicePreview\.tsx$/,
+  /^lib\/creationDeliverables\.ts$/,
+  /^lib\/courseLms\.ts$/,
+];
 
 function collect(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -75,10 +115,18 @@ function collect(dir, out = []) {
   return out;
 }
 
-/** One declaration can carry several corners: `12px 12px 0 0`. Every part counts. */
+/**
+ * One declaration can carry several corners: `12px 12px 0 0`. Every part counts.
+ *
+ * A JS value arrives QUOTED (`borderRadius: '12px 12px 0 0'`), and the quotes are
+ * syntax rather than value — reading them as part of the first and last corner
+ * turned four on-scale corners into two off-scale ones and reported an on-scale
+ * `'50%'` as a defect. Strip them, so the guard measures what was written.
+ */
 function radiusParts(value) {
-  return value
-    .trim()
+  const trimmed = value.trim();
+  const quoted = /^(['"])([\s\S]*)\1$/.exec(trimmed);
+  return (quoted ? quoted[2] : trimmed)
     .replace(/var\([^)]*\)/g, 'var()')
     .split(/[\s/]+/)
     .filter(Boolean);
@@ -97,6 +145,8 @@ for (const file of files) {
     hexFiles.push(rel);
   }
   LITERAL_HEX.lastIndex = 0;
+
+  if (RADIUS_EXEMPT.some((pattern) => pattern.test(rel))) continue;
 
   for (const match of text.matchAll(RADIUS)) {
     for (const part of radiusParts(match[1])) {

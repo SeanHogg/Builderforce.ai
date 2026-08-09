@@ -75,14 +75,14 @@ export function BarChart({
                 <div
                   style={{
                     position: 'absolute', inset: 0, width: `${secPct}%`,
-                    background: 'var(--border-subtle)', borderRadius: 5,
+                    background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                   }}
                 />
               )}
               <div
                 style={{
                   position: 'absolute', top: 0, bottom: 0, left: 0, width: `${pct}%`,
-                  background: color, borderRadius: 5, minWidth: 2, transition: 'width 0.3s',
+                  background: color, borderRadius: 'var(--radius-sm)', minWidth: 2, transition: 'width 0.3s',
                 }}
               />
             </div>

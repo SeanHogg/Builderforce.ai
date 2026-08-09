@@ -17,12 +17,12 @@ import {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8,
+  width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)', minHeight: 60, resize: 'vertical', fontFamily: 'inherit',
 };
@@ -101,7 +101,7 @@ export function SecurityTicketAccessCard() {
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
                   background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 8, cursor: 'pointer',
+                  borderRadius: 'var(--radius-md)', cursor: 'pointer',
                 }}
               >
                 <input
@@ -146,13 +146,13 @@ export function SecurityTicketAccessCard() {
               disabled={saving}
               style={{
                 padding: '8px 16px', fontSize: 13, fontWeight: 600,
-                background: 'var(--coral-bright, #f4726e)', color: '#fff',
-                border: 'none', borderRadius: 8, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
+                background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)',
+                border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
               }}
             >
               {saving ? t('saving') : t('accessSave')}
             </button>
-            {saved && <span style={{ fontSize: 12, color: 'var(--success-text, #22c55e)' }}>{t('accessSaved')}</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success-text, var(--success))' }}>{t('accessSaved')}</span>}
           </div>
         </>
       )}

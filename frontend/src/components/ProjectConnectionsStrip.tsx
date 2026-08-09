@@ -86,7 +86,7 @@ const chipBase: React.CSSProperties = {
   gap: 5,
   fontSize: 11,
   lineHeight: 1.2,
-  borderRadius: 999,
+  borderRadius: 'var(--radius-full)',
   padding: '4px 9px',
   maxWidth: '100%',
   textDecoration: 'none',
@@ -173,7 +173,7 @@ export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: Proj
               </span>
               <span
                 aria-hidden
-                style={{ width: 6, height: 6, borderRadius: 999, background: TONE[tone].fg, flexShrink: 0 }}
+                style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: TONE[tone].fg, flexShrink: 0 }}
               />
             </Chip>
 

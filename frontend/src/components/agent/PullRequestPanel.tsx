@@ -39,7 +39,7 @@ function Badge({ label, color }: { label: string; color: string }) {
   return (
     <span style={{
       fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
-      color, border: `1px solid ${color}`, borderRadius: 6, padding: '2px 6px',
+      color, border: `1px solid ${color}`, borderRadius: 'var(--radius-sm)', padding: '2px 6px',
     }}>{label}</span>
   );
 }
@@ -77,7 +77,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
         <pre style={{
           margin: 0, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           color: 'var(--text-secondary)', background: 'var(--surface-sunken, rgba(127,127,127,0.08))',
-          border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '8px 10px',
+          border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '8px 10px',
           maxHeight: 220, overflow: 'auto', fontFamily: 'var(--font-mono)',
         }}>{error}</pre>
       )}
@@ -201,7 +201,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
             value={method}
             onChange={(e) => setMethod(e.target.value as MergeMethod)}
             disabled={merging || !!mergeBlockReason}
-            style={{ fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+            style={{ fontSize: 12, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
           >
             {availableMethods.map((m) => <option key={m} value={m}>{m}</option>)}
           </Select>
@@ -210,7 +210,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
             onClick={merge}
             disabled={merging || !!mergeBlockReason}
             style={{
-              fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 6, border: 'none', cursor: merging || mergeBlockReason ? 'not-allowed' : 'pointer',
+              fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: merging || mergeBlockReason ? 'not-allowed' : 'pointer',
               background: 'var(--success, #16a34a)', color: 'var(--text-on-accent, #fff)', opacity: merging || mergeBlockReason ? 0.6 : 1,
             }}
           >

@@ -53,7 +53,7 @@ export default async function ProductPage() {
         .pp-stats {
           max-width: 900px; margin: 28px auto 0; padding: 0 24px;
           display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-          border: 1px solid var(--border-subtle); border-radius: 16px; overflow: hidden;
+          border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); overflow: hidden;
         }
         @media (max-width: 640px) { .pp-stats { grid-template-columns: repeat(2, 1fr); } }
         .pp-stat { padding: 20px 14px; text-align: center; background: var(--surface-card); }
@@ -75,7 +75,7 @@ export default async function ProductPage() {
         .pp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
         .pp-card {
           display: flex; flex-direction: column; background: var(--surface-card);
-          border: 1px solid var(--border-subtle); border-radius: 16px; padding: 22px 20px;
+          border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); padding: 22px 20px;
           text-decoration: none; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
         }
         .pp-card:hover {
@@ -84,11 +84,11 @@ export default async function ProductPage() {
         }
         .pp-card-icon { font-size: 1.5rem; margin-bottom: 12px; }
         .pp-card-proof { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
-        .pp-proof-chip { border: 1px solid var(--border-subtle); border-radius: 999px; padding: 3px 8px; color: var(--text-muted); font-size: 0.7rem; line-height: 1.2; }
-        .pp-proof-chip[data-status="available"] { border-color: color-mix(in srgb, #22c55e 48%, var(--border-subtle)); color: var(--success-text); }
+        .pp-proof-chip { border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 3px 8px; color: var(--text-muted); font-size: 0.7rem; line-height: 1.2; }
+        .pp-proof-chip[data-status="available"] { border-color: color-mix(in srgb, var(--success) 48%, var(--border-subtle)); color: var(--success-text); }
         .pp-proof-chip[data-status="beta"] { border-color: color-mix(in srgb, var(--coral-bright) 48%, var(--border-subtle)); color: var(--coral-bright); }
         .pp-proof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-        .pp-proof-card { border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card); padding: 20px; }
+        .pp-proof-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); padding: 20px; }
         .pp-proof-card h3 { color: var(--text-primary); font-size: 1rem; margin: 0 0 8px; }
         .pp-proof-card p, .pp-proof-card li { color: var(--text-secondary); font-size: 0.82rem; line-height: 1.55; }
         .pp-proof-card ol { padding-left: 20px; }
@@ -104,21 +104,21 @@ export default async function ProductPage() {
 
         .pp-cta { max-width: 820px; margin: 0 auto; padding: 0 24px 80px; }
         .pp-cta-box {
-          text-align: center; padding: 52px 40px; border-radius: 22px;
+          text-align: center; padding: 52px 40px; border-radius: var(--radius-xl);
           border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px);
         }
         .pp-cta-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2.1rem); color: var(--text-primary); margin: 0 0 12px; }
         .pp-cta-desc { font-size: 0.97rem; color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
         .pp-actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
         .pp-btn-primary {
-          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 13px;
-          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: #fff;
+          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent);
           font-family: var(--font-display); font-weight: 600; font-size: 0.92rem; text-decoration: none;
           box-shadow: 0 6px 22px var(--shadow-coral-mid); transition: transform 0.22s ease, box-shadow 0.22s ease;
         }
         .pp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px var(--shadow-coral-strong); }
         .pp-btn-secondary {
-          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 13px;
+          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-primary);
           font-family: var(--font-display); font-weight: 600; font-size: 0.92rem; text-decoration: none;
         }

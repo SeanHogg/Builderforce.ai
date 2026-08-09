@@ -67,7 +67,7 @@ const fieldLabelStyle: CSSProperties = {
 };
 const segmentGroupStyle: CSSProperties = {
   display: 'inline-flex', flexWrap: 'wrap', gap: 6,
-  border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4, maxWidth: '100%',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 4, maxWidth: '100%',
 };
 
 /** Prominent kill-switch shared by the workspace and project policy headers. */
@@ -87,8 +87,8 @@ export function ManagerKillSwitch({ checked, disabled, onChange }: {
       onClick={() => onChange(!checked)}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px 7px 12px',
-        border: `1px solid ${checked ? 'var(--success, #22c55e)' : 'var(--coral-bright, #ef4444)'}`,
-        borderRadius: 12, background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+        border: `1px solid ${checked ? 'var(--success, var(--success))' : 'var(--coral-bright, #ef4444)'}`,
+        borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
         cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.65 : 1,
       }}
     >
@@ -102,7 +102,7 @@ export function ManagerKillSwitch({ checked, disabled, onChange }: {
         aria-hidden="true"
         style={{
           position: 'relative', display: 'inline-block', width: 38, height: 22, flex: '0 0 auto',
-          borderRadius: 999, background: checked ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+          borderRadius: 'var(--radius-full)', background: checked ? 'var(--success, var(--success))' : 'var(--text-muted)',
           transition: 'background .15s ease',
         }}
       >
@@ -128,7 +128,7 @@ function Segment({ label, title, active, disabled, onClick }: {
       title={title}
       onClick={onClick}
       style={{
-        padding: '6px 11px', borderRadius: 7, border: 'none', cursor: disabled ? 'default' : 'pointer',
+        padding: '6px 11px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: disabled ? 'default' : 'pointer',
         background: active ? 'var(--accent, #2563eb)' : 'transparent',
         color: active ? '#fff' : 'var(--text-secondary)',
         fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap',
@@ -234,7 +234,7 @@ function NumberRow({
               if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Math.round(n))));
             }}
             style={{
-              width: 88, minHeight: 40, padding: '6px 10px', borderRadius: 8,
+              width: 88, minHeight: 40, padding: '6px 10px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)',
               background: 'var(--bg-base)', color: 'var(--text-primary)',
               fontSize: '0.85rem', fontWeight: 600,
@@ -289,7 +289,7 @@ export function ManagerEffectiveSummary({ effective }: { effective: ManagerPolic
   return (
     <div style={{
       background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-      borderRadius: 10, padding: 12, marginBottom: 16,
+      borderRadius: 'var(--radius-lg)', padding: 12, marginBottom: 16,
     }}>
       <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
         {t('policy.effective.title')}
@@ -300,7 +300,7 @@ export function ManagerEffectiveSummary({ effective }: { effective: ManagerPolic
           <span
             key={chip.text}
             style={{
-              padding: '3px 9px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 600,
+              padding: '3px 9px', borderRadius: 'var(--radius-full)', fontSize: '0.72rem', fontWeight: 600,
               border: '1px solid var(--border-subtle)',
               background: chip.tone === 'on' ? 'var(--bg-elevated)' : 'transparent',
               color: chip.tone === 'on' ? 'var(--text-primary)' : 'var(--text-muted)',

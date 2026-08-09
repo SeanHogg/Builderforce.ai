@@ -47,7 +47,7 @@ export function CalendarConnectionsCard({ returnPath = '/meetings' }: { returnPa
   const connectedProviders = new Set(connections.map((c) => c.provider));
 
   return (
-    <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 }}>
+    <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('calendarsTitle')}</div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('calendarsSubtitle')}</p>
 
@@ -58,7 +58,7 @@ export function CalendarConnectionsCard({ returnPath = '/meetings' }: { returnPa
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {connections.map((c) => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{PROVIDER_LABEL[c.provider] ?? c.provider}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.accountEmail || t('connected')}</div>
@@ -79,7 +79,7 @@ export function CalendarConnectionsCard({ returnPath = '/meetings' }: { returnPa
               onClick={() => connect(p)}
               disabled={busy === p}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
                 background: 'var(--bg-deep)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
                 fontSize: 13, fontWeight: 600, opacity: busy === p ? 0.6 : 1,
               }}

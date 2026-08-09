@@ -39,14 +39,14 @@ import {
 const VIZ_OPTIONS: WidgetViz[] = ['stat', 'bar', 'line', 'gauge'];
 
 const inputStyle: React.CSSProperties = {
-  padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
 };
-const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: '1px solid transparent' };
+const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: '1px solid transparent' };
 
 /** 'me' = the personal pinned view; a number = a saved tenant-shared dashboard id. */
 type View = 'me' | number;
@@ -180,7 +180,7 @@ export default function InsightsHomePage() {
           <input style={{ ...inputStyle, flex: '1 1 320px' }} placeholder={td('ask.placeholder')} value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void ask(); }} />
           <button style={btnStyle} onClick={() => void ask()} disabled={asking}>{asking ? td('ask.asking') : td('ask.button')}</button>
         </div>
-        {answer && <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)' }}>
+        {answer && <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{answer.value == null ? '—' : answer.unit === 'USD' ? `$${Math.round(answer.value).toLocaleString('en-US')}` : answer.unit === '%' ? `${Math.round(answer.value * 100) / 100}%` : `${Math.round(answer.value * 100) / 100}${answer.unit === '/day' ? '/day' : answer.unit === 'hours' ? 'h' : ''}`}</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{answer.explanation}</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{td('ask.matched')}: <code>{answer.matchedMetric}</code></div>

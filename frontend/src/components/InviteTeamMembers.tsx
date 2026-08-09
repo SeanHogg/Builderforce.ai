@@ -94,7 +94,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             fontSize: 14,
             background: 'var(--bg-base)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             color: 'var(--text-primary)',
             outline: 'none',
           }}
@@ -108,7 +108,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             fontSize: 14,
             background: 'var(--bg-base)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             color: 'var(--text-primary)',
             cursor: 'pointer',
           }}
@@ -125,9 +125,9 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             fontSize: 14,
             fontWeight: 600,
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: adding || !email.trim() ? 'not-allowed' : 'pointer',
             opacity: adding || !email.trim() ? 0.6 : 1,
             whiteSpace: 'nowrap',
@@ -149,7 +149,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 padding: '8px 12px',
                 background: 'var(--bg-base)',
                 border: `1px solid ${invite.status === 'error' ? 'var(--error-border, #e74c3c)' : invite.status === 'added' ? 'rgba(34,197,94,0.3)' : invite.status === 'invited' ? 'rgba(245,158,11,0.35)' : 'var(--border-subtle)'}`,
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 fontSize: 13,
               }}
             >

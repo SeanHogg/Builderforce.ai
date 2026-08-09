@@ -10,8 +10,8 @@ import { badge } from './KnowledgeClient';
 function stateColor(state: string): React.CSSProperties {
   if (state === 'completed' || state === 'acknowledged')
     return { background: 'var(--success-bg, #0f3d2e)', color: 'var(--success-text, #4ade80)' };
-  if (state === 'overdue') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' };
-  return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' };
+  if (state === 'overdue') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, var(--error))' };
+  return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, var(--amber-bright))' };
 }
 
 /**
@@ -49,7 +49,7 @@ export function MyTrainingSection() {
               alignItems: 'center',
               gap: 12,
               padding: '12px 16px',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--border, #333)',
               background: 'var(--surface, #1a1a1a)',
               textDecoration: 'none',
@@ -128,18 +128,18 @@ function ComplianceAudit() {
                   {data.documents.map((d) => (
                     <tr key={d.documentId} style={{ borderTop: '1px solid var(--border, #333)' }}>
                       <td style={td}>
-                        <Link href={`/knowledge/${d.documentId}`} style={{ color: 'var(--accent, #60a5fa)' }}>
+                        <Link href={`/knowledge/${d.documentId}`} style={{ color: 'var(--accent, var(--info))' }}>
                           {d.title}
                         </Link>
                       </td>
                       <td style={td}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 80, height: 6, borderRadius: 3, background: 'var(--surface-2, #222)' }}>
+                          <div style={{ width: 80, height: 6, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2, #222)' }}>
                             <div
                               style={{
                                 width: `${d.percent}%`,
                                 height: '100%',
-                                borderRadius: 3,
+                                borderRadius: 'var(--radius-sm)',
                                 background: d.percent >= 100 ? 'var(--success-text, #4ade80)' : 'var(--accent, #2563eb)',
                               }}
                             />
@@ -149,7 +149,7 @@ function ComplianceAudit() {
                       </td>
                       <td style={td}>{d.acknowledged}</td>
                       <td style={td}>{d.pending}</td>
-                      <td style={{ ...td, color: d.overdue > 0 ? 'var(--error-text, #f87171)' : undefined }}>{d.overdue}</td>
+                      <td style={{ ...td, color: d.overdue > 0 ? 'var(--error-text, var(--error))' : undefined }}>{d.overdue}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,13 +167,13 @@ export function Stat({ label, value, danger }: { label: string; value: string; d
     <div
       style={{
         padding: '12px 18px',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border, #333)',
         background: 'var(--surface, #1a1a1a)',
         minWidth: 110,
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--error-text, #f87171)' : undefined }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--error-text, var(--error))' : undefined }}>{value}</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{label}</div>
     </div>
   );

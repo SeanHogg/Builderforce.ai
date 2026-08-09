@@ -28,7 +28,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
         flex: '1 1 140px',
         minWidth: 120,
         padding: '12px 14px',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
         background: 'var(--surface)',
       }}
@@ -277,7 +277,7 @@ export default function ErrorsPanel() {
                             style={{
                               display: 'inline-block',
                               padding: '1px 7px',
-                              borderRadius: 999,
+                              borderRadius: 'var(--radius-full)',
                               fontSize: 11,
                               fontWeight: 600,
                               border: '1px solid var(--border)',

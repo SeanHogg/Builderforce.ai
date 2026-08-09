@@ -13,22 +13,22 @@ import type { ProjectScore, ToolSummary, SystemAuditSummary } from '@/lib/tools'
 const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
 };
 const primaryBtn: React.CSSProperties = {
-  padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const subtleBtn: React.CSSProperties = {
-  padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8, textDecoration: 'none',
+  padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', textDecoration: 'none',
   background: 'var(--surface-interactive)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap', cursor: 'pointer',
 };
 const ghostBtn: React.CSSProperties = {
-  padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+  padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)',
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', whiteSpace: 'nowrap', cursor: 'pointer',
 };
 
@@ -132,13 +132,13 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
       </div>
 
       {error && (
-        <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.12)', color: 'var(--error-text)', borderRadius: 8 }}>
+        <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.12)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>
           {t('loadError')}: {error}
         </div>
       )}
 
       {archMsg && (
-        <div style={{ fontSize: 12, color: archState === 'error' ? '#ef4444' : '#22c55e' }}>{archMsg}</div>
+        <div style={{ fontSize: 12, color: archState === 'error' ? '#ef4444' : 'var(--success)' }}>{archMsg}</div>
       )}
 
       <div style={cardStyle}>

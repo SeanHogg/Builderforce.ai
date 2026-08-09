@@ -93,7 +93,7 @@ export function GithubActionsSurfaceNotice({ surface }: { surface: string }) {
     <div
       role="status"
       style={{
-        marginTop: 8, padding: '10px 12px', borderRadius: 8,
+        marginTop: 8, padding: '10px 12px', borderRadius: 'var(--radius-md)',
         // Theme tokens only — --warning/--warning-bg are redefined per theme, so
         // this reads correctly in both light and dark.
         border: '1px solid var(--warning)',

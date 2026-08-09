@@ -227,7 +227,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 padding: '10px 14px',
                 outline: 'none',
               }}
@@ -246,7 +246,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 padding: '10px 14px',
                 outline: 'none',
               }}
@@ -268,9 +268,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 fontSize: '0.875rem',
                 fontWeight: 600,
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 cursor: isCreating || !newProjectName.trim() ? 'not-allowed' : 'pointer',
                 opacity: isCreating || !newProjectName.trim() ? 0.7 : 1,
               }}
@@ -315,9 +315,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               fontSize: '0.875rem',
               fontWeight: 600,
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
               boxShadow: '0 4px 14px var(--shadow-coral-mid)',
@@ -336,7 +336,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             textAlign: 'center',
             padding: 48,
             background: 'var(--bg-elevated)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
           }}
         >
@@ -348,9 +348,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             style={{
               padding: '12px 24px',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               fontWeight: 600,
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',

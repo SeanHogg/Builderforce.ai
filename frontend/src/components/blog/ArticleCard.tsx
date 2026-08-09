@@ -90,7 +90,7 @@ export function ArticleCardStyles() {
       .blog-card {
         background: var(--surface-card);
         border: 1px solid var(--border-subtle);
-        border-radius: 20px;
+        border-radius: var(--radius-xl);
         padding: 28px 24px;
         backdrop-filter: blur(12px);
         display: flex;
@@ -123,7 +123,7 @@ export function ArticleCardStyles() {
         font-size: 0.7rem;
         font-weight: 600;
         padding: 2px 8px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: var(--surface-coral-soft);
         color: var(--coral-bright);
         border: 1px solid var(--border-accent);

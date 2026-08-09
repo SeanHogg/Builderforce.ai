@@ -61,7 +61,7 @@ const CAP_DORA = 'insights.delivery' as const;
 
 const TIER_ORDER = ['elite', 'high', 'medium', 'low'] as const;
 type TierKey = (typeof TIER_ORDER)[number];
-const TIER_COLOR: Record<TierKey, string> = { elite: '#15803d', high: '#22c55e', medium: '#f59e0b', low: '#ef4444' };
+const TIER_COLOR: Record<TierKey, string> = { elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: '#ef4444' };
 const PHASE_ORDER: LifecyclePhase[] = ['refinement', 'work', 'review', 'deploy'];
 
 // DORA tier classification (index 0=Elite … 3=Low) — same thresholds as DoraLens.

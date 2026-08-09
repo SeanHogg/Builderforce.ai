@@ -149,7 +149,7 @@ export default function PersonaDetailPage() {
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Output Prefix</div>
-            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 6, fontSize: 13 }}>{persona.outputPrefix}</code>
+            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>{persona.outputPrefix}</code>
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Capabilities</div>

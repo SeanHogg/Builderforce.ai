@@ -59,7 +59,7 @@ export default function RoleChoiceScreen({
           maxWidth: 860,
           background: 'var(--surface-card)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 20,
+          borderRadius: 'var(--radius-xl)',
           boxShadow: '0 16px 48px var(--shadow-coral-soft)',
           padding: 'clamp(24px, 4vw, 40px)',
         }}
@@ -70,7 +70,7 @@ export default function RoleChoiceScreen({
               display: 'inline-block', marginBottom: 12,
               fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
-              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
               fontFamily: 'var(--font-display)',
             }}
           >
@@ -97,7 +97,7 @@ export default function RoleChoiceScreen({
             style={{
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 14,
+              borderRadius: 'var(--radius-lg)',
               padding: 18,
             }}
           >
@@ -126,7 +126,7 @@ export default function RoleChoiceScreen({
               background: 'rgba(239,68,68,0.12)',
               border: '1px solid rgba(239,68,68,0.4)',
               color: 'var(--error-text)',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               padding: '10px 14px',
               fontSize: '0.875rem',
             }}
@@ -144,9 +144,9 @@ export default function RoleChoiceScreen({
             style={{
               padding: '13px 28px',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
               fontSize: '0.95rem',

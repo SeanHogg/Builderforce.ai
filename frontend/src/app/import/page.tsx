@@ -87,7 +87,7 @@ export default function ImportPage() {
             aria-pressed={mode === 'guided'}
             style={{
               padding: '8px 16px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: mode === 'guided' ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
               background: mode === 'guided' ? 'var(--accent)' : 'var(--bg-base)',
               color: mode === 'guided' ? '#fff' : 'var(--text-primary)',
@@ -104,7 +104,7 @@ export default function ImportPage() {
             aria-pressed={mode === 'bulk'}
             style={{
               padding: '8px 16px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: mode === 'bulk' ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
               background: mode === 'bulk' ? 'var(--accent)' : 'var(--bg-base)',
               color: mode === 'bulk' ? '#fff' : 'var(--text-primary)',

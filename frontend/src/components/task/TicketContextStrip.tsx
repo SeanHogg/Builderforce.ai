@@ -23,7 +23,7 @@ import { tasksApi, kanbanApi, type TicketContext, type TicketObjective } from '@
 
 const card: CSSProperties = {
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 12,
   background: 'var(--bg-elevated)',
   display: 'flex',
@@ -65,7 +65,7 @@ function Meter({ percent, height = 8 }: { percent: number; height?: number }) {
       aria-valuenow={percent}
       aria-valuemin={0}
       aria-valuemax={100}
-      style={{ height, borderRadius: 999, background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden', width: '100%' }}
+      style={{ height, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden', width: '100%' }}
     >
       <div style={{ width: `${Math.min(100, Math.max(0, percent))}%`, height: '100%', background: meterColor(percent), transition: 'width .3s ease' }} />
     </div>
@@ -257,8 +257,8 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
               onClick={coordinate}
               disabled={coordinating}
               style={{
-                padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700,
-                background: 'var(--coral-bright, #f97316)', color: '#fff',
+                padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', fontSize: 12, fontWeight: 700,
+                background: 'var(--coral-bright, #f97316)', color: 'var(--text-on-accent)',
                 cursor: coordinating ? 'default' : 'pointer', opacity: coordinating ? 0.65 : 1,
               }}
             >
@@ -268,7 +268,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
               type="button"
               onClick={() => onOpenTab?.('accountability')}
               style={{
-                padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+                padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-base)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
               }}
             >

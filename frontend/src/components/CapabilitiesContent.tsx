@@ -59,7 +59,7 @@ export function CapabilitiesContent({
               color: activeSection === s.id ? 'var(--coral-bright)' : 'var(--text-muted)',
               background: activeSection === s.id ? 'rgba(255,107,53,0.08)' : 'transparent',
               border: 'none',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
               transition: 'all 0.15s',
             }}

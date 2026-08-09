@@ -158,7 +158,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
                   flex: 1,
                   overflowY: 'auto',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   padding: '8px 14px',
                   background: 'var(--bg-deep)',
                 }}

@@ -90,7 +90,7 @@ export default function RegisterPageClient() {
     background: 'var(--bg-elevated)',
     color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     padding: '11px 14px',
     fontSize: '0.9rem',
     outline: 'none',
@@ -142,7 +142,7 @@ export default function RegisterPageClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ThemeToggleButton />
             <Link href="/login" style={{
-              padding: '7px 16px', borderRadius: 10,
+              padding: '7px 16px', borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--border-subtle)',
               background: 'var(--surface-card)',
               color: 'var(--text-primary)', textDecoration: 'none',
@@ -179,7 +179,7 @@ export default function RegisterPageClient() {
                 background: 'var(--surface-coral-soft)',
                 color: 'var(--coral-bright)',
                 border: '1px solid var(--border-accent)',
-                borderRadius: 999, padding: '4px 12px',
+                borderRadius: 'var(--radius-full)', padding: '4px 12px',
                 fontFamily: 'var(--font-display)',
               }}>{f}</span>
             ))}
@@ -200,7 +200,7 @@ export default function RegisterPageClient() {
           <div style={{
             background: 'var(--surface-card)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 20,
+            borderRadius: 'var(--radius-xl)',
             padding: '32px 28px',
             backdropFilter: 'blur(12px)',
             boxShadow: '0 16px 48px var(--shadow-coral-soft)',
@@ -311,7 +311,7 @@ export default function RegisterPageClient() {
               </label>
 
               {error && (
-                <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--error-text)', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
+                <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--error-text)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: '0.875rem' }}>
                   {error}
                 </div>
               )}
@@ -322,7 +322,7 @@ export default function RegisterPageClient() {
                 style={{
                   width: '100%', marginTop: 4,
                   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff', border: 'none', borderRadius: 12, padding: '13px',
+                  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', padding: '13px',
                   fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem',
                   cursor: isLoading ? 'wait' : 'pointer',
                   opacity: (isLoading || !email || !password || !confirmPassword || !agreeToTerms || !ageAttested) ? 0.5 : 1,
@@ -366,7 +366,7 @@ export default function RegisterPageClient() {
               display: 'inline-block', marginBottom: 12,
               fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
-              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
               fontFamily: 'var(--font-display)',
             }}>{marketing.eyebrow}</span>
 
@@ -382,7 +382,7 @@ export default function RegisterPageClient() {
             {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
               {marketing.stats.map(s => (
-                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                 </div>
@@ -400,7 +400,7 @@ export default function RegisterPageClient() {
             </ul>
 
             {/* Comparison quote */}
-            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 10px 10px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 var(--radius-lg) var(--radius-lg) 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
               &ldquo;{marketing.quote}&rdquo;
             </blockquote>
 

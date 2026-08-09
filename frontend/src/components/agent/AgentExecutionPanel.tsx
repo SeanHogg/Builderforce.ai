@@ -129,7 +129,7 @@ function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
 }
 
 type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline' | 'pull-request';
-const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 };
+const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 
 /** The cloud agent that ran a specific execution — read from that execution's own
@@ -623,7 +623,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   .then(() => { loadExecutions(true); onTaskChanged?.(); })
                   .finally(() => setCoordinating(false));
               }}
-              style={{ padding: '8px 14px', border: 'none', borderRadius: 8, background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: coordinating ? 'default' : 'pointer', opacity: coordinating ? 0.65 : 1 }}
+              style={{ padding: '8px 14px', border: 'none', borderRadius: 'var(--radius-md)', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: coordinating ? 'default' : 'pointer', opacity: coordinating ? 0.65 : 1 }}
             >
               {coordinating ? t('coordinating') : t('coordinateNow')}
             </button>
@@ -638,7 +638,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           />
         )}
         {gate && (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, padding: 10, background: 'var(--bg-deep)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, padding: 10, background: 'var(--bg-deep)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span>{t('awaitingApproval', { reason: gate.reason })}</span>
             {/* Resolve inline — approving auto-starts the run (server replays it as
                 the same agent + model) and we follow the new execution. */}
@@ -709,7 +709,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
             {runAgentName && (
               <span
                 title={t('agentThatRan')}
-                style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: 6, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}
+                style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}
               >
                 {runAgentName}
                 {runAgentType && !runAgentName.includes(runAgentType) && (
@@ -730,7 +730,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                  /api/runtime/executions/:id/cancel) — everything else in this header
                  (status, agent, live/polling indicator) is read-only and stays open. */
               <RoleGate capability="runtime.execute">
-                <button type="button" onClick={cancel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <button type="button" onClick={cancel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   {t('cancel')}
                 </button>
               </RoleGate>
@@ -747,7 +747,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   disabled={revertingId != null}
                   title={t('revertHint')}
                   style={{
-                    fontSize: 11, padding: '4px 10px', borderRadius: 6,
+                    fontSize: 11, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--danger, #dc2626)', background: 'var(--bg-base)',
                     color: 'var(--danger, #dc2626)',
                     cursor: revertingId != null ? 'default' : 'pointer',
@@ -799,7 +799,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   user's directions interleave between the agent's narration. */}
               <div
                 ref={outputRef}
-                style={{ height: 360, overflow: 'auto', padding: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}
+                style={{ height: 360, overflow: 'auto', padding: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 12 }}
               >
                 {thread.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
@@ -831,13 +831,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
                   placeholder={isRunning ? t('steerPlaceholder') : t('followUpPlaceholder')}
                   rows={2}
-                  style={{ flex: 1, resize: 'vertical', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
+                  style={{ flex: 1, resize: 'vertical', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
                 <button
                   type="button"
                   onClick={send}
                   disabled={!draft.trim() || sending || selectedId == null}
-                  style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : '#fff', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
+                  style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : '#fff', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
                   title={isRunning ? t('steerTitle') : t('startRunTitle')}
                 >
                   {sending ? (isRunning ? t('sendingLabel') : t('startingLabel')) : isRunning ? t('send') : t('startRun')}

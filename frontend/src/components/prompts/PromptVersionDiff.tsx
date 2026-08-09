@@ -101,7 +101,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
             </div>
 
             {/* Diff body */}
-            <div style={{ overflowX: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 10 }}>
+            <div style={{ overflowX: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
               {mode === 'unified' ? <UnifiedDiff rows={rows} /> : <SplitDiff rows={rows} />}
             </div>
 

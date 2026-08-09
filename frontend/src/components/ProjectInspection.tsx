@@ -31,9 +31,9 @@ import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 /** Best→worst tier order the banded bars are drawn in (matches DORA convention). */
 const TIER_ORDER: HealthTier[] = ['healthy', 'watch', 'at_risk', 'critical'];
 const TIER_HEX: Record<HealthTier, string> = {
-  healthy: '#22c55e',
+  healthy: 'var(--success)',
   watch: '#eab308',
-  at_risk: '#f59e0b',
+  at_risk: 'var(--warning)',
   critical: '#ef4444',
 };
 
@@ -63,7 +63,7 @@ export function ProjectInspectionGrade({ project, onOpen }: ProjectInspectionGra
         aria-hidden
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          width: 40, height: 40, borderRadius: 9, flexShrink: 0,
+          width: 40, height: 40, borderRadius: 'var(--radius-md)', flexShrink: 0,
           background: `${insp.color}22`, border: `1px solid ${insp.color}`,
         }}
       >
@@ -81,7 +81,7 @@ export function ProjectInspectionGrade({ project, onOpen }: ProjectInspectionGra
               key={d.key}
               title={`${t(`dim.${d.key}.label`)}: ${d.score == null ? t('noData') : d.score}`}
               style={{
-                flex: 1, height: 6, borderRadius: 999,
+                flex: 1, height: 6, borderRadius: 'var(--radius-full)',
                 background: d.score == null ? 'var(--border-subtle)' : d.color,
                 opacity: d.score == null ? 0.5 : 1,
               }}
@@ -93,7 +93,7 @@ export function ProjectInspectionGrade({ project, onOpen }: ProjectInspectionGra
         <span
           style={{
             fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)',
-            background: 'var(--surface-interactive)', borderRadius: 999, padding: '2px 7px',
+            background: 'var(--surface-interactive)', borderRadius: 'var(--radius-full)', padding: '2px 7px',
             whiteSpace: 'nowrap', flexShrink: 0,
           }}
         >
@@ -106,7 +106,7 @@ export function ProjectInspectionGrade({ project, onOpen }: ProjectInspectionGra
   const baseStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '8px 10px', margin: '2px 0',
-    background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+    background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
     width: '100%', textAlign: 'left',
   };
 
@@ -162,14 +162,14 @@ export function ProjectInspectionSummary({ project }: { project: Project }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
         height: '100%', padding: 16, background: 'var(--bg-base)',
-        border: `1px solid ${insp.color}`, borderRadius: 12,
+        border: `1px solid ${insp.color}`, borderRadius: 'var(--radius-lg)',
       }}
     >
       <div
         aria-hidden
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          width: 64, height: 64, borderRadius: 12, flexShrink: 0,
+          width: 64, height: 64, borderRadius: 'var(--radius-lg)', flexShrink: 0,
           background: `${insp.color}22`, border: `2px solid ${insp.color}`,
         }}
       >
@@ -240,15 +240,15 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
         <div
           style={{
             display: 'flex', flexDirection: 'column', gap: 8, padding: 14,
-            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('maturity.title')}</span>
             {maturity?.result.scoreLabel && (
               <span style={{
-                fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: diagnosticScoreColor(maturityScore),
-                padding: '1px 8px', borderRadius: 999,
+                fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-on-accent)', background: diagnosticScoreColor(maturityScore),
+                padding: '1px 8px', borderRadius: 'var(--radius-full)',
               }}>
                 {maturity.result.scoreLabel}
               </span>
@@ -257,8 +257,8 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
               {t('maturity.outOf', { score: maturityScore })}
             </span>
           </div>
-          <div style={{ height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
-            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: diagnosticScoreColor(maturityScore), borderRadius: 999 }} />
+          <div style={{ height: 8, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
+            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: diagnosticScoreColor(maturityScore), borderRadius: 'var(--radius-full)' }} />
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('maturity.subtitle')}</p>
           {onNavigate && (
@@ -292,7 +292,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
           <div
             style={{
               fontSize: 13, color: 'var(--text-secondary)', padding: 12,
-              background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+              background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
             }}
           >
             {t('allClear')}
@@ -306,7 +306,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
                   key={rec.key}
                   style={{
                     display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12,
-                    background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+                    background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
                   }}
                 >
                   <span
@@ -314,7 +314,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
                     style={{
                       flexShrink: 0, width: 22, height: 22, borderRadius: '50%',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, fontWeight: 800, color: '#fff', background: 'var(--coral-bright)',
+                      fontSize: 11, fontWeight: 800, color: 'var(--text-on-accent)', background: 'var(--coral-bright)',
                     }}
                   >
                     {i + 1}
@@ -361,7 +361,7 @@ const recActionStyle: React.CSSProperties = {
   color: 'var(--coral-bright)',
   background: 'transparent',
   border: '1px solid var(--coral-bright)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   padding: '4px 10px',
   textDecoration: 'none',
   whiteSpace: 'nowrap',

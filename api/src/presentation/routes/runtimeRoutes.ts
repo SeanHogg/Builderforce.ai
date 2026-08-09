@@ -522,6 +522,24 @@ async function startDispatchedExecution(
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
+  // Per-agent containment: `ide_agents.status != active` is the quarantine switch.
+  // Refuse the named teammate without disturbing peers or the workspace-wide switch.
+  if (agent.active === false) {
+    const msg = `Agent "${agent.label ?? agent.ref ?? 'agent'}" is quarantined and cannot start executions. Re-enable it in Workforce before retrying.`;
+    await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg });
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+      toolName: 'runtime.quarantined', category: 'governance',
+      detail: { agentRef: agent.ref }, result: msg,
+    });
+    const updated = await runtimeService.getExecution(execution.id);
+    notifyExecutionSubscribers(execution.id, {
+      type: 'done', executionId: execution.id, status: updated.status,
+      execution: updated.toPlain(), ts: new Date().toISOString(),
+    });
+    return updated.toPlain();
+  }
+
   // The EXECUTING agent vs the ticket's OWNER are distinct roles. The swimlane's
   // agent works whatever stage (lane) the ticket is in — it executes AS itself
   // (resolved into `agent.ref` from the lane assignment / payload) and that run is

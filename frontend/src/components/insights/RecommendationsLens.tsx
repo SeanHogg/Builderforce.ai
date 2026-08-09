@@ -65,10 +65,10 @@ function Card({
 }) {
   const color = SEVERITY_COLOR[r.severity];
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderLeft: `4px solid ${color}`, borderRadius: 12, padding: 18 }}>
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderLeft: `4px solid ${color}`, borderRadius: 'var(--radius-lg)', padding: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: color, padding: '2px 8px', borderRadius: 999 }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-on-accent)', background: color, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
             {t(`recs.severity.${r.severity}`)}
           </span>
           <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -82,7 +82,7 @@ function Card({
             type="button"
             onClick={onDismiss}
             disabled={dismissing}
-            style={{ fontSize: '0.8rem', padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: dismissing ? 'default' : 'pointer', opacity: dismissing ? 0.6 : 1 }}
+            style={{ fontSize: '0.8rem', padding: '5px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: dismissing ? 'default' : 'pointer', opacity: dismissing ? 0.6 : 1 }}
           >
             {dismissing ? t('recs.dismissing') : t('recs.dismiss')}
           </button>

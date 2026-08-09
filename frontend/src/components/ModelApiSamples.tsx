@@ -106,14 +106,14 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
         onClick={copy}
         aria-label={t('copy')}
         style={{
-          position: 'absolute', top: 8, right: 8, fontSize: 12, padding: '4px 10px', borderRadius: 8,
+          position: 'absolute', top: 8, right: 8, fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-md)',
           background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', cursor: 'pointer',
         }}
       >
         {copied ? t('copied') : t('copy')}
       </button>
       <pre style={{
-        margin: 0, padding: '16px 18px', borderRadius: 12, overflowX: 'auto',
+        margin: 0, padding: '16px 18px', borderRadius: 'var(--radius-lg)', overflowX: 'auto',
         background: '#0e1525', border: '1px solid var(--border-subtle)',
         fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 13, lineHeight: 1.6, color: '#dce6f7',
       }}>
@@ -146,7 +146,7 @@ export default function ModelApiSamples({
             aria-selected={lang === l}
             onClick={() => setLang(l)}
             style={{
-              fontSize: 13, padding: '6px 14px', borderRadius: 9, cursor: 'pointer', fontWeight: 600,
+              fontSize: 13, padding: '6px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600,
               border: '1px solid var(--border-subtle)',
               background: lang === l ? 'var(--coral-bright)' : 'transparent',
               color: lang === l ? '#fff' : 'var(--text-secondary)',

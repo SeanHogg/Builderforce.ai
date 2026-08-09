@@ -9,7 +9,7 @@
   overflow: hidden;
   background: color-mix(in srgb, var(--surface-card-strong) 92%, transparent);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
 }
 
@@ -69,7 +69,7 @@
   color: var(--text-secondary);
   background: var(--surface-coral-soft);
   border: 1px solid var(--border-accent);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 .note > span {
@@ -99,7 +99,7 @@
     overflow: hidden;
     background: color-mix(in srgb, var(--surface-card-strong) 94%, transparent);
     border: 1px solid var(--border-subtle);
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
   }
   .table td {
     display: grid;

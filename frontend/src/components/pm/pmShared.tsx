@@ -14,7 +14,7 @@ const noticeStyle: CSSProperties = {
   textAlign: 'center',
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   color: 'var(--text-secondary)',
   fontSize: '0.9rem',
 };
@@ -30,7 +30,7 @@ export function PmError({ message }: { message: string }) {
 /** A titled section card matching the dashboard surfaces. */
 export function PmCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20 }}>
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>{title}</h3>
         {action}
@@ -60,10 +60,10 @@ export function StatusPill({ value }: { value: string }) {
       style={{
         display: 'inline-block',
         padding: '2px 10px',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         fontSize: '0.72rem',
         fontWeight: 600,
-        color: '#fff',
+        color: 'var(--text-on-accent)',
         background: color,
         whiteSpace: 'nowrap',
       }}
@@ -82,7 +82,7 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
   const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
+      <div style={{ flex: 1, height: 8, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width 0.3s ease' }} />
       </div>
       <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)', minWidth: 36, textAlign: 'right' }}>

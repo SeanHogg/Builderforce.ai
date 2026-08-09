@@ -25,16 +25,16 @@ const heading: React.CSSProperties = {
 };
 const label: React.CSSProperties = { display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 5 };
 const input: React.CSSProperties = {
-  width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  width: '100%', padding: '7px 9px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '0.85rem',
 };
 const primaryBtn: React.CSSProperties = {
   fontSize: '0.82rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-  color: '#fff', border: 'none', borderRadius: 9, padding: '8px 14px', cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', padding: '8px 14px', cursor: 'pointer',
 };
 const ghostBtn: React.CSSProperties = {
   fontSize: '0.78rem', background: 'none', border: '1px solid var(--border-subtle)',
-  color: 'var(--text-secondary)', borderRadius: 8, padding: '6px 11px', cursor: 'pointer',
+  color: 'var(--text-secondary)', borderRadius: 'var(--radius-md)', padding: '6px 11px', cursor: 'pointer',
 };
 
 export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; projectId?: number }) {
@@ -75,7 +75,7 @@ export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; pro
                 key={c.id}
                 onClick={() => voice.setSelectedCloneId(c.id)}
                 style={{
-                  padding: '5px 11px', borderRadius: 16, cursor: 'pointer', fontSize: '0.8rem',
+                  padding: '5px 11px', borderRadius: 'var(--radius-xl)', cursor: 'pointer', fontSize: '0.8rem',
                   border: `1px solid ${c.id === voice.selectedCloneId ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                   background: c.id === voice.selectedCloneId ? 'rgba(255,107,107,0.12)' : 'var(--bg-surface)',
                   color: 'var(--text-primary)',
@@ -121,7 +121,7 @@ function EngineBadge({ onDevice }: { onDevice: boolean | null }) {
   const text = onDevice ? t(hasWebGPU() ? 'engineWebGPU' : 'engineCPU') : t('engineServer');
   return (
     <span style={{
-      fontSize: '0.68rem', fontWeight: 600, padding: '4px 10px', borderRadius: 16,
+      fontSize: '0.68rem', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-xl)',
       border: '1px solid var(--border-subtle)', color: onDevice ? '#6ee7b7' : 'var(--text-secondary)',
       background: onDevice ? 'rgba(16,185,129,0.1)' : 'var(--bg-surface)',
     }}>{text}</span>

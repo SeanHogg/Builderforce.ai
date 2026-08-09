@@ -117,7 +117,7 @@ export default function PersonalityUsagePanel({
 
   const cardStyle: React.CSSProperties = {
     border: '1px solid var(--border)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     padding: 14,
     background: 'var(--surface)',
   };
@@ -132,7 +132,7 @@ export default function PersonalityUsagePanel({
         fontSize: 11,
         fontWeight: 600,
         padding: '2px 8px',
-        borderRadius: 9999,
+        borderRadius: 'var(--radius-full)',
         background: d > 0 ? 'var(--success-bg, var(--surface-2))' : 'var(--surface-coral-soft, var(--surface-2))',
         color: d > 0 ? 'var(--success-text, var(--text-strong))' : 'var(--coral-bright, var(--text-strong))',
         border: '1px solid var(--border)',
@@ -187,7 +187,7 @@ export default function PersonalityUsagePanel({
                   type="button"
                   onClick={onDismiss}
                   disabled={busy}
-                  style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+                  style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                 >
                   {t('dismiss')}
                 </button>
@@ -195,7 +195,7 @@ export default function PersonalityUsagePanel({
                   type="button"
                   onClick={onApply}
                   disabled={busy}
-                  style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                  style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                 >
                   {busy ? t('applying') : t('apply')}
                 </button>
@@ -226,14 +226,14 @@ export default function PersonalityUsagePanel({
             {events.map((ev) => (
               <div
                 key={ev.id}
-                style={{ padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-elevated)' }}
+                style={{ padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-strong)' }}>
                     {ev.directivesSummary || t('activeNone')}
                   </span>
                   {!ev.recorded && (
-                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 9999, background: 'var(--surface-2)', color: 'var(--muted)' }}>
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', color: 'var(--muted)' }}>
                       {t('derived')}
                     </span>
                   )}

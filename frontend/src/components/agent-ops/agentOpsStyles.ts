@@ -13,7 +13,7 @@ import type { CSSProperties } from 'react';
 export const card: CSSProperties = {
   background: 'var(--surface, #ffffff)',
   border: '1px solid var(--border, #e5e7eb)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 'clamp(12px, 3vw, 18px)',
 };
 
@@ -74,13 +74,13 @@ export function chip(tone: 'neutral' | 'accent' | 'warn' | 'good' = 'neutral'): 
     neutral: { bg: 'var(--bg-elevated, #f3f4f6)', fg: 'var(--text-secondary)' },
     accent: { bg: 'var(--accent-subtle, var(--bg-elevated, #eef2ff))', fg: 'var(--accent, #4f46e5)' },
     warn: { bg: 'var(--warning-subtle, var(--bg-elevated, #fef3c7))', fg: 'var(--warning, #b45309)' },
-    good: { bg: 'var(--success-subtle, var(--bg-elevated, #dcfce7))', fg: 'var(--success, #15803d)' },
+    good: { bg: 'var(--success-subtle, var(--bg-elevated, #dcfce7))', fg: 'var(--success, var(--success))' },
   };
   const { bg, fg } = palette[tone];
   return {
     display: 'inline-block',
     padding: '2px 8px',
-    borderRadius: 999,
+    borderRadius: 'var(--radius-full)',
     fontSize: '0.72rem',
     fontWeight: 600,
     background: bg,
@@ -94,7 +94,7 @@ export function button(kind: 'primary' | 'ghost' | 'danger' = 'ghost'): CSSPrope
   const base: CSSProperties = {
     minHeight: 40,
     padding: '8px 14px',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     fontSize: '0.85rem',
     fontWeight: 600,
     cursor: 'pointer',
@@ -116,7 +116,7 @@ export function button(kind: 'primary' | 'ghost' | 'danger' = 'ghost'): CSSPrope
 export const input: CSSProperties = {
   minHeight: 40,
   padding: '8px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #e5e7eb)',
   background: 'var(--surface, #ffffff)',
   color: 'var(--text-primary)',

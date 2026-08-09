@@ -12,7 +12,7 @@
 export default function MarketingVisual({ variant }: { variant: 'standard' | 'freelancer' | 'sales' }) {
   const wrap: React.CSSProperties = {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 'var(--radius-xl)',
     marginBottom: 24,
     padding: '20px 20px 8px',
     background: 'linear-gradient(135deg, var(--surface-coral-soft), transparent 70%)',

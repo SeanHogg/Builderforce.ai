@@ -52,7 +52,7 @@ export default async function ComparePage() {
           display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
         }
         .cmp-pillar {
-          background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 22px 20px;
+          background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); padding: 22px 20px;
         }
         .cmp-pillar-icon { font-size: 1.5rem; margin-bottom: 10px; }
         .cmp-pillar-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--text-primary); margin: 0 0 6px; }
@@ -62,27 +62,27 @@ export default async function ComparePage() {
         .cmp-intro { font-size: 0.97rem; color: var(--text-secondary); line-height: 1.7; max-width: none; margin: 0 0 24px; }
 
         .cmp-criteria { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-        .cmp-criterion { border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card); padding: 20px; }
+        .cmp-criterion { border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); padding: 20px; }
         .cmp-cat-title { font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--text-primary); margin: 0 0 6px; }
         .cmp-cat-blurb { font-size: 0.84rem; color: var(--text-muted); line-height: 1.6; margin: 0; }
 
         .cmp-cta { max-width: 820px; margin: 0 auto; padding: 40px 24px 80px; }
         .cmp-cta-box {
-          text-align: center; padding: 52px 40px; border-radius: 22px;
+          text-align: center; padding: 52px 40px; border-radius: var(--radius-xl);
           border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px);
         }
         .cmp-cta-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2.1rem); color: var(--text-primary); margin: 0 0 12px; }
         .cmp-cta-desc { font-size: 0.97rem; color: var(--text-secondary); max-width: 520px; margin: 0 auto 28px; line-height: 1.65; }
         .cmp-actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
         .cmp-btn-primary {
-          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 13px;
-          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: #fff;
+          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent);
           font-family: var(--font-display); font-weight: 600; font-size: 0.92rem; text-decoration: none;
           box-shadow: 0 6px 22px var(--shadow-coral-mid); transition: transform 0.22s ease, box-shadow 0.22s ease;
         }
         .cmp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px var(--shadow-coral-strong); }
         .cmp-btn-secondary {
-          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 13px;
+          display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-primary);
           font-family: var(--font-display); font-weight: 600; font-size: 0.92rem; text-decoration: none;
         }

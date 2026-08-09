@@ -104,7 +104,7 @@ export default function IntegrationGrid({
           gap: 10px;
           padding: 18px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           color: var(--text-primary);
           text-decoration: none;
@@ -120,7 +120,7 @@ export default function IntegrationGrid({
           justify-content: center;
           width: 48px;
           height: 48px;
-          border-radius: 11px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--accent) 14%, transparent);
         }
         .cc-int-name {

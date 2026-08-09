@@ -18,11 +18,11 @@ import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
 import { useConfirm } from '@/components/ConfirmProvider';
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 };
+const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: bg, color: fg,
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: bg, color: fg,
 });
-const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', fontSize: 13, outline: 'none' };
+const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none' };
 
 export function RolesView() {
   const t = useTranslations('workforceRoles');
@@ -148,7 +148,7 @@ export function RolesView() {
             {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
           </Select>
           {canManage && (
-            <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none' }}>
+            <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none' }}>
               {t('newRole')}
             </button>
           )}
@@ -163,10 +163,10 @@ export function RolesView() {
           <Select style={input} value={form.discipline} onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value as Discipline }))}>
             {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
           </Select>
-          <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
+          <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
             {creating ? t('creating') : t('addRole')}
           </button>
-          <button type="button" onClick={() => setShowNew(false)} style={{ fontSize: 13, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+          <button type="button" onClick={() => setShowNew(false)} style={{ fontSize: 13, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
             {tk('assignCancel')}
           </button>
         </div>
@@ -191,12 +191,12 @@ export function RolesView() {
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t(`discipline.${role.discipline}`)}</span>
                   <span style={{ flex: 1 }} />
                   {canManage && (
-                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)' }}>
+                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)' }}>
                       {tk('assign')}
                     </button>
                   )}
                   {canManage && !role.builtin && (
-                    <button type="button" onClick={() => onDeleteRole(role)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                    <button type="button" onClick={() => onDeleteRole(role)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
                       {t('delete')}
                     </button>
                   )}

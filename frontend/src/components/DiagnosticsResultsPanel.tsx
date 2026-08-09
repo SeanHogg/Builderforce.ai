@@ -45,7 +45,7 @@ export function DiagnosticsResultsPanel({
             type="button"
             onClick={onClose}
             aria-label={t('closeResults')}
-            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}
           >
             <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <line x1="18" y1="6" x2="6" y2="18" />

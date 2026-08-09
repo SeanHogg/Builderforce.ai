@@ -85,7 +85,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
     <div>
       {/* Instant website scan — real findings in seconds, no repo required. */}
       <div style={{
-        marginBottom: 18, padding: 14, borderRadius: 10,
+        marginBottom: 18, padding: 14, borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
       }}>
         <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{t('webHeading')}</div>
@@ -101,7 +101,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
             style={{
               flex: '1 1 220px', minWidth: 0, padding: '9px 12px', fontSize: 13,
               background: 'var(--bg-base)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8,
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             }}
           />
           <button
@@ -109,7 +109,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
             onClick={scanSite}
             disabled={webStatus === 'running' || !siteUrl.trim()}
             style={{
-              padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', color: '#fff',
+              padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', color: 'var(--text-on-accent)',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               cursor: webStatus === 'running' || !siteUrl.trim() ? 'not-allowed' : 'pointer',
               opacity: webStatus === 'running' || !siteUrl.trim() ? 0.6 : 1, flexShrink: 0,
@@ -147,7 +147,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
               disabled={running}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', width: '100%',
-                padding: '12px 14px', borderRadius: 10,
+                padding: '12px 14px', borderRadius: 'var(--radius-lg)',
                 background: isSel ? 'rgba(244,114,110,0.1)' : 'var(--bg-elevated)',
                 border: `1px solid ${isSel ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                 cursor: running ? 'default' : 'pointer',
@@ -158,7 +158,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
                 <span style={{ display: 'block', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{a.name}</span>
                 <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{a.blurb}</span>
               </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: st === 'done' ? '#22c55e' : st === 'error' ? 'var(--error-text, #e74c3c)' : st === 'running' ? 'var(--coral-bright)' : isSel ? 'var(--coral-bright)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: st === 'done' ? 'var(--success)' : st === 'error' ? 'var(--error-text, #e74c3c)' : st === 'running' ? 'var(--coral-bright)' : isSel ? 'var(--coral-bright)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {st === 'running' ? t('running') : st === 'done' ? t('started') : st === 'error' ? t('failed') : isSel ? '✓' : ''}
               </span>
             </button>
@@ -172,7 +172,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
           onClick={runSelected}
           disabled={running || selected.size === 0}
           style={{
-            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', color: '#fff',
+            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-lg)', border: 'none', color: 'var(--text-on-accent)',
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
             cursor: running || selected.size === 0 ? 'not-allowed' : 'pointer', opacity: running || selected.size === 0 ? 0.6 : 1,
           }}
@@ -181,7 +181,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
         </button>
         {ranAny && (
           <button type="button" onClick={viewReports} style={{
-            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 10,
+            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-lg)',
             background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', cursor: 'pointer',
           }}>{t('viewReports')}</button>
         )}

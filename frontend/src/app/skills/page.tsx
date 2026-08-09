@@ -209,7 +209,7 @@ export default function SkillsPage() {
         <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>{t('newSkill')}</button>
       </div>
 
-      {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>{t('tabAssigned', { n: assigned.length })}</button>
@@ -322,7 +322,7 @@ export default function SkillsPage() {
                     <div style={{ padding: s.icon ? 12 : 0 }}>
                       <div className="card-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 32, height: 32, background: 'var(--accent-subtle)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{(s as { emoji?: string }).emoji ?? '✨'}</div>
+                          <div style={{ width: 32, height: 32, background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{(s as { emoji?: string }).emoji ?? '✨'}</div>
                           <div>
                             <div className="card-title">{s.name}</div>
                             <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>

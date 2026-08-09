@@ -897,7 +897,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             padding: '6px 10px',
             cursor: 'pointer',
             flexShrink: 0,
@@ -909,9 +909,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           }}
           title={t('yourIdeProjects')}
         >
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 'var(--radius-sm)' }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 'var(--radius-sm)' }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 'var(--radius-sm)' }} />
         </button>
         {/* Editable project title */}
         <input
@@ -949,7 +949,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             color: 'var(--text-primary)',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             padding: '6px 10px',
             minWidth: 120,
             maxWidth: 320,
@@ -971,7 +971,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               background: 'var(--bg-elevated)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               padding: '5px 10px',
               fontSize: '0.82rem',
               cursor: 'pointer',
@@ -998,7 +998,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             padding: '5px 9px',
             fontSize: '0.95rem',
             cursor: 'pointer',
@@ -1020,7 +1020,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             display: 'flex', alignItems: 'center', gap: 5, marginLeft: 8, flexShrink: 0,
             padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
             fontFamily: 'var(--font-display)', color: 'var(--text-secondary)',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
           }}
         >
           <span>{modalityCopy.icon}</span>
@@ -1048,7 +1048,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               title={checkResults.map(r => `${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`).join('\n')}
               style={{
                 fontSize: '0.72rem', fontWeight: 600, flexShrink: 0,
-                color: failed > 0 ? '#f87171' : '#4ade80',
+                color: failed > 0 ? 'var(--error)' : '#4ade80',
               }}
             >
               {failed > 0 ? `✗ ${failed} check${failed > 1 ? 's' : ''} failed` : `✓ ${passed} check${passed > 1 ? 's' : ''} passed`}
@@ -1079,7 +1079,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             title={t('runChecksHint')}
             style={{
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8,
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
               padding: '5px 12px', fontSize: '0.82rem', fontWeight: 600,
               cursor: (isChecking || isRunning) ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
               display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
@@ -1101,8 +1101,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               disabled={disabled}
               title={isVoice && !voice.selectedCloneId ? 'Create or select a voice first' : undefined}
               style={{
-                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
-                color: '#fff', border: 'none', borderRadius: 8,
+                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--success), #16a34a)',
+                color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
                 padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
                 cursor: active ? 'wait' : (disabled ? 'not-allowed' : 'pointer'), fontFamily: 'var(--font-display)',
                 display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
@@ -1222,10 +1222,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               style={{
                 position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 18px', borderRadius: 9999, cursor: 'pointer',
+                padding: '10px 18px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
                 border: '1px solid var(--border-subtle)',
                 background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #d94f4a))',
-                color: '#fff', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem',
+                color: 'var(--text-on-accent)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem',
                 boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
               }}
             >
@@ -1305,7 +1305,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                   border: 'none', borderBottom: centerView === view ? '2px solid var(--coral-bright)' : '2px solid transparent',
                   cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 6,
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                 }}
               >
                 {view === 'preview' ? (
@@ -1335,7 +1335,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                     aria-pressed={previewDevice === d}
                     title={d === 'web' ? t('previewWeb') : t('previewMobile')}
                     style={{
-                      padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600, borderRadius: 6,
+                      padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600, borderRadius: 'var(--radius-sm)',
                       cursor: 'pointer', border: '1px solid var(--border-subtle)',
                       background: previewDevice === d ? 'var(--bg-elevated)' : 'transparent',
                       color: previewDevice === d ? 'var(--text-primary)' : 'var(--text-muted)',

@@ -1141,10 +1141,10 @@ export function BrainPanel({
         color: capture.state === 'error'
           ? 'var(--danger, #ef4444)'
           : capture.state === 'copied'
-            ? 'var(--success, #22c55e)'
+            ? 'var(--success, var(--success))'
             : 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: conv.hasTrace ? 'pointer' : 'not-allowed',
         opacity: conv.hasTrace ? 1 : 0.5,
       }}
@@ -1267,7 +1267,7 @@ export function BrainPanel({
                     onBlur={submitRename}
                     onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); } }}
                     onClick={(e) => e.stopPropagation()}
-                    style={{ width: '100%', fontSize: 13, padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 4 }}
+                    style={{ width: '100%', fontSize: 13, padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}
                   />
                 ) : chat.title}
               </div>
@@ -1278,7 +1278,7 @@ export function BrainPanel({
                   aria-label={tBrain('chatActionsAria', { title: chat.title })}
                   title={tBrain('chatActions')}
                   onClick={(e) => { e.stopPropagation(); setActionsChatId(actionsOpen ? null : chat.id); }}
-                  style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, lineHeight: 1, borderRadius: 6, cursor: 'pointer', background: actionsOpen ? 'var(--bg-elevated)' : 'transparent', border: '1px solid', borderColor: actionsOpen ? 'var(--border-subtle)' : 'transparent', color: 'var(--text-muted)' }}
+                  style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, lineHeight: 1, borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: actionsOpen ? 'var(--bg-elevated)' : 'transparent', border: '1px solid', borderColor: actionsOpen ? 'var(--border-subtle)' : 'transparent', color: 'var(--text-muted)' }}
                 >
                   ⋯
                 </button>
@@ -1286,7 +1286,7 @@ export function BrainPanel({
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {chat.projectId != null && pinnedProjectId == null && (
-                <span style={{ background: 'var(--bg-elevated)', padding: '1px 4px', borderRadius: 4, fontSize: 10 }}>
+                <span style={{ background: 'var(--bg-elevated)', padding: '1px 4px', borderRadius: 'var(--radius-sm)', fontSize: 10 }}>
                   {projectName(chat.projectId)}
                 </span>
               )}
@@ -1385,7 +1385,7 @@ export function BrainPanel({
           value={personaSel}
           onChange={(e) => choosePersona(e.target.value)}
           aria-label={tBrain('personaAria')}
-          style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+          style={{ fontSize: 12, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
         >
           <option value="default">{tBrain('defaultBrain')}</option>
           <optgroup label={tBrain('personas')}>
@@ -1405,7 +1405,7 @@ export function BrainPanel({
             value={recipient ? recipient.ref : 'brain'}
             onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
             aria-label={tBrain('recipientPickerTitle')}
-            style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+            style={{ fontSize: 12, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
           >
             <option value="brain">{tBrain('brainRecipient')}</option>
             {participants.map((p) => <option key={p.ref} value={p.ref}>{p.name}</option>)}
@@ -1431,7 +1431,7 @@ export function BrainPanel({
           truncates turns. Self-gating on the shared consumption snapshot. */}
       <AllowanceBanner />
       {showProviderCapBanner && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 'var(--radius-md)' }} role="status">
           <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
             {tBrain('providerCapBanner', { providers: conv.providerCap.join(', ') })}{' '}
             <a href="/settings/integrations" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
@@ -1480,7 +1480,7 @@ export function BrainPanel({
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+            <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}>
               {tBrain('startNewChat')}
             </button>
             {/* Onboarding entry point — starts a chat seeded so the Brain guides a
@@ -1488,7 +1488,7 @@ export function BrainPanel({
             <button
               type="button"
               onClick={() => { void startNewChat(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
-              style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 10, cursor: 'pointer' }}
+              style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}
             >
               ✨ {tBrain('onboardMe')}
             </button>
@@ -1535,12 +1535,12 @@ export function BrainPanel({
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && createProjectAndAssign()}
-                style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
               />
-              <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                 {creatingProject ? '…' : tBrain('createAndAssign')}
               </button>
-              <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
+              <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tCommon('cancel')}</button>
             </div>
           )}
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1603,7 +1603,7 @@ export function BrainPanel({
                     stated up front rather than after a turn dies on the cap. */}
                 <PlanBadge />
                 {captureButton}
-                <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                   {tBrain('newChat')}
                 </button>
               </div>
@@ -1624,7 +1624,7 @@ export function BrainPanel({
               />
             </label>
             <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
+              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
           </div>
           <div className="bs-chat-list">{chatRows}</div>
         </div>
@@ -1642,7 +1642,7 @@ export function BrainPanel({
           {/* Plan + remaining allowance (see the page header). */}
           <PlanBadge />
           {captureButton}
-          <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
+          <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tBrain('newChat')}</button>
           {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the
               project it's scoped to) so the page opens the SAME conversation
               instead of a blank one — otherwise expanding a docked chat (e.g. the
@@ -1657,7 +1657,7 @@ export function BrainPanel({
               return s ? `/brainstorm?${s}` : '/brainstorm';
             })()}
             title={tBrain('openFullBrainStorm')}
-            style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}
+            style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}
           >{tBrain('expand')}</Link>
           {onClose && (
             <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
@@ -1681,7 +1681,7 @@ export function BrainPanel({
               onClick={() => setDockedTab(id)}
               style={{
                 flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                 border: `1px solid ${selected ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
                 background: selected ? 'var(--bg-elevated)' : 'var(--bg-base)',
                 color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -1699,7 +1699,7 @@ export function BrainPanel({
         <div id="brain-tabpanel-history" role="tabpanel" aria-labelledby="brain-tab-history" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <div style={{ padding: '8px 12px' }}>
             <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </div>
           {chatRows}
         </div>
@@ -1748,7 +1748,7 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
     <div
       role="alertdialog"
       aria-label={tBrain('confirmActionAria')}
-      style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--coral-bright, #f4726e)', background: 'var(--bg-elevated)' }}
+      style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--coral-bright, #f4726e)', background: 'var(--bg-elevated)' }}
     >
       <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 6 }}>
         ⚠️ {tBrain.rich('wantsTo', { action: label, b: (chunks) => <strong>{chunks}</strong> })}
@@ -1757,9 +1757,9 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tCommon('approve')}</button>
-        <button type="button" onClick={onApproveAll} title={tBrain('approveAllTitle')} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>{tBrain('approveAll')}</button>
-        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
+        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tCommon('approve')}</button>
+        <button type="button" onClick={onApproveAll} title={tBrain('approveAllTitle')} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tBrain('approveAll')}</button>
+        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tCommon('cancel')}</button>
       </div>
     </div>
   );
@@ -1797,7 +1797,7 @@ function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestio
                 background: 'var(--coral-bright, #f4726e)',
                 color: 'var(--text-on-accent, #fff)',
                 border: 'none',
-                borderRadius: 999,
+                borderRadius: 'var(--radius-full)',
                 maxWidth: '100%',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -1867,8 +1867,8 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
         ) : (
           <>
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
-            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
-            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
+            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
+            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
           </>
         )}
       </div>

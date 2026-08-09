@@ -229,7 +229,7 @@ export default function IDEDashboardPage() {
         </div>
 
         {error && (
-          <div style={{ borderRadius: 8, padding: '12px 16px', margin: '16px 0', fontSize: 14, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
+          <div style={{ borderRadius: 'var(--radius-md)', padding: '12px 16px', margin: '16px 0', fontSize: 14, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
             {error}
           </div>
         )}
@@ -248,7 +248,7 @@ export default function IDEDashboardPage() {
                   onClick={() => { setNewName(''); setCreateType(m.id); }}
                   title={disabled ? `${m.label} — ${t('comingSoon')}` : t('newModalityProject', { label: m.label })}
                   style={{
-                    textAlign: 'left', padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+                    textAlign: 'left', padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
                     cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1, display: 'flex', flexDirection: 'column', gap: 8, transition: 'border-color 0.2s',
                   }}
                   onMouseEnter={disabled ? undefined : (e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
@@ -258,7 +258,7 @@ export default function IDEDashboardPage() {
                     <span style={{ fontSize: 28 }} aria-hidden>{m.icon}</span>
                     <span style={{ fontSize: '1.05rem', fontWeight: 700 }}>{m.label}</span>
                     {disabled && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '1px 6px' }}>{t('soon')}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>{t('soon')}</span>
                     )}
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{m.tagline}</p>
@@ -303,7 +303,7 @@ export default function IDEDashboardPage() {
           {/* Active parent-Project scope chip */}
           {currentProjectId != null && (
             <div style={{ marginBottom: 16 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, background: 'var(--surface-interactive)', border: '1px solid var(--border-subtle)', borderRadius: 999, padding: '4px 12px', color: 'var(--text-secondary)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, background: 'var(--surface-interactive)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-full)', padding: '4px 12px', color: 'var(--text-secondary)' }}>
                 {t('filteredTo', { name: currentProject ? currentProject.name : `#${currentProjectId}` })}
                 <button type="button" onClick={() => setProject(null)} aria-label={t('clearProjectFilter')} style={{ background: 'none', border: 'none', color: 'var(--coral-bright)', cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
               </span>
@@ -313,7 +313,7 @@ export default function IDEDashboardPage() {
           {loading ? (
             <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('loadingProjects')}</div>
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border-subtle)' }}>
+            <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
               <p style={{ color: 'var(--text-secondary)' }}>
                 {currentProjectId != null || typeParam ? t('noProjectsFilter') : t('noProjectsYet')}
@@ -393,7 +393,7 @@ export default function IDEDashboardPage() {
                           onClick={() => { setRecipe(r.id); if (!r.needsSeedModel) setSeedModelSlug(null); }}
                           style={{
                             display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
-                            padding: '10px 12px', borderRadius: 10, cursor: noModels ? 'not-allowed' : 'pointer',
+                            padding: '10px 12px', borderRadius: 'var(--radius-lg)', cursor: noModels ? 'not-allowed' : 'pointer',
                             background: selected ? 'var(--surface-interactive)' : 'var(--bg-deep)',
                             border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                             opacity: noModels ? 0.55 : 1,
@@ -404,7 +404,7 @@ export default function IDEDashboardPage() {
                             <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t(r.nameKey)}</span>
                               {r.recommended && (
-                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '0 6px' }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)', padding: '0 6px' }}>
                                   {t('recipeRecommended')}
                                 </span>
                               )}
@@ -437,7 +437,7 @@ export default function IDEDashboardPage() {
                 <button
                   type="submit"
                   disabled={creating || !newName.trim() || evermindNeedsSeed}
-                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || evermindNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || evermindNeedsSeed ? 0.7 : 1 }}
+                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: creating || !newName.trim() || evermindNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || evermindNeedsSeed ? 0.7 : 1 }}
                 >
                   {creating ? t('creating') : t('createOpen')}
                 </button>
@@ -462,7 +462,7 @@ export default function IDEDashboardPage() {
 
 const inputStyle: React.CSSProperties = {
   width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 14px', outline: 'none',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', outline: 'none',
 };
 
 /** Compact List view for IDE projects. */
@@ -475,7 +475,7 @@ function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
   const t = useTranslations('ide');
   const modalityCopy = useModalityCopy();
   return (
-    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', textAlign: 'left' }}>
@@ -520,7 +520,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
     <button
       type="button"
       onClick={onClick}
-      style={{ fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, background: active ? 'var(--coral-bright)' : 'transparent', color: active ? '#fff' : 'var(--text-secondary)' }}
+      style={{ fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--radius-full)', cursor: 'pointer', border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, background: active ? 'var(--coral-bright)' : 'transparent', color: active ? '#fff' : 'var(--text-secondary)' }}
     >
       {label}
     </button>

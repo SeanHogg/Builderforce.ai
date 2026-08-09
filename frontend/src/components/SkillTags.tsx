@@ -35,7 +35,7 @@ export function SkillTags({
           style={{
             fontSize: 10,
             padding: '2px 6px',
-            borderRadius: 99,
+            borderRadius: 'var(--radius-full)',
             background: 'var(--surface-2)',
             color: 'var(--text)',
             border: '1px solid var(--border)',

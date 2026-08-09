@@ -160,7 +160,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
     width: '100%',
     padding: '10px 12px',
     border: hasError ? '1px solid var(--coral-bright)' : '1px solid var(--border-subtle)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     fontSize: 14,
     background: 'var(--bg-base)',
     color: 'var(--text-primary)',
@@ -317,7 +317,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
             {t('guidedReviewBody')}
           </p>
 
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 20, marginBottom: 24 }}>
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20, marginBottom: 24 }}>
             {entries.map(([key]) => {
               const field = BASE_FIELDS[key];
               const value = key === 'enabled'
@@ -371,7 +371,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
           {t('guidedSuccessBody')}
         </p>
 
-        <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 20, marginBottom: 24, display: 'inline-block', minWidth: 300 }}>
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20, marginBottom: 24, display: 'inline-block', minWidth: 300 }}>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {t('referenceIdLabel')}
           </div>
@@ -399,14 +399,14 @@ function ProgressBar({ current, total, labels }: { current: number; total: numbe
         <span>{`${current} / ${total}`}</span>
         <span>{labels[current]}</span>
       </div>
-      <div style={{ width: '100%', height: 4, background: 'var(--border-subtle)', borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ width: '100%', height: 4, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
         <div
           style={{
             width: `${((current) / Math.max(total, 1)) * 100}%`,
             height: '100%',
             background: 'var(--accent)',
             transition: 'width 0.3s ease',
-            borderRadius: 2,
+            borderRadius: 'var(--radius-sm)',
           }}
         />
       </div>
@@ -456,7 +456,7 @@ function FieldWrapper({
 const cardStyle: React.CSSProperties = {
   padding: 24,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   background: 'var(--bg-base)',
 };
 
@@ -470,9 +470,9 @@ const h2Style: React.CSSProperties = {
 const primaryBtnStyle: React.CSSProperties = {
   padding: '10px 22px',
   background: 'var(--accent)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   border: 'none',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 600,
@@ -483,7 +483,7 @@ const secondaryBtnStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 500,
@@ -494,7 +494,7 @@ const ghostBtnStyle: React.CSSProperties = {
   background: 'transparent',
   color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 500,

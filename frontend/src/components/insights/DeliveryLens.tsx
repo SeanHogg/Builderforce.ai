@@ -38,12 +38,12 @@ const STATUS_TONE: Record<DeliveryStatus, string> = {
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 interface Pick { scope: DeliverableScope; id: string; label: string }
@@ -111,7 +111,7 @@ function BurnChart({ series, projection, targetDate }: { series: BurnPoint[]; pr
   );
 }
 
-const POINTS_DONE_COLOR = '#22c55e';
+const POINTS_DONE_COLOR = 'var(--success)';
 const POINTS_DEFINED_COLOR = 'var(--text-muted)';
 
 /**
@@ -321,8 +321,8 @@ function LifecycleExplorer() {
             {phases.map((p, i) => (
               <div key={p.phase} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 84px', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{t(`deliv.lifecycle.phase.${p.phase}`)}</span>
-                <div style={{ background: 'var(--surface-sunken, #00000010)', borderRadius: 6, height: 18, overflow: 'hidden' }}>
-                  <div style={{ width: `${(p.avgHours / maxAvg) * 100}%`, height: '100%', background: colorAt(i), borderRadius: 6, minWidth: p.avgHours > 0 ? 2 : 0 }} />
+                <div style={{ background: 'var(--surface-sunken, #00000010)', borderRadius: 'var(--radius-sm)', height: 18, overflow: 'hidden' }}>
+                  <div style={{ width: `${(p.avgHours / maxAvg) * 100}%`, height: '100%', background: colorAt(i), borderRadius: 'var(--radius-sm)', minWidth: p.avgHours > 0 ? 2 : 0 }} />
                 </div>
                 <span style={{ fontSize: '0.82rem', textAlign: 'right', fontWeight: 600 }} title={t('deliv.lifecycle.median', { d: fmtDur(p.medianHours) })}>
                   {fmtDur(p.avgHours)}
@@ -436,8 +436,8 @@ export function DeliveryLens() {
           {(data.hasPoints || data.hasEffort) && (
             <PmCard title={t('deliv.scopeEffort.title')}>
               <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 8, fontSize: '0.78rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DONE_COLOR, borderRadius: 2, display: 'inline-block' }} /> {t('deliv.scopeEffort.completed')}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DEFINED_COLOR, opacity: 0.25, borderRadius: 2, display: 'inline-block' }} /> {t('deliv.scopeEffort.defined')}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DONE_COLOR, borderRadius: 'var(--radius-sm)', display: 'inline-block' }} /> {t('deliv.scopeEffort.completed')}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DEFINED_COLOR, opacity: 0.25, borderRadius: 'var(--radius-sm)', display: 'inline-block' }} /> {t('deliv.scopeEffort.defined')}</span>
                 {data.hasEffort && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 2, background: PROJECTION_COLOR, display: 'inline-block' }} /> {t('deliv.scopeEffort.fte')}</span>}
               </div>
               <ScopeEffortChart points={data.scopeEffort} hasEffort={data.hasEffort} />

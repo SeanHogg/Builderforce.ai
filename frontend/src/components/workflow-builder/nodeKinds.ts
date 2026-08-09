@@ -53,7 +53,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Trigger',
     icon: '⚡',
     group: 'Trigger',
-    accent: '#a78bfa',
+    accent: 'var(--violet-bright)',
     blurb: 'Entry point that starts the workflow.',
     defaultConfig: { triggerType: 'manual' },
     fields: [
@@ -120,7 +120,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Memory',
     icon: '🧠',
     group: 'LLM Logic',
-    accent: '#00e5cc',
+    accent: 'var(--cyan-bright)',
     blurb: 'Recall from or write to the SSM hippocampus memory.',
     defaultConfig: { op: 'recall', query: '', key: '', content: '', limit: 5 },
     fields: [
@@ -136,7 +136,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Knowledge Base',
     icon: '📚',
     group: 'LLM Logic',
-    accent: '#00e5cc',
+    accent: 'var(--cyan-bright)',
     blurb: 'Query a knowledge base or ingest source text into it.',
     defaultConfig: { op: 'query', query: '', source: '', namespace: '', limit: 5 },
     fields: [
@@ -209,7 +209,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Train',
     icon: '🎓',
     group: 'LLM Logic',
-    accent: '#00e5cc',
+    accent: 'var(--cyan-bright)',
     blurb: 'Train an Evermind model on a dataset (tokenizer → train → package).',
     defaultConfig: { model: '', dataset: '', epochs: 1 },
     fields: [
@@ -403,7 +403,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Output',
     icon: '📤',
     group: 'Output',
-    accent: '#22c55e',
+    accent: 'var(--success)',
     blurb: 'Terminal: write artifact / notify / push to board.',
     defaultConfig: { target: 'artifact', note: '' },
     fields: [

@@ -38,7 +38,7 @@ export default async function MediaPage() {
       </p>
 
       {/* Deck preview */}
-      <div style={{ border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: '0 12px 40px var(--shadow-coral-mid, rgba(59,130,246,0.2))', marginBottom: 36, maxWidth: 860 }}>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: '0 12px 40px var(--shadow-coral-mid, rgba(59,130,246,0.2))', marginBottom: 36, maxWidth: 860 }}>
         <Image
           src={MEDIA_KIT.cover}
           alt={t('media.deckAlt')}
@@ -54,9 +54,9 @@ export default async function MediaPage() {
         {MEDIA_KIT.assets.map((a) => (
           <div
             key={a.key}
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}
           >
-            <span style={{ alignSelf: 'flex-start', background: 'var(--accent-subtle)', color: 'var(--accent)', borderRadius: 999, padding: '3px 12px', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em' }}>
+            <span style={{ alignSelf: 'flex-start', background: 'var(--accent-subtle)', color: 'var(--accent)', borderRadius: 'var(--radius-full)', padding: '3px 12px', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em' }}>
               {a.format}
             </span>
             <h2 style={{ color: 'var(--text-primary)', fontSize: 19, margin: '6px 0 0' }}>{t(`media.assets.${a.key}.name`)}</h2>
@@ -66,7 +66,7 @@ export default async function MediaPage() {
             <a
               href={a.href}
               download
-              style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '12px 16px', fontWeight: 600, fontSize: 15, textDecoration: 'none', minHeight: 44 }}
+              style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '12px 16px', fontWeight: 600, fontSize: 15, textDecoration: 'none', minHeight: 44 }}
             >
               {t('media.download')} · {a.size}
             </a>

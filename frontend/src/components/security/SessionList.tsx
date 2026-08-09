@@ -103,8 +103,8 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
               disabled={busy}
               style={{
                 padding: '5px 12px', fontSize: 11, fontWeight: 600,
-                background: 'var(--coral-bright, #f4726e)', color: '#fff',
-                border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 6,
+                background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)',
+                border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-sm)',
                 cursor: busy ? 'wait' : 'pointer',
               }}
             >
@@ -121,7 +121,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
           return (
             <div key={s.id} style={{
               display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 12px', borderRadius: 8,
+              padding: '10px 12px', borderRadius: 'var(--radius-md)',
               background: 'var(--bg-elevated)',
               border: `1px solid ${s.isCurrent ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
               opacity: s.isActive ? 1 : 0.45,
@@ -149,7 +149,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', gap: 8, alignItems: 'center' }}>
                   {s.sessionName ?? s.userAgent ?? t('session')}
                   {s.isCurrent && (
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
                       {t('current')}
                     </span>
                   )}
@@ -170,7 +170,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
                   style={{
                     padding: '4px 8px', fontSize: 11, fontWeight: 600, flexShrink: 0,
                     background: 'none', color: 'var(--coral-bright, #f4726e)',
-                    border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 6,
+                    border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-sm)',
                     cursor: busy ? 'wait' : 'pointer',
                   }}
                 >
@@ -191,7 +191,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
             style={{
               padding: '4px 10px', fontSize: 12, fontWeight: 600,
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 6,
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
               cursor: safePage === 0 ? 'default' : 'pointer', opacity: safePage === 0 ? 0.5 : 1,
             }}
           >
@@ -205,7 +205,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
             style={{
               padding: '4px 10px', fontSize: 12, fontWeight: 600,
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 6,
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
               cursor: safePage >= pageCount - 1 ? 'default' : 'pointer', opacity: safePage >= pageCount - 1 ? 0.5 : 1,
             }}
           >

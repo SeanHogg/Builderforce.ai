@@ -27,25 +27,25 @@ import { useGithubActionsReadiness } from '@/components/repos/githubActionsSurfa
 const SCM_PROVIDERS = ['github', 'gitlab', 'bitbucket'] as const;
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 const inputStyle: React.CSSProperties = {
-  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   // Keeps every action in this row a comfortable tap target on a phone.
   minHeight: 32,
 };
 const iconBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   cursor: 'pointer', color: 'var(--text-secondary)', padding: 0,
 };
 
@@ -411,7 +411,7 @@ export function SourceControlContent({
       {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: 130 }}>
               {SCM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}

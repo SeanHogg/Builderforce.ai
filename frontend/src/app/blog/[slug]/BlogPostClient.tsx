@@ -69,7 +69,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           font-size: 0.7rem;
           font-weight: 600;
           padding: 2px 9px;
-          border-radius: 999px;
+          border-radius: var(--radius-full);
           background: var(--surface-coral-soft);
           color: var(--coral-bright);
           border: 1px solid var(--border-accent);
@@ -132,7 +132,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           padding: 14px 20px;
           border-left: 3px solid var(--coral-bright);
           background: var(--surface-coral-soft);
-          border-radius: 0 12px 12px 0;
+          border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
           color: var(--text-primary);
           font-style: italic;
         }
@@ -141,7 +141,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           font-size: 0.87em;
           background: var(--bg-elevated, rgba(255,255,255,0.07));
           padding: 2px 6px;
-          border-radius: 5px;
+          border-radius: var(--radius-sm);
           color: var(--cyan-bright);
         }
         .bpost-content pre {
@@ -149,7 +149,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           padding: 20px 22px;
           background: var(--bg-elevated, rgba(0,0,0,0.35));
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           overflow-x: auto;
         }
         .bpost-content pre code {
@@ -250,7 +250,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
                 <Link href="/blog" style={{ fontSize: '0.9rem', color: 'var(--coral-bright)', fontFamily: 'var(--font-display)', fontWeight: 600, textDecoration: 'none' }}>
                   ← Back to Blog
                 </Link>
-                <Link href="/register" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.9rem', textDecoration: 'none', boxShadow: '0 4px 14px var(--shadow-coral-mid)' }}>
+                <Link href="/register" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 'var(--radius-lg)', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.9rem', textDecoration: 'none', boxShadow: '0 4px 14px var(--shadow-coral-mid)' }}>
                   Start building for free →
                 </Link>
               </div>

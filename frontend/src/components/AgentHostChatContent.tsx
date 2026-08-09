@@ -20,12 +20,12 @@ interface AgentHostChatContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  connected: 'var(--cyan-bright, #00e5cc)',
+  connected: 'var(--cyan-bright, var(--cyan-bright))',
   connecting: 'var(--text-muted)',
   offline: 'var(--text-muted)',
   error: 'var(--coral-bright, #f4726e)',
@@ -207,7 +207,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
               style={{
                 maxWidth: '85%',
                 padding: '10px 14px',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 fontSize: 13,
                 lineHeight: 1.55,
                 background:
@@ -265,7 +265,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
             background: 'var(--bg-base)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             resize: 'none',
             outline: 'none',
             fontFamily: 'inherit',
@@ -280,10 +280,10 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
             padding: '10px 16px',
             fontSize: 13,
             fontWeight: 600,
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             border: 'none',
             background: 'var(--coral-bright, #f4726e)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             cursor: !input.trim() || connStatus !== 'connected' || sending ? 'not-allowed' : 'pointer',
             opacity: !input.trim() || connStatus !== 'connected' || sending ? 0.5 : 1,
             whiteSpace: 'nowrap',

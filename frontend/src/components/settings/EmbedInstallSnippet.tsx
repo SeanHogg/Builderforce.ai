@@ -30,14 +30,14 @@ const labelStyle: React.CSSProperties = {
 
 const codeBox: React.CSSProperties = {
   fontFamily: 'var(--font-mono)', fontSize: 12, padding: '10px 12px',
-  background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   whiteSpace: 'pre-wrap', margin: 0, overflowX: 'auto',
 };
 
 const button: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600,
   background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 const INSTALL_CMD = 'npm install @seanhogg/builderforce-embedded';
@@ -112,7 +112,7 @@ export default function ProductPage() {
             title={EMBED_VIEWS[v].label}
             style={{
               fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 8px',
-              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6,
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
             }}
           >
             {v}

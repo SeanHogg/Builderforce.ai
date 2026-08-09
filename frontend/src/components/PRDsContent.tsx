@@ -129,7 +129,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
               background: 'var(--surface-coral-soft)',
               color: 'var(--coral-bright)',
               border: '1px solid var(--border-accent)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               textDecoration: 'none',
             }}
           >
@@ -146,9 +146,9 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
               fontSize: '0.875rem',
               fontWeight: 600,
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
             }}
@@ -159,7 +159,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 8 }}>
+        <div style={{ padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>
           {error}
         </div>
       )}
@@ -172,7 +172,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
             textAlign: 'center',
             padding: 48,
             background: 'var(--bg-elevated)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
           }}
         >
@@ -188,9 +188,9 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
               style={{
                 padding: '12px 24px',
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 12,
+                borderRadius: 'var(--radius-lg)',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -204,7 +204,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 background: 'var(--surface-coral-soft)',
                 color: 'var(--coral-bright)',
                 border: '1px solid var(--border-accent)',
-                borderRadius: 12,
+                borderRadius: 'var(--radius-lg)',
                 fontWeight: 600,
                 textDecoration: 'none',
               }}
@@ -221,7 +221,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
               style={{
                 background: 'var(--bg-base)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 12,
+                borderRadius: 'var(--radius-lg)',
                 padding: 16,
                 cursor: 'pointer',
                 transition: 'border-color 0.2s',
@@ -284,7 +284,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                           color: 'var(--coral-bright)',
                           background: 'none',
                           border: '1px solid var(--coral-bright)',
-                          borderRadius: 8,
+                          borderRadius: 'var(--radius-md)',
                           cursor: 'pointer',
                         }}
                       >
@@ -300,7 +300,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                           color: 'var(--error-text)',
                           background: 'none',
                           border: '1px solid var(--error-border)',
-                          borderRadius: 8,
+                          borderRadius: 'var(--radius-md)',
                           cursor: 'pointer',
                         }}
                       >
@@ -347,7 +347,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 background: 'var(--bg-elevated)',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
               }}
             >
@@ -362,9 +362,9 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 fontSize: 12,
                 fontWeight: 600,
                 background: 'var(--coral-bright)',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: isSaving ? 'not-allowed' : 'pointer',
               }}
             >
@@ -380,7 +380,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 color: 'var(--error-text)',
                 background: 'none',
                 border: '1px solid var(--error-border)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
               }}
             >
@@ -401,7 +401,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                 fontSize: 13,
                 fontFamily: 'var(--font-mono)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
                 resize: 'vertical',
@@ -414,7 +414,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
                   padding: 12,
                   background: 'var(--bg-deep)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   overflow: 'auto',
                   fontSize: 13,
                 }}

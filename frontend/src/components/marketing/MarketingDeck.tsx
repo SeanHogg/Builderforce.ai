@@ -69,7 +69,7 @@ export default function MarketingDeck() {
           position: relative; width: 100%; overflow: hidden; text-align: left;
           background: linear-gradient(145deg, var(--bg-elevated), color-mix(in srgb, var(--accent-subtle) 72%, transparent));
           border: 1px solid var(--border-accent, var(--border-subtle));
-          border-radius: 24px; padding: clamp(34px, 6vw, 70px);
+          border-radius: var(--radius-xl); padding: clamp(34px, 6vw, 70px);
           box-shadow: 0 24px 70px var(--shadow-coral-mid, rgba(59,130,246,.14));
         }
         .mdk-card::after { position: absolute; width: 420px; height: 420px; right: -190px; top: -230px;
@@ -104,17 +104,17 @@ export default function MarketingDeck() {
           display: flex; align-items: flex-start; gap: 14px;
           background: var(--bg-surface, var(--surface, rgba(0,0,0,0.02)));
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.08));
-          border-radius: 14px; padding: 14px 16px;
+          border-radius: var(--radius-lg); padding: 14px 16px;
           color: var(--text-primary, #14181f); font-size: clamp(0.95rem, 1.8vw, 1.05rem);
         }
         .mdk-step-num {
-          flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px;
+          flex: 0 0 auto; width: 26px; height: 26px; border-radius: var(--radius-full);
           display: inline-flex; align-items: center; justify-content: center;
           font-family: var(--font-display); font-weight: 700; font-size: 0.82rem;
-          color: #fff; background: var(--accent);
+          color: var(--text-on-accent); background: var(--accent);
         }
         .mdk-see {
-          margin: 28px 0 0; max-width: 760px; border: 1px solid var(--border-accent); border-radius: 14px;
+          margin: 28px 0 0; max-width: 760px; border: 1px solid var(--border-accent); border-radius: var(--radius-lg);
           padding: 16px 20px; font-size: clamp(0.98rem, 2vw, 1.12rem); font-weight: 600;
           color: var(--text-primary); background: var(--accent-subtle);
         }
@@ -125,10 +125,10 @@ export default function MarketingDeck() {
         .mdk-ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-start; margin-top: 32px; }
         .mdk-btn {
           font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
-          padding: 12px 26px; border-radius: 12px; cursor: pointer; border: none;
+          padding: 12px 26px; border-radius: var(--radius-lg); cursor: pointer; border: none;
           text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
         }
-        .mdk-btn-primary { color: #fff; background: var(--accent); box-shadow: 0 10px 28px var(--shadow-coral-mid, rgba(59,130,246,.24)); }
+        .mdk-btn-primary { color: var(--text-on-accent); background: var(--accent); box-shadow: 0 10px 28px var(--shadow-coral-mid, rgba(59,130,246,.24)); }
         .mdk-btn-ghost {
           color: var(--text-primary, #14181f); background: var(--surface, transparent);
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.14));
@@ -140,7 +140,7 @@ export default function MarketingDeck() {
         }
         .mdk-dots { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; }
         .mdk-dot {
-          width: 10px; height: 10px; border-radius: 999px; border: none; cursor: pointer; padding: 0;
+          width: 10px; height: 10px; border-radius: var(--radius-full); border: none; cursor: pointer; padding: 0;
           background: var(--border-strong, var(--text-muted, rgba(0,0,0,0.25)));
           opacity: 0.5; transition: opacity 0.15s, transform 0.15s;
         }

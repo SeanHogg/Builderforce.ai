@@ -107,9 +107,9 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
               fontSize: 12,
               fontWeight: 600,
               background: 'var(--coral-bright)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -117,7 +117,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
           </button>
         </div>
 
-        {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
+        {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>}
 
         {loading ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{tc('loading')}</div>
@@ -138,7 +138,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                     padding: '8px 12px',
                     background: 'var(--bg-base)',
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                   }}
                 >
                   <AgentKindBadge kind={p.kind} />
@@ -150,7 +150,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                     type="button"
                     onClick={() => handleAdd(p)}
                     disabled={busy}
-                    style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff', border: 'none', borderRadius: 6, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}
+                    style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}
                   >
                     {t('add')}
                   </button>
@@ -174,7 +174,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                   padding: '8px 12px',
                   background: 'var(--bg-base)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
                 <AgentKindBadge kind={a.agentKind} />
@@ -185,7 +185,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                   type="button"
                   onClick={() => handleRemove(a)}
                   disabled={busy}
-                  style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: 'var(--error-text)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}
+                  style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: 'var(--error-text)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}
                 >
                   {t('remove')}
                 </button>
@@ -249,7 +249,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
               hideProjectColumn
             />
           ) : (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
               {t('assignHostHint')}
             </div>
           )}
@@ -274,7 +274,7 @@ function AgentKindBadge({ kind }: { kind: PoolAgent['kind'] }) {
         fontWeight: 600,
         textTransform: 'uppercase',
         padding: '2px 6px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         flexShrink: 0,
         background: kind === 'workforce' ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
         color: kind === 'workforce' ? 'var(--coral-bright)' : 'var(--text-muted)',
@@ -293,7 +293,7 @@ function chipStyle(active: boolean): React.CSSProperties {
     color: active ? 'var(--coral-bright)' : 'var(--text-muted)',
     background: active ? 'rgba(255,107,53,0.08)' : 'transparent',
     border: `1px solid ${active ? 'var(--border-accent, var(--coral-bright))' : 'var(--border-subtle)'}`,
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
   };
 }

@@ -149,7 +149,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
           <div
             style={{
               background: 'rgba(239,68,68,0.12)', border: '1px solid #ef4444', color: 'var(--error-text)',
-              borderRadius: 8, padding: '8px 12px', fontSize: '0.8rem', marginBottom: 16,
+              borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.8rem', marginBottom: 16,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
             }}
           >
@@ -159,7 +159,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
               onClick={() => void load()}
               style={{
                 background: 'transparent', color: 'var(--error-text)', border: '1px solid #ef4444',
-                borderRadius: 6, padding: '2px 10px', fontSize: '0.75rem', cursor: 'pointer',
+                borderRadius: 'var(--radius-sm)', padding: '2px 10px', fontSize: '0.75rem', cursor: 'pointer',
               }}
             >
               {t('retry')}
@@ -174,12 +174,12 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
               style={{
                 display: 'flex', gap: 14, alignItems: 'flex-start',
                 background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-                borderRadius: 12, padding: '16px 18px',
+                borderRadius: 'var(--radius-lg)', padding: '16px 18px',
               }}
             >
               <div
                 style={{
-                  flexShrink: 0, width: 38, height: 38, borderRadius: 10,
+                  flexShrink: 0, width: 38, height: 38, borderRadius: 'var(--radius-lg)',
                   background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center',
                   justifyContent: 'center', fontSize: '1.2rem',
                 }}
@@ -193,8 +193,8 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                   </span>
                   <span
                     style={{
-                      fontSize: '0.7rem', fontWeight: 600, color: 'var(--coral-bright, #4d9eff)',
-                      background: 'rgba(77,158,255,0.12)', borderRadius: 6, padding: '1px 8px',
+                      fontSize: '0.7rem', fontWeight: 600, color: 'var(--coral-bright, var(--coral-bright))',
+                      background: 'rgba(77,158,255,0.12)', borderRadius: 'var(--radius-sm)', padding: '1px 8px',
                     }}
                   >
                     {loading ? '…' : step.metric}
@@ -210,7 +210,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                     style={{
                       fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.78rem',
                       background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                      border: '1px solid var(--border-subtle)', borderRadius: 8,
+                      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                       padding: '5px 12px', cursor: 'pointer',
                     }}
                   >
@@ -229,7 +229,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                       style={{
                         fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.78rem',
                         background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                        border: '1px solid var(--border-subtle)', borderRadius: 8,
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                         padding: '5px 12px', cursor: 'pointer',
                       }}
                     >
@@ -254,7 +254,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                       style={{
                         fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.78rem',
                         background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                        border: '1px solid var(--border-subtle)', borderRadius: 8,
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                         padding: '5px 12px', cursor: 'pointer',
                       }}
                     >
@@ -283,7 +283,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                           display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
                           fontFamily: "'JetBrains Mono', monospace", fontSize: '0.74rem',
                           background: 'var(--bg-deep)', color: 'var(--text-primary)',
-                          border: '1px solid var(--border-subtle)', borderRadius: 8,
+                          border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                           padding: '6px 10px', cursor: onOpenFile ? 'pointer' : 'default',
                           width: '100%',
                         }}

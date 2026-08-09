@@ -220,8 +220,10 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'route',
     tabs: [
       { id: '/settings', labelKey: 'tab.settings', icon: '⚙', activePaths: [] },
-      // Lateral "lens persona" (CEO/CFO/CTO/CISO/PMO/EM) — reshapes insight lenses.
-      { id: '/settings/persona', labelKey: 'tab.persona', icon: '🎯' },
+      // The insight LENS (CEO/CFO/CTO/CISO/PMO/EM) — which role's view of the
+      // dashboards you get. Named "Viewpoint" so it is not read as Settings'
+      // "Personality", which is the user's psychometric profile (PRD 21 §7).
+      { id: '/settings/viewpoint', labelKey: 'tab.viewpoint', icon: '🎯' },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },

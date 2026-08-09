@@ -1,5 +1,6 @@
 /**
- * PRD versioning, generation & audit routes – /api/prd
+ * PRD versioning, generation & audit routes. Canonical mount: /api/specs/:id/*;
+ * legacy compatibility mount: /api/prd/specs/:id/*.
  *
  * Sibling to specRoutes.ts (the spec CRUD). Adds the auditable-contract
  * capabilities on top of an existing spec:
@@ -35,8 +36,9 @@ import {
 import { buildPrdWorkflowSpec } from '../../application/prd/generatePrd';
 import { buildSpecAuditRecord } from '../../application/prd/audit';
 
-export function createPrdRoutes(db: Db): Hono<HonoEnv> {
+export function createPrdRoutes(db: Db, specPrefix = '/specs'): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+  const specRoute = (suffix: string) => `${specPrefix}/:id/${suffix}`;
 
   router.use('*', authMiddleware);
 
@@ -50,10 +52,10 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   }
 
   // POST /api/prd/specs/:id/versions — snapshot current spec into spec_versions
-  router.post('/specs/:id/versions', async (c) => {
+  router.post(specRoute('versions'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
-    const specId = c.req.param('id');
+    const specId = c.req.param('id')!;
 
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
@@ -86,9 +88,9 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // POST /api/prd/specs/:id/freeze — freeze the latest version
-  router.post('/specs/:id/freeze', async (c) => {
+  router.post(specRoute('freeze'), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const specId = c.req.param('id');
+    const specId = c.req.param('id')!;
 
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
@@ -123,9 +125,9 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // GET /api/prd/specs/:id/versions — list versions (newest first)
-  router.get('/specs/:id/versions', async (c) => {
+  router.get(specRoute('versions'), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const specId = c.req.param('id');
+    const specId = c.req.param('id')!;
 
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
@@ -140,10 +142,10 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // POST /api/prd/specs/:id/generate — create a generate-PRD planning workflow
-  router.post('/specs/:id/generate', async (c) => {
+  router.post(specRoute('generate'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
-    const specId = c.req.param('id');
+    const specId = c.req.param('id')!;
 
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
@@ -209,9 +211,9 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // GET /api/prd/specs/:id/audit — list audit records (+ filters)
-  router.get('/specs/:id/audit', async (c) => {
+  router.get(specRoute('audit'), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const specId = c.req.param('id');
+    const specId = c.req.param('id')!;
     const agentRole = c.req.query('agentRole');
     const swimlane = c.req.query('swimlane');
 
@@ -232,10 +234,10 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // POST /api/prd/specs/:id/audit — append an audit record
-  router.post('/specs/:id/audit', async (c) => {
+  router.post(specRoute('audit'), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
-    const specId = c.req.param('id');
+    const specId = c.req.param('id')!;
 
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);

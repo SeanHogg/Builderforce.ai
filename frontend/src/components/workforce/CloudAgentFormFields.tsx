@@ -62,11 +62,11 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 const RUNTIME_SUPPORT_KEYS: AgentRuntimeSupport[] = ['cloud', 'host', 'both'];
 const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container', 'github_actions'];
 
-export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 
 export const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)',
+  width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
   background: 'var(--bg-elevated)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box',
 };
 export const labelStyle: React.CSSProperties = {

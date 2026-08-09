@@ -154,8 +154,8 @@ export default function IDEPage() {
           style={{
             marginTop: 16,
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-            color: '#fff', border: 'none', padding: '10px 24px',
-            borderRadius: 12, fontFamily: 'var(--font-display)',
+            color: 'var(--text-on-accent)', border: 'none', padding: '10px 24px',
+            borderRadius: 'var(--radius-lg)', fontFamily: 'var(--font-display)',
             fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem',
           }}
         >
@@ -177,18 +177,18 @@ export default function IDEPage() {
         <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>{t('loadError')}</h2>
         <pre style={{
           background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-          borderRadius: 10, padding: '12px 20px', fontSize: '0.78rem',
+          borderRadius: 'var(--radius-lg)', padding: '12px 20px', fontSize: '0.78rem',
           color: 'var(--error-text)', maxWidth: 560, overflowX: 'auto', whiteSpace: 'pre-wrap',
         }}>
           {errorMsg || t('unknownError')}
         </pre>
         <div style={{ display: 'flex', gap: 12 }}>
           <button onClick={() => window.location.reload()}
-            style={{ background: 'var(--surface-interactive)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', padding: '8px 18px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+            style={{ background: 'var(--surface-interactive)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', padding: '8px 18px', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
             {t('retry')}
           </button>
           <button onClick={() => router.push('/dashboard')}
-            style={{ background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+            style={{ background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', border: 'none', padding: '8px 18px', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
             {t('dashboard')}
           </button>
         </div>
@@ -286,7 +286,7 @@ export default function IDEPage() {
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 padding: '10px 14px',
                 fontSize: '0.95rem',
                 outline: 'none',
@@ -302,7 +302,7 @@ export default function IDEPage() {
                   color: 'var(--text-secondary)',
                   background: 'var(--bg-base)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 10,
+                  borderRadius: 'var(--radius-lg)',
                   cursor: 'pointer',
                 }}
               >
@@ -315,10 +315,10 @@ export default function IDEPage() {
                   padding: '8px 18px',
                   fontSize: '0.9rem',
                   fontWeight: 600,
-                  color: '#fff',
+                  color: 'var(--text-on-accent)',
                   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
                   border: 'none',
-                  borderRadius: 10,
+                  borderRadius: 'var(--radius-lg)',
                   cursor: isSavingName || !firstTimeProjectName.trim() ? 'not-allowed' : 'pointer',
                   opacity: isSavingName || !firstTimeProjectName.trim() ? 0.7 : 1,
                 }}

@@ -425,7 +425,7 @@ export default function PricingPageClient() {
                       const cycleLabel = c === 'yearly' ? t('cycleYearly') : t('cycleMonthly');
                       return (
                         <button key={c} type="button" onClick={() => setBillingCycle(c)}
-                          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border-subtle)', background: billingCycle === c ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)', color: billingCycle === c ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)', cursor: 'pointer' }}>
+                          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: billingCycle === c ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)', color: billingCycle === c ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)', cursor: 'pointer' }}>
                           {c === 'yearly' ? t('cycleYearlyWithSaving', { cycle: cycleLabel, saving }) : cycleLabel}
                         </button>
                       );
@@ -439,7 +439,7 @@ export default function PricingPageClient() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <input type="number" min={teamMinSeats} value={seats}
                         onChange={(e) => setSeats(Math.max(teamMinSeats, parseInt(e.target.value, 10) || teamMinSeats))}
-                        style={{ width: 80, padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }} />
+                        style={{ width: 80, padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }} />
                       {teamsCostNote && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{teamsCostNote}</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{t('teamsSeatMinimum', { min: teamMinSeats })}</div>
@@ -450,7 +450,7 @@ export default function PricingPageClient() {
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelBillingEmail')}</label>
                   <input type="email" required value={billingEmail} onChange={(e) => setBillingEmail(e.target.value)}
                     placeholder={t('placeholderBillingEmail')}
-                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', boxSizing: 'border-box' }} />
                 </div>
 
                 <div>
@@ -458,15 +458,15 @@ export default function PricingPageClient() {
                   <input id="checkout-discount-code" type="text" value={discountCode}
                     onChange={(e) => { setDiscountCode(e.target.value.toUpperCase()); retainDiscountCode(e.target.value); }}
                     placeholder={t('placeholderDiscountCode')}
-                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', boxSizing: 'border-box' }} />
                   {discountCode && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 6 }}>{t('discountVerificationNote')}</div>}
                 </div>
 
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
                   {t('redirectNote')}
                 </div>
 
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
                   {pricing ? t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') }) : t('pricingUnavailable')}
                   {upgradeTarget === 'teams' && ` ${t('totalForSeats', { seats })}`}
                 </div>
@@ -479,7 +479,7 @@ export default function PricingPageClient() {
                     {t('cancel')}
                   </button>
                   <button type="submit" disabled={upgrading || !pricing}
-                    style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? '#60a5fa' : 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: upgrading ? 'wait' : 'pointer' }}>
+                    style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? 'var(--info)' : 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: upgrading ? 'wait' : 'pointer' }}>
                     {upgrading ? t('redirecting') : t('continueToPayment')}
                   </button>
                 </div>

@@ -24,7 +24,7 @@ export interface MemberProfileTask {
 
 const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' };
 const field: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary, var(--text-secondary))', fontSize: 13,
 };
 const row: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 };
@@ -144,7 +144,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
           {tasks?.length ? tasks.map((task) => (
             <div
               key={task.id}
-              style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)' }}
+              style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)' }}
             >
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{task.title}</div>
@@ -164,7 +164,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
         ) : (
           <>
             {kind === 'human' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
                 <button onClick={syncCalendar} disabled={syncing} style={{ ...field, width: 'auto', cursor: 'pointer' }}>
                   {syncing ? t('syncing') : t('syncFromGoogleCalendar')}
                 </button>
@@ -250,7 +250,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button onClick={onClose} style={{ ...field, width: 'auto', cursor: 'pointer' }}>{tc('cancel')}</button>
-              <button onClick={save} disabled={saving} style={{ ...field, width: 'auto', cursor: 'pointer', background: 'var(--accent, #6366f1)', color: '#fff', border: 'none', opacity: saving ? 0.6 : 1 }}>
+              <button onClick={save} disabled={saving} style={{ ...field, width: 'auto', cursor: 'pointer', background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', border: 'none', opacity: saving ? 0.6 : 1 }}>
                 {saving ? tc('saving') : t('saveProfile')}
               </button>
             </div>

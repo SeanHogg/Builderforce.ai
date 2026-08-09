@@ -21,7 +21,7 @@
   color: inherit;
   background: color-mix(in srgb, var(--surface-card-strong) 94%, transparent);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   text-decoration: none;
   transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
 }
@@ -40,7 +40,7 @@
   color: var(--cyan-bright);
   background: var(--surface-cyan-soft);
   border: 1px solid color-mix(in srgb, var(--cyan-bright) 24%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 1rem;
 }
 
@@ -58,7 +58,7 @@
   padding: 20px;
   background: var(--surface-cyan-soft);
   border: 1px solid color-mix(in srgb, var(--cyan-bright) 22%, var(--border-subtle));
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
 }
 
 .assurance p { margin: 0; font-size: 0.86rem; line-height: 1.65; }

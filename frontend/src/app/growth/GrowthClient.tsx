@@ -43,13 +43,13 @@ const page: React.CSSProperties = {
   padding: 'clamp(16px, 4vw, 32px)',
   maxWidth: '80rem',
   margin: '0 auto',
-  color: 'var(--text-primary, #111827)',
+  color: 'var(--text-primary, var(--bg-elevated))',
 };
 
 const card: React.CSSProperties = {
   background: 'var(--surface, #ffffff)',
   border: '1px solid var(--border, #e5e7eb)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 'clamp(12px, 3vw, 20px)',
 };
 
@@ -57,10 +57,10 @@ const input: React.CSSProperties = {
   flex: '1 1 10rem',
   minWidth: 0,
   padding: '8px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #e5e7eb)',
   background: 'var(--surface-2, #f9fafb)',
-  color: 'var(--text-primary, #111827)',
+  color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
 };
 
@@ -70,15 +70,15 @@ const input: React.CSSProperties = {
 const selectStyle: React.CSSProperties = { ...input, appearance: 'auto' };
 const optionStyle: React.CSSProperties = {
   background: 'var(--surface, #ffffff)',
-  color: 'var(--text-primary, #111827)',
+  color: 'var(--text-primary, var(--bg-elevated))',
 };
 
 const button: React.CSSProperties = {
   padding: '8px 14px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #e5e7eb)',
   background: 'var(--surface-2, #f9fafb)',
-  color: 'var(--text-primary, #111827)',
+  color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
   cursor: 'pointer',
   minHeight: 36,
@@ -410,7 +410,7 @@ export function GrowthClient() {
                     <>
                       <code style={{
                         display: 'block', overflowX: 'auto', whiteSpace: 'nowrap', marginTop: 6,
-                        padding: '6px 8px', borderRadius: 6, fontSize: 12,
+                        padding: '6px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12,
                         background: 'var(--surface-2, #f3f4f6)',
                         border: '1px solid var(--border, #e5e7eb)',
                       }}>
@@ -451,7 +451,7 @@ export function GrowthClient() {
               {assets.map((asset) => (
                 <li key={asset.id} style={{
                   display: 'grid', gap: 4, justifyItems: 'center', width: '6.5rem',
-                  padding: 8, borderRadius: 8, border: '1px solid var(--border, #e5e7eb)',
+                  padding: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border, #e5e7eb)',
                   background: 'var(--surface-2, #f9fafb)',
                 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- an asset
@@ -637,7 +637,7 @@ export function GrowthClient() {
             </select>
           </label>
 
-          <fieldset style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: 12 }}>
+          <fieldset style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 'var(--radius-md)', padding: 12 }}>
             <legend style={{ ...muted, padding: '0 4px' }}>{t('composer.transport')}</legend>
             {(['platform', 'mailbox', 'sendgrid'] as const).map((transport) => (
               <label key={transport} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 6 }}>

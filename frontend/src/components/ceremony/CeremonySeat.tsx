@@ -73,7 +73,7 @@ export function CeremonySeat({
         gap: 4,
         width: 140,
         padding: 8,
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         background: over ? 'var(--surface-coral-soft)' : 'transparent',
         border: over ? '1px dashed var(--coral-bright)' : '1px solid transparent',
         transition: 'background 0.12s, border-color 0.12s',

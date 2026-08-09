@@ -52,14 +52,14 @@ const nodeTypes: NodeTypes = { builder: BuilderNode };
 
 const btnPrimary: React.CSSProperties = {
   padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright, #f4726e)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '7px 12px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const fieldStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
 const groupLabelStyle: React.CSSProperties = {
@@ -72,7 +72,7 @@ function paletteItemStyle(accent: string): React.CSSProperties {
     padding: '6px 8px', marginBottom: 4, fontSize: 12, fontWeight: 600,
     background: 'var(--bg-elevated)', color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${accent}`,
-    borderRadius: 7, cursor: 'grab',
+    borderRadius: 'var(--radius-sm)', cursor: 'grab',
   };
 }
 

@@ -73,7 +73,7 @@ export function PlanBadge() {
         letterSpacing: '0.05em',
         whiteSpace: 'nowrap',
         border: '1px solid currentColor',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         background: 'transparent',
         color: tone,
         textDecoration: 'none',

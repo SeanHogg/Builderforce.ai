@@ -88,7 +88,7 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
           aria-label={t('device.deviceLabel')}
           style={{
             background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             padding: '4px 8px', fontSize: '0.78rem', maxWidth: 170,
           }}
         >
@@ -117,7 +117,7 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
           style={{
             display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
             background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
             fontFamily: 'var(--font-display)',
           }}
@@ -234,7 +234,7 @@ function ToolbarButton({ onClick, label, icon, disabled }: {
       aria-label={label}
       style={{
         background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-        border: '1px solid var(--border-subtle)', borderRadius: 8,
+        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
         padding: '4px 9px', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
       }}

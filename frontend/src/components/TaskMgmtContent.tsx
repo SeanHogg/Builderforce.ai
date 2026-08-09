@@ -909,7 +909,7 @@ export function TaskMgmtContent({
   const cardStyle: React.CSSProperties = {
     background: 'var(--bg-base)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 12,
+    borderRadius: 'var(--radius-lg)',
     padding: 16,
   };
 
@@ -920,13 +920,13 @@ export function TaskMgmtContent({
     background: 'var(--bg-deep)',
     color: 'var(--text-secondary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer' as const,
   };
   const buttonPrimary = {
     ...buttonTertiary,
     background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-    color: '#fff',
+    color: 'var(--text-on-accent)',
     border: 'none',
   };
 
@@ -965,7 +965,7 @@ export function TaskMgmtContent({
               style={{
                 fontSize: 10,
                 padding: '2px 8px',
-                borderRadius: 4,
+                borderRadius: 'var(--radius-sm)',
                 textTransform: 'capitalize',
                 cursor: 'pointer',
               }}
@@ -1055,7 +1055,7 @@ export function TaskMgmtContent({
         <div
           style={{
             padding: '10px 14px',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             background: 'var(--error-bg)',
             border: '1px solid var(--error-border)',
             color: 'var(--error-text)',
@@ -1070,7 +1070,7 @@ export function TaskMgmtContent({
         <div
           style={{
             padding: '10px 14px',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             background: 'var(--warning-bg)',
             border: '1px solid var(--warning-border)',
             color: 'var(--warning-text)',
@@ -1241,7 +1241,7 @@ export function TaskMgmtContent({
               padding: '4px 10px',
               fontSize: 13,
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-deep)',
               color: 'var(--text-primary)',
             }}
@@ -1255,7 +1255,7 @@ export function TaskMgmtContent({
               padding: '4px 10px',
               fontSize: 13,
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-deep)',
               color: 'var(--text-primary)',
             }}
@@ -1277,7 +1277,7 @@ export function TaskMgmtContent({
                 padding: '4px 10px',
                 fontSize: 13,
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
               }}
@@ -1299,7 +1299,7 @@ export function TaskMgmtContent({
               padding: '4px 10px',
               fontSize: 13,
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-deep)',
               color: 'var(--text-primary)',
             }}
@@ -1410,7 +1410,7 @@ export function TaskMgmtContent({
                           style={{
                             background: 'var(--bg-deep)',
                             border: '1px dashed var(--border-subtle)',
-                            borderRadius: 10,
+                            borderRadius: 'var(--radius-lg)',
                             padding: 8,
                             display: 'flex',
                             flexDirection: 'column',
@@ -1458,7 +1458,7 @@ export function TaskMgmtContent({
                 style={{
                   background: 'var(--bg-deep)',
                   border: '1px dashed var(--border-subtle)',
-                  borderRadius: 10,
+                  borderRadius: 'var(--radius-lg)',
                   padding: 12,
                   display: 'flex',
                   flexDirection: 'column',
@@ -1663,7 +1663,7 @@ export function TaskMgmtContent({
                             style={{
                               fontSize: 10,
                               padding: '2px 8px',
-                              borderRadius: 4,
+                              borderRadius: 'var(--radius-sm)',
                               textTransform: 'capitalize',
                               cursor: 'pointer',
                             }}
@@ -1776,7 +1776,7 @@ export function TaskMgmtContent({
                     padding: '8px 10px',
                     fontSize: 13,
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-deep)',
                     color: 'var(--text-primary)',
                   }}
@@ -1796,7 +1796,7 @@ export function TaskMgmtContent({
                     padding: '8px 10px',
                     fontSize: 13,
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-deep)',
                     color: 'var(--text-primary)',
                     resize: 'vertical',
@@ -1816,7 +1816,7 @@ export function TaskMgmtContent({
                       padding: '8px 10px',
                       fontSize: 13,
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -1840,7 +1840,7 @@ export function TaskMgmtContent({
                       padding: '8px 10px',
                       fontSize: 13,
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -1868,7 +1868,7 @@ export function TaskMgmtContent({
                       padding: '8px 10px',
                       fontSize: 13,
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -1900,7 +1900,7 @@ export function TaskMgmtContent({
                       padding: '8px 10px',
                       fontSize: 13,
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -1919,7 +1919,7 @@ export function TaskMgmtContent({
                       padding: '8px 10px',
                       fontSize: 13,
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -1940,7 +1940,7 @@ export function TaskMgmtContent({
                     padding: '8px 10px',
                     fontSize: 13,
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-deep)',
                     color: 'var(--text-primary)',
                     boxSizing: 'border-box',
@@ -2017,7 +2017,7 @@ export function TaskMgmtContent({
                       fontSize: 16,
                       padding: '4px 8px',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
+                      borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -2033,7 +2033,7 @@ export function TaskMgmtContent({
                     onClick={() => { setFieldDraft(drawerTask.title); setEditingField('title'); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.title); setEditingField('title'); } }}
                     title={tTask('editTitleTitle')}
-                    style={{ fontWeight: 700, fontSize: 16, cursor: 'text', borderRadius: 6, padding: '4px 6px', margin: '-4px -6px' }}
+                    style={{ fontWeight: 700, fontSize: 16, cursor: 'text', borderRadius: 'var(--radius-sm)', padding: '4px 6px', margin: '-4px -6px' }}
                   >
                     {drawerTask.title}
                   </div>
@@ -2074,7 +2074,7 @@ export function TaskMgmtContent({
                   alignItems: 'center',
                   justifyContent: 'center',
                   border: '1px solid var(--error-border)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   background: 'var(--bg-base)',
                   color: 'var(--error-text)',
                   cursor: 'pointer',
@@ -2100,7 +2100,7 @@ export function TaskMgmtContent({
                   alignItems: 'center',
                   justifyContent: 'center',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   background: 'var(--bg-base)',
                   color: 'var(--text-secondary)',
                   cursor: 'pointer',
@@ -2176,7 +2176,7 @@ export function TaskMgmtContent({
                       fontSize: 12,
                       padding: '3px 6px',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
+                      borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -2193,7 +2193,7 @@ export function TaskMgmtContent({
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('status'); }}
                     title={tTask('changeStatusTitle')}
                     className={taskStatusBadgeClass(drawerTask.status)}
-                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
+                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
                   >
                     {columnLabel(drawerTask.status)}
                   </span>
@@ -2209,7 +2209,7 @@ export function TaskMgmtContent({
                       fontSize: 12,
                       padding: '3px 6px',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
+                      borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
@@ -2226,7 +2226,7 @@ export function TaskMgmtContent({
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
                     title={tTask('changePriorityTitle')}
                     className={taskPriorityBadgeClass(drawerTask.priority)}
-                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
+                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
                   >
                     {drawerTask.priority}
                   </span>
@@ -2271,7 +2271,7 @@ export function TaskMgmtContent({
                           color: 'var(--coral-bright, #f4726e)',
                           textDecoration: 'none',
                           padding: '2px 8px',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           border: '1px solid var(--border-subtle)',
                           background: 'var(--bg-deep)',
                           whiteSpace: 'nowrap',
@@ -2300,7 +2300,7 @@ export function TaskMgmtContent({
                         fontSize: 13,
                         fontFamily: 'var(--font-mono)',
                         border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                         resize: 'vertical',
@@ -2333,7 +2333,7 @@ export function TaskMgmtContent({
                       color: drawerTask.description ? 'var(--text-secondary)' : 'var(--text-muted)',
                       lineHeight: 1.6,
                       cursor: 'text',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       padding: 8,
                       margin: -8,
                       minHeight: 24,
@@ -2358,7 +2358,7 @@ export function TaskMgmtContent({
                         type="button"
                         disabled={publishBusy}
                         onClick={unpublishDrawerTicket}
-                        style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                        style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >
                         {publishBusy ? tGigs('publish.unpublishing') : tGigs('publish.unpublish')}
                       </button>
@@ -2367,7 +2367,7 @@ export function TaskMgmtContent({
                     <button
                       type="button"
                       onClick={() => setPublishOpen(true)}
-                      style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                      style={{ padding: '7px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
                     >
                       {tGigs('publish.action')}
                     </button>
@@ -2426,7 +2426,7 @@ export function TaskMgmtContent({
                           fontSize: 13,
                           padding: '3px 6px',
                           border: '1px solid var(--border-subtle)',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           background: 'var(--bg-deep)',
                           color: 'var(--text-primary)',
                         }}
@@ -2461,7 +2461,7 @@ export function TaskMgmtContent({
                           fontSize: 13,
                           padding: '3px 6px',
                           border: '1px solid var(--border-subtle)',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           background: 'var(--bg-deep)',
                           color: 'var(--text-primary)',
                         }}
@@ -2503,7 +2503,7 @@ export function TaskMgmtContent({
                       {drawerTask.managerRank != null && (
                         <span
                           title={tBoard('businessValue.rankTitle')}
-                          style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
+                          style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
                         >
                           #{drawerTask.managerRank}
                         </span>
@@ -2529,7 +2529,7 @@ export function TaskMgmtContent({
                           fontSize: 13,
                           padding: '3px 6px',
                           border: '1px solid var(--border-subtle)',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           background: 'var(--bg-deep)',
                           color: 'var(--text-primary)',
                         }}
@@ -2657,7 +2657,7 @@ export function TaskMgmtContent({
               margin: '0 auto',
               background: 'var(--bg-surface)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 16,
+              borderRadius: 'var(--radius-xl)',
               padding: 16,
               display: 'flex',
               flexDirection: 'column',

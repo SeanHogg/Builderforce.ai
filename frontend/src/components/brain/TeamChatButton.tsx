@@ -92,7 +92,7 @@ export function TeamChatButton({
         background: 'var(--bg-elevated)',
         color: 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: loading ? 'wait' : 'pointer',
         opacity: loading ? 0.6 : 1,
         ...style,

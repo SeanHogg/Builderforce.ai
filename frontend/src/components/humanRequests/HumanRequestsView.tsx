@@ -219,7 +219,7 @@ export function HumanRequestsView({
         <div
           style={{
             marginBottom: 12, padding: '10px 12px',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             background: 'var(--danger-bg)', color: 'var(--text-primary)', fontSize: 13,
           }}
         >
@@ -288,7 +288,7 @@ export function HumanRequestsView({
                 key={row.id}
                 style={{
                   background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 12, padding: 18, display: 'flex', flexDirection: 'column', gap: 10,
+                  borderRadius: 'var(--radius-lg)', padding: 18, display: 'flex', flexDirection: 'column', gap: 10,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -310,7 +310,7 @@ export function HumanRequestsView({
                 )}
 
                 {row.status !== 'pending' && row.status !== 'expired' && (
-                  <div style={{ fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', overflowWrap: 'anywhere' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', overflowWrap: 'anywhere' }}>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{row.status === 'answered' ? 'Answer' : 'Resolution'}</div>
                     {resolutionText(row)}
                   </div>

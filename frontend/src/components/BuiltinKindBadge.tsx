@@ -38,7 +38,7 @@ export function BuiltinKindBadge({ kind }: { kind?: string | null }) {
         letterSpacing: 0.4,
         textTransform: 'uppercase',
         padding: '2px 7px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         background: 'rgba(139,92,246,0.15)',
         color: '#7c3aed',
         border: '1px solid rgba(139,92,246,0.3)',

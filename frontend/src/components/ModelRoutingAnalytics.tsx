@@ -13,7 +13,7 @@ import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -77,7 +77,7 @@ export function ModelRoutingAnalytics() {
               style={{
                 padding: '6px 12px',
                 fontSize: 13,
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)',
                 background: scope === s ? 'var(--bg-elevated, rgba(124,131,253,0.15))' : 'transparent',
                 color: scope === s ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -93,7 +93,7 @@ export function ModelRoutingAnalytics() {
       {loading ? (
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading…</p>
       ) : error ? (
-        <p style={{ fontSize: 13, color: 'var(--red-bright, #ff6b6b)' }}>{error}</p>
+        <p style={{ fontSize: 13, color: 'var(--red-bright, var(--red-bright))' }}>{error}</p>
       ) : !data || data.byAction.length === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           No routing data yet. As cloud runs finish, each is scored and the best model per task type is learned here.

@@ -18,33 +18,33 @@ import {
 } from '@/lib/freelancerApi';
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
 };
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
-  borderRadius: 8, padding: '7px 10px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
+  borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 const primaryBtn: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-  color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+  color: 'var(--text-on-accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
 };
 const ghostBtn: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
   color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
 };
 
 /** AI eval headline (0..100) chip — translucent bg + saturated text, both themes. */
 function ScoreChip({ score }: { score: number }) {
   const hue = score >= 75 ? '34,197,94' : score >= 50 ? '245,158,11' : '239,68,68';
-  const fg = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#f87171';
-  return <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 6, background: `rgba(${hue},0.16)`, color: fg, flexShrink: 0 }}>{Math.round(score)}</span>;
+  const fg = score >= 75 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--error)';
+  return <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: `rgba(${hue},0.16)`, color: fg, flexShrink: 0 }}>{Math.round(score)}</span>;
 }
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   submitted: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  in_review: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, #f59e0b)' },
+  in_review: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, var(--warning))' },
   accepted: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
-  changes_requested: { bg: 'rgba(239,68,68,0.14)', fg: '#f87171' },
+  changes_requested: { bg: 'rgba(239,68,68,0.14)', fg: 'var(--error)' },
 };
 
 export default function FreelancerWorkspacePage() {
@@ -108,7 +108,7 @@ export default function FreelancerWorkspacePage() {
 
   const statusPill = (s: string) => {
     const c = STATUS_COLORS[s] ?? { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' };
-    return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: c.bg, color: c.fg, flexShrink: 0 }}>{tg(`deliverables.status.${s}`)}</span>;
+    return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: c.bg, color: c.fg, flexShrink: 0 }}>{tg(`deliverables.status.${s}`)}</span>;
   };
 
   return (
@@ -134,7 +134,7 @@ export default function FreelancerWorkspacePage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
             {boards.map((b) => (
               <button key={b.engagementId} type="button" onClick={() => setSelected(b.engagementId)}
-                style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
                   background: selected === b.engagementId ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
                   border: `1px solid ${selected === b.engagementId ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, color: 'var(--text-primary)' }}>
                 <div>{b.projectName ?? b.title ?? b.tenantName ?? b.engagementId}</div>

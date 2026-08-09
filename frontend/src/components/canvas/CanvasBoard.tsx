@@ -158,7 +158,7 @@ export function CanvasBoard({ value, onChange, readOnly = false, height = 600 }:
           position: 'relative',
           height,
           overflow: 'auto',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border, #333)',
           background:
             'var(--surface-2, #131313) radial-gradient(var(--border, #2a2a2a) 1px, transparent 1px) 0 0 / 22px 22px',
@@ -215,7 +215,7 @@ function BlockView({
     top: block.y,
     width: block.w,
     height: block.h,
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     border: selected ? '2px solid var(--accent, #2563eb)' : '1px solid var(--border, #333)',
     background: block.type === 'sticky' ? (block as { color: string }).color : 'var(--surface, #1d1d1d)',
     color: block.type === 'sticky' ? '#1a1a1a' : 'inherit',
@@ -356,7 +356,7 @@ function BlockBody({
 
     case 'file':
       return block.url ? (
-        <a href={block.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #60a5fa)', fontSize: 13, margin: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>
+        <a href={block.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, var(--info))', fontSize: 13, margin: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>
           📎 {block.name || block.url}
         </a>
       ) : readOnly ? (
@@ -370,7 +370,7 @@ function BlockBody({
 
     case 'embed':
       return block.documentId ? (
-        <Link href={`/knowledge/${block.documentId}`} style={{ color: 'var(--accent, #60a5fa)', fontSize: 13, margin: 'auto', textAlign: 'center' }}>
+        <Link href={`/knowledge/${block.documentId}`} style={{ color: 'var(--accent, var(--info))', fontSize: 13, margin: 'auto', textAlign: 'center' }}>
           📄 {block.title || t('openEmbeddedDoc')}
         </Link>
       ) : readOnly ? (
@@ -449,7 +449,7 @@ function WidgetBody({
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-      <div style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: danger ? 'var(--error-text, #f87171)' : undefined }}>
+      <div style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: danger ? 'var(--error-text, var(--error))' : undefined }}>
         {display}
       </div>
       {!readOnly && (
@@ -469,7 +469,7 @@ function WidgetBody({
 
 const toolBtn: React.CSSProperties = {
   padding: '5px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #333)',
   background: 'var(--surface, #1a1a1a)',
   color: 'inherit',
@@ -479,7 +479,7 @@ const toolBtn: React.CSSProperties = {
 };
 const miniBtn: React.CSSProperties = {
   padding: '3px 8px',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   border: '1px solid var(--border, #444)',
   background: 'var(--surface-2, #222)',
   color: 'inherit',
@@ -498,7 +498,7 @@ const inlineInput: React.CSSProperties = {
   width: '100%',
   margin: 'auto 0',
   padding: '6px 8px',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   border: '1px solid var(--border, #333)',
   background: 'var(--surface-2, #111)',
   color: 'inherit',

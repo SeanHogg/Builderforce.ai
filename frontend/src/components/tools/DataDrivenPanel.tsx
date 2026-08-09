@@ -8,9 +8,9 @@ import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import type { ToolResult, SavedToolRun } from '@/lib/tools';
 
-const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
+const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const btnSubtle: React.CSSProperties = {
-  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)',
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 

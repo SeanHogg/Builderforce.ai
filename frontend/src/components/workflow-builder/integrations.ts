@@ -46,9 +46,9 @@ export interface IntegrationCategory {
 export const INTEGRATION_CATEGORIES: IntegrationCategory[] = [
   { id: 'llm', label: 'LLM Platforms', icon: '✨', accent: '#a855f7', order: 1 },
   { id: 'official', label: 'Core MCP Servers', icon: '🧩', accent: '#38bdf8', order: 2 },
-  { id: 'data-db', label: 'Data & Databases', icon: '🗄️', accent: '#34d399', order: 3 },
-  { id: 'productivity', label: 'Productivity & Docs', icon: '📋', accent: '#fbbf24', order: 4 },
-  { id: 'comms', label: 'Communication', icon: '💬', accent: '#60a5fa', order: 5 },
+  { id: 'data-db', label: 'Data & Databases', icon: '🗄️', accent: 'var(--emerald-bright)', order: 3 },
+  { id: 'productivity', label: 'Productivity & Docs', icon: '📋', accent: 'var(--amber-bright)', order: 4 },
+  { id: 'comms', label: 'Communication', icon: '💬', accent: 'var(--info)', order: 5 },
   { id: 'marketing-crm', label: 'Marketing & CRM', icon: '📣', accent: '#fb7185', order: 6 },
   { id: 'analytics-collection', label: 'Analytics & Data Collection', icon: '📊', accent: '#f472b6', order: 7 },
 ];

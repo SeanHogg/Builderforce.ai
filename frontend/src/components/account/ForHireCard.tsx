@@ -15,7 +15,7 @@ import { useAvailableForHire, useIsFreelancer } from '@/lib/rbac';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -29,7 +29,7 @@ const sectionTitle: React.CSSProperties = {
 const linkBtn: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600,
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
 };
 
 export default function ForHireCard() {
@@ -77,7 +77,7 @@ export default function ForHireCard() {
               disabled={busy}
               style={{
                 marginLeft: 'auto', padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer',
-                background: 'none', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+                background: 'none', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                 opacity: busy ? 0.6 : 1,
               }}
             >
@@ -94,8 +94,8 @@ export default function ForHireCard() {
               onClick={() => void toggle(true)}
               disabled={busy}
               style={{
-                padding: '9px 18px', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: busy ? 'wait' : 'pointer',
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff',
+                padding: '9px 18px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-lg)', border: 'none', cursor: busy ? 'wait' : 'pointer',
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)',
                 opacity: busy ? 0.6 : 1, letterSpacing: '0.02em',
               }}
             >

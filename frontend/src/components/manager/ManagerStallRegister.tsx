@@ -35,7 +35,7 @@ import {
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
@@ -52,7 +52,7 @@ function Badge({ label, fg, bg }: { label: string; fg: string; bg: string }) {
   return (
     <span
       style={{
-        display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+        display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)',
         fontSize: '0.72rem', fontWeight: 700, color: fg, background: bg,
         border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',
       }}

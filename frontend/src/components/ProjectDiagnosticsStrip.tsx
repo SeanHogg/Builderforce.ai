@@ -72,9 +72,9 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
     return d.gapCount > 0 ? { label: gapText(d), tone: 'warn' } : { label: `✓ ${t('noGaps')}`, tone: 'good' };
   };
   const BADGE_TONE: Record<BadgeTone, { fg: string; bg: string; border: string }> = {
-    good: { fg: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
+    good: { fg: 'var(--success)', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
     progress: { fg: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
-    warn: { fg: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
+    warn: { fg: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
   };
 
   // ── chips: dense score pills for the project card / list row ────────────────
@@ -101,7 +101,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
                 <span
                   aria-hidden
                   title={dot.title}
-                  style={{ width: 6, height: 6, borderRadius: 999, background: dot.color, flexShrink: 0 }}
+                  style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: dot.color, flexShrink: 0 }}
                 />
               )}
             </>
@@ -110,7 +110,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 11, lineHeight: 1,
             background: 'var(--bg-base)', border: `1px solid ${d.score == null ? 'var(--border-subtle)' : color + '66'}`,
-            borderRadius: 999, padding: '4px 9px', color: 'var(--text-secondary)',
+            borderRadius: 'var(--radius-full)', padding: '4px 9px', color: 'var(--text-secondary)',
           };
           return onOpen ? (
             <button key={d.toolId} type="button" title={ariaFor(d)} aria-label={ariaFor(d)}
@@ -154,7 +154,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
                       color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}`,
-                      borderRadius: 999, padding: '3px 9px', maxWidth: '100%',
+                      borderRadius: 'var(--radius-full)', padding: '3px 9px', maxWidth: '100%',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {badge.label}
@@ -167,7 +167,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
           const cardStyle: React.CSSProperties = {
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
             padding: 14, textAlign: 'center', width: '100%',
-            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
           };
           return onOpen ? (
             <button key={d.toolId} type="button" aria-label={ariaFor(d)}

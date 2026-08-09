@@ -27,7 +27,7 @@ import PageContainer from '@/components/PageContainer';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -151,12 +151,12 @@ export default function SecurityClient() {
                     <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                       {user.displayName ?? user.username}
                       {isCurrentUser && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
                           {t('you')}
                         </span>
                       )}
                       {user.mfaEnabled && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.12)', color: 'rgba(34,197,94,0.9)' }}>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'rgba(34,197,94,0.12)', color: 'rgba(34,197,94,0.9)' }}>
                           MFA
                         </span>
                       )}
@@ -225,7 +225,7 @@ export default function SecurityClient() {
             style={{
               padding: '7px 14px', fontSize: 13, fontWeight: 600,
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
             }}
           >
             {loading ? t('loading') : t('refresh')}

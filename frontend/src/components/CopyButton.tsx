@@ -54,7 +54,7 @@ export function CopyButton({
         fontSize: 12, fontWeight: 600,
         // 32px min keeps the target tappable on a phone without bloating a dense header.
         padding: compact ? '6px 10px' : '7px 12px', minHeight: 32,
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: `1px solid ${state === 'idle' ? 'var(--border-subtle)' : tone}`,
         background: 'var(--bg-base)',
         color: tone,

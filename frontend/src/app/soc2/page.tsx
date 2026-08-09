@@ -62,15 +62,15 @@ export default async function Soc2Page() {
         .s2-eyebrow {
           display: inline-flex; align-items: center; gap: 8px; font-size: 0.72rem; font-weight: 700;
           letter-spacing: 0.14em; text-transform: uppercase; color: var(--coral-bright);
-          border: 1px solid var(--border-accent, var(--border-subtle)); border-radius: 999px; padding: 5px 14px; margin-bottom: 20px;
+          border: 1px solid var(--border-accent, var(--border-subtle)); border-radius: var(--radius-full); padding: 5px 14px; margin-bottom: 20px;
         }
         .s2-title { font-weight: 800; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(2.1rem, 5.4vw, 3.4rem); margin: 0 auto 16px; max-width: 15ch; }
         .s2-grad { background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright, #22d3ee)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .s2-sub { font-size: clamp(1rem, 2vw, 1.15rem); color: var(--text-secondary); line-height: 1.65; margin: 0 auto 28px; max-width: 62ch; }
         .s2-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-        .s2-btn-primary { display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: 12px; background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: #fff; font-weight: 600; font-size: 0.95rem; text-decoration: none; box-shadow: 0 6px 20px var(--shadow-coral-mid, rgba(244,114,110,0.28)); transition: transform 0.2s ease; }
+        .s2-btn-primary { display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent); font-weight: 600; font-size: 0.95rem; text-decoration: none; box-shadow: 0 6px 20px var(--shadow-coral-mid, rgba(244,114,110,0.28)); transition: transform 0.2s ease; }
         .s2-btn-primary:hover { transform: translateY(-2px); }
-        .s2-btn-secondary { display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--surface-card, var(--bg-elevated)); color: var(--text-primary); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
+        .s2-btn-secondary { display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); background: var(--surface-card, var(--bg-elevated)); color: var(--text-primary); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
         .s2-section { padding: clamp(36px, 6vw, 64px) 0; }
         .s2-section-title { font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2.1rem); letter-spacing: -0.02em; text-align: center; margin: 0 0 8px; }
         .s2-section-sub { text-align: center; color: var(--text-secondary); font-size: 1rem; max-width: 60ch; margin: 0 auto 32px; line-height: 1.6; }
@@ -78,22 +78,22 @@ export default async function Soc2Page() {
         .s2-grid.cc { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
         .s2-grid.steps { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); counter-reset: step; }
         .s2-grid.family { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-        .s2-card { background: var(--surface-card, var(--bg-elevated)); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 18px 18px; }
+        .s2-card { background: var(--surface-card, var(--bg-elevated)); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 18px 18px; }
         .s2-cc-ref { font-weight: 800; color: var(--coral-bright); font-size: 0.82rem; letter-spacing: 0.04em; }
         .s2-cc-label { display: block; margin-top: 4px; color: var(--text-primary); font-size: 0.95rem; line-height: 1.4; }
         .s2-step { position: relative; padding-left: 4px; }
-        .s2-step-n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(244,114,110,0.14); color: var(--coral-bright); font-weight: 800; margin-bottom: 10px; }
+        .s2-step-n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--radius-md); background: rgba(244,114,110,0.14); color: var(--coral-bright); font-weight: 800; margin-bottom: 10px; }
         .s2-step-t { font-weight: 700; font-size: 1rem; margin: 0 0 4px; }
         .s2-step-d { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin: 0; }
         .s2-audit-icon { font-size: 1.6rem; }
         .s2-audit-name { font-weight: 700; font-size: 1.02rem; margin: 8px 0 4px; }
         .s2-audit-desc { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin: 0; }
         .s2-faq { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
-        .s2-faq details { background: var(--surface-card, var(--bg-elevated)); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 18px; }
+        .s2-faq details { background: var(--surface-card, var(--bg-elevated)); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 14px 18px; }
         .s2-faq summary { font-weight: 600; cursor: pointer; color: var(--text-primary); list-style: none; }
         .s2-faq summary::-webkit-details-marker { display: none; }
         .s2-faq p { color: var(--text-secondary); font-size: 0.94rem; line-height: 1.6; margin: 10px 0 0; }
-        .s2-cta { text-align: center; background: var(--surface-card, var(--bg-elevated)); border: 1px solid var(--border-subtle); border-radius: 18px; padding: clamp(28px, 5vw, 48px) 24px; margin: 24px 0 8px; }
+        .s2-cta { text-align: center; background: var(--surface-card, var(--bg-elevated)); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); padding: clamp(28px, 5vw, 48px) 24px; margin: 24px 0 8px; }
         .s2-cta h2 { font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 700; margin: 0 0 10px; }
         .s2-cta p { color: var(--text-secondary); margin: 0 auto 22px; max-width: 52ch; line-height: 1.6; }
       `}</style>

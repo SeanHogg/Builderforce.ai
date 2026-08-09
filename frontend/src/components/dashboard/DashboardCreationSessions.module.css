@@ -40,7 +40,7 @@
   min-width: 0;
   padding: 18px;
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
 }
 
@@ -77,7 +77,7 @@
   height: 26px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--coral-bright, #f4726e) 42%, var(--border-subtle));
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--coral-bright, #f4726e) 10%, transparent);
   color: var(--coral-bright, #f4726e);
   font-size: 12px;
@@ -105,7 +105,7 @@
   align-items: flex-start;
   text-align: left;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
   color: var(--text-primary);
   cursor: pointer;
@@ -118,7 +118,7 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 13%, var(--surface-sunken));
   font-size: 20px;
 }
@@ -180,7 +180,7 @@
   align-items: start;
   text-align: left;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
   color: var(--text-primary);
   cursor: pointer;
@@ -215,7 +215,7 @@
   align-items: center;
   justify-content: space-between;
   border: 1px dashed var(--border-default);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-secondary);
   font-size: 12px;

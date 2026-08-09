@@ -11,7 +11,7 @@ import { getFreelancer, hireFreelancer, type FreelancerProfile } from '@/lib/fre
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 
 export default function TalentDetailClient() {
@@ -57,18 +57,18 @@ export default function TalentDetailClient() {
 
   const actions = isOwner ? (
     <Link href="/freelancer/profile"
-      style={{ padding: '9px 18px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
+      style={{ padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
       {t('editProfile')}
     </Link>
   ) : canHire ? (
     <>
       <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
       <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
-        style={{ padding: '9px 16px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+        style={{ padding: '9px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
         {t('interview')}
       </button>
       <button type="button" onClick={() => doHire('active')} disabled={hireState === 'busy' || hireState !== 'idle'}
-        style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', fontWeight: 700, fontSize: 13, cursor: hireState === 'busy' ? 'wait' : 'pointer' }}>
+        style={{ padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 13, cursor: hireState === 'busy' ? 'wait' : 'pointer' }}>
         {hireState === 'busy' ? t('hiring') : hireState === 'hired' ? t('hired') : t('hire')}
       </button>
     </>

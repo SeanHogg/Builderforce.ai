@@ -62,7 +62,7 @@ export default function BlogPageClient() {
           gap: 8px;
           background: var(--surface-coral-soft);
           border: 1px solid var(--border-accent);
-          border-radius: 999px;
+          border-radius: var(--radius-full);
           padding: 5px 16px;
           font-family: var(--font-display);
           font-size: 0.72rem;
@@ -118,7 +118,7 @@ export default function BlogPageClient() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle);
           background: var(--surface-card);
           color: var(--text-secondary);
@@ -136,7 +136,7 @@ export default function BlogPageClient() {
         .blog-page-btn.is-active {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
           border-color: transparent;
-          color: #fff;
+          color: var(--text-on-accent);
         }
 
         @media (max-width: 640px) {

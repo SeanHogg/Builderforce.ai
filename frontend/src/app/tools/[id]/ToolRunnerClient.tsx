@@ -15,17 +15,17 @@ import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 
 const wrap: React.CSSProperties = { maxWidth: 820, margin: '0 auto', padding: '32px 20px' };
-const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
+const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
   padding: '9px 12px', fontSize: 14, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-  borderRadius: 8, color: 'var(--text-primary)', width: '100%',
+  borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', width: '100%',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 10, border: 'none',
-  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', cursor: 'pointer', textDecoration: 'none',
+  padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 'var(--radius-lg)', border: 'none',
+  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', cursor: 'pointer', textDecoration: 'none',
 };
 const btnSubtle: React.CSSProperties = {
-  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)',
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
@@ -137,7 +137,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
 
       {/* Mode toggle — only for tools that also have a "from your data" provider */}
       {def.hasDataDriven && (
-        <div style={{ display: 'flex', gap: 0, marginBottom: 18, border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden', maxWidth: 380 }}>
+        <div style={{ display: 'flex', gap: 0, marginBottom: 18, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden', maxWidth: 380 }}>
           {(['self', 'data'] as const).map((m) => (
             <button
               key={m}
@@ -197,7 +197,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                       aria-pressed={active}
                       style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
-                        padding: '12px 14px', fontSize: 13, lineHeight: 1.45, borderRadius: 10, cursor: 'pointer',
+                        padding: '12px 14px', fontSize: 13, lineHeight: 1.45, borderRadius: 'var(--radius-lg)', cursor: 'pointer',
                         border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                         background: active ? 'var(--accent)' : 'var(--bg-elevated)',
                         color: active ? '#fff' : 'var(--text-secondary)',
@@ -225,7 +225,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                 <div key={sc.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22,
-                    borderRadius: 6, fontWeight: 700, fontSize: 11, background: 'var(--bg-elevated)',
+                    borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 11, background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)', color: 'var(--text-strong)',
                   }}>{sc.value}</span>
                   {sc.label}
@@ -248,7 +248,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                           <button
                             key={sc.value} type="button" onClick={() => setVal(q.id, sc.value)} title={`${sc.value} — ${sc.label}`}
                             style={{
-                              padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                              padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                               border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                               background: active ? 'var(--accent)' : 'var(--bg-elevated)', color: active ? '#fff' : 'var(--text-secondary)',
                             }}
@@ -290,7 +290,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>{t('saveTitle')}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('saveDesc')}</div>
-                  {saveState !== 'idle' && <div style={{ fontSize: 12, marginTop: 6, color: saveState === 'error' ? 'var(--error-text)' : '#22c55e' }}>{saveMsg}</div>}
+                  {saveState !== 'idle' && <div style={{ fontSize: 12, marginTop: 6, color: saveState === 'error' ? 'var(--error-text)' : 'var(--success)' }}>{saveMsg}</div>}
                 </div>
                 <button type="button" onClick={save} disabled={saveState === 'saving'} style={btnSubtle}>
                   {saveState === 'saving' ? t('saving') : saveState === 'saved' ? t('savedShort') : t('saveResult')}

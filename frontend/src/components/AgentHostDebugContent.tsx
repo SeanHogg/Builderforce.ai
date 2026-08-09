@@ -7,7 +7,7 @@ import { AgentHostGateway } from '@/lib/agentHostGateway';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -20,7 +20,7 @@ const preStyle: React.CSSProperties = {
   color: 'var(--text-secondary)',
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   padding: 12,
 };
 
@@ -202,7 +202,7 @@ export function AgentHostDebugContent({
   const isOffline = connState === 'offline';
   const dotColor =
     connState === 'connected'
-      ? 'var(--success-bg, #22c55e)'
+      ? 'var(--success-bg, var(--success))'
       : connState === 'offline'
         ? 'var(--danger-bg, #ef4444)'
         : 'var(--text-muted)';
@@ -217,7 +217,7 @@ export function AgentHostDebugContent({
             fontWeight: 600,
             background: 'rgba(239,68,68,0.2)',
             color: 'var(--error-text)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             border: '1px solid rgba(239,68,68,0.4)',
           }}
         >
@@ -232,7 +232,7 @@ export function AgentHostDebugContent({
             fontSize: 13,
             background: 'rgba(239,68,68,0.15)',
             color: 'var(--error-text)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
           }}
         >
           {error}
@@ -284,7 +284,7 @@ export function AgentHostDebugContent({
             background: 'var(--surface-interactive)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: refreshing || connState !== 'connected' ? 'not-allowed' : 'pointer',
           }}
         >
@@ -317,7 +317,7 @@ export function AgentHostDebugContent({
                 padding: '8px 10px',
                 fontSize: 13,
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
               }}
@@ -337,7 +337,7 @@ export function AgentHostDebugContent({
                 fontSize: 12,
                 fontFamily: 'var(--font-mono)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
               }}
@@ -352,9 +352,9 @@ export function AgentHostDebugContent({
               fontSize: 13,
               fontWeight: 600,
               background: 'var(--coral-bright)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: rpcRunning || connState !== 'connected' ? 'not-allowed' : 'pointer',
             }}
           >

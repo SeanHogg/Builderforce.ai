@@ -90,7 +90,7 @@ export function InitialAvatar({ label }: { label: string }) {
     <div
       aria-hidden
       style={{
-        width: 36, height: 36, borderRadius: 10, background: 'var(--bg-base)',
+        width: 36, height: 36, borderRadius: 'var(--radius-lg)', background: 'var(--bg-base)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 13, fontWeight: 700, color: 'var(--coral-bright)', flexShrink: 0,
       }}

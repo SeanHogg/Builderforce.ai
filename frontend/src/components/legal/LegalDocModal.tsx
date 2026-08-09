@@ -57,10 +57,10 @@ export default function LegalDocModal({ type, legal, onClose }: LegalDocModalPro
               padding: '10px 20px',
               fontSize: '0.9rem',
               fontWeight: 600,
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
             }}

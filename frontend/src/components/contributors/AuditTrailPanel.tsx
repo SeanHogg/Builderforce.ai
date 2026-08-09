@@ -15,7 +15,7 @@ import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/li
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -160,7 +160,7 @@ export function AuditTrailPanel() {
                 onClick={() => setActorType(f)}
                 aria-pressed={active}
                 style={{
-                  fontSize: 12, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
+                  fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
                   border: `1px solid ${active ? accent : 'var(--border-subtle)'}`,
                   background: active ? accent : 'var(--bg-base)',
                   color: active ? '#fff' : 'var(--text-secondary)',
@@ -211,7 +211,7 @@ export function AuditTrailPanel() {
                   aria-hidden
                   title={actorLabel(e.actorType)}
                   style={{
-                    flex: '0 0 auto', width: 30, height: 30, borderRadius: 999,
+                    flex: '0 0 auto', width: 30, height: 30, borderRadius: 'var(--radius-full)',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 12, fontWeight: 700, color: as.color,
                     background: `color-mix(in srgb, ${as.color} 16%, transparent)`,
@@ -227,7 +227,7 @@ export function AuditTrailPanel() {
                       {e.actorName ?? t('actor.unknown')}
                     </span>
                     <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-full)',
                       color: as.color, background: `color-mix(in srgb, ${as.color} 14%, transparent)`,
                       border: `1px solid color-mix(in srgb, ${as.color} 34%, transparent)`,
                     }}>
@@ -255,7 +255,7 @@ export function AuditTrailPanel() {
                         title={t('model.tooltip', { model: mp.model ?? '' })}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%',
-                          fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+                          fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-full)',
                           color: 'var(--text-secondary)',
                           background: 'var(--bg-hover, rgba(127,127,127,0.08))',
                           border: '1px solid var(--border-subtle)',
@@ -269,7 +269,7 @@ export function AuditTrailPanel() {
                       </span>
                       {mp.vendor && (
                         <span style={{
-                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 999,
+                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 'var(--radius-full)',
                           color: 'var(--muted)', border: '1px solid var(--border-subtle)',
                           whiteSpace: 'nowrap',
                         }}>
@@ -278,7 +278,7 @@ export function AuditTrailPanel() {
                       )}
                       {accountLabel && (
                         <span style={{
-                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 999,
+                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 'var(--radius-full)',
                           color: 'var(--muted)', border: '1px dashed var(--border-subtle)',
                           whiteSpace: 'nowrap',
                         }}>
@@ -300,7 +300,7 @@ export function AuditTrailPanel() {
             onClick={() => load(false)}
             disabled={loadingMore}
             style={{
-              fontSize: 13, padding: '8px 16px', borderRadius: 8,
+              fontSize: 13, padding: '8px 16px', borderRadius: 'var(--radius-md)',
               cursor: loadingMore ? 'default' : 'pointer',
               background: 'var(--bg-hover, rgba(127,127,127,0.08))',
               color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)',

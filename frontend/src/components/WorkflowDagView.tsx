@@ -15,7 +15,7 @@ import type { WorkflowGraphNode, WorkflowGraphEdge } from '@/lib/builderforceApi
 
 const STATUS_COLORS: Record<string, string> = {
   pending:   'var(--text-muted, #8a8f9c)',
-  running:   'var(--cyan-bright, #00e5cc)',
+  running:   'var(--cyan-bright, var(--cyan-bright))',
   completed: 'rgba(34,197,94,0.9)',
   failed:    'var(--coral-bright, #f4726e)',
 };

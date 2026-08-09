@@ -143,10 +143,9 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * SAME `memory` container-op as recall/remember (action:'forget'), so it needs no new
  * op in the image.
  *
- * `coordinate` is INTENTIONALLY omitted (not a gap): the container commits through the
- * Worker's `write` op, and THAT path is already lease-guarded on the Worker side — so
- * the container is protected by the same locks without advertising four tools its
- * image has no handler for. Add it here only alongside a `coordinate` container-op.
+ * `coordinate` relays through the Worker just like memory. The image can therefore
+ * reserve work before its first write and read the shared blackboard while the Worker
+ * remains the sole owner of the lease/note stores.
  *
  * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
  * surface — which must do surgical edits over the git API (read blob → string-replace
@@ -160,7 +159,7 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * advertises to the gateway, so it MUST match what that image implements.
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget',
+  'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate',
 ]);
 
 /** Durable/Worker schema array — derived from {@link CLOUD_SURFACE_CAPS}, not

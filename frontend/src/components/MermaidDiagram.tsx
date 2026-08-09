@@ -69,7 +69,7 @@ export function MermaidDiagram({ code }: { code: string }) {
           padding: '10px 12px',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 8,
+          borderRadius: 'var(--radius-md)',
           overflowX: 'auto',
           fontSize: '0.78rem',
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace",

@@ -41,7 +41,7 @@ import { ticketHref } from '@/lib/ticketHref';
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
@@ -145,7 +145,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
             type="button"
             onClick={() => void load()}
             style={{
-              padding: '4px 10px', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', cursor: 'pointer',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
             }}
           >
@@ -311,7 +311,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 8, padding: '7px 10px',
+                  borderRadius: 'var(--radius-md)', padding: '7px 10px',
                 }}
               >
                 <span aria-hidden style={{ flexShrink: 0 }}>{KIND_ICON[c.kind] ?? '•'}</span>
@@ -334,7 +334,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
       {needsAttention.openEscalations > 0 && (
         <div
           style={{
-            marginTop: 16, padding: 12, borderRadius: 10,
+            marginTop: 16, padding: 12, borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--warning-border, var(--border-subtle))',
             borderLeft: '3px solid var(--warning-text, #b45309)',
             background: 'var(--bg-base)',

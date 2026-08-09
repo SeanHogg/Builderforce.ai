@@ -80,6 +80,8 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
+import { isAgentRunnable } from '../../domain/containment/agentState';
+import { recordCodeCompletionClaim } from '../provenance/finishClaimService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
@@ -102,6 +104,9 @@ export interface ResolvedCloudAgent {
    *  swimlane coordinator resolves this to an assignment runtime; the direct
    *  dispatch path uses it only to break a tie when a host is available. */
   preferredRuntime?: string | null;
+  /** False when the named agent exists but is quarantined/inactive. Missing refs keep
+   * the legacy gateway-default fallback; a known inactive teammate must never run. */
+  active?: boolean;
 }
 
 /** Does an agent's declared runtime_support permit running on an On-Prem host?
@@ -137,6 +142,7 @@ export async function resolveCloudAgent(
       baseModel:        ideAgents.baseModel,
       runtimeSupport:   ideAgents.runtimeSupport,
       preferredRuntime: ideAgents.preferredRuntime,
+      status:           ideAgents.status,
     })
     .from(ideAgents)
     .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
@@ -148,7 +154,8 @@ export async function resolveCloudAgent(
   const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
   const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
   const preferredRuntime = rows[0]?.preferredRuntime ?? null;
-  return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
+  const active = rows[0] ? isAgentRunnable(rows[0].status) : undefined;
+  return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime, active };
 }
 /**
  * Load a cloud agent's OWN psychometric profile (ide_agents.psychometric) — the
@@ -922,6 +929,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
     if (board?.lifecycleManaged && !explicitRef) return null;
     const ref = explicitRef ?? task.assignedAgentRef ?? undefined;
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
+    if (agent.active === false) return null;
     const payloadModel = parseModel(exec.payload ?? undefined);
     const routing = await resolveCloudRouting(env, exec.tenantId);
     // Compile the persona/agent personality exec levers ONCE per run (cache-backed
@@ -1192,6 +1200,62 @@ export async function handleContainerOp(
       tenantId, cloudAgentRef, executionId,
       toolName, category: 'tool', detail: args,
       result: JSON.stringify(result).slice(0, 300), durationMs: Date.now() - tStart,
+    });
+    return { status: 200, body: result };
+  }
+
+  // Multi-agent coordination relayed from the container. The Worker remains the
+  // authority for leases and blackboard notes; the image receives only the same
+  // capability-shaped results as the durable loop.
+  if (op === 'coordinate') {
+    const action = typeof args.action === 'string' ? args.action : '';
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const coordination = buildCoordinationCapability({
+      env,
+      db,
+      holder: {
+        tenantId,
+        executionId,
+        label: agentLabel,
+        taskId,
+        repoSlug: repo.ok ? `${repo.ctx.owner}/${repo.ctx.repo}` : '',
+        branch: repo.ok ? repo.ctx.branch : '',
+        scopeKey: coordinationScopeKey(taskId),
+      },
+    });
+    let result: Record<string, unknown>;
+    try {
+      if (action === 'claim') {
+        const resource = typeof args.resource === 'string' ? args.resource : '';
+        if (!resource.trim()) return { status: 200, body: { ok: false, error: 'resource is required' } };
+        result = await coordination.claim(resource, {
+          mode: args.mode === 'shared' ? 'shared' : 'exclusive',
+          reason: typeof args.reason === 'string' ? args.reason : undefined,
+        }) as unknown as Record<string, unknown>;
+      } else if (action === 'release') {
+        const resource = typeof args.resource === 'string' ? args.resource : '';
+        if (!resource.trim()) return { status: 200, body: { ok: false, error: 'resource is required' } };
+        result = await coordination.release(resource) as unknown as Record<string, unknown>;
+      } else if (action === 'note') {
+        const key = typeof args.key === 'string' ? args.key : '';
+        const content = typeof args.content === 'string' ? args.content : '';
+        if (!key.trim() || !content.trim()) return { status: 200, body: { ok: false, error: 'key and content are required' } };
+        result = await coordination.postNote(key, content) as unknown as Record<string, unknown>;
+      } else if (action === 'read') {
+        result = await coordination.readNotes(
+          typeof args.query === 'string' ? args.query : undefined,
+          typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : undefined,
+        ) as unknown as Record<string, unknown>;
+      } else {
+        return { status: 200, body: { ok: false, error: `unknown coordinate action '${action}'` } };
+      }
+    } catch (e) {
+      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: `coordinate.${action || 'unknown'}`, category: 'tool', detail: args,
+      result: JSON.stringify(result).slice(0, 300),
     });
     return { status: 200, body: result };
   }
@@ -2258,6 +2322,16 @@ export async function runCloudToolLoop(
             });
           }
         }
+        if (!finishBlock && repoCtx && writtenPaths.size > 0) {
+          const claim = await recordCodeCompletionClaim(db, {
+            tenantId,
+            executionId,
+            statement: summary || finalOutput || `Completed changes to ${[...writtenPaths].join(', ')}`,
+          });
+          if (!claim.ok) {
+            finishBlock = `Cannot finish — no structural evidence record supports this completion claim (${claim.error}). Retry the successful write or verification, then finish again.`;
+          }
+        }
         if (finishBlock) {
           toolResult = { ok: false, error: finishBlock };
         } else {
@@ -2288,6 +2362,16 @@ export async function runCloudToolLoop(
     // in `state` so the resume tick continues right where it left off.
     if (awaitingInput) break;
   }
+  } catch (error) {
+    // A thrown tool/LLM path is terminal for this invocation. Hand leases back now;
+    // otherwise peers remain blocked until the 15-minute TTL even though this run can
+    // no longer use them. Preserve the original failure if cleanup itself fails.
+    await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskRow.id))
+      .catch((releaseError) => reportCaughtError(releaseError, {
+        source: 'application/runtime/cloudAgentEngine.ts', operation: 'runCloudToolLoop.releaseAfterThrow',
+        context: { tenantId, executionId, taskId: taskRow.id, error: releaseError },
+      }));
+    throw error;
   } finally {
     // Stop the cancel watcher (and let it settle) so its timer can't outlive the run.
     watcherDone = true;

@@ -8,9 +8,9 @@
 
 export const CHART_PALETTE = [
   '#7c5cff', // violet (brand)
-  '#4d9eff', // coral-bright blue
-  '#22c55e', // green
-  '#f59e0b', // amber
+  'var(--coral-bright)', // coral-bright blue
+  'var(--success)', // green
+  'var(--warning)', // amber
   '#ef4444', // red
   '#14b8a6', // teal
   '#ec4899', // pink

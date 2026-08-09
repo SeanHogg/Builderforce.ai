@@ -9,7 +9,7 @@ export function RatingStars({ rating, count, size = 13 }: { rating?: number | nu
   const rounded = Math.round(rating);
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, lineHeight: 1 }} aria-label={`${rating} out of 5`}>
-      <span style={{ color: 'var(--warning-text, #f59e0b)' }} aria-hidden>
+      <span style={{ color: 'var(--warning-text, var(--warning))' }} aria-hidden>
         {'★'.repeat(rounded)}{'☆'.repeat(Math.max(0, 5 - rounded))}
       </span>
       <span style={{ color: 'var(--text-muted)', fontSize: size - 1 }}>{rating.toFixed(1)}{count != null && count > 0 ? ` (${count})` : ''}</span>

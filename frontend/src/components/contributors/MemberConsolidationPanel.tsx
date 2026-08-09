@@ -21,10 +21,10 @@ import { ContributorConsolidation } from './ContributorConsolidation';
  */
 
 const sectionStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const btn = (primary = false): React.CSSProperties => ({
-  fontSize: 13, padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+  fontSize: 13, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   border: '1px solid var(--border-subtle)',
   background: primary ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
   color: primary ? '#fff' : 'var(--text-secondary)',

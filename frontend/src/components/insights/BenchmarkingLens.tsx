@@ -66,7 +66,7 @@ function RatingBadge({ rating }: { rating: BenchmarkRating | null }) {
   const c = RATING_COLOR[rating];
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+      display: 'inline-block', padding: '2px 10px', borderRadius: 'var(--radius-full)',
       background: c.bg, color: c.fg, fontSize: '0.74rem', fontWeight: 700,
     }}>
       {t(`benchmarking.rating.${rating}`)}
@@ -75,7 +75,7 @@ function RatingBadge({ rating }: { rating: BenchmarkRating | null }) {
 }
 
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 

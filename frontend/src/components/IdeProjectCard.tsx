@@ -33,7 +33,7 @@ export function IdeProjectCard({
       style={{
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         padding: 16,
         cursor: 'pointer',
         display: 'flex',
@@ -93,7 +93,7 @@ export function IdeProjectCard({
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpen(ideProject); }}
           style={{
-            fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 8,
+            fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-subtle)', background: 'transparent',
             color: 'var(--coral-bright)', cursor: 'pointer',
           }}
@@ -108,7 +108,7 @@ export function IdeProjectCard({
 const iconBtn: React.CSSProperties = {
   background: 'transparent',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   padding: '4px 8px',
   cursor: 'pointer',
   fontSize: 13,
@@ -119,7 +119,7 @@ const chip: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   padding: '2px 8px',
-  borderRadius: 999,
+  borderRadius: 'var(--radius-full)',
   border: '1px solid var(--border-subtle)',
   color: 'var(--text-secondary)',
 };

@@ -10,7 +10,7 @@ interface AgentHostChannelsContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -130,7 +130,7 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
             background: showAdd ? 'var(--bg-base)' : 'var(--surface-interactive)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
           }}
         >
@@ -157,7 +157,7 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
                   background: form.platform === p ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)',
                   color: 'var(--text-primary)',
                   border: `1px solid ${form.platform === p ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   cursor: 'pointer',
                 }}
               >
@@ -177,7 +177,7 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
             }}
           />
           <textarea
@@ -198,7 +198,7 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               resize: 'vertical',
             }}
           />
@@ -212,9 +212,9 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
                 fontSize: 13,
                 fontWeight: 600,
                 background: 'var(--coral-bright, #f4726e)',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: !form.name.trim() || saving ? 'not-allowed' : 'pointer',
                 opacity: !form.name.trim() || saving ? 0.5 : 1,
               }}
@@ -249,9 +249,9 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
                 fontSize: 11,
                 fontWeight: 600,
                 background: ch.enabled ? 'rgba(0,229,204,0.15)' : 'var(--bg-elevated)',
-                color: ch.enabled ? 'var(--cyan-bright, #00e5cc)' : 'var(--text-muted)',
-                border: `1px solid ${ch.enabled ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)'}`,
-                borderRadius: 6,
+                color: ch.enabled ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--text-muted)',
+                border: `1px solid ${ch.enabled ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--border-subtle)'}`,
+                borderRadius: 'var(--radius-sm)',
                 cursor: togglingId === ch.id ? 'wait' : 'pointer',
                 flexShrink: 0,
               }}
@@ -269,7 +269,7 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
                 background: 'none',
                 color: 'var(--coral-bright, #f4726e)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 cursor: deletingId === ch.id ? 'wait' : 'pointer',
                 flexShrink: 0,
               }}

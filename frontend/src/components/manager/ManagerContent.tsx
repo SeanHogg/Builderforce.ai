@@ -104,18 +104,18 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
 const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
 const controlStyle: CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', minWidth: 220, maxWidth: '100%',
 };
 const primaryBtn: CSSProperties = {
-  padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: '#fff', fontWeight: 700, fontSize: '0.85rem',
+  padding: '9px 16px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+  background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: '0.85rem',
 };
 
 export interface ManagerContentProps {
@@ -676,7 +676,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
 
           {/* Mode — standing directive vs a one-off task the manager executes once. */}
-          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4, marginBottom: 10 }}>
+          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 4, marginBottom: 10 }}>
             {(['directive', 'task'] as const).map((m) => {
               const active = coachMode === m;
               return (
@@ -687,7 +687,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                   aria-checked={active}
                   onClick={() => setCoachMode(m)}
                   style={{
-                    padding: '7px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                    padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer',
                     background: active ? 'var(--accent, #2563eb)' : 'transparent',
                     color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
                   }}
@@ -751,7 +751,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                     key={d.id}
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
-                      border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)',
+                      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)',
                     }}
                   >
                     <span aria-hidden style={{ flexShrink: 0 }}>🎯</span>
@@ -773,7 +773,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                         title={t('coaching.markDone')}
                         aria-label={t('coaching.markDone')}
                         style={{
-                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
                         }}
                       >
@@ -785,7 +785,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                         title={t('coaching.dismiss')}
                         aria-label={t('coaching.dismiss')}
                         style={{
-                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
                         }}
                       >
@@ -958,8 +958,8 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={rationale || noRationale}>
       <span style={{ fontWeight: 700, fontSize: '0.82rem', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
-      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 4 }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent, #2563eb)', borderRadius: 4 }} />
+      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent, #2563eb)', borderRadius: 'var(--radius-sm)' }} />
       </div>
     </div>
   );
@@ -977,7 +977,7 @@ function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip 
       <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.key}</td>
       <td style={tdStyle}>{item.title}</td>
       <td style={tdStyle}>
-        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
           {priorityLabel}
         </span>
       </td>
@@ -1003,7 +1003,7 @@ function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 
 /** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
 const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
   in_progress: 'var(--accent, #2563eb)',
-  done: 'var(--success-text, #15803d)',
+  done: 'var(--success-text, var(--success))',
   blocked: 'var(--warning-text, #b45309)',
   open: 'var(--text-secondary)',
 };
@@ -1020,7 +1020,7 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
       <td style={tdStyle}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
-          color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: '2px 9px',
+          color: tone, border: `1px solid ${tone}`, borderRadius: 'var(--radius-full)', padding: '2px 9px',
         }}>
           <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
           {statusLabel}

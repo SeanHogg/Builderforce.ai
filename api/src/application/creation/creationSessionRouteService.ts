@@ -465,8 +465,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         role: creationSessionMembers.role,
         pinned: creationSessionMembers.pinned,
         unread: sql<boolean>`${creationSessionMembers.lastSeenRevision} < ${creationSessions.canvasRevision}`,
-        collaboratorCount: sql<number>`(SELECT COUNT(*)::int FROM creation_session_members member_count WHERE member_count.session_id = ${creationSessions.id})`,
-        projectIds: sql<number[]>`COALESCE((SELECT array_agg(project_id ORDER BY project_id) FROM creation_session_project_links project_link WHERE project_link.session_id = ${creationSessions.id}), ARRAY[]::integer[])`,
+        collaboratorCount: sql<number>`(SELECT COUNT(*)::int FROM creation_session_members member_count WHERE member_count.session_id = ${creationSessions}.id)`,
+        projectIds: sql<number[]>`COALESCE((SELECT array_agg(project_id ORDER BY project_id) FROM creation_session_project_links project_link WHERE project_link.session_id = ${creationSessions}.id), ARRAY[]::integer[])`,
       })
       .from(creationSessions)
       .innerJoin(creationSessionMembers, and(
@@ -551,15 +551,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
           ilike(creationSessions.title, pattern),
           ilike(creationSessions.description, pattern),
           ilike(creationSessions.status, pattern),
-          sql`EXISTS (SELECT 1 FROM creation_session_objects searchable WHERE searchable.session_id = ${creationSessions.id} AND searchable.search_text ILIKE ${pattern} ESCAPE '\\')`,
-          sql`EXISTS (SELECT 1 FROM creation_session_project_links searchable_project JOIN projects searchable_project_record ON searchable_project_record.id = searchable_project.project_id WHERE searchable_project.session_id = ${creationSessions.id} AND (searchable_project.project_id::text ILIKE ${pattern} ESCAPE '\\' OR searchable_project_record.name ILIKE ${pattern} ESCAPE '\\'))`,
-          sql`EXISTS (SELECT 1 FROM creation_session_members searchable_member JOIN users searchable_user ON searchable_user.id = searchable_member.user_id WHERE searchable_member.session_id = ${creationSessions.id} AND searchable_user.display_name ILIKE ${pattern} ESCAPE '\\')`,
+          sql`EXISTS (SELECT 1 FROM creation_session_objects searchable WHERE searchable.session_id = ${creationSessions}.id AND searchable.search_text ILIKE ${pattern} ESCAPE '\\')`,
+          sql`EXISTS (SELECT 1 FROM creation_session_project_links searchable_project JOIN projects searchable_project_record ON searchable_project_record.id = searchable_project.project_id WHERE searchable_project.session_id = ${creationSessions}.id AND (searchable_project.project_id::text ILIKE ${pattern} ESCAPE '\\' OR searchable_project_record.name ILIKE ${pattern} ESCAPE '\\'))`,
+          sql`EXISTS (SELECT 1 FROM creation_session_members searchable_member JOIN users searchable_user ON searchable_user.id = searchable_member.user_id WHERE searchable_member.session_id = ${creationSessions}.id AND searchable_user.display_name ILIKE ${pattern} ESCAPE '\\')`,
         ),
-        kind ? sql`EXISTS (SELECT 1 FROM creation_session_objects kind_filter WHERE kind_filter.session_id = ${creationSessions.id} AND kind_filter.kind = ${kind})` : undefined,
-        Number.isInteger(projectId) && projectId > 0 ? sql`EXISTS (SELECT 1 FROM creation_session_project_links project_filter WHERE project_filter.session_id = ${creationSessions.id} AND project_filter.project_id = ${projectId})` : undefined,
-        collaborator ? sql`EXISTS (SELECT 1 FROM creation_session_members collaborator_filter JOIN users collaborator_user ON collaborator_user.id = collaborator_filter.user_id WHERE collaborator_filter.session_id = ${creationSessions.id} AND collaborator_user.display_name ILIKE ${`%${collaborator}%`})` : undefined,
+        kind ? sql`EXISTS (SELECT 1 FROM creation_session_objects kind_filter WHERE kind_filter.session_id = ${creationSessions}.id AND kind_filter.kind = ${kind})` : undefined,
+        Number.isInteger(projectId) && projectId > 0 ? sql`EXISTS (SELECT 1 FROM creation_session_project_links project_filter WHERE project_filter.session_id = ${creationSessions}.id AND project_filter.project_id = ${projectId})` : undefined,
+        collaborator ? sql`EXISTS (SELECT 1 FROM creation_session_members collaborator_filter JOIN users collaborator_user ON collaborator_user.id = collaborator_filter.user_id WHERE collaborator_filter.session_id = ${creationSessions}.id AND collaborator_user.display_name ILIKE ${`%${collaborator}%`})` : undefined,
         pinned === 'true' ? eq(creationSessionMembers.pinned, true) : pinned === 'false' ? eq(creationSessionMembers.pinned, false) : undefined,
-        shared === 'true' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions.id}) > 1` : shared === 'false' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions.id}) = 1` : undefined,
+        shared === 'true' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions}.id) > 1` : shared === 'false' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions}.id) = 1` : undefined,
         fromDate ? gte(creationSessions.lastActivityAt, fromDate) : undefined,
         toDate ? sql`${creationSessions.lastActivityAt} <= ${toDate}` : undefined,
       ))

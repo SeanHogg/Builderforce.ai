@@ -109,7 +109,7 @@ export function EvermindLearnings({
           </>
         ) : selectedRegion ? (
           <button type="button" onClick={onClearRegion} style={filterChip}>
-            <span style={{ width: 9, height: 9, borderRadius: 3, background: `var(${REGION_HUE_VAR[selectedRegion]})` }} aria-hidden />
+            <span style={{ width: 9, height: 9, borderRadius: 'var(--radius-sm)', background: `var(${REGION_HUE_VAR[selectedRegion]})` }} aria-hidden />
             {regionLabel}
             <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}>✕</span>
           </button>
@@ -165,7 +165,7 @@ function StateRegionView({
                 <span>{t(m.label)}</span>
                 <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)' }}>{m.raw.toFixed(2)}</span>
               </div>
-              <div style={{ height: 6, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden', marginTop: 3 }}>
+              <div style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden', marginTop: 3 }}>
                 <div style={{ width: `${Math.round(m.value * 100)}%`, height: '100%', background: `var(${REGION_HUE_VAR[regionKey]})` }} />
               </div>
             </div>
@@ -175,7 +175,7 @@ function StateRegionView({
       {/* Personality is the only state region you steer directly — its setpoints are the
           psychometric persona. Jump there rather than dead-end on a note (gap fix). */}
       {regionKey === 'personality' && (
-        <Link href="/settings/persona" style={tuneLinkStyle}>
+        <Link href="/settings/viewpoint" style={tuneLinkStyle}>
           {t('tunePersonality')} →
         </Link>
       )}
@@ -211,7 +211,7 @@ function LearningRow({
         )}
       </div>
       {pct != null && (
-        <div style={{ height: 4, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
+        <div style={{ height: 4, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
           <div style={{ width: `${pct}%`, height: '100%', background: 'var(--coral-bright, #ff6b5e)' }} />
         </div>
       )}
@@ -310,7 +310,7 @@ function TeacherFaultNotice({ entry, t }: { entry: ListedEntry; t: ReturnType<ty
       role="status"
       style={{
         display: 'flex', flexDirection: 'column', gap: 6,
-        padding: '10px 12px', borderRadius: 8,
+        padding: '10px 12px', borderRadius: 'var(--radius-md)',
         border: '1px solid var(--warning-border, var(--border-subtle))',
         background: 'var(--warning-bg, var(--bg-elevated))',
       }}
@@ -330,7 +330,7 @@ function TeacherFaultNotice({ entry, t }: { entry: ListedEntry; t: ReturnType<ty
 
 function DetailChip({ label, value }: { label: string; value: string }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', padding: '3px 10px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
       <span style={{ color: 'var(--text-muted)' }}>{label}</span>
       {value && <strong style={{ color: 'var(--text-primary)' }}>{value}</strong>}
     </span>
@@ -342,11 +342,11 @@ function DetailChip({ label, value }: { label: string; value: string }) {
 const rootStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0,
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-  borderRadius: 14, padding: '16px 18px', color: 'var(--text-primary)',
+  borderRadius: 'var(--radius-lg)', padding: '16px 18px', color: 'var(--text-primary)',
 };
 const rowStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-  borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4,
+  borderRadius: 'var(--radius-md)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4,
 };
 const noteStyle: React.CSSProperties = {
   margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.5,
@@ -354,25 +354,25 @@ const noteStyle: React.CSSProperties = {
 const metaText: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' };
 const filterChip: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', fontWeight: 600,
-  padding: '2px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)',
+  padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', maxWidth: '100%',
 };
 const methodChip: React.CSSProperties = {
   fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)',
-  padding: '1px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)',
+  padding: '1px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)',
 };
 const primaryBadgeStyle: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-  padding: '1px 6px', borderRadius: 5, color: '#fff', background: 'var(--coral-bright, #ff6b5e)',
+  padding: '1px 6px', borderRadius: 'var(--radius-sm)', color: 'var(--text-on-accent)', background: 'var(--coral-bright, #ff6b5e)',
 };
 /** The "not distilled" badge — a warning, so it must read in BOTH themes: the amber
  *  tokens carry their own fallbacks rather than assuming a dark surface. */
 const faultBadgeStyle: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-  padding: '1px 6px', borderRadius: 5,
+  padding: '1px 6px', borderRadius: 'var(--radius-sm)',
   color: 'var(--warning-text, #92400e)',
   background: 'var(--warning-bg, #fef3c7)',
-  border: '1px solid var(--warning-border, #f59e0b)',
+  border: '1px solid var(--warning-border, var(--warning))',
 };
 const detailLinkStyle: React.CSSProperties = {
   alignSelf: 'flex-start', padding: 0, fontSize: '0.7rem', fontWeight: 600, border: 'none',
@@ -380,7 +380,7 @@ const detailLinkStyle: React.CSSProperties = {
 };
 const tuneLinkStyle: React.CSSProperties = {
   alignSelf: 'flex-start', fontSize: '0.76rem', fontWeight: 600, textDecoration: 'none',
-  padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
 };
 const detailSectionLabel: React.CSSProperties = {
@@ -388,12 +388,12 @@ const detailSectionLabel: React.CSSProperties = {
 };
 const detailBody: React.CSSProperties = {
   fontSize: '0.85rem', lineHeight: 1.6, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 14px',
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px 14px',
 };
 function tagStyle(isDelta: boolean): React.CSSProperties {
   return {
     fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-    padding: '1px 6px', borderRadius: 5, border: '1px solid var(--border-subtle)',
+    padding: '1px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
     color: isDelta ? 'var(--text-muted)' : 'var(--coral-bright, #ff6b5e)', background: 'var(--bg-surface)',
   };
 }

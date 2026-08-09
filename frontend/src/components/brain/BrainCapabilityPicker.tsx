@@ -43,7 +43,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
           onChange={(e) => onSelect((e.target.value || null) as BrainCapabilityId | null)}
           aria-label={t('pickerAria')}
           disabled={disabled}
-          style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+          style={{ fontSize: 12, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
         >
           <option value="">{t('none')}</option>
           {options.map((c) => (
@@ -82,7 +82,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
                 gap: 6,
                 minHeight: 84,
                 padding: '12px 8px',
-                borderRadius: 12,
+                borderRadius: 'var(--radius-lg)',
                 border: `1px solid ${active ? 'var(--accent, #3b82f6)' : 'var(--border-subtle)'}`,
                 background: active ? 'var(--accent-subtle, rgba(59,130,246,0.12))' : 'var(--bg-elevated)',
                 color: 'var(--text-primary)',

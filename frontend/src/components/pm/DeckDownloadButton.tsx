@@ -56,7 +56,7 @@ export function DeckDownloadButton() {
   };
 
   const selectStyle: React.CSSProperties = {
-    padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border, #d1d5db)',
+    padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border, #d1d5db)',
     background: 'var(--surface, #fff)', fontSize: '0.82rem', color: 'inherit',
   };
 
@@ -76,8 +76,8 @@ export function DeckDownloadButton() {
         onClick={onDownload}
         disabled={busy}
         style={{
-          padding: '6px 14px', borderRadius: 6, border: 'none', cursor: busy ? 'default' : 'pointer',
-          background: '#4F46E5', color: '#fff', fontSize: '0.82rem', fontWeight: 600, opacity: busy ? 0.6 : 1,
+          padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: busy ? 'default' : 'pointer',
+          background: '#4F46E5', color: 'var(--text-on-accent)', fontSize: '0.82rem', fontWeight: 600, opacity: busy ? 0.6 : 1,
         }}
       >
         {busy ? t('generating') : t('download')}

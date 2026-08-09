@@ -37,20 +37,20 @@ export function EvermindStatusBadge({ projectId }: { projectId: number | null })
 
   const posture: Posture = !head.inferenceEnabled ? 'off' : head.mode === 'connected' ? 'learning' : 'frozen';
   const stateLabel = posture === 'learning' ? t('learning') : posture === 'frozen' ? t('frozen') : t('off');
-  const tone = posture === 'learning' ? '#22c55e' : 'var(--text-muted)';
+  const tone = posture === 'learning' ? 'var(--success)' : 'var(--text-muted)';
 
   return (
     <span
       title={t('tooltip', { version: head.version })}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
-        padding: '3px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)',
+        padding: '3px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)',
         background: 'var(--bg-elevated)', color: 'var(--text-secondary)', whiteSpace: 'nowrap', cursor: 'help',
       }}
     >
       <span aria-hidden>🧠</span>
       <span>{t('label')} v{head.version}</span>
-      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: tone }} />
+      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: tone }} />
       <span style={{ color: tone }}>{stateLabel}</span>
     </span>
   );

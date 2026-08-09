@@ -51,7 +51,7 @@ export function EmbedPrdSurface() {
           value={selectedId ?? ''}
           onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
           style={{
-            fontSize: 13, padding: '4px 8px', borderRadius: 6,
+            fontSize: 13, padding: '4px 8px', borderRadius: 'var(--radius-sm)',
             border: '1px solid var(--border-subtle, #e2e8f0)',
             background: 'var(--bg-base, #fff)', color: 'var(--text-primary, #0f172a)',
           }}

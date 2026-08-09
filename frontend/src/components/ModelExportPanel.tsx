@@ -91,7 +91,7 @@ export function ModelExportPanel() {
             disabled={models === null}
             style={{
               width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', fontSize: '0.8rem',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
             }}
           >
             {models === null && <option>{t('loading')}</option>}
@@ -119,7 +119,7 @@ export function ModelExportPanel() {
             onChange={(e) => setFormat(e.target.value as EvermindExportFormat)}
             style={{
               width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', fontSize: '0.8rem',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
             }}
           >
             {EVERMIND_EXPORT_FORMATS.map((f) => (
@@ -149,9 +149,9 @@ export function ModelExportPanel() {
           disabled={disabled}
           style={{
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem',
-            background: busy ? 'var(--bg-elevated)' : 'var(--coral-bright, #4d9eff)',
+            background: busy ? 'var(--bg-elevated)' : 'var(--coral-bright, var(--coral-bright))',
             color: busy ? 'var(--text-muted)' : '#fff',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 16px',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
             cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
           }}
         >
@@ -165,7 +165,7 @@ export function ModelExportPanel() {
           role="alert"
           style={{
             background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: 'var(--error-text)',
-            borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
           ⚠ {error}
@@ -176,8 +176,8 @@ export function ModelExportPanel() {
         <div
           role="status"
           style={{
-            background: 'rgba(34,197,94,0.12)', border: '1px solid #22c55e', color: 'var(--text-primary)',
-            borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
+            background: 'rgba(34,197,94,0.12)', border: '1px solid var(--success)', color: 'var(--text-primary)',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
           ✅ {t('done', { filename: done })}

@@ -30,6 +30,13 @@ describe('readThroughCache KV TTL floor', () => {
     expect(put.mock.calls[0]?.[2]).toEqual({ expirationTtl: 300 });
   });
 
+  it('returns the same JSON timestamp shape on a loader miss and later cache hits', async () => {
+    const loaded = await getOrSetCached(env, 'date-shape', async () => ({ at: new Date('2026-07-25T07:11:00.123Z') }));
+    expect(loaded).toEqual({ at: '2026-07-25T07:11:00.123Z' });
+    expect(await getOrSetCached(env, 'date-shape', async () => ({ at: new Date(0) }))).toEqual(loaded);
+    expect(JSON.parse(String(put.mock.calls[0]?.[1]))).toEqual(loaded);
+  });
+
   it('applies the same floor to setCached', async () => {
     await setCached(env, 'k3', { v: 3 }, { kvTtlSeconds: 30 });
     expect(put.mock.calls[0]?.[2]).toEqual({ expirationTtl: 60 });

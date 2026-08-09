@@ -57,7 +57,7 @@ export function OnboardingProgressPill() {
         aria-label={t('ariaLabel', { pct })}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          height: 30, padding: '0 10px', borderRadius: 999, cursor: 'pointer',
+          height: 30, padding: '0 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
           border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft, rgba(244,114,110,0.12))',
           color: 'var(--coral-bright)', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
         }}
@@ -74,8 +74,8 @@ export function OnboardingProgressPill() {
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('percentDone', { pct })}</span>
             </div>
             {/* Progress track — theme-aware, adapts to both modes. */}
-            <div style={{ height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--coral-bright), var(--coral-dark, #d94f4a))', borderRadius: 999 }} />
+            <div style={{ height: 8, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--coral-bright), var(--coral-dark, #d94f4a))', borderRadius: 'var(--radius-full)' }} />
             </div>
           </div>
 
@@ -89,7 +89,7 @@ export function OnboardingProgressPill() {
                   key={id}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 12px', borderRadius: 10,
+                    padding: '10px 12px', borderRadius: 'var(--radius-lg)',
                     background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
                   }}
                 >
@@ -99,7 +99,7 @@ export function OnboardingProgressPill() {
                       width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 12, fontWeight: 700,
-                      background: done ? '#22c55e' : 'transparent',
+                      background: done ? 'var(--success)' : 'transparent',
                       border: done ? 'none' : '1px solid var(--border-subtle)',
                       color: done ? '#fff' : 'var(--text-muted)',
                     }}
@@ -109,7 +109,7 @@ export function OnboardingProgressPill() {
                   <span style={{ flex: 1, fontSize: 13, color: done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>
                     {tSteps(`steps.${id}.label`)}
                   </span>
-                  <span style={{ fontSize: 11, color: done ? '#22c55e' : 'var(--text-muted)' }}>
+                  <span style={{ fontSize: 11, color: done ? 'var(--success)' : 'var(--text-muted)' }}>
                     {done ? t('statusDone') : t('statusTodo')}
                   </span>
                 </li>
@@ -121,9 +121,9 @@ export function OnboardingProgressPill() {
             type="button"
             onClick={() => { setOpen(false); router.push('/dashboard'); }}
             style={{
-              alignSelf: 'stretch', padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
+              alignSelf: 'stretch', padding: '10px 16px', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
               border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark, #d94f4a))',
-              color: '#fff', fontWeight: 700, fontSize: 14,
+              color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14,
             }}
           >
             {pct >= 100 ? t('reviewSetup') : t('continueSetup')}

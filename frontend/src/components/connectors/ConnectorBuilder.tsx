@@ -27,14 +27,14 @@ import {
 
 const btnPrimary: React.CSSProperties = {
   padding: '9px 15px', fontSize: 13, fontWeight: 650, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '8px 12px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  width: '100%', padding: '9px 11px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box',
 };
 const labelStyle: React.CSSProperties = {

@@ -73,7 +73,7 @@ export default function ShowcasePage() {
           padding: 40px 24px;
           text-align: center;
           border: 1px solid var(--border-subtle);
-          border-radius: 18px;
+          border-radius: var(--radius-xl);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
         }
         .cc-cta-card h2 {
@@ -93,7 +93,7 @@ export default function ShowcasePage() {
         }
         .cc-btn {
           padding: 12px 22px;
-          border-radius: 11px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: var(--text-primary);
           background: var(--surface-interactive, rgba(136,146,176,0.08));

@@ -10,11 +10,11 @@ import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const btnStyle: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-  background: 'var(--accent, #7c5cff)', color: '#fff', fontWeight: 600, fontSize: '0.85rem',
+  padding: '8px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+  background: 'var(--accent, #7c5cff)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.85rem',
 };
 const chipStyle = (active: boolean): React.CSSProperties => ({
-  width: 40, height: 40, borderRadius: 8, cursor: 'pointer', fontWeight: 700,
+  width: 40, height: 40, borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700,
   border: active ? '2px solid var(--accent, #7c5cff)' : '1px solid var(--border-subtle)',
   background: active ? 'rgba(124,92,255,0.14)' : 'var(--bg-base)',
   color: 'var(--text-primary)',
@@ -73,7 +73,7 @@ export function PulseSubmitCard() {
         onChange={(e) => setComment(e.target.value)}
         placeholder={t('pulse.commentPlaceholder')}
         rows={2}
-        style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', marginBottom: 12 }}
+        style={{ width: '100%', padding: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', marginBottom: 12 }}
       />
       <button type="button" style={{ ...btnStyle, opacity: score == null || saving ? 0.6 : 1 }} disabled={score == null || saving} onClick={submit}>
         {t('pulse.submit')}
@@ -137,11 +137,11 @@ export function PulseLens() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder={t('pulse.questionPlaceholder')}
-            style={{ flex: '1 1 240px', padding: 8, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+            style={{ flex: '1 1 240px', padding: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
           />
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
             {t('pulse.scale')}
-            <input type="number" min={2} max={10} value={scale} onChange={(e) => setScale(Number(e.target.value))} style={{ width: 64, padding: 8, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+            <input type="number" min={2} max={10} value={scale} onChange={(e) => setScale(Number(e.target.value))} style={{ width: 64, padding: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </label>
           <button type="button" style={{ ...btnStyle, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={create}>{t('pulse.open')}</button>
         </div>
@@ -173,7 +173,7 @@ export function PulseLens() {
                     <td style={tdMutedStyle}>{s.active ? t('pulse.active') : t('pulse.closed')}</td>
                     <td style={tdMutedStyle}>
                       {s.active && (
-                        <button type="button" onClick={() => close(s.id)} disabled={busy} style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                        <button type="button" onClick={() => close(s.id)} disabled={busy} style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px 10px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
                           {t('pulse.close')}
                         </button>
                       )}

@@ -200,7 +200,7 @@ export default function FreelancerProfilePage() {
           {/* Public alias (slug) */}
           <div>
             <label className="ui-field__label">{t('profile.alias')}</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '0 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0 12px' }}>
               <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>/talent/</span>
               <input className="ui-input" style={{ border: 'none', background: 'transparent', padding: '9px 0' }} value={slugText} maxLength={40}
                 onChange={(e) => setSlugText(e.target.value)} placeholder={t('profile.aliasPlaceholder')} />
@@ -275,7 +275,7 @@ export default function FreelancerProfilePage() {
                 {(['public', 'private'] as const).map((v) => (
                   <button key={v} type="button" onClick={() => set({ visibility: v })}
                     style={{
-                      padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                       background: profile.visibility === v ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
                       border: `1px solid ${profile.visibility === v ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                       color: 'var(--text-primary)',
@@ -332,11 +332,11 @@ export default function FreelancerProfilePage() {
             <iframe
               title={t('resume.viewerTitle')}
               src={embedUrl}
-              style={{ width: '100%', height: 460, border: '1px solid var(--border-subtle)', borderRadius: 10, background: 'var(--bg-elevated)' }}
+              style={{ width: '100%', height: 460, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }}
             />
           ) : (
             <div style={{
-              padding: 20, borderRadius: 10, border: '1px dashed var(--border-subtle)', background: 'var(--bg-elevated)',
+              padding: 20, borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)', background: 'var(--bg-elevated)',
               fontSize: 13, color: 'var(--text-muted)', textAlign: 'center',
             }}>
               {profile.hiredVideoConnected ? t('resume.viewerPending') : t('resume.viewerNotConnected')}

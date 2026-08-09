@@ -14,7 +14,7 @@ const inputStyle: React.CSSProperties = {
   padding: '7px 9px',
   fontSize: 12.5,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 7,
+  borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
   boxSizing: 'border-box',
@@ -143,7 +143,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         <div
           style={{
             display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 10px',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)',
           }}
         >
           <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
@@ -186,7 +186,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
           background: 'transparent',
           color: 'var(--danger, #dc2626)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 8,
+          borderRadius: 'var(--radius-md)',
           cursor: 'pointer',
         }}
       >

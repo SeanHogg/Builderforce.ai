@@ -43,7 +43,7 @@ import {
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
@@ -206,7 +206,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
             disabled={thinking || (!compact && !handle?.agentRef)}
             onClick={() => (compact && onAsk ? onAsk(question) : void ask(question))}
             style={{
-              padding: '6px 12px', borderRadius: 999, cursor: thinking ? 'default' : 'pointer',
+              padding: '6px 12px', borderRadius: 'var(--radius-full)', cursor: thinking ? 'default' : 'pointer',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
               color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 600,
               opacity: thinking ? 0.6 : 1, textAlign: 'left', maxWidth: '100%',
@@ -269,7 +269,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
         <div
           role="alert"
           style={{
-            marginTop: 12, padding: 12, borderRadius: 10, fontSize: '0.85rem',
+            marginTop: 12, padding: 12, borderRadius: 'var(--radius-lg)', fontSize: '0.85rem',
             border: '1px solid var(--warning-border, var(--border-subtle))',
             borderLeft: '3px solid var(--warning-text, #b45309)',
             background: 'var(--bg-base)', color: 'var(--text-primary)',
@@ -294,7 +294,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
                   background: mine ? 'var(--accent, #2563eb)' : 'var(--bg-base)',
                   color: mine ? '#fff' : 'var(--text-primary)',
                   border: mine ? 'none' : '1px solid var(--border-subtle)',
-                  borderRadius: 12, padding: '10px 13px', minWidth: 0,
+                  borderRadius: 'var(--radius-lg)', padding: '10px 13px', minWidth: 0,
                 }}
               >
                 <div style={{
@@ -349,7 +349,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
             disabled={!handle?.agentRef}
             style={{
               flex: '1 1 240px', minWidth: 0, resize: 'vertical', fontFamily: 'inherit',
-              padding: '9px 11px', borderRadius: 10, fontSize: '0.87rem',
+              padding: '9px 11px', borderRadius: 'var(--radius-lg)', fontSize: '0.87rem',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
             }}
           />
@@ -358,8 +358,8 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
             disabled={thinking || !draft.trim() || !handle?.agentRef}
             onClick={() => void ask(draft)}
             style={{
-              padding: '10px 18px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: '0.85rem',
-              background: 'var(--accent, #2563eb)', color: '#fff',
+              padding: '10px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 700, fontSize: '0.85rem',
+              background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)',
               cursor: thinking || !draft.trim() ? 'default' : 'pointer',
               opacity: thinking || !draft.trim() || !handle?.agentRef ? 0.6 : 1,
             }}

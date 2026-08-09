@@ -87,7 +87,7 @@ export function MediaControls({
           style={{
             width: 44, height: 44, borderRadius: '50%', cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--error-bg, #7f1d1d)', color: '#fff', border: '1px solid var(--error-border, #b91c1c)',
+            background: 'var(--error-bg, #7f1d1d)', color: 'var(--text-on-accent)', border: '1px solid var(--error-border, #b91c1c)',
           }}
         >
           {leaveIcon}

@@ -153,7 +153,7 @@ export function TeamMemberAvatarFilter({
           justifyContent: 'center',
           height: 32,
           padding: '0 10px',
-          borderRadius: 16,
+          borderRadius: 'var(--radius-xl)',
           fontSize: 12,
           fontWeight: 600,
           border: `1px solid ${allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
@@ -238,7 +238,7 @@ export function TeamMemberAvatarFilter({
             fontSize: 11,
             color: 'var(--text-muted)',
             background: 'var(--bg-deep)',
-            borderRadius: 14,
+            borderRadius: 'var(--radius-lg)',
             flexShrink: 0,
           }}>
             +{assignees.length - 8} more

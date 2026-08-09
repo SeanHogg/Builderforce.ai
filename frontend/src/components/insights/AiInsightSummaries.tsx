@@ -65,7 +65,7 @@ export function ProviderConsumptionBreakdown({ providers }: { providers: Provide
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               gap: 12, flexWrap: 'wrap',
-              padding: '8px 12px', borderRadius: 8,
+              padding: '8px 12px', borderRadius: 'var(--radius-md)',
               background: 'var(--surface)',
               border: '1px solid var(--border)',
             }}
@@ -77,8 +77,8 @@ export function ProviderConsumptionBreakdown({ providers }: { providers: Provide
               <span
                 style={{
                   fontSize: '0.68rem', fontWeight: 700, whiteSpace: 'nowrap',
-                  padding: '2px 8px', borderRadius: 999,
-                  color: p.byo ? 'var(--success-text, #15803d)' : 'var(--text-secondary)',
+                  padding: '2px 8px', borderRadius: 'var(--radius-full)',
+                  color: p.byo ? 'var(--success-text, var(--success))' : 'var(--text-secondary)',
                   background: p.byo ? 'var(--success-bg, rgba(34, 197, 94, 0.12))' : 'var(--border)',
                 }}
               >
@@ -217,7 +217,7 @@ export function RecommendationsSummary(props: SummaryProps<RecommendationsResult
             key={s}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600,
-              color: '#fff', background: SEVERITY_COLOR[s], padding: '4px 10px', borderRadius: 999,
+              color: 'var(--text-on-accent)', background: SEVERITY_COLOR[s], padding: '4px 10px', borderRadius: 'var(--radius-full)',
             }}
           >
             {counts[s]} {t(`recs.severity.${s}`)}

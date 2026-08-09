@@ -29,13 +29,13 @@ export interface TaskBadgeSignals {
 const chip = {
   fontSize: 10,
   padding: '2px 6px',
-  borderRadius: 4,
+  borderRadius: 'var(--radius-sm)',
 } as const;
 
 /** Review-verdict tone: green complete, amber gaps, neutral when only a count. */
 function reviewTone(verdict: Task['lastReviewVerdict']): { color: string; glyph: string } {
-  if (verdict === 'complete') return { color: 'var(--success-text, #22c55e)', glyph: '✓' };
-  if (verdict === 'gaps') return { color: 'var(--warning-text, #f59e0b)', glyph: '⚠' };
+  if (verdict === 'complete') return { color: 'var(--success-text, var(--success))', glyph: '✓' };
+  if (verdict === 'gaps') return { color: 'var(--warning-text, var(--warning))', glyph: '⚠' };
   return { color: 'var(--text-secondary)', glyph: '↻' };
 }
 

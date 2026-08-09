@@ -116,7 +116,7 @@ export function Soc2Content() {
                 <div key={c.id} style={rowStyle}>
                   <span style={{ fontWeight: 600, minWidth: 52 }}>{c.controlRef}</span>
                   <span style={{ flex: 1 }}>{c.name}</span>
-                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: 8, background: STATUS_COLOR[c.status] }} />
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: 'var(--radius-md)', background: STATUS_COLOR[c.status] }} />
                   <Select value={c.status} onChange={(e) => setStatus(c.id, e.target.value as SocControl['status'])} style={selectStyle}>
                     {STATUS_ORDER.map((s) => (
                       <option key={s} value={s}>{STATUS_LABELS[s]}</option>
@@ -134,13 +134,13 @@ export function Soc2Content() {
 
 const btnStyle: React.CSSProperties = {
   padding: '6px 14px', fontSize: 13, fontWeight: 600,
-  background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
-  padding: '6px 10px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 6,
+  padding: '6px 10px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-sm)',
 };
 const selectStyle: React.CSSProperties = {
-  fontSize: 12, padding: '2px 6px', borderRadius: 6,
+  fontSize: 12, padding: '2px 6px', borderRadius: 'var(--radius-sm)',
   border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)',
 };

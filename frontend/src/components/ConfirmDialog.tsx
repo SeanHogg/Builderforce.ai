@@ -78,7 +78,7 @@ export function ConfirmDialog({
           width: '100%',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           padding: 24,
         }}
@@ -95,7 +95,7 @@ export function ConfirmDialog({
             style={{
               padding: '8px 14px',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               cursor: 'pointer',
@@ -110,9 +110,9 @@ export function ConfirmDialog({
             style={{
               padding: '8px 14px',
               border: `1px solid ${accent}`,
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: accent,
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               cursor: 'pointer',
               fontWeight: 600,
             }}

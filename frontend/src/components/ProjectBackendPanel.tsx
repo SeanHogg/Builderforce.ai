@@ -27,7 +27,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -46,7 +46,7 @@ const code: React.CSSProperties = {
   color: 'var(--text-primary)',
   background: 'var(--surface-sunken, transparent)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   padding: '3px 7px',
   wordBreak: 'break-all',
 };
@@ -55,7 +55,7 @@ const input: React.CSSProperties = {
   flex: '1 1 200px',
   minWidth: 0,
   padding: '8px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated, transparent)',
   color: 'var(--text-primary)',
@@ -64,7 +64,7 @@ const input: React.CSSProperties = {
 
 const button: React.CSSProperties = {
   padding: '8px 14px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
   background: 'transparent',
   color: 'var(--text-primary)',

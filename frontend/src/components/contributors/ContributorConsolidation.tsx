@@ -17,10 +17,10 @@ import {
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const btn = (primary = false): React.CSSProperties => ({
-  fontSize: 12, padding: '5px 11px', borderRadius: 8, cursor: 'pointer',
+  fontSize: 12, padding: '5px 11px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   border: '1px solid var(--border-subtle)',
   background: primary ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
   color: primary ? '#fff' : 'var(--text-secondary)',
@@ -233,7 +233,7 @@ export function ContributorConsolidation() {
 }
 
 const selectStyle: React.CSSProperties = {
-  fontSize: 13, padding: '5px 8px', borderRadius: 8,
+  fontSize: 13, padding: '5px 8px', borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
   maxWidth: 260,
 };

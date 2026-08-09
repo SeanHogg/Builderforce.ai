@@ -123,7 +123,7 @@ export default async function SkillDetailPage({
           padding: 4px 10px;
           background: rgba(77,158,255,0.12);
           color: var(--coral-bright);
-          border-radius: 6px;
+          border-radius: var(--radius-sm);
           white-space: nowrap;
           flex-shrink: 0;
         }
@@ -170,7 +170,7 @@ export default async function SkillDetailPage({
           padding: 16px 18px;
           background: var(--bg-elevated, rgba(0,0,0,0.35));
           border: 1px solid var(--border-subtle);
-          border-radius: 12px;
+          border-radius: var(--radius-lg);
           overflow-x: auto;
         }
         .cc-skill-detail-install code {
@@ -186,7 +186,7 @@ export default async function SkillDetailPage({
         }
         .cc-btn {
           padding: 10px 22px;
-          border-radius: 11px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: var(--text-primary);
           background: var(--surface-interactive, rgba(136,146,176,0.08));

@@ -60,7 +60,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           margin: 64px auto 0;
           padding: 32px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
         }
         .cc-nl-form {
@@ -75,7 +75,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           padding: 12px 14px;
           background: var(--bg-deep);
           border: 1px solid var(--border-subtle);
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           color: var(--text-primary);
           font-family: inherit;
           font-size: 0.95rem;
@@ -89,7 +89,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));
           color: white;
           border: none;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           font-family: var(--font-display);
           font-weight: 600;
           cursor: pointer;
@@ -106,7 +106,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           margin: 12px 0 0;
           font-size: 0.875rem;
         }
-        .cc-error { color: #ff6b6b; }
+        .cc-error { color: var(--red-bright); }
         .cc-ok { color: var(--cyan-bright); }
       `}</style>
     </section>

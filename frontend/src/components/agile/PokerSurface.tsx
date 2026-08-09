@@ -119,10 +119,10 @@ export function PokerSurface() {
   );
 }
 
-const inp: React.CSSProperties = { fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)', flex: 1 };
-const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
+const inp: React.CSSProperties = { fontSize: 13, padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)', flex: 1 };
+const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 const link: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontSize: 13, padding: 0 };
-const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 8, background: 'var(--bg-base, #fff)', cursor: 'pointer', textAlign: 'left' };
-const card: React.CSSProperties = { border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 8, padding: 14 };
-const chip: React.CSSProperties = { minWidth: 34, padding: '6px 0', fontSize: 13, fontWeight: 600, border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 6, background: 'var(--bg-elevated, #f8fafc)', cursor: 'pointer' };
-const voteBadge: React.CSSProperties = { minWidth: 24, textAlign: 'center', padding: '2px 6px', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--bg-elevated, #f1f5f9)' };
+const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base, #fff)', cursor: 'pointer', textAlign: 'left' };
+const card: React.CSSProperties = { border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-md)', padding: 14 };
+const chip: React.CSSProperties = { minWidth: 34, padding: '6px 0', fontSize: 13, fontWeight: 600, border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated, #f8fafc)', cursor: 'pointer' };
+const voteBadge: React.CSSProperties = { minWidth: 24, textAlign: 'center', padding: '2px 6px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated, #f1f5f9)' };

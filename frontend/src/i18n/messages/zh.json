@@ -534,7 +534,6 @@
       "calendar": "日历",
       "facts": "事实库",
       "snapshots": "定期回顾",
-      "persona": "角色视角",
       "plan": "人力规划",
       "incidents": "事件",
       "oncall": "值班",
@@ -548,7 +547,8 @@
       "autonomy": "自主",
       "coordination": "协同",
       "memory": "记忆",
-      "rehearsal": "预演"
+      "rehearsal": "预演",
+      "viewpoint": "视角"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -1414,7 +1414,6 @@
       "error": "无法更新你的接单状态，请重试。"
     },
     "accountTab": "账户",
-    "sessionsTab": "会话",
     "subnavLabel": "设置分区",
     "emailTab": "邮件",
     "logsTab": "日志",
@@ -10781,19 +10780,19 @@
     "sourcePlaceholder": "例如 入职通话"
   },
   "personaLens": {
-    "pageTitle": "视角角色",
-    "title": "你的视角角色",
+    "pageTitle": "视角",
+    "title": "你的视角",
     "subtitle": "选择你所担任的角色。它会重新排序并突出你关注的洞察视图 — 但绝不会改变你的访问权限。",
     "loading": "加载中…",
     "primary": "主要",
-    "save": "保存角色",
+    "save": "保存视角",
     "saving": "保存中…",
-    "saved": "角色已保存",
-    "saveFailed": "无法保存角色",
-    "highlightsFor": "为 {persona} 突出的视图",
+    "saved": "视角已保存",
+    "saveFailed": "无法保存视角",
+    "highlightsFor": "为 {persona} 突出显示的视图",
     "home": "主页",
     "viewingAs": "当前视角",
-    "viewShapingNote": "角色仅影响你的视图。每个视图仍遵循你的工作区权限 — 你不会因此获得额外的访问权限。",
+    "viewShapingNote": "视角只影响你的视图。每个洞察视图仍然遵循你的工作区角色 — 你不会因此获得原本没有的访问权限。",
     "personas": {
       "ceo": "首席执行官",
       "cfo": "首席财务官",

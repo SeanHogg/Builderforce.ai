@@ -804,7 +804,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
-        let afterTimestamp = new Date(0).toISOString();
+        let afterTimestamp = new Date(0);
         let complete = false;
         while (!complete) {
           const jobRows = await db.select({ status: ideTrainingJobs.status }).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
@@ -812,12 +812,12 @@ export function createIdeRoutes(): Hono<HonoEnv> {
           const currentJob = jobRows[0];
           if (!currentJob) break;
           complete = currentJob.status === 'completed' || currentJob.status === 'failed';
-          // The watermark is the raw Postgres timestamp text of the last row sent;
-          // bind it as-is so no precision is lost round-tripping through JS Date.
+          // Keep the watermark as the typed timestamp returned by Drizzle so the
+          // comparison and the ISO wire serialization share one precise value.
           const logRows = await db
             .select(trainingLogRow)
             .from(ideTrainingLogs)
-            .where(and(eq(ideTrainingLogs.jobId, jobId), gt(ideTrainingLogs.createdAt, sql`${afterTimestamp}`)))
+            .where(and(eq(ideTrainingLogs.jobId, jobId), gt(ideTrainingLogs.createdAt, afterTimestamp)))
             .orderBy(asc(ideTrainingLogs.createdAt));
           for (const row of logRows) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(row)}\n\n`));

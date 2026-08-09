@@ -143,7 +143,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
   const isMine = (m: ConversationMessage) => (side === 'freelancer' ? m.fromFreelancer : !m.fromFreelancer);
 
   const bubble = (mine: boolean): React.CSSProperties => ({
-    maxWidth: '80%', padding: '8px 12px', borderRadius: 12, fontSize: 14, lineHeight: 1.4,
+    maxWidth: '80%', padding: '8px 12px', borderRadius: 'var(--radius-lg)', fontSize: 14, lineHeight: 1.4,
     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
     alignSelf: mine ? 'flex-end' : 'flex-start',
     background: mine ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
@@ -173,7 +173,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
               <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 24, textAlign: 'center' }}>{t('empty')}</div>
             ) : items.map((c) => (
               <button key={c.id} type="button" onClick={() => void openThread(c.id)}
-                style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: c.unread > 0 ? 'var(--bg-elevated)' : 'transparent', cursor: 'pointer' }}>
+                style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: c.unread > 0 ? 'var(--bg-elevated)' : 'transparent', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartName(c)}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtTime(c.lastMessageAt)}</span>
@@ -182,7 +182,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.title ? `${c.title} · ` : ''}{c.lastMessagePreview ?? t('noMessages')}
                   </span>
-                  {c.unread > 0 && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{c.unread}</span>}
+                  {c.unread > 0 && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 'var(--radius-full)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{c.unread}</span>}
                 </div>
               </button>
             ))}
@@ -205,7 +205,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
                       {m.body && <div>{m.body}</div>}
                       {m.hasAttachment && (
                         <button type="button" onClick={() => void openAttachment(m)}
-                          style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? '#fff' : 'var(--coral-bright)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>
+                          style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? '#fff' : 'var(--coral-bright)', border: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', cursor: 'pointer' }}>
                           📎 {m.attachmentName ?? t('attachment')}
                         </button>
                       )}
@@ -235,10 +235,10 @@ export function MessagesPanel({ open, onClose, side, context }: {
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
                   placeholder={t('placeholder')}
                   rows={2}
-                  style={{ flex: 1, resize: 'none', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit' }}
+                  style={{ flex: 1, resize: 'none', padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit' }}
                 />
                 <button type="button" onClick={() => void send()} disabled={sending || (!draft.trim() && !file)}
-                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--coral-bright, #f4726e)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: sending ? 'wait' : 'pointer', opacity: (!draft.trim() && !file) ? 0.5 : 1 }}>
+                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: sending ? 'wait' : 'pointer', opacity: (!draft.trim() && !file) ? 0.5 : 1 }}>
                   {sending ? t('sending') : t('send')}
                 </button>
               </div>

@@ -113,7 +113,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
             placeholder="my-app"
             spellCheck={false}
             style={{
-              flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8,
+              flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--chat-input-border)', background: 'var(--chat-input-bg)',
               color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-mono, monospace)',
             }}
@@ -127,9 +127,9 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
         onClick={handlePublish}
         disabled={busy || !loaded}
         style={{
-          padding: '10px 14px', borderRadius: 8, border: 'none', cursor: busy ? 'wait' : 'pointer',
+          padding: '10px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: busy ? 'wait' : 'pointer',
           background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--coral-bright, #e2654a)',
-          color: '#fff', fontWeight: 600, fontSize: 14,
+          color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 14,
         }}
       >
         {phase === 'building' ? t('publish.building') : phase === 'uploading' ? t('publish.uploading') : site ? t('publish.republish') : t('publish.publish')}

@@ -64,7 +64,7 @@ function sameDay(a: number, b: Date): boolean {
 
 /** Color a calendar item by source/kind (theme tokens). */
 function itemColor(it: CalItem): string {
-  if (it.source === 'event') return 'var(--violet-bright, #a78bfa)';
+  if (it.source === 'event') return 'var(--violet-bright, var(--violet-bright))';
   if (it.live) return 'var(--coral-bright)';
   return 'var(--cyan-bright)';
 }
@@ -210,7 +210,7 @@ export function MeetingsCalendar({
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-muted)' }}>
         <Legend color="var(--cyan-bright)" label={t('legendScheduled')} />
         <Legend color="var(--coral-bright)" label={t('legendLive')} />
-        <Legend color="var(--violet-bright, #a78bfa)" label={t('legendCalendar')} />
+        <Legend color="var(--violet-bright, var(--violet-bright))" label={t('legendCalendar')} />
         <Legend color="var(--success-bg, rgba(52,211,153,0.18))" label={t('legendAvailable')} border />
       </div>
 
@@ -234,7 +234,7 @@ export function MeetingsCalendar({
 function Legend({ color, label, border }: { color: string; label: string; border?: boolean }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ width: 10, height: 10, borderRadius: 3, background: color, border: border ? '1px solid var(--success-border, #34d399)' : 'none' }} />
+      <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: color, border: border ? '1px solid var(--success-border, var(--emerald-bright))' : 'none' }} />
       {label}
     </span>
   );
@@ -267,13 +267,13 @@ function MonthGrid({ anchor, items, dayFmt, locale, onPickDay, onJoin }: {
             const dayItems = items.filter((it) => sameDay(it.startMs, d));
             return (
               <div key={i} onClick={() => onPickDay(d)}
-                style={{ minHeight: 84, padding: 6, borderRadius: 8, cursor: 'pointer', background: inMonth ? 'var(--surface-card)' : 'var(--bg-deep)', border: `1px solid ${isToday ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, opacity: inMonth ? 1 : 0.55, display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
+                style={{ minHeight: 84, padding: 6, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: inMonth ? 'var(--surface-card)' : 'var(--bg-deep)', border: `1px solid ${isToday ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, opacity: inMonth ? 1 : 0.55, display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
                 <span style={{ fontSize: 12, fontWeight: isToday ? 800 : 600, color: 'var(--text-primary)' }}>{d.getDate()}</span>
                 {dayItems.slice(0, 3).map((it) => (
                   <button key={it.id} type="button"
                     onClick={(ev) => { ev.stopPropagation(); if (it.meetingId) onJoin(it.meetingId); else if (it.href) window.open(it.href, '_blank'); }}
                     title={it.title}
-                    style={{ textAlign: 'left', fontSize: 10, padding: '1px 4px', borderRadius: 4, background: itemColor(it), color: 'var(--bg-deep)', border: 'none', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    style={{ textAlign: 'left', fontSize: 10, padding: '1px 4px', borderRadius: 'var(--radius-sm)', background: itemColor(it), color: 'var(--bg-deep)', border: 'none', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {it.title}
                   </button>
                 ))}
@@ -350,7 +350,7 @@ function WeekGrid({ anchor, items, dayFmt, timeFmt, isAvailable, onPickSlot, onJ
                 <button key={it.id} type="button"
                   onClick={() => { if (it.meetingId) onJoin(it.meetingId); else if (it.href) window.open(it.href, '_blank'); }}
                   title={it.title}
-                  style={{ position: 'absolute', top, left, width: colWidth, height, background: itemColor(it), color: 'var(--bg-deep)', border: 'none', borderRadius: 5, padding: '2px 5px', fontSize: 10, fontWeight: 600, textAlign: 'left', cursor: 'pointer', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
+                  style={{ position: 'absolute', top, left, width: colWidth, height, background: itemColor(it), color: 'var(--bg-deep)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '2px 5px', fontSize: 10, fontWeight: 600, textAlign: 'left', cursor: 'pointer', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
                   {timeFmt.format(s)} · {it.title}
                 </button>
               );
@@ -364,6 +364,6 @@ function WeekGrid({ anchor, items, dayFmt, timeFmt, isAvailable, onPickSlot, onJ
 
 function FragmentRow({ children }: { children: React.ReactNode }) { return <>{children}</>; }
 
-const navBtn: React.CSSProperties = { width: 30, height: 30, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' };
-const ghostBtn: React.CSSProperties = { padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' };
-const primaryBtn: React.CSSProperties = { padding: '7px 14px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none' };
+const navBtn: React.CSSProperties = { width: 30, height: 30, borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' };
+const ghostBtn: React.CSSProperties = { padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' };
+const primaryBtn: React.CSSProperties = { padding: '7px 14px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none' };

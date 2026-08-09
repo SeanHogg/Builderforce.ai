@@ -42,6 +42,7 @@ import type {
 import {
   dedupeBySpecificity,
   expiryFromTtlDays,
+  isExpired,
   resolveWriteScope,
   visibleScopeChain,
   type MemoryOrigin,
@@ -248,7 +249,15 @@ export async function recall(
       },
       { l1TtlMs: RECALL_L1_TTL_MS },
     );
-    return { ok: true, query, entries };
+    // Cache version tokens change on writes, not when the clock crosses an expiry.
+    // Revalidate every cached entry at the return seam so neither L1 nor KV can keep
+    // a lapsed belief alive for the remainder of its cache TTL.
+    const now = new Date();
+    return {
+      ok: true,
+      query,
+      entries: entries.filter((entry) => !isExpired(entry.expiresAt, now)),
+    };
   } catch (e) {
     return { ok: false, error: errMessage(e) };
   }

@@ -849,6 +849,29 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 
+/** An agent assertion whose support is structural rather than inferred from prose. */
+export const executionClaims = pgTable('execution_claims', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  kind:        varchar('kind', { length: 32 }).notNull(),
+  statement:   text('statement').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byExecution: index('idx_execution_claims_execution').on(t.tenantId, t.executionId, t.createdAt),
+}));
+
+/** Exact tool-audit rows supporting a claim. Both tables are append-only in SQL. */
+export const executionClaimEvidence = pgTable('execution_claim_evidence', {
+  claimId:          uuid('claim_id').notNull().references(() => executionClaims.id, { onDelete: 'cascade' }),
+  toolAuditEventId: integer('tool_audit_event_id').notNull().references(() => toolAuditEvents.id, { onDelete: 'restrict' }),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.claimId, t.toolAuditEventId] }),
+  byEvent: index('idx_execution_claim_evidence_event').on(t.tenantId, t.toolAuditEventId),
+}));
+
 
 // ---------------------------------------------------------------------------
 // OTel spans — W3C-compatible workflow trace spans forwarded from BuilderForce Agents

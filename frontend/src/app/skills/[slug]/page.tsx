@@ -144,7 +144,7 @@ export default function SkillDetailPage() {
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Slug</div>
-            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 6, fontSize: 13 }}>{skill.slug}</code>
+            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>{skill.slug}</code>
           </div>
           {'category' in skill && skill.category && (
             <div>

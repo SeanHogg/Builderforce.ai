@@ -45,7 +45,7 @@ function FunnelStat({ label, value, hint }: { label: string; value: string; hint
         minWidth: 120,
         padding: '12px 14px',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         background: 'var(--surface-card)',
       }}
     >
@@ -215,7 +215,7 @@ export default function GuestSessionsPanel() {
                     style={{
                       padding: '10px 12px',
                       border: '1px solid var(--border)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'var(--surface-card)',
                     }}
                   >

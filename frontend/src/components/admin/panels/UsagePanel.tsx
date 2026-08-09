@@ -467,7 +467,7 @@ export default function UsagePanel() {
                   background: 'var(--bg-surface, #0b0b0b)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   resize: 'vertical',
                 }}
               />
@@ -508,7 +508,7 @@ export default function UsagePanel() {
                         minWidth: 8,
                         height: `${Math.max(4, h)}%`,
                         background: 'var(--accent)',
-                        borderRadius: 4,
+                        borderRadius: 'var(--radius-sm)',
                       }}
                     />
                   );

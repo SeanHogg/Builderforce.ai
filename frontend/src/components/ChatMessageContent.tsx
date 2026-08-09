@@ -71,7 +71,7 @@ export function ChatMessageContent({
         // is a file the user wants to keep — offer it directly, no round-trip.
         const saveable = SAVEABLE_FENCE[lang.trim().toLowerCase()];
         return (
-          <div style={{ position: 'relative', margin: '8px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ position: 'relative', margin: '8px 0', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-deep)', padding: '4px 10px', flexWrap: 'wrap', gap: 6 }}>
               <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {lang || 'text'}
@@ -81,7 +81,7 @@ export function ChatMessageContent({
                 <button
                   type="button"
                   onClick={() => { void copyTextToClipboard(code); }}
-                  style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
+                  style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}
                 >
                   {t('copy')}
                 </button>
@@ -90,7 +90,7 @@ export function ChatMessageContent({
                     type="button"
                     onClick={() => downloadText(code, `${pathLike ? lang.trim() : `data.${saveable.ext}`}`, saveable.mime)}
                     title={t('downloadAs', { ext: saveable.ext.toUpperCase() })}
-                    style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
+                    style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}
                   >
                     {t('downloadAs', { ext: saveable.ext.toUpperCase() })}
                   </button>
@@ -99,7 +99,7 @@ export function ChatMessageContent({
                   <button
                     type="button"
                     onClick={() => onApplyCode(code)}
-                    style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--font-display)', fontWeight: 600 }}
+                    style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-display)', fontWeight: 600 }}
                   >
                     {t('apply')}
                   </button>
@@ -108,7 +108,7 @@ export function ChatMessageContent({
                   <button
                     type="button"
                     onClick={() => onCreateFile(lang.trim(), code)}
-                    style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--font-display)', fontWeight: 600 }}
+                    style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-display)', fontWeight: 600 }}
                   >
                     {t('createFile')}
                   </button>
@@ -122,7 +122,7 @@ export function ChatMessageContent({
         );
       }
       return (
-        <code style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '1px 5px', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', color: 'var(--coral-bright)' }} {...props}>
+        <code style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '1px 5px', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', color: 'var(--coral-bright)' }} {...props}>
           {children}
         </code>
       );

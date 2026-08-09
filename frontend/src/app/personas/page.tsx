@@ -277,7 +277,7 @@ export default function PersonasPage() {
       'agentlink-assigned': { label: t('sourceAssigned'), color: '#ec4899' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
-    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
   };
 
   return (
@@ -295,7 +295,7 @@ export default function PersonasPage() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>
+        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
@@ -449,15 +449,15 @@ export default function PersonasPage() {
                       {isOpen && (
                         <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 10 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('voiceLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.voice}</div>
                             </div>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('perspectiveLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.perspective}</div>
                             </div>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('decisionStyleLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.decisionStyle}</div>
                             </div>
@@ -466,7 +466,7 @@ export default function PersonasPage() {
                             <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{t('capabilitiesLabel')}</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{p.capabilities.map((c) => <span key={c} className="badge badge-gray">{c}</span>)}</div>
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{p.outputPrefix}</code></div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 'var(--radius-sm)', fontSize: 11 }}>{p.outputPrefix}</code></div>
                         </div>
                       )}
                     </div>

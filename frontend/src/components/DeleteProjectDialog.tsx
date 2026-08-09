@@ -118,7 +118,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
           width: '90%',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           padding: 24,
         }}
@@ -154,7 +154,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
                     padding: '4px 8px',
                     fontSize: 13,
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-deep)',
                     color: 'var(--text-primary)',
                   }}
@@ -198,7 +198,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
             style={{
               padding: '6px 12px',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               cursor: busy ? 'not-allowed' : 'pointer',
@@ -213,9 +213,9 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
             style={{
               padding: '6px 12px',
               border: '1px solid var(--coral-bright)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--coral-bright)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               cursor: confirmDisabled ? 'not-allowed' : 'pointer',
               opacity: confirmDisabled ? 0.6 : 1,
             }}

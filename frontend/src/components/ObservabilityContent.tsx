@@ -24,7 +24,7 @@ import { ExecutionTimelineChart } from './ExecutionTimelineChart';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -138,9 +138,9 @@ function isErrorEvent(ev: ToolAuditEvent): boolean {
 const AGENT_COLORS = [
   'var(--coral-bright, #f97316)',
   'var(--accent, #6366f1)',
-  'var(--success, #22c55e)',
+  'var(--success, var(--success))',
   'var(--info, #3b82f6)',
-  'var(--warning, #f59e0b)',
+  'var(--warning, var(--warning))',
 ];
 
 /** Stable per-agent color, indexed by position in the current selection. */
@@ -161,7 +161,7 @@ function pillStyle(bg: string, color: string): React.CSSProperties {
     fontWeight: 700,
     letterSpacing: 0.3,
     padding: '1px 6px',
-    borderRadius: 9999,
+    borderRadius: 'var(--radius-full)',
     background: bg,
     color,
   };
@@ -652,7 +652,7 @@ export function ObservabilityContent({
                     padding: '6px 12px',
                     background: checked ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
                     border: `1px solid ${checked ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     cursor: 'pointer',
                     fontSize: 13,
                     color: checked ? 'var(--coral-bright)' : 'var(--text-secondary)',
@@ -704,7 +704,7 @@ export function ObservabilityContent({
                       borderRadius: '50%',
                       background:
                         connState === 'connected'
-                          ? 'var(--success, #22c55e)'
+                          ? 'var(--success, var(--success))'
                           : connState === 'offline'
                             ? 'var(--danger, #ef4444)'
                             : 'var(--text-muted)',
@@ -768,7 +768,7 @@ export function ObservabilityContent({
                       l.level === 'error'
                         ? 'var(--danger, #ef4444)'
                         : l.level === 'warn'
-                          ? 'var(--warning, #f59e0b)'
+                          ? 'var(--warning, var(--warning))'
                           : 'var(--text-secondary)',
                   }}
                 >
@@ -778,11 +778,11 @@ export function ObservabilityContent({
                       display: 'inline-block',
                       marginRight: 8,
                       padding: '1px 6px',
-                      borderRadius: 4,
+                      borderRadius: 'var(--radius-sm)',
                       fontSize: 10,
                       fontWeight: 600,
                       background: colorForKey(selectedKeys, l.agentKey),
-                      color: '#fff',
+                      color: 'var(--text-on-accent)',
                       opacity: 0.9,
                     }}
                   >
@@ -821,7 +821,7 @@ export function ObservabilityContent({
                   {timelineViewMode === 'list' ? t('viewGantt') : t('viewList')}
                 </button>
               </div>
-              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
+              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
                 {diagError ? (
                   <div style={{ color: 'var(--danger, #ef4444)', fontSize: 13 }}>{diagError}</div>
                 ) : diagLoading && tracks.length === 0 ? (
@@ -835,7 +835,7 @@ export function ObservabilityContent({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {/* `track`, not `t` — `t` is the translations function in this scope. */}
                     {tracks.map((track, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
                         <span
                           style={{
                             width: 8,
@@ -847,7 +847,7 @@ export function ObservabilityContent({
                                 : track.kind === 'tool'
                                   ? 'var(--accent, #6366f1)'
                                   : track.status === 'completed'
-                                    ? 'var(--success, #22c55e)'
+                                    ? 'var(--success, var(--success))'
                                     : track.status === 'running'
                                       ? 'var(--info, #3b82f6)'
                                       : 'var(--text-muted)',
@@ -857,7 +857,7 @@ export function ObservabilityContent({
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: colorForKey(selectedKeys, track.agentKey), color: '#fff', flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: colorForKey(selectedKeys, track.agentKey), color: 'var(--text-on-accent)', flexShrink: 0 }}>
                               {track.agentName}
                             </span>
                             <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{track.label}</span>
@@ -870,7 +870,7 @@ export function ObservabilityContent({
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{track.detail}</div>
                           )}
                         </div>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--bg-deep)', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-deep)', color: 'var(--text-secondary)', flexShrink: 0 }}>
                           {track.status}
                         </span>
                       </div>
@@ -905,7 +905,7 @@ const smallBtn: React.CSSProperties = {
   fontSize: 11,
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   color: 'var(--text-secondary)',
   cursor: 'pointer',
 };
@@ -915,7 +915,7 @@ const selectStyle: React.CSSProperties = {
   padding: '3px 8px',
   fontSize: 12,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
 };
@@ -925,14 +925,14 @@ const emptyBox: React.CSSProperties = {
   color: 'var(--text-muted)',
   padding: 12,
   background: 'var(--bg-deep)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
 };
 
 const logPaneStyle: React.CSSProperties = {
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   padding: 12,
   minHeight: 280,
   maxHeight: 480,
@@ -958,7 +958,7 @@ function toggleBtn(active: boolean): React.CSSProperties {
     background: active ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
     color: active ? 'var(--coral-bright)' : 'var(--text-secondary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
   };
 }

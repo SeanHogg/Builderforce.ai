@@ -33,7 +33,7 @@ import {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -71,7 +71,7 @@ function ToggleRow({ label, help, checked, disabled, onChange }: {
         disabled={disabled}
         onClick={() => onChange(!checked)}
         style={{
-          flexShrink: 0, marginTop: 2, width: 40, height: 22, borderRadius: 999, border: 'none',
+          flexShrink: 0, marginTop: 2, width: 40, height: 22, borderRadius: 'var(--radius-full)', border: 'none',
           position: 'relative', cursor: disabled ? 'default' : 'pointer', transition: 'background 0.2s',
           background: checked ? 'var(--accent)' : 'var(--border-subtle)',
           opacity: disabled ? 0.5 : 1,
@@ -163,7 +163,7 @@ export default function EmailPreferencesCard() {
           style={{
             padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
           }}
         >
           {t('emailPrefs.whatWeSend')} →
@@ -190,7 +190,7 @@ export default function EmailPreferencesCard() {
                 disabled={busy}
                 onChange={(e) => { if (e.target.value) void patch({ locale: e.target.value as Locale }); }}
                 style={{
-                  padding: '7px 10px', fontSize: 13, borderRadius: 8,
+                  padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)',
                   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
                   border: '1px solid var(--border-subtle)', cursor: busy ? 'wait' : 'pointer',
                   minWidth: 160,
@@ -199,12 +199,12 @@ export default function EmailPreferencesCard() {
                 {/* Native <option> needs its own opaque colours — the OS popup does
                     not inherit the theme variables from the <select>. */}
                 {locale === null && (
-                  <option value="" style={{ background: '#ffffff', color: '#111827' }}>
+                  <option value="" style={{ background: '#ffffff', color: 'var(--bg-elevated)' }}>
                     {t('emailPrefs.languageAuto')}
                   </option>
                 )}
                 {LOCALES.map((l) => (
-                  <option key={l} value={l} style={{ background: '#ffffff', color: '#111827' }}>
+                  <option key={l} value={l} style={{ background: '#ffffff', color: 'var(--bg-elevated)' }}>
                     {LOCALE_LABELS[l]}
                   </option>
                 ))}
@@ -218,7 +218,7 @@ export default function EmailPreferencesCard() {
           {prefs?.unsubscribedAll && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap',
-              padding: 12, borderRadius: 10,
+              padding: 12, borderRadius: 'var(--radius-lg)',
               background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
             }}>
               <div style={{ flex: '1 1 220px', minWidth: 0 }}>
@@ -232,7 +232,7 @@ export default function EmailPreferencesCard() {
                 onClick={() => void resubscribe()}
                 disabled={busy}
                 style={{
-                  padding: '7px 14px', fontSize: 12, fontWeight: 700, borderRadius: 8,
+                  padding: '7px 14px', fontSize: 12, fontWeight: 700, borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-subtle)', cursor: busy ? 'wait' : 'pointer',
                   background: 'var(--surface-interactive)', color: 'var(--text-primary)',
                   opacity: busy ? 0.6 : 1,

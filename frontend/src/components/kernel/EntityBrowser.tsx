@@ -330,7 +330,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
       )}
 
       {error && (
-        <p className="m-0 text-xs" style={{ color: 'var(--danger, #f87171)' }} role="alert">
+        <p className="m-0 text-xs" style={{ color: 'var(--danger, var(--error))' }} role="alert">
           {error}
         </p>
       )}

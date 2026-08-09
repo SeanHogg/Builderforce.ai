@@ -38,7 +38,7 @@ const actionButton: React.CSSProperties = {
   background: 'var(--bg-surface, transparent)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
 };
 
 export function CardOnFile() {
@@ -140,7 +140,7 @@ export function CardOnFile() {
         padding: 16,
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>

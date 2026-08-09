@@ -91,7 +91,7 @@ export default function BrainstormPage() {
       initialChatId={initialChatId}
       initialPrompt={initialPrompt}
     />
-    {adapterFailed && <div role="status" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 20, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>Canvas migration was unavailable. Brain remains open so your deep link still works.</div>}
+    {adapterFailed && <div role="status" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 20, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>Canvas migration was unavailable. Brain remains open so your deep link still works.</div>}
     </>
   );
 }

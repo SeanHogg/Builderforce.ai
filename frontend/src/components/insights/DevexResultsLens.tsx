@@ -62,7 +62,7 @@ export function DevexResultsLens() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
         <button
           type="button" onClick={() => setBenchmarkOpen(true)}
-          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem', cursor: 'pointer' }}
+          style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem', cursor: 'pointer' }}
         >
           🎯 {t('devex.benchmarkButton', { n: percentile })}
         </button>

@@ -128,7 +128,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
           text-align: center;
           padding: 48px 24px 40px;
           border: 1px solid var(--border-subtle);
-          border-radius: 20px;
+          border-radius: var(--radius-xl);
           background: var(--surface-card);
         }
         .rm-icon { font-size: 56px; line-height: 1; margin-bottom: 16px; }
@@ -150,15 +150,15 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
         .rm-btn-primary {
           display: inline-flex; align-items: center; gap: 8px;
-          padding: 13px 26px; border-radius: 12px;
+          padding: 13px 26px; border-radius: var(--radius-lg);
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
-          color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 0.92rem;
+          color: var(--text-on-accent); font-family: var(--font-display); font-weight: 600; font-size: 0.92rem;
           text-decoration: none; box-shadow: 0 6px 20px var(--shadow-coral-mid);
           transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         .rm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px var(--shadow-coral-strong); }
         .rm-btn-secondary {
-          display: inline-flex; align-items: center; padding: 13px 26px; border-radius: 12px;
+          display: inline-flex; align-items: center; padding: 13px 26px; border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle); background: var(--surface-card);
           color: var(--text-primary); font-family: var(--font-display); font-weight: 600; font-size: 0.92rem;
           text-decoration: none;
@@ -170,7 +170,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-highlights { margin-top: 40px; }
         .rm-hl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
         .rm-hl-card {
-          padding: 22px 20px; border-radius: 16px;
+          padding: 22px 20px; border-radius: var(--radius-xl);
           border: 1px solid var(--border-subtle); background: var(--surface-card);
         }
         .rm-hl-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--text-primary); margin-bottom: 6px; }
@@ -179,7 +179,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-figures { margin-top: 40px; display: flex; flex-direction: column; gap: 26px; }
         .rm-figure { margin: 0; }
         .rm-figure-img {
-          width: 100%; height: auto; display: block; border-radius: 16px;
+          width: 100%; height: auto; display: block; border-radius: var(--radius-xl);
           border: 1px solid var(--border-subtle); background: #0e1525;
         }
         .rm-figure-cap { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; text-align: center; margin-top: 10px; }
@@ -193,7 +193,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
         .rm-card {
           display: flex; flex-direction: column; gap: 6px;
-          padding: 20px; border-radius: 16px;
+          padding: 20px; border-radius: var(--radius-xl);
           border: 1px solid var(--border-subtle); background: var(--surface-card);
           text-decoration: none; transition: transform 0.2s ease, border-color 0.2s ease;
         }
@@ -205,7 +205,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-faq { margin-top: 40px; max-width: 760px; margin-left: auto; margin-right: auto; }
         .rm-faq-list { display: flex; flex-direction: column; gap: 10px; }
         .rm-faq-item {
-          border: 1px solid var(--border-subtle); border-radius: 14px;
+          border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
           background: var(--surface-card); padding: 4px 18px;
         }
         .rm-faq-q {

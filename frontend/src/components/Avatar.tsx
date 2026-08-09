@@ -8,8 +8,8 @@ import { useMemo, type MouseEvent } from 'react';
  */
 export function avatarColor(name: string): string {
   const colors = [
-    '#f4726e', '#fb923c', '#fbbf24', '#a3e635', '#34d399',
-    '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#e879f9',
+    '#f4726e', '#fb923c', 'var(--amber-bright)', '#a3e635', 'var(--emerald-bright)',
+    '#22d3ee', 'var(--info)', '#818cf8', 'var(--violet-bright)', '#e879f9',
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -102,12 +102,12 @@ export function Avatar({
             top: -4,
             right: -4,
             background: 'var(--coral-bright, #f4726e)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             fontSize: 9,
             fontWeight: 700,
             minWidth: 16,
             height: 16,
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

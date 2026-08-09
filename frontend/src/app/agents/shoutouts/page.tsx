@@ -54,7 +54,7 @@ export default function ShoutoutsPage() {
           margin: 0 0 16px;
           break-inside: avoid;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           color: var(--text-primary);
           text-decoration: none;

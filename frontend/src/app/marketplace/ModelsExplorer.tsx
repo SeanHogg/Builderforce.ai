@@ -65,7 +65,7 @@ function Badge({ record }: { record: ModelRecord }) {
         fontSize: 10,
         fontWeight: 700,
         padding: '2px 8px',
-        borderRadius: 99,
+        borderRadius: 'var(--radius-full)',
         background: tierColor(record),
         color: contrastText(tierColor(record)),
         textTransform: 'uppercase',
@@ -86,7 +86,7 @@ function RoutableChip({ record }: { record: ModelRecord }) {
     <span
       title={t('routableChip.title')}
       style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-full)',
         background: 'rgba(34,197,94,0.12)', color: 'var(--success-text)',
         border: '1px solid rgba(34,197,94,0.35)', whiteSpace: 'nowrap',
       }}
@@ -101,7 +101,7 @@ function PriceTag({ record }: { record: ModelRecord }) {
   const free = record.pricing.prompt <= 0 && record.pricing.completion <= 0;
   if (free) {
     return (
-      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,197,94,0.3)' }}>
         {t('price.free')}
       </span>
     );
@@ -133,7 +133,7 @@ function ModelDetail({ record }: { record: ModelRecord }) {
         <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-secondary)', margin: 0 }}>{record.description}</p>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         {fieldSpecs.map((f) => (
           <div key={f.label} style={{ background: 'var(--bg-elevated)', padding: '12px 14px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{f.label}</div>
@@ -147,7 +147,7 @@ function ModelDetail({ record }: { record: ModelRecord }) {
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('detail.supportedParameters')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {record.supportedParameters.map((p) => (
-              <span key={p} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}>
+              <span key={p} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}>
                 {p}
               </span>
             ))}
@@ -249,7 +249,7 @@ function CompareTray({
         width: 'min(320px, calc(100vw - 32px))',
         background: 'var(--panel-drawer-bg, var(--bg-elevated))',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 14,
+        borderRadius: 'var(--radius-lg)',
         boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
         overflow: 'hidden',
       }}
@@ -264,7 +264,7 @@ function CompareTray({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, maxHeight: 220, overflow: 'auto' }}>
         {selected.map((m) => (
-          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
             <button
               type="button"
@@ -285,7 +285,7 @@ function CompareTray({
             onChange={(event) => setPrompt(event.target.value)}
             placeholder={t('compare.promptPlaceholder')}
             rows={3}
-            style={{ width: '100%', resize: 'vertical', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', padding: 9, font: 'inherit' }}
+            style={{ width: '100%', resize: 'vertical', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', padding: 9, font: 'inherit' }}
           />
         </label>
         <button
@@ -491,7 +491,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
             onClick={() => setTierFilter(f.id)}
             aria-pressed={tierFilter === f.id}
             className={tierFilter === f.id ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13 }}
+            style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
           >
             {f.label}
           </button>
@@ -502,7 +502,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           aria-pressed={routableOnly}
           title={t('filter.routableOnlyTitle')}
           className={routableOnly ? 'btn btn-primary' : 'btn btn-secondary'}
-          style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13 }}
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
         >
           ✓ {t('filter.routableOnly')}
         </button>
@@ -511,7 +511,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           onChange={(e) => setMaxInputPrice(e.target.value as PriceLimit)}
           aria-label={t('filter.maxInput')}
           title={t('filter.priceHelp')}
-          style={{ minWidth: 170, padding: '8px 12px', borderRadius: 8, fontSize: 13 }}
+          style={{ minWidth: 170, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
         >
           {PRICE_LIMITS.map((limit) => (
             <option key={limit} value={limit}>
@@ -526,7 +526,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           onChange={(e) => setMaxOutputPrice(e.target.value as PriceLimit)}
           aria-label={t('filter.maxOutput')}
           title={t('filter.priceHelp')}
-          style={{ minWidth: 178, padding: '8px 12px', borderRadius: 8, fontSize: 13 }}
+          style={{ minWidth: 178, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
         >
           {PRICE_LIMITS.map((limit) => (
             <option key={limit} value={limit}>
@@ -543,7 +543,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
       ) : (
         <>
           {error && (
-            <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+            <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
               {error}
             </div>
           )}

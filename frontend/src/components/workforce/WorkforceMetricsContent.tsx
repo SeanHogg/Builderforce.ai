@@ -18,7 +18,7 @@ const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 
 const KIND_LABEL = MEMBER_KIND_LABEL;
@@ -75,14 +75,14 @@ export function WorkforceMetricsContent() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           {[7, 14, 30].map((d) => (
             <button key={d} onClick={() => setDays(d)} style={{
-              padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer',
               border: '1px solid var(--border-subtle)',
               background: days === d ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
               color: days === d ? '#fff' : 'var(--text-secondary)',
             }}>{d}d</button>
           ))}
           <button onClick={doExport} disabled={exporting} title={tw('emp.exportCsv')} style={{
-            padding: '4px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+            padding: '4px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer',
             border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
             color: 'var(--text-secondary)', opacity: exporting ? 0.6 : 1,
           }}>{exporting ? tw('emp.exporting') : tw('emp.exportCsv')}</button>
@@ -106,7 +106,7 @@ export function WorkforceMetricsContent() {
             <Select
               value={discipline}
               onChange={(e) => setDiscipline(e.target.value)}
-              style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)' }}
+              style={{ padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)' }}
             >
               <option value="">{t('allDisciplines')}</option>
               {DISCIPLINE_OPTIONS.map((d) => <option key={d} value={d}>{t(`disciplineOptions.${d}`)}</option>)}
@@ -118,7 +118,7 @@ export function WorkforceMetricsContent() {
         {byDiscipline.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
             {byDiscipline.map((b) => (
-              <div key={b.discipline} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, fontSize: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+              <div key={b.discipline} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 'var(--radius-full)', fontSize: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
                 <span style={{ fontWeight: 600 }}>{disciplineLabel(b.discipline === 'unassigned' ? null : b.discipline)}</span>
                 <span style={{ color: 'var(--muted)' }}>{b.memberCount} · {b.completedCount}✓</span>
                 <span style={{ fontWeight: 700, color: scoreColor(b.avgEffectiveness) }}>{fmtScore(b.avgEffectiveness)}</span>

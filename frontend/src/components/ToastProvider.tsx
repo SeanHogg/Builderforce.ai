@@ -115,7 +115,7 @@ export function useToast(): ToastApi {
 
 const TONE: Record<ToastTone, { accent: string; role: 'status' | 'alert'; icon: string }> = {
   info: { accent: 'var(--accent, #3987e5)', role: 'status', icon: 'ℹ' },
-  success: { accent: 'var(--success, #22c55e)', role: 'status', icon: '✓' },
+  success: { accent: 'var(--success, var(--success))', role: 'status', icon: '✓' },
   warning: { accent: 'var(--warning, #d97706)', role: 'alert', icon: '⚠' },
   error: { accent: 'var(--error, #ef4444)', role: 'alert', icon: '✕' },
 };
@@ -166,7 +166,7 @@ const TOAST_CSS = `
 .bf-toast {
   pointer-events: auto; display: flex; align-items: flex-start; gap: 10px;
   background: var(--bg-elevated, var(--surface, #1e2230)); color: var(--text-primary, #e8eaf0);
-  border: 1px solid var(--border-subtle, rgba(148,163,184,0.28)); border-radius: 10px;
+  border: 1px solid var(--border-subtle, rgba(148,163,184,0.28)); border-radius: var(--radius-lg);
   padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.22);
 }
 .bf-toast-icon { flex-shrink: 0; font-size: 0.95rem; line-height: 1.4; font-weight: 700; }
@@ -175,7 +175,7 @@ const TOAST_CSS = `
 .bf-toast-msg { font-size: 0.8rem; line-height: 1.45; color: var(--text-secondary, var(--text-muted, #b6bccb)); word-break: break-word; }
 .bf-toast-x {
   flex-shrink: 0; background: transparent; border: none; cursor: pointer; padding: 0 2px;
-  color: var(--text-muted, #8b93a7); font-size: 0.8rem; line-height: 1.4; border-radius: 4px;
+  color: var(--text-muted, #8b93a7); font-size: 0.8rem; line-height: 1.4; border-radius: var(--radius-sm);
 }
 .bf-toast-x:hover { color: var(--text-primary, #e8eaf0); }
 @media (max-width: 480px) {

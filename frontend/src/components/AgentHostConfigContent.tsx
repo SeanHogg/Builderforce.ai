@@ -10,7 +10,7 @@ interface AgentHostConfigContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -96,7 +96,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               background: 'var(--bg-elevated)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               cursor: jsonValid ? 'pointer' : 'not-allowed',
             }}
           >
@@ -112,7 +112,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               background: 'var(--bg-elevated)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
             }}
           >
@@ -138,7 +138,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
             background: 'var(--bg-elevated)',
             color: jsonValid ? 'var(--text-primary)' : 'var(--coral-bright, #f4726e)',
             border: `1px solid ${jsonValid ? 'var(--border-subtle)' : 'var(--coral-bright, #f4726e)'}`,
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             resize: 'vertical',
             outline: 'none',
             boxSizing: 'border-box',
@@ -174,7 +174,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               background: jsonValid && !saving ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
               color: jsonValid && !saving ? '#fff' : 'var(--text-muted)',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: !jsonValid || saving ? 'not-allowed' : 'pointer',
             }}
           >

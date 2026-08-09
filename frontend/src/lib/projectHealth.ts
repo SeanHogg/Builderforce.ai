@@ -42,9 +42,9 @@ export interface ProjectHealth {
 }
 
 const TIER_COLOR: Record<HealthTier, string> = {
-  healthy: '#22c55e',
+  healthy: 'var(--success)',
   watch: '#eab308',
-  at_risk: '#f59e0b',
+  at_risk: 'var(--warning)',
   critical: '#ef4444',
 };
 

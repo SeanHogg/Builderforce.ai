@@ -12,7 +12,7 @@ WHERE agent.tenant_id IS NULL
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM ide_agents WHERE tenant_id IS NULL) THEN
-    RAISE EXCEPTION 'ide_agents contains tenantless rows with no owning project; repair them before applying 0436';
+    RAISE EXCEPTION 'ide_agents contains tenantless rows with no owning project; repair them before applying 0439';
   END IF;
 END $$;
 

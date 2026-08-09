@@ -82,7 +82,7 @@ export function StackedBar({
         role="img"
         aria-label={ariaLabel}
         style={{
-          display: 'flex', gap: 2, height: thickness, borderRadius: 5, minWidth: 0,
+          display: 'flex', gap: 2, height: thickness, borderRadius: 'var(--radius-sm)', minWidth: 0,
           // Empty state: an inert track so the row keeps its geometry.
           background: total > 0 ? 'transparent' : 'var(--border-subtle)',
         }}
@@ -118,7 +118,7 @@ export function StackedBar({
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', minWidth: 0 }}>
           {segments.map((s) => (
             <span key={s.key} style={legendRow}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
               <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatValue(s.value)}</span>
             </span>
@@ -140,7 +140,7 @@ export function StackedBarLegend({ items }: { items: Array<{ key: string; label:
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', minWidth: 0 }}>
       {items.map((s) => (
         <span key={s.key} style={legendRow}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+          <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
           <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
         </span>
       ))}

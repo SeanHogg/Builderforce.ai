@@ -45,7 +45,7 @@ const iconButtonStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   color: 'var(--coral-bright)',
   border: '1px solid var(--coral-bright)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
@@ -231,7 +231,7 @@ export function ProjectTable({
                         color: 'var(--coral-bright)',
                         background: 'transparent',
                         border: '1px solid var(--coral-bright)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         cursor: 'pointer',
                       }}
                     >

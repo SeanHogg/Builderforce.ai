@@ -221,6 +221,20 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name === 'memory_forget') {
     return op(spec, { op: 'memory', args: { action: 'forget', key: parsed.key } });
   }
+  // Multi-agent leases + blackboard. The Worker owns both stores; this image only
+  // relays the four shared coordination verbs, exactly like durable memory above.
+  if (name === 'claim_resource') {
+    return op(spec, { op: 'coordinate', args: { action: 'claim', resource: parsed.resource, mode: parsed.mode, reason: parsed.reason } });
+  }
+  if (name === 'release_resource') {
+    return op(spec, { op: 'coordinate', args: { action: 'release', resource: parsed.resource } });
+  }
+  if (name === 'workspace_note') {
+    return op(spec, { op: 'coordinate', args: { action: 'note', key: parsed.key, content: parsed.content } });
+  }
+  if (name === 'workspace_read') {
+    return op(spec, { op: 'coordinate', args: { action: 'read', query: parsed.query, limit: parsed.limit } });
+  }
   // Platform (project-management) tools — the container holds no DB creds, so it
   // relays each `builtin_*` call back to the Worker, which runs the curated,
   // subset-guarded tool in-process (create task / update OKR / read remaining work).

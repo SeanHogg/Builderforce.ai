@@ -697,6 +697,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/audit',    createAuditRoutes(auditService));
   app.route('/api/admin',    createAdminRoutes());
   app.route('/api/specs',    createSpecRoutes(db));
+  // Canonical spec subresources. The legacy /api/prd/specs/* mount below stays as
+  // a compatibility entry point while canvas and extension clients migrate.
+  app.route('/api/specs',    createPrdRoutes(db, ''));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));

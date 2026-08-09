@@ -88,7 +88,7 @@ export default function NotificationBell() {
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unread > 0 && (
-          <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 16, height: 16, borderRadius: 8, background: '#6366f1', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+          <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 16, height: 16, borderRadius: 'var(--radius-md)', background: '#6366f1', color: 'var(--text-on-accent)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -97,7 +97,7 @@ export default function NotificationBell() {
       {open && (
         <div
           role="menu"
-          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 'min(340px, calc(100vw - 24px))', maxHeight: 420, overflowY: 'auto', background: 'var(--surface, var(--bg-elevated))', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.24)', zIndex: 1000, padding: 8 }}
+          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 'min(340px, calc(100vw - 24px))', maxHeight: 420, overflowY: 'auto', background: 'var(--surface, var(--bg-elevated))', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 28px rgba(0,0,0,0.24)', zIndex: 1000, padding: 8 }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 8px' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('title')}</span>
@@ -114,7 +114,7 @@ export default function NotificationBell() {
                   key={n.id}
                   type="button"
                   onClick={() => void openItem(n)}
-                  style={{ display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left', padding: '8px 10px', borderRadius: 8, background: n.read ? 'transparent' : 'var(--bg-elevated, rgba(99,102,241,0.08))', border: '1px solid var(--border)', cursor: 'pointer', width: '100%' }}
+                  style={{ display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left', padding: '8px 10px', borderRadius: 'var(--radius-md)', background: n.read ? 'transparent' : 'var(--bg-elevated, rgba(99,102,241,0.08))', border: '1px solid var(--border)', cursor: 'pointer', width: '100%' }}
                 >
                   <span aria-hidden style={{ fontSize: 8, flexShrink: 0, marginTop: 5, color: n.read ? 'var(--text-muted)' : '#6366f1' }}>●</span>
                   <span style={{ minWidth: 0 }}>

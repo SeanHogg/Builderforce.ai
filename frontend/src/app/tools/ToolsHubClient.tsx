@@ -12,7 +12,7 @@ import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/t
 const wrap: React.CSSProperties = { maxWidth: 980, margin: '0 auto', padding: '32px 20px' };
 const cardLink: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8, padding: 18, textDecoration: 'none',
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
   color: 'inherit', transition: 'border-color .15s',
 };
 
@@ -89,7 +89,7 @@ export default function ToolsHubClient() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 20 }}>{tool.icon}</span>
                     <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{tool.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>
+                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>
                       {t(`kind.${tool.kind}`)}
                     </span>
                   </div>

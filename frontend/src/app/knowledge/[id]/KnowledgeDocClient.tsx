@@ -161,8 +161,8 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   if (error) {
     return (
       <PageContainer width="readable">
-        <div style={{ color: 'var(--error-text, #f87171)' }}>{error}</div>
-        <Link href="/knowledge" style={{ color: 'var(--accent, #60a5fa)' }}>
+        <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>
+        <Link href="/knowledge" style={{ color: 'var(--accent, var(--info))' }}>
           ← {t('backToList')}
         </Link>
       </PageContainer>
@@ -179,7 +179,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   return (
     <PageContainer width="readable">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Link href="/knowledge" style={{ color: 'var(--accent, #60a5fa)', textDecoration: 'none' }}>
+        <Link href="/knowledge" style={{ color: 'var(--accent, var(--info))', textDecoration: 'none' }}>
           ← {t('backToList')}
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -299,7 +299,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             width: '100%',
             minHeight: 420,
             padding: 16,
-            borderRadius: 10,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border, #333)',
             background: 'var(--surface-2, #111)',
             color: 'inherit',
@@ -314,7 +314,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         <article
           style={{
             padding: 20,
-            borderRadius: 10,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border, #333)',
             background: 'var(--surface, #1a1a1a)',
             minHeight: 200,
@@ -402,7 +402,7 @@ function SharePanel({
     <div
       style={{
         margin: '14px 0',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border, #333)',
         background: 'var(--surface, #1a1a1a)',
         overflow: 'hidden',
@@ -464,7 +464,7 @@ function SharePanel({
                       type="button"
                       onClick={() => remove(cc.userId)}
                       disabled={busy}
-                      style={{ background: 'none', border: 'none', color: 'var(--error-text, #f87171)', cursor: 'pointer' }}
+                      style={{ background: 'none', border: 'none', color: 'var(--error-text, var(--error))', cursor: 'pointer' }}
                       aria-label={t('remove')}
                     >
                       ×
@@ -514,7 +514,7 @@ function PresenceBar({
         style={{
           width: 8,
           height: 8,
-          borderRadius: 999,
+          borderRadius: 'var(--radius-full)',
           background: collab.connected ? 'var(--success-text, #4ade80)' : 'var(--text-muted, #9ca3af)',
         }}
       />
@@ -526,9 +526,9 @@ function PresenceBar({
             style={{
               width: 22,
               height: 22,
-              borderRadius: 999,
+              borderRadius: 'var(--radius-full)',
               background: p.color,
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               fontSize: 11,
               display: 'flex',
               alignItems: 'center',
@@ -623,7 +623,7 @@ function AcknowledgeBanner({
         gap: 12,
         padding: '12px 16px',
         margin: '16px 0',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border, #333)',
         background: current ? 'var(--success-bg, #0f3d2e)' : 'var(--surface-2, #1a1a1a)',
       }}
@@ -695,7 +695,7 @@ function AiAssist({
     <div
       style={{
         margin: '16px 0',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--accent, #2563eb)',
         background: 'var(--surface, #1a1a1a)',
         overflow: 'hidden',
@@ -728,7 +728,7 @@ function AiAssist({
               width: '100%',
               minHeight: 70,
               padding: 10,
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border, #333)',
               background: 'var(--surface-2, #111)',
               color: 'inherit',
@@ -740,13 +740,13 @@ function AiAssist({
               {busy ? t('generating') : t('generate')}
             </button>
           </div>
-          {error && <div style={{ color: 'var(--error-text, #f87171)', marginTop: 8 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--error-text, var(--error))', marginTop: 8 }}>{error}</div>}
           {result && (
             <div style={{ marginTop: 12 }}>
               <div
                 style={{
                   padding: 12,
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border, #333)',
                   background: 'var(--surface-2, #111)',
                   maxHeight: 260,
@@ -772,8 +772,8 @@ function AiAssist({
 }
 
 function severityColor(severity: string): React.CSSProperties {
-  if (severity === 'high') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' };
-  if (severity === 'medium') return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' };
+  if (severity === 'high') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, var(--error))' };
+  if (severity === 'medium') return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, var(--amber-bright))' };
   return { background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)' };
 }
 
@@ -808,7 +808,7 @@ function AnalyzePanel({
     <div
       style={{
         margin: '16px 0',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border, #333)',
         background: 'var(--surface, #1a1a1a)',
         overflow: 'hidden',
@@ -836,7 +836,7 @@ function AnalyzePanel({
           <button type="button" onClick={run} disabled={busy} style={btnPrimary}>
             {busy ? t('analyzing') : t('analyzeRun')}
           </button>
-          {error && <div style={{ color: 'var(--error-text, #f87171)', marginTop: 8 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--error-text, var(--error))', marginTop: 8 }}>{error}</div>}
           {result && (
             <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
               {result.summary && <p style={{ margin: 0, fontSize: 14 }}>{result.summary}</p>}
@@ -847,7 +847,7 @@ function AnalyzePanel({
                   {result.findings.map((f, i) => (
                     <div
                       key={i}
-                      style={{ padding: 12, borderRadius: 8, border: '1px solid var(--border, #333)', background: 'var(--surface-2, #111)' }}
+                      style={{ padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border, #333)', background: 'var(--surface-2, #111)' }}
                     >
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                         <span style={{ ...badge, ...severityColor(f.severity) }}>{t(`severity_${f.severity}`)}</span>
@@ -869,7 +869,7 @@ function AnalyzePanel({
                   <div
                     style={{
                       padding: 12,
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--border, #333)',
                       background: 'var(--surface-2, #111)',
                       maxHeight: 220,
@@ -952,7 +952,7 @@ function PublishBar({
       <button type="button" onClick={publish} disabled={busy} style={btnPrimary}>
         {busy ? t('publishing') : doc.versionNumber > 0 ? t('publishNewVersion') : t('publish')}
       </button>
-      <button type="button" onClick={remove} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, #f87171)' }}>
+      <button type="button" onClick={remove} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, var(--error))' }}>
         {t('deleteDoc')}
       </button>
     </div>
@@ -1027,7 +1027,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
           <button type="button" onClick={list} disabled={busy} style={btnGhost}>
             {busy ? t('saving') : t('updateListing')}
           </button>
-          <button type="button" onClick={unlist} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, #f87171)' }}>
+          <button type="button" onClick={unlist} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, var(--error))' }}>
             {t('unlist')}
           </button>
         </>
@@ -1078,7 +1078,7 @@ function VersionHistory({ docId, t }: { docId: string; t: ReturnType<typeof useT
           {versions.map((v) => (
             <div
               key={v.id}
-              style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border, #333)', background: 'var(--surface, #1a1a1a)' }}
+              style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border, #333)', background: 'var(--surface, #1a1a1a)' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <strong>v{v.versionNumber}</strong>
@@ -1161,7 +1161,7 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
                 maxHeight: 180,
                 overflow: 'auto',
                 border: '1px solid var(--border, #333)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 padding: 8,
               }}
             >
@@ -1203,8 +1203,8 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
                           ...(r.state === 'acknowledged'
                             ? { background: 'var(--success-bg, #0f3d2e)', color: 'var(--success-text, #4ade80)' }
                             : r.state === 'overdue'
-                              ? { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' }
-                              : { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' }),
+                              ? { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, var(--error))' }
+                              : { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, var(--amber-bright))' }),
                         }}
                       >
                         {t(`state_${r.state}`)}

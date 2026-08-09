@@ -40,7 +40,7 @@ export function AgentTypePill({ kind, label }: { kind: AgentPillKind; label?: st
         letterSpacing: 0.4,
         textTransform: 'uppercase',
         padding: '2px 7px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         background: palette.background,
         color: palette.color,
         border: '1px solid var(--border)',

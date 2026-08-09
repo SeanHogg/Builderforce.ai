@@ -351,7 +351,7 @@ export function Select({
               background: 'var(--panel-drawer-bg, var(--bg-elevated))',
               color: 'var(--text-primary)',
               border: '1px solid var(--border)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
               zIndex: 100000,
               padding: 4,
@@ -388,7 +388,7 @@ export function Select({
                   style={{
                     padding: '7px 10px',
                     fontSize: 13,
-                    borderRadius: 4,
+                    borderRadius: 'var(--radius-sm)',
                     cursor: opt.disabled ? 'not-allowed' : 'pointer',
                     color: opt.disabled ? 'var(--text-muted)' : 'var(--text-primary)',
                     background: isSel

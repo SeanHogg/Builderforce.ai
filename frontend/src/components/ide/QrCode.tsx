@@ -34,7 +34,7 @@ export function QrCode({ value, size = 180, label }: QrCodeProps) {
       <div
         style={{
           padding: 12,
-          borderRadius: 10,
+          borderRadius: 'var(--radius-lg)',
           border: '1px dashed var(--border-subtle, #d4d4d8)',
           color: 'var(--text-muted, #71717a)',
           fontSize: 12,
@@ -65,7 +65,7 @@ export function QrCode({ value, size = 180, label }: QrCodeProps) {
       shapeRendering="crispEdges"
       style={{
         background: '#ffffff',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         padding: 0,
         maxWidth: '100%',
         height: 'auto',

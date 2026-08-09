@@ -30,8 +30,8 @@ function fmtElapsed(ms: number | null): string {
 }
 
 const KIND_PILL: Record<ActiveRun['kind'], { label: string; bg: string; fg: string }> = {
-  cloud: { label: 'CLOUD', bg: 'rgba(124,131,253,0.15)', fg: 'var(--indigo-bright, #7c83fd)' },
-  'on-prem': { label: 'ON-PREM', bg: 'rgba(0,229,204,0.15)', fg: 'var(--cyan-bright, #00e5cc)' },
+  cloud: { label: 'CLOUD', bg: 'rgba(124,131,253,0.15)', fg: 'var(--indigo-bright, var(--indigo-bright))' },
+  'on-prem': { label: 'ON-PREM', bg: 'rgba(0,229,204,0.15)', fg: 'var(--cyan-bright, var(--cyan-bright))' },
 };
 
 export function ActiveRunsPanel() {
@@ -99,7 +99,7 @@ export function ActiveRunsPanel() {
       style={{
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         padding: 16,
       }}
     >
@@ -119,7 +119,7 @@ export function ActiveRunsPanel() {
             disabled={stoppingAll}
             aria-label="Stop all running agents"
             style={{
-              minHeight: 36, padding: '7px 12px', borderRadius: 8,
+              minHeight: 36, padding: '7px 12px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--coral-bright, #f4726e)',
               background: 'rgba(244,114,94,0.1)', color: 'var(--coral-bright, #f4726e)',
               fontSize: 12, fontWeight: 700, cursor: stoppingAll ? 'default' : 'pointer',
@@ -144,13 +144,13 @@ export function ActiveRunsPanel() {
                 alignItems: 'center',
                 gap: 12,
                 padding: '8px 10px',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-elevated)',
               }}
             >
               <span
                 style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                  fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)',
                   background: pill.bg, color: pill.fg, flexShrink: 0,
                 }}
               >
@@ -179,7 +179,7 @@ export function ActiveRunsPanel() {
                   onClick={() => void cancel(r.id)}
                   disabled={cancelling.has(r.id)}
                   style={{
-                    fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
                     color: 'var(--coral-bright, #f4726e)',
                     cursor: cancelling.has(r.id) ? 'default' : 'pointer', opacity: cancelling.has(r.id) ? 0.5 : 1,

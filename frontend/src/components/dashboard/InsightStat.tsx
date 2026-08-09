@@ -81,7 +81,7 @@ export function InsightStat({
         position: 'relative',
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         padding: 16,
         minWidth: 180,
         height: '100%',

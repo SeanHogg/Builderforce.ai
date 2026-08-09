@@ -22,7 +22,7 @@ import { SessionList } from '@/components/security/SessionList';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -98,7 +98,7 @@ export default function AccountSecurityPanel() {
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                     padding: '10px 14px', background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)', borderRadius: 8, gap: 12,
+                    border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', gap: 12,
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -112,7 +112,7 @@ export default function AccountSecurityPanel() {
                       {new Date(s.startedAt).toLocaleString()}
                       {' · '}{t('duration')}: {durStr}
                       {s.writeBlockCount > 0 && (
-                        <span style={{ color: 'var(--warning-text, #f59e0b)', marginLeft: 6 }}>({t('writeBlocked', { count: s.writeBlockCount })})</span>
+                        <span style={{ color: 'var(--warning-text, var(--warning))', marginLeft: 6 }}>({t('writeBlocked', { count: s.writeBlockCount })})</span>
                       )}
                     </div>
                     {s.reason && (
@@ -123,11 +123,11 @@ export default function AccountSecurityPanel() {
                   </div>
                   <span
                     style={{
-                      fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
+                      fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-sm)',
                       background: s.endedAt ? 'var(--surface-card)' : 'rgba(245,158,11,0.15)',
                       border: '1px solid',
                       borderColor: s.endedAt ? 'var(--border-subtle)' : 'rgba(245,158,11,0.5)',
-                      color: s.endedAt ? 'var(--text-muted)' : 'var(--warning-text, #f59e0b)',
+                      color: s.endedAt ? 'var(--text-muted)' : 'var(--warning-text, var(--warning))',
                       flexShrink: 0,
                     }}
                   >

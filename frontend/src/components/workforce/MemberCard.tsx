@@ -11,7 +11,7 @@ import { useWorkforceMetrics } from './WorkforceMetricsContext';
 import PersonalitySummary from '@/components/PersonalitySummary';
 
 const roleBadgeStyle: CSSProperties = {
-  fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+  fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
   background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', letterSpacing: 0.3,
 };
 
@@ -45,7 +45,7 @@ export function RoleSelect({
         style={{
           padding: compact ? '4px 8px' : '6px 10px', fontSize: 12,
           background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-          borderRadius: 8, color: 'var(--text-primary)', cursor: busy ? 'not-allowed' : 'pointer',
+          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', cursor: busy ? 'not-allowed' : 'pointer',
           opacity: busy ? 0.6 : 1,
         }}
       >
@@ -65,14 +65,14 @@ export function RoleSelect({
  */
 
 const mfaBadgeStyle: CSSProperties = {
-  fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+  fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
   background: 'rgba(34,197,94,0.15)', color: 'var(--success-text)', letterSpacing: 0.3,
 };
 
 // Coral-outline destructive action, matching the old MembersView Remove button.
 const dangerBtnStyle = (busy: boolean): CSSProperties => ({
   padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)',
-  background: 'transparent', border: '1px solid var(--coral-bright)', borderRadius: 8,
+  background: 'transparent', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)',
   cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
 });
 

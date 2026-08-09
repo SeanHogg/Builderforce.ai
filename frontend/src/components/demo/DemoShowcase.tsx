@@ -177,7 +177,7 @@ const styles = `
   .demo-showcase-track::-webkit-scrollbar { display: none; }
   .demo-card {
     display: flex; flex-direction: column; gap: 8px; text-align: left; cursor: pointer;
-    position: relative; flex: 0 0 calc((100% - 42px) / 4); min-height: 340px; overflow: hidden; padding: 26px; border-radius: 16px; font-family: inherit;
+    position: relative; flex: 0 0 calc((100% - 42px) / 4); min-height: 340px; overflow: hidden; padding: 26px; border-radius: var(--radius-xl); font-family: inherit;
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
     box-shadow: 0 1px 0 var(--surface-inset-highlight);
@@ -194,7 +194,7 @@ const styles = `
   .demo-card-icon {
     width: 42px; height: 42px; display: grid; place-items: center; margin-bottom: 18px;
     border: 1px solid color-mix(in srgb, var(--card-accent) 35%, var(--border-subtle));
-    border-radius: 10px; background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+    border-radius: var(--radius-lg); background: color-mix(in srgb, var(--card-accent) 12%, transparent);
     color: var(--card-accent); font: 750 11px/1 var(--font-mono); letter-spacing: .06em;
   }
   .demo-card-title { margin: 6px 0 0; font-size: 18px; font-weight: 750; color: var(--text-primary); }
@@ -212,7 +212,7 @@ const styles = `
   .demo-carousel-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .demo-carousel-arrow:disabled { cursor: default; opacity: .35; }
   .demo-carousel-dots { display: flex; align-items: center; gap: 7px; }
-  .demo-carousel-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--text-muted); opacity: .38; transition: width .18s ease; }
+  .demo-carousel-dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--text-muted); opacity: .38; transition: width .18s ease; }
   .demo-carousel-dot.is-active { width: 22px; background: var(--accent); opacity: 1; }
   .demo-showcase-error { margin: 16px auto 0; text-align: center; color: var(--error-text); font-size: 14px; }
   .demo-showcase-note { margin: 18px auto 0; text-align: center; font-size: 13px; color: var(--text-muted); }

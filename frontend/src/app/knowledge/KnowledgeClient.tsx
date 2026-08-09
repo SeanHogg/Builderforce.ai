@@ -34,7 +34,7 @@ const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'ty
 function statusColor(status: string): { bg: string; fg: string } {
   if (status === 'published') return { bg: 'var(--success-bg, #0f3d2e)', fg: 'var(--success-text, #4ade80)' };
   if (status === 'archived') return { bg: 'var(--surface-2, #2a2a2a)', fg: 'var(--text-muted, #9ca3af)' };
-  return { bg: 'var(--warning-bg, #3d320f)', fg: 'var(--warning-text, #fbbf24)' };
+  return { bg: 'var(--warning-bg, #3d320f)', fg: 'var(--warning-text, var(--amber-bright))' };
 }
 
 export default function KnowledgeClient() {
@@ -90,7 +90,7 @@ function OverviewDashboard({ t, projectId }: { t: ReturnType<typeof useTranslati
 
   const { counts, coverage, stale, gaps } = data;
   const coverageColor =
-    coverage.score >= 75 ? 'var(--success-text, #22c55e)' : coverage.score >= 40 ? '#f59e0b' : 'var(--error-text, #ef4444)';
+    coverage.score >= 75 ? 'var(--success-text, var(--success))' : coverage.score >= 40 ? 'var(--warning)' : 'var(--error-text, #ef4444)';
 
   const typeBars: BarDatum[] = [
     { key: 'sop', label: t('type_sop'), value: counts.sop, color: colorAt(0) },
@@ -163,7 +163,7 @@ function GapCard({
     <div
       style={{
         padding: 14,
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         border: '1px dashed var(--border, #444)',
         background: 'var(--surface-2, #161616)',
         display: 'flex',
@@ -252,7 +252,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
         )}
       </div>
 
-      {error && <div style={{ color: 'var(--error-text, #f87171)' }}>{error}</div>}
+      {error && <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>}
       {!loaded && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>}
       {loaded && docs.length === 0 && (
         <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted, #9ca3af)' }}>{t('empty')}</div>
@@ -266,7 +266,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
             style={{
               display: 'block',
               padding: 16,
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--border, #333)',
               background: 'var(--surface, #1a1a1a)',
               textDecoration: 'none',
@@ -301,7 +301,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ padding: 18, borderRadius: 12, border: '1px solid var(--border, #333)', background: 'var(--surface, #1a1a1a)' }}>
+    <div style={{ padding: 18, borderRadius: 'var(--radius-lg)', border: '1px solid var(--border, #333)', background: 'var(--surface, #1a1a1a)' }}>
       {children}
     </div>
   );
@@ -310,7 +310,7 @@ function Panel({ children }: { children: React.ReactNode }) {
 function MiniStat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
   return (
     <div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: danger ? 'var(--error-text, #f87171)' : undefined }}>{value}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: danger ? 'var(--error-text, var(--error))' : undefined }}>{value}</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{label}</div>
     </div>
   );
@@ -328,7 +328,7 @@ function statusColorStyle(status: string): { background: string; color: string }
 
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #333)',
   background: 'var(--surface-2, #111)',
   color: 'inherit',
@@ -337,16 +337,16 @@ const inputStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: 'none',
   background: 'var(--accent, #2563eb)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   cursor: 'pointer',
   fontWeight: 600,
 };
 const btnGhost: React.CSSProperties = {
   padding: '8px 14px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border, #333)',
   background: 'transparent',
   color: 'inherit',
@@ -354,7 +354,7 @@ const btnGhost: React.CSSProperties = {
 };
 const chip: React.CSSProperties = {
   padding: '6px 12px',
-  borderRadius: 999,
+  borderRadius: 'var(--radius-full)',
   border: '1px solid var(--border, #333)',
   background: 'transparent',
   color: 'var(--text-muted, #9ca3af)',
@@ -366,13 +366,13 @@ const chipActive: React.CSSProperties = {
   ...chip,
   background: 'var(--accent, #2563eb)',
   borderColor: 'var(--accent, #2563eb)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
 };
-const badge: React.CSSProperties = { fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600 };
+const badge: React.CSSProperties = { fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', fontWeight: 600 };
 const tagChip: React.CSSProperties = {
   fontSize: 11,
   padding: '2px 8px',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   background: 'var(--surface-2, #222)',
   color: 'var(--text-muted, #9ca3af)',
 };

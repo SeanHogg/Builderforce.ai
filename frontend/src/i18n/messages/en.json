@@ -534,7 +534,6 @@
       "calendar": "Calendar",
       "facts": "Facts",
       "snapshots": "Reviews",
-      "persona": "Persona",
       "plan": "Planning",
       "incidents": "Incidents",
       "oncall": "On-call",
@@ -548,7 +547,8 @@
       "autonomy": "Autonomy",
       "coordination": "Coordination",
       "memory": "Memory",
-      "rehearsal": "Rehearsal"
+      "rehearsal": "Rehearsal",
+      "viewpoint": "Viewpoint"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -1414,7 +1414,6 @@
       "error": "Couldn't update your availability. Please try again."
     },
     "accountTab": "Account",
-    "sessionsTab": "Sessions",
     "subnavLabel": "Settings sections",
     "emailTab": "Email",
     "logsTab": "Logs",
@@ -10782,19 +10781,19 @@
     "sourcePlaceholder": "e.g. onboarding call"
   },
   "personaLens": {
-    "pageTitle": "Lens persona",
-    "title": "Your lens persona",
-    "subtitle": "Pick the role you play. It reorders and highlights the insight lenses you care about — it never changes what you can access.",
+    "pageTitle": "Viewpoint",
+    "title": "Your viewpoint",
+    "subtitle": "Pick the role you work as. It reorders and highlights the insight lenses you care about — it never changes what you can access.",
     "loading": "Loading…",
     "primary": "Primary",
-    "save": "Save persona",
+    "save": "Save viewpoint",
     "saving": "Saving…",
-    "saved": "Persona saved",
-    "saveFailed": "Could not save persona",
+    "saved": "Viewpoint saved",
+    "saveFailed": "Could not save viewpoint",
     "highlightsFor": "Highlighted lenses for {persona}",
     "home": "Home",
     "viewingAs": "Viewing as",
-    "viewShapingNote": "A persona shapes your view only. Every lens still respects your workspace role — you never gain access you would not otherwise have.",
+    "viewShapingNote": "A viewpoint shapes your view only. Every lens still respects your workspace role — you never gain access you would not otherwise have.",
     "personas": {
       "ceo": "CEO",
       "cfo": "CFO",

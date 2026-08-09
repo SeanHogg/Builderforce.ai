@@ -7,9 +7,9 @@
 
 /** Best→worst tier hexes (match the DORA/health tier palette used across the app). */
 const TIER_HEX = {
-  healthy: '#22c55e',
+  healthy: 'var(--success)',
   watch: '#eab308',
-  atRisk: '#f59e0b',
+  atRisk: 'var(--warning)',
   critical: '#ef4444',
 } as const;
 

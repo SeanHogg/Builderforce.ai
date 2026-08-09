@@ -10,7 +10,7 @@ const badgeBase: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 700,
   padding: '2px 6px',
-  borderRadius: 4,
+  borderRadius: 'var(--radius-sm)',
   letterSpacing: '0.02em',
   whiteSpace: 'nowrap',
 };

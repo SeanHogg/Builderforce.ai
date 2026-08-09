@@ -33,7 +33,7 @@ function DrillLink({ label, onClick }: { label: string; onClick: () => void }) {
       type="button"
       onClick={onClick}
       style={{
-        fontSize: '0.82rem', fontWeight: 600, padding: '6px 12px', borderRadius: 8,
+        fontSize: '0.82rem', fontWeight: 600, padding: '6px 12px', borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border-subtle)', background: 'transparent',
         color: 'var(--coral-bright, #f4726e)', cursor: 'pointer', whiteSpace: 'nowrap',
       }}

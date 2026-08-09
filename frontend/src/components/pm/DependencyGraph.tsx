@@ -141,7 +141,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       position: pos.get(t.id) ?? { x: 0, y: 0 },
       data: { label: `${t.key} · ${t.title}` },
       style: {
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: `2px solid ${STATUS_COLOR[t.status] ?? '#6b7280'}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
@@ -240,7 +240,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   };
 
   const selectStyle: React.CSSProperties = {
-    padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+    padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
     background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13,
   };
 
@@ -264,7 +264,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
             type="button"
             onClick={addEdge}
             disabled={busy}
-            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+            style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
           >
             {t('depAddButton')}
           </button>
@@ -274,7 +274,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       <Canvas3DControlsProvider>
         {/* The scene fills this box, so it has to be the box it is positioned
             against — see `.scene` in Canvas3DView.module.css. */}
-        <div ref={boardRef} style={{ position: 'relative', height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+        <div ref={boardRef} style={{ position: 'relative', height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}

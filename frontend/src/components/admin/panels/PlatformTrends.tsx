@@ -47,7 +47,7 @@ export function PlatformTrends() {
               type="button"
               onClick={() => setDays(w)}
               style={{
-                padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 border: `1px solid ${days === w ? 'transparent' : 'var(--border-subtle)'}`,
                 background: days === w ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
                 color: days === w ? '#fff' : 'var(--text-primary)',

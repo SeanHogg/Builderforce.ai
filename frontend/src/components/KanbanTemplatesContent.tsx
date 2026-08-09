@@ -25,19 +25,19 @@ import type {
 type Tab = 'mine' | 'marketplace' | 'roles';
 
 const card: React.CSSProperties = {
-  background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16,
+  background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)',
   fontSize: 11, fontWeight: 600, background: bg, color: fg,
 });
 const btn = (primary = false): React.CSSProperties => ({
-  fontSize: 12, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 600,
+  fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
   background: primary ? 'var(--accent, #2563eb)' : 'var(--surface-2)',
   color: primary ? '#fff' : 'var(--text-primary)', border: primary ? 'none' : '1px solid var(--border)',
 });
 const input: React.CSSProperties = {
-  padding: '6px 8px', borderRadius: 6, fontSize: 13, background: 'var(--surface-2)',
+  padding: '6px 8px', borderRadius: 'var(--radius-sm)', fontSize: 13, background: 'var(--surface-2)',
   color: 'var(--text-primary)', border: '1px solid var(--border)',
 };
 
@@ -191,7 +191,7 @@ function RolesTab({ roles, canManage, rolesCrud }: {
     <div style={card}>
       <div style={{ display: 'grid', gap: 6 }}>
         {roles.map((r) => (
-          <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: 'var(--surface-2)' }}>
+          <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)' }}>
             <span aria-hidden>{r.icon ?? '👤'}</span>
             <span style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.discipline}</span>
@@ -265,7 +265,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
 
       <div style={{ display: 'grid', gap: 10 }}>
         {lanes.map((lane, li) => (
-          <div key={lane.key} style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 10 }}>
+          <div key={lane.key} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
               <input style={{ ...input, flex: '1 1 140px', fontWeight: 600 }} value={lane.name} onChange={(e) => updateLane(li, { name: e.target.value })} />
               <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('gate')}</label>

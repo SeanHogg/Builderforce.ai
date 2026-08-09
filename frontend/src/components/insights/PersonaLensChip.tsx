@@ -4,7 +4,7 @@
  * PersonaLensChip — a compact chip for the Insights nav/hub that surfaces the
  * signed-in user's primary lens persona and links to that persona's HOME lens
  * plus its next highlighted lenses. Pure view-shaping: it is an affordance, not a
- * gate (the lens pages remain role-gated). Links to /settings/persona to change it.
+ * gate (the lens pages remain role-gated). Links to /settings/viewpoint to change it.
  */
 
 import { useTranslations } from 'next-intl';
@@ -21,16 +21,16 @@ export function PersonaLensChip() {
     <div
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        padding: '6px 10px', borderRadius: 10,
+        padding: '6px 10px', borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
       }}
     >
       <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{t('viewingAs')}</span>
       <Link
-        href="/settings/persona"
+        href="/settings/viewpoint"
         style={{
-          fontSize: 12, fontWeight: 700, textDecoration: 'none', padding: '2px 8px', borderRadius: 999,
-          color: '#fff', background: 'var(--accent, #6366f1)',
+          fontSize: 12, fontWeight: 700, textDecoration: 'none', padding: '2px 8px', borderRadius: 'var(--radius-full)',
+          color: 'var(--text-on-accent)', background: 'var(--accent, #6366f1)',
         }}
       >
         {t(`personas.${persona}`)}

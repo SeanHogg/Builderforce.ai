@@ -15,7 +15,7 @@ import { TenantActivityPanel } from './TenantActivityPanel';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -110,7 +110,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
   const isAgent = kind === 'agent';
   return (
     <span style={{
-      fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+      fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-full)',
       color: isAgent ? '#b388ff' : '#39d353',
       background: isAgent ? 'rgba(138,75,224,0.12)' : 'rgba(38,166,65,0.12)',
       border: `1px solid ${isAgent ? 'rgba(138,75,224,0.4)' : 'rgba(38,166,65,0.4)'}`,
@@ -181,8 +181,8 @@ export function ContributorsView() {
           disabled={syncing}
           style={{
             flexShrink: 0,
-            fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: syncing ? 'default' : 'pointer',
-            background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: syncing ? 0.6 : 1,
+            fontSize: 13, padding: '8px 14px', borderRadius: 'var(--radius-md)', cursor: syncing ? 'default' : 'pointer',
+            background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', opacity: syncing ? 0.6 : 1,
           }}
         >
           {syncing ? t('syncing') : t('syncAgents')}
@@ -235,7 +235,7 @@ export function ContributorsView() {
                     key={c.id}
                     onClick={() => setSelected(c.id)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 8,
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 'var(--radius-md)',
                       background: selected === c.id ? 'var(--bg-hover, rgba(255,255,255,0.04))' : 'transparent',
                       border: '1px solid transparent', cursor: 'pointer', textAlign: 'left', width: '100%',
                     }}
@@ -306,12 +306,12 @@ function Legend() {
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
       <span>{t('legend.less')}</span>
       {[EMPTY, ...GREEN].map((c, i) => (
-        <span key={i} style={{ width: CELL, height: CELL, borderRadius: 2, background: c, display: 'inline-block' }} />
+        <span key={i} style={{ width: CELL, height: CELL, borderRadius: 'var(--radius-sm)', background: c, display: 'inline-block' }} />
       ))}
       <span>{t('legend.more')}</span>
       <span style={{ marginLeft: 12 }}>{t('legend.agents')}</span>
       {PURPLE.map((c, i) => (
-        <span key={i} style={{ width: CELL, height: CELL, borderRadius: 2, background: c, display: 'inline-block' }} />
+        <span key={i} style={{ width: CELL, height: CELL, borderRadius: 'var(--radius-sm)', background: c, display: 'inline-block' }} />
       ))}
     </div>
   );

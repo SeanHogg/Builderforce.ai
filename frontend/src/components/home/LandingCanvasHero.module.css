@@ -2,7 +2,7 @@
  * Landing hero — the Creation Canvas itself, running, above the fold.
  *
  * Every colour is a theme token so the board reads in BOTH themes: the dot grid
- * and node cards sit on --bg-surface, which is #0a0f1a dark / #ffffff light.
+ * and node cards sit on --bg-surface, which is var(--bg-surface) dark / #ffffff light.
  * The old hero hardcoded rgba(236,242,255,…) text because it always sat on the
  * dark BrainBackdrop; nothing here may assume a ground colour.
  *
@@ -35,7 +35,7 @@
   gap: 8px;
   padding: 5px 16px;
   border: 1px solid var(--border-accent);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--surface-card);
   color: var(--text-primary);
   font-family: var(--font-display);
@@ -371,7 +371,7 @@
 .spark i {
   flex: 1;
   display: block;
-  border-radius: 3px 3px 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: var(--coral-bright);
   opacity: 0.8;
 }
@@ -482,9 +482,9 @@
      which in the light theme is very nearly white. */
   padding-bottom: 88px;
 
-  --text-primary: #f0f4ff;
+  --text-primary: var(--text-primary);
   --text-secondary: #b9c4de;
-  --text-muted: #8892b0;
+  --text-muted: var(--text-secondary);
   --border-subtle: rgba(136, 146, 176, 0.28);
   --border-accent: rgba(77, 158, 255, 0.42);
   --surface-card: rgba(10, 15, 26, 0.72);

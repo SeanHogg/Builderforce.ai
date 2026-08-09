@@ -55,7 +55,7 @@ export function VoiceOutput({
         <div style={{
           maxWidth: 520, textAlign: 'center',
           background: 'rgba(234,179,8,0.1)', border: '1px solid #eab308',
-          color: '#fde68a', borderRadius: 12, padding: '20px 24px',
+          color: '#fde68a', borderRadius: 'var(--radius-lg)', padding: '20px 24px',
         }}>
           <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>⚠</div>
           <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('synthUnavailable')}</p>
@@ -101,7 +101,7 @@ export function VoiceOutput({
           {result.wordTimestamps.length > 0
             ? result.wordTimestamps.map((w, i) => (
                 <span key={i} style={{
-                  padding: '1px 3px', borderRadius: 4,
+                  padding: '1px 3px', borderRadius: 'var(--radius-sm)',
                   background: i === activeWord ? 'var(--coral-bright)' : 'transparent',
                   color: i === activeWord ? '#fff' : 'var(--text-primary)',
                   transition: 'background 0.1s',

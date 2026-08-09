@@ -221,7 +221,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                   </div>
                   <div className="user-drawer__field">
                     <span className="user-drawer__field-label">{t('users.drawer.fieldSuperadmin')}</span>
-                    <span style={{ color: user.isSuperadmin ? '#22c55e' : 'var(--text-muted)' }}>
+                    <span style={{ color: user.isSuperadmin ? 'var(--success)' : 'var(--text-muted)' }}>
                       {user.isSuperadmin ? t('users.drawer.yes') : t('users.drawer.no')}
                     </span>
                   </div>
@@ -291,7 +291,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                             style={{
                               background: 'var(--surface-card)',
                               border: '1px solid var(--border)',
-                              borderRadius: 4,
+                              borderRadius: 'var(--radius-sm)',
                               padding: '2px 7px',
                               fontSize: 11,
                               fontFamily: 'monospace',
@@ -332,7 +332,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                             <td>{s.ipAddress ?? '—'}</td>
                             <td>{fmtDateTime(s.lastSeenAt)}</td>
                             <td>
-                              <span style={{ color: s.isActive ? '#22c55e' : 'var(--text-muted)' }}>
+                              <span style={{ color: s.isActive ? 'var(--success)' : 'var(--text-muted)' }}>
                                 {s.isActive ? t('users.drawer.statusActive') : t('users.drawer.statusRevoked')}
                               </span>
                             </td>
@@ -359,7 +359,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="user-drawer__field">
                         <span className="user-drawer__field-label">{t('users.drawer.fieldMfa')}</span>
-                        <span style={{ color: secDetails.mfa.enabled ? '#22c55e' : '#ef4444' }}>
+                        <span style={{ color: secDetails.mfa.enabled ? 'var(--success)' : '#ef4444' }}>
                           {secDetails.mfa.enabled ? t('users.drawer.mfaEnabled') : t('users.drawer.mfaDisabled')}
                         </span>
                       </div>

@@ -180,7 +180,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
   }, [media, meetingId]);
 
   const headerBtn = (active: boolean): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
     background: active ? 'var(--bg-elevated)' : 'var(--bg-deep)',
     color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
     border: `1px solid ${active ? 'var(--border-strong, #555)' : 'var(--border-subtle)'}`,
@@ -209,7 +209,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
           </label>
           {media.mediaPaths.length > 0 && <span title={media.mediaPaths.map((path) => `${path.peerId}: ${path.localCandidateType} ↔ ${path.remoteCandidateType}`).join('\n')} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{media.mediaPaths.some((path) => path.relayed) ? 'Encrypted TURN relay in use' : `Direct ICE path verified · ${media.mediaPaths.length}`}</span>}
           {/* Camera size toggle */}
-          <div role="group" aria-label={t('cameraSize')} style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+          <div role="group" aria-label={t('cameraSize')} style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             {(['small', 'large'] as const).map((s) => (
               <button
                 key={s}
@@ -237,7 +237,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
           <button
             type="button"
             onClick={leave}
-            style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+            style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
           >
             {t('leave')}
           </button>
@@ -280,7 +280,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                     type="button"
                     onClick={() => askAgent(a.ref)}
                     disabled={agentBusy.has(a.ref)}
-                    style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 999, cursor: agentBusy.has(a.ref) ? 'default' : 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', opacity: agentBusy.has(a.ref) ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--radius-full)', cursor: agentBusy.has(a.ref) ? 'default' : 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', opacity: agentBusy.has(a.ref) ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
                     <span aria-hidden>🗣</span>{agentBusy.has(a.ref) ? t('agentThinking', { name: a.name }) : t('askForUpdate', { name: a.name })}
                   </button>
@@ -292,7 +292,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                     value={askAgentRef}
                     onChange={(e) => setAskAgentRef(e.target.value)}
                     aria-label={t('askWhichAgent')}
-                    style={{ fontSize: 13, padding: '7px 8px', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
+                    style={{ fontSize: 13, padding: '7px 8px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                   >
                     {agents.map((a) => <option key={a.ref} value={a.ref}>{a.name}</option>)}
                   </Select>
@@ -302,9 +302,9 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                   onChange={(e) => setAsk(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendAsk(); } }}
                   placeholder={t('askAgentPlaceholder')}
-                  style={{ flex: '1 1 220px', fontSize: 13, padding: '7px 10px', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
+                  style={{ flex: '1 1 220px', fontSize: 13, padding: '7px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                 />
-                <button type="button" onClick={sendAsk} disabled={!ask.trim()} style={{ fontSize: 13, fontWeight: 700, padding: '7px 14px', borderRadius: 8, cursor: ask.trim() ? 'pointer' : 'default', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: ask.trim() ? 1 : 0.5 }}>
+                <button type="button" onClick={sendAsk} disabled={!ask.trim()} style={{ fontSize: 13, fontWeight: 700, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: ask.trim() ? 'pointer' : 'default', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: ask.trim() ? 1 : 0.5 }}>
                   {t('askSend')}
                 </button>
               </div>
@@ -324,7 +324,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                     <span
                       key={a.id}
                       style={{
-                        fontSize: 12, padding: '3px 10px', borderRadius: 999,
+                        fontSize: 12, padding: '3px 10px', borderRadius: 'var(--radius-full)',
                         background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
                         color: here ? 'var(--text-primary)' : 'var(--text-muted)',
                         display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -353,7 +353,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('transcript')}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {isHost && (
-                  <button type="button" onClick={generateMinutes} style={{ fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+                  <button type="button" onClick={generateMinutes} style={{ fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
                     {t('generateMinutes')}
                   </button>
                 )}
@@ -396,7 +396,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
           <button
             type="button"
             onClick={endForAll}
-            style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, borderRadius: 999, cursor: 'pointer', background: 'var(--error-bg, #7f1d1d)', color: '#fff', border: '1px solid var(--error-border, #b91c1c)' }}
+            style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-full)', cursor: 'pointer', background: 'var(--error-bg, #7f1d1d)', color: 'var(--text-on-accent)', border: '1px solid var(--error-border, #b91c1c)' }}
           >
             {t('endForAll')}
           </button>

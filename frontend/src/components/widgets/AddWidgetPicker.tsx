@@ -27,7 +27,7 @@ export function AddWidgetPicker({ open, onClose }: { open: boolean; onClose: () 
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={t('searchPlaceholder')}
-          style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+          style={{ padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
         />
         {groups.map((g) => {
           const items = g.widgets.filter((w) => !query || t(`title.${w.titleKey}`).toLowerCase().includes(query));
@@ -57,7 +57,7 @@ function WidgetRow({ id, titleKey, capability }: { id: string; titleKey: string;
   // capability check (never hidden — same product rule as RoleGate).
   const allowed = usePermission((capability ?? 'insights.aiImpact') as Parameters<typeof usePermission>[0]).allowed || !capability;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: pins.isPinned(id) ? 'var(--bg-elevated)' : 'transparent' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: pins.isPinned(id) ? 'var(--bg-elevated)' : 'transparent' }}>
       <span style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>{t(`title.${titleKey}`)}</span>
       {allowed ? <PinButton widgetKey={id} /> : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>🔒</span>}
     </div>

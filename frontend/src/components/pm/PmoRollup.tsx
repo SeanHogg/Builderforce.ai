@@ -18,8 +18,8 @@ const pct = (n: number | null | undefined) => (n == null ? '—' : `${n.toFixed(
 const hrs = (n: number | null | undefined) => (n == null ? '—' : `${n.toFixed(1)}h`);
 
 const blockedPill: React.CSSProperties = {
-  display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: '0.68rem',
-  fontWeight: 700, color: '#fff', background: '#dc2626', whiteSpace: 'nowrap',
+  display: 'inline-block', padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: '0.68rem',
+  fontWeight: 700, color: 'var(--text-on-accent)', background: '#dc2626', whiteSpace: 'nowrap',
 };
 
 export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string } }) {
@@ -66,7 +66,7 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: '0.88rem' }}>
               {data.criticalPath.map((c, i) => (
                 <span key={c.initiativeId} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ padding: '4px 10px', borderRadius: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontWeight: 600 }}>{c.name}</span>
+                  <span style={{ padding: '4px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontWeight: 600 }}>{c.name}</span>
                   {i < data.criticalPath.length - 1 && <span style={{ color: 'var(--text-muted)' }}>→</span>}
                 </span>
               ))}

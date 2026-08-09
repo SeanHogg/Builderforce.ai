@@ -15,7 +15,7 @@ import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
  */
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 
 
@@ -28,7 +28,7 @@ function TalentStats({ stats }: { stats: FreelancerStats }) {
   const money = (cents: number, cur: string) => `${cur} ${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
   const tiles: { key: string; value: string; label: string; sub: string; accent: string }[] = [
-    { key: 'aiUsage', value: num(stats.aiActions), label: t('stats.aiUsage'), sub: t('stats.aiUsageSub'), accent: 'var(--cyan-bright, #00e5cc)' },
+    { key: 'aiUsage', value: num(stats.aiActions), label: t('stats.aiUsage'), sub: t('stats.aiUsageSub'), accent: 'var(--cyan-bright, var(--cyan-bright))' },
     { key: 'activity', value: `${num(stats.activeDays)}${t('stats.daysSuffix')}`, label: t('stats.activity'), sub: t('stats.activitySub', { signals: num(stats.activitySignals) }), accent: 'var(--coral-bright, #f4726e)' },
     { key: 'awarded', value: num(stats.projectsAwarded), label: t('stats.awarded'), sub: t('stats.awardedSub', { count: stats.activeEngagements }), accent: 'rgba(34,197,94,0.9)' },
     { key: 'inProposal', value: num(stats.proposalsActive), label: t('stats.inProposal'), sub: t('stats.inProposalSub'), accent: 'rgba(245,158,11,0.95)' },
@@ -41,7 +41,7 @@ function TalentStats({ stats }: { stats: FreelancerStats }) {
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))' }}>
         {tiles.map((tile) => (
           <div key={tile.key} style={{
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
             padding: '12px 14px', borderTop: `2px solid ${tile.accent}`,
           }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, wordBreak: 'break-word' }}>{tile.value}</div>
@@ -100,7 +100,7 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('skills')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {profile.skills.map((s) => (
-              <span key={s} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
+              <span key={s} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
             ))}
           </div>
         </div>
@@ -127,7 +127,7 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{t('resumeTitle')}</div>
         {profile.embedUrl ? (
           <iframe title={t('resumeTitle')} src={profile.embedUrl}
-            style={{ width: '100%', height: 560, border: '1px solid var(--border-subtle)', borderRadius: 10, background: 'var(--bg-elevated)' }} />
+            style={{ width: '100%', height: 560, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }} />
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{resumeEmptyNote ?? t('noResume')}</p>
         )}

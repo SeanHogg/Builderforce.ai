@@ -32,7 +32,7 @@ const grid: React.CSSProperties = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14,
 };
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 
 /** One member → a capacity-vs-WIP bar: value = open WIP, faint track = WIP ceiling. */

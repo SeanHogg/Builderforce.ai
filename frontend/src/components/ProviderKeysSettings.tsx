@@ -63,7 +63,7 @@ const PROVIDERS: ProviderConfig[] = [
 ];
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 const wrapStyle: React.CSSProperties = {
   display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
@@ -73,16 +73,16 @@ const sectionTitle: React.CSSProperties = {
 };
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)',
-  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   boxSizing: 'border-box', fontFamily: 'var(--font-mono)', minWidth: 0,
 };
 const buttonPrimary: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--surface-interactive)',
-  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const buttonDanger: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'none',
-  color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const dividerRow: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600,
@@ -191,7 +191,7 @@ function ReorderableList({
           aria-label={t('precedence.rowLabel', { provider: labelFor(key), position: i + 1 })}
           style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             cursor: 'grab', opacity: drag.draggingKey === key ? 0.4 : 1,
             outline: drag.dropKey === key ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
             outlineOffset: 2, transition: 'opacity 120ms ease',
@@ -485,7 +485,7 @@ function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
         gap: 6,
         marginTop: 8,
         padding: '8px 10px',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         fontSize: 11.5,
         lineHeight: 1.5,
         background: 'var(--warning-bg, rgba(245,158,11,0.16))',
@@ -682,7 +682,7 @@ function ProviderConnectionCard({
       <div style={sectionTitle}>{config.label}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
-      <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+      <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           {/* `usable` alone would paint this green for a credential that decrypts and then
               403s on every call, so an outstanding alert downgrades it the same way it
@@ -1040,7 +1040,7 @@ function OpenRouterConnectionsPanel({
             placeholder={t('openRouter.search')}
             style={{ ...inputStyle, marginBottom: 8 }}
           />
-          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
             {visibleModels.map((model) => (
               <label key={model.id} style={{ display: 'flex', gap: 9, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={selected.includes(model.id)} onChange={() => toggleModel(model.id)} />

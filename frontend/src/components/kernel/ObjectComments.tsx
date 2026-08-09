@@ -80,7 +80,7 @@ export function ObjectComments({
             className="w-full rounded-md px-3 py-2 text-sm resize-y"
             style={{
               background: 'var(--surface, #101624)',
-              color: 'var(--text-primary, #f0f4ff)',
+              color: 'var(--text-primary, var(--text-primary))',
               border: '1px solid var(--border-subtle, rgba(136,146,176,0.25))',
             }}
           />
@@ -120,7 +120,7 @@ export function ObjectComments({
                 {row.resolvedAt ? (
                   <span
                     className="text-[0.65rem] uppercase tracking-wider rounded px-1.5 py-0.5"
-                    style={{ background: 'var(--success-bg, rgba(34,197,94,0.15))', color: 'var(--success, #22c55e)' }}
+                    style={{ background: 'var(--success-bg, rgba(34,197,94,0.15))', color: 'var(--success, var(--success))' }}
                   >
                     {t('resolved')}
                   </span>

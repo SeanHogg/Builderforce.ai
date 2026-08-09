@@ -38,7 +38,7 @@ const EFFECTS: PolicyGateEffect[] = ['inject-directive', 'require-approval', 'bl
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
   minWidth: 0,
 };
@@ -56,7 +56,7 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
   padding: '8px 10px',
   fontSize: 13,
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   background: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
@@ -74,10 +74,10 @@ const primaryButton: React.CSSProperties = {
   padding: '8px 14px',
   fontSize: 13,
   fontWeight: 600,
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid transparent',
   background: 'var(--accent, #4f7cff)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   cursor: 'pointer',
 };
 
@@ -85,7 +85,7 @@ const subtleButton: React.CSSProperties = {
   padding: '7px 12px',
   fontSize: 12,
   fontWeight: 600,
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   background: 'var(--bg-elevated)',
   color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)',
@@ -103,7 +103,7 @@ function effectBadgeStyle(effect: PolicyGateEffect): React.CSSProperties {
     fontSize: 10,
     fontWeight: 700,
     padding: '2px 7px',
-    borderRadius: 5,
+    borderRadius: 'var(--radius-sm)',
     whiteSpace: 'nowrap',
     background: tone.bg,
     color: tone.fg,
@@ -314,7 +314,7 @@ export default function PolicyPacksPanel() {
                   key={g.id}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%',
-                    padding: '4px 8px', borderRadius: 8, fontSize: 11,
+                    padding: '4px 8px', borderRadius: 'var(--radius-md)', fontSize: 11,
                     background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
                     border: '1px solid var(--border-subtle)',
                   }}
@@ -497,7 +497,7 @@ export default function PolicyPacksPanel() {
                         <div
                           key={g.id}
                           style={{
-                            border: '1px solid var(--border-subtle)', borderRadius: 8,
+                            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                             padding: 10, background: 'var(--bg-elevated)', minWidth: 0,
                           }}
                         >

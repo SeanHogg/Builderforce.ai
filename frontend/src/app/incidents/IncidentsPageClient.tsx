@@ -40,7 +40,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -499,7 +499,7 @@ function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; canManag
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 999, background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
                     <div style={{ width: `${a.percentComplete}%`, height: '100%', background: complete ? 'var(--success, #16a34a)' : 'var(--coral-bright, #f97316)' }} />
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{t('implicated.signed', { done: a.completedCount, total: a.requiredCount })}</span>

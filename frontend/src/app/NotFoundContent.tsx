@@ -18,8 +18,8 @@ export default function NotFoundContent() {
       <Link
         href="/"
         style={{
-          marginTop: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 10,
-          background: 'var(--accent)', color: '#fff', textDecoration: 'none',
+          marginTop: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 'var(--radius-lg)',
+          background: 'var(--accent)', color: 'var(--text-on-accent)', textDecoration: 'none',
         }}
       >
         {t('home')}

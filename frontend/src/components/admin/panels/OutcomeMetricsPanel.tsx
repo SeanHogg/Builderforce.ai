@@ -86,7 +86,7 @@ export default function OutcomeMetricsPanel() {
         {headlineKeys.map((key) => {
           const metric = metricByKey.get(key); if (!metric) return null;
           const change = comparison(metric);
-          return <article key={key} style={{ padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--bg-elevated)' }}>
+          return <article key={key} style={{ padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }}>
             <div className="text-muted" style={{ fontSize: 11 }}>{metric.label}</div>
             <strong style={{ display: 'block', margin: '7px 0 5px', fontSize: 25, color: 'var(--text-strong)' }}>{formatMetric(metric.current, metric.unit)}</strong>
             <small style={{ color: change.positive == null ? 'var(--text-muted)' : change.positive ? 'var(--success,#16856f)' : 'var(--danger,#b14f45)' }}>{change.label}</small>
@@ -94,15 +94,15 @@ export default function OutcomeMetricsPanel() {
         })}
       </section>
 
-      <section style={{ marginBottom: 18, padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--bg-elevated)' }}>
+      <section style={{ marginBottom: 18, padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}><div><strong>Value trend</strong><div className="text-muted" style={{ fontSize: 11 }}>Sessions started and successful deliveries by day</div></div><span className="text-muted" style={{ fontSize: 11 }}>{fmtNum(data.deliveredSessions)} delivered</span></div>
         <div aria-label="Daily outcome trend" style={{ height: 120, display: 'flex', alignItems: 'end', gap: 3, overflow: 'hidden' }}>
-          {data.trends.map((point) => <div key={point.day} title={`${point.day}: ${point.sessions} sessions, ${point.deliveries} deliveries`} style={{ flex: 1, minWidth: 3, height: '100%', display: 'flex', alignItems: 'end', gap: 1 }}><i style={{ display: 'block', flex: 1, minHeight: 1, height: `${point.sessions / peak * 100}%`, background: '#9db9ee', borderRadius: '3px 3px 0 0' }} /><i style={{ display: 'block', flex: 1, minHeight: point.deliveries ? 2 : 0, height: `${point.deliveries / peak * 100}%`, background: '#16856f', borderRadius: '3px 3px 0 0' }} /></div>)}
+          {data.trends.map((point) => <div key={point.day} title={`${point.day}: ${point.sessions} sessions, ${point.deliveries} deliveries`} style={{ flex: 1, minWidth: 3, height: '100%', display: 'flex', alignItems: 'end', gap: 1 }}><i style={{ display: 'block', flex: 1, minHeight: 1, height: `${point.sessions / peak * 100}%`, background: '#9db9ee', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'}} /><i style={{ display: 'block', flex: 1, minHeight: point.deliveries ? 2 : 0, height: `${point.deliveries / peak * 100}%`, background: '#16856f', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'}} /></div>)}
         </div>
       </section>
 
       <section aria-label="All outcome metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 8, marginBottom: 18 }}>
-        {data.metrics.map((metric) => { const change = comparison(metric); return <article key={metric.key} style={{ display: 'grid', gap: 5, padding: '11px 13px', border: '1px solid var(--border-subtle)', borderRadius: 9, background: 'var(--bg-elevated)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ fontSize: 12 }}>{metric.label}</span><strong>{formatMetric(metric.current, metric.unit)}</strong></div><small className="text-muted">Prior: {formatMetric(metric.baseline, metric.unit)} · <span style={{ color: change.positive == null ? undefined : change.positive ? 'var(--success,#16856f)' : 'var(--danger,#b14f45)' }}>{change.label}</span></small></article>; })}
+        {data.metrics.map((metric) => { const change = comparison(metric); return <article key={metric.key} style={{ display: 'grid', gap: 5, padding: '11px 13px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ fontSize: 12 }}>{metric.label}</span><strong>{formatMetric(metric.current, metric.unit)}</strong></div><small className="text-muted">Prior: {formatMetric(metric.baseline, metric.unit)} · <span style={{ color: change.positive == null ? undefined : change.positive ? 'var(--success,#16856f)' : 'var(--danger,#b14f45)' }}>{change.label}</span></small></article>; })}
       </section>
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(330px,1fr))', gap: 14, marginBottom: 18 }}>
@@ -110,7 +110,7 @@ export default function OutcomeMetricsPanel() {
         <BreakdownTable title="Project value" nameLabel="Project" rows={data.projects.map((project) => ({ id: project.projectId, name: `${project.projectName} · ${project.tenantName}`, sessions: project.sessions, deliveries: project.deliveries }))} />
       </section>
 
-      <section style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 16, border: `1px solid ${data.privacy.externalClaimsEligible ? '#9bd4c7' : '#e2c984'}`, borderRadius: 12, background: data.privacy.externalClaimsEligible ? 'color-mix(in srgb,#16856f 7%,var(--bg-elevated))' : 'color-mix(in srgb,#c68a16 7%,var(--bg-elevated))' }}>
+      <section style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 16, border: `1px solid ${data.privacy.externalClaimsEligible ? '#9bd4c7' : '#e2c984'}`, borderRadius: 'var(--radius-lg)', background: data.privacy.externalClaimsEligible ? 'color-mix(in srgb,#16856f 7%,var(--bg-elevated))' : 'color-mix(in srgb,#c68a16 7%,var(--bg-elevated))' }}>
         <div><strong>Sales-deck proof</strong><p className="text-muted" style={{ margin: '4px 0 0', fontSize: 11 }}>{data.privacy.externalClaimsEligible ? `Eligible: ${data.sampleSize} content-free sessions exceed the ${data.privacy.minimumExternalCohort}-session privacy threshold.` : `Internal preview only: at least ${data.privacy.minimumExternalCohort} sessions are required before using this cohort externally.`}</p></div>
         <button type="button" className="btn-ghost" disabled={!data.privacy.externalClaimsEligible} onClick={() => void copyBrief()}>{copyStatus || 'Copy value brief'}</button>
       </section>

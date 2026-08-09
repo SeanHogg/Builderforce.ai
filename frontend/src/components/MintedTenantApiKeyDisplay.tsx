@@ -20,7 +20,7 @@ const BUILDERFORCE_BASE_URL = 'https://api.builderforce.ai';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--coral-bright, #f4726e)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -39,7 +39,7 @@ const codeBox: React.CSSProperties = {
   fontSize: 12,
   padding: '10px 12px',
   background: 'var(--bg-elevated)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   wordBreak: 'break-all',
   border: '1px solid var(--border-subtle)',
 };
@@ -51,7 +51,7 @@ const buttonStyle: React.CSSProperties = {
   background: 'var(--surface-interactive)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
 };
 

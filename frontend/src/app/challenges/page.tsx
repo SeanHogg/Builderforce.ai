@@ -30,7 +30,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -46,7 +46,7 @@ const label: React.CSSProperties = {
 const chip: React.CSSProperties = {
   display: 'inline-block',
   padding: '3px 10px',
-  borderRadius: 999,
+  borderRadius: 'var(--radius-full)',
   border: '1px solid var(--border-subtle)',
   background: 'var(--surface-sunken, transparent)',
   color: 'var(--text-secondary)',
@@ -56,10 +56,10 @@ const chip: React.CSSProperties = {
 
 const primaryButton: React.CSSProperties = {
   padding: '10px 18px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--accent, #2f6fed)',
   background: 'var(--accent, #2f6fed)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   fontWeight: 600,
   fontSize: 14,
   cursor: 'pointer',
@@ -67,7 +67,7 @@ const primaryButton: React.CSSProperties = {
 
 const secondaryButton: React.CSSProperties = {
   padding: '10px 18px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
   background: 'transparent',
   color: 'var(--text-primary)',
@@ -83,7 +83,7 @@ const codeCell: React.CSSProperties = {
   color: 'var(--text-primary)',
   background: 'var(--surface-sunken, transparent)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   padding: '3px 7px',
   wordBreak: 'break-all',
 };
@@ -385,7 +385,7 @@ export default function ChallengesPage() {
               minHeight: 180,
               resize: 'vertical',
               padding: 12,
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)',
               background: 'var(--bg-elevated, transparent)',
               color: 'var(--text-primary)',
@@ -443,7 +443,7 @@ export default function ChallengesPage() {
                     alignItems: 'baseline',
                     justifyContent: 'space-between',
                     padding: '10px 12px',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-subtle)',
                     background: selected?.id === c.id ? 'var(--bg-elevated, transparent)' : 'transparent',
                     color: 'var(--text-primary)',

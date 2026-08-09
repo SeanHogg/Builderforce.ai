@@ -204,7 +204,7 @@ export function WizardPublishStep() {
           {(['public', 'private'] as const).map((v) => (
             <button key={v} type="button" onClick={() => patch({ visibility: v })}
               style={{
-                padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 background: profile.visibility === v ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
                 border: `1px solid ${profile.visibility === v ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                 color: 'var(--text-primary)',
@@ -253,7 +253,7 @@ export function WizardFindWorkStep() {
         ] as const).map(({ href, emoji, key }) => (
           <Link key={key} href={href}
             style={{
-              display: 'block', padding: 16, borderRadius: 12, textDecoration: 'none',
+              display: 'block', padding: 16, borderRadius: 'var(--radius-lg)', textDecoration: 'none',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
             }}>
             <span style={{ fontSize: 22 }}>{emoji}</span>

@@ -94,7 +94,7 @@ export function GitHubDeployPanel({ projectId, subdomain }: GitHubDeployPanelPro
             onClick={enable}
             disabled={busy}
             style={{
-              padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+              padding: '9px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
               cursor: busy ? 'wait' : 'pointer', background: 'var(--bg-elevated)',
               color: 'var(--text-primary)', fontWeight: 600, fontSize: 13.5,
               fontFamily: 'var(--font-display)', alignSelf: 'flex-start',
@@ -130,7 +130,7 @@ export function GitHubDeployPanel({ projectId, subdomain }: GitHubDeployPanelPro
                 </summary>
                 <pre
                   style={{
-                    marginTop: 8, padding: 12, borderRadius: 8, overflowX: 'auto',
+                    marginTop: 8, padding: 12, borderRadius: 'var(--radius-md)', overflowX: 'auto',
                     background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
                     color: 'var(--text-secondary)', fontSize: 11.5, lineHeight: 1.5,
                     fontFamily: 'var(--font-mono, monospace)',

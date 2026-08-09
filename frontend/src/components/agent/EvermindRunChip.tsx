@@ -36,7 +36,7 @@ export function EvermindRunChip({ models, projectId }: { models: readonly string
         fontWeight: 600,
         color: 'var(--ev-personality, #9085e9)',
         padding: '2px 8px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         background: 'var(--bg-deep)',
         border: '1px solid var(--ev-personality, #9085e9)',
       }}

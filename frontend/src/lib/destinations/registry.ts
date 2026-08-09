@@ -60,13 +60,13 @@ const CANVAS_DESTINATIONS: Destination[] = [
 
 /**
  * Route → the plan feature its API actually enforces. Verified against the
- * server: `/settings/persona` is gated by `tenantHasFeature('psychometricPersona')`
+ * server: `/settings/viewpoint` is gated by `tenantHasFeature('psychometricPersona')`
  * in personaRoutes/personalityRoutes, and `/insights/finance` by
  * `requirePlanFeature('advancedInsights')` in insightsRoutes. Nothing else is
  * listed, because nothing else is gated.
  */
 const FEATURE_BY_HREF: Record<string, PlanFeatureKey | undefined> = {
-  '/settings/persona': 'psychometricPersona',
+  '/settings/viewpoint': 'psychometricPersona',
   '/insights/finance': 'advancedInsights',
 };
 

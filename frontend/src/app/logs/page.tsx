@@ -8,8 +8,8 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import PageContainer from '@/components/PageContainer';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
-  user_registered: 'var(--cyan-bright, #00e5cc)',
-  user_login: 'var(--cyan-bright, #00e5cc)',
+  user_registered: 'var(--cyan-bright, var(--cyan-bright))',
+  user_login: 'var(--cyan-bright, var(--cyan-bright))',
   task_created: 'var(--text-secondary)',
   task_updated: 'var(--text-secondary)',
   task_submitted: 'var(--coral-bright, #f4726e)',
@@ -41,7 +41,7 @@ function EventTypeBadge({ type }: { type: string }) {
         fontSize: 11,
         fontWeight: 700,
         padding: '2px 8px',
-        borderRadius: 5,
+        borderRadius: 'var(--radius-sm)',
         background: `${color}22`,
         color,
         whiteSpace: 'nowrap',
@@ -102,7 +102,7 @@ export default function AuditLogsContent() {
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -122,7 +122,7 @@ export default function AuditLogsContent() {
             background: 'var(--bg-base)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
           }}
         >
           <option value="">All event types</option>
@@ -139,7 +139,7 @@ export default function AuditLogsContent() {
             background: 'var(--bg-base)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
           }}
         >
           <option value="">All resource types</option>
@@ -156,7 +156,7 @@ export default function AuditLogsContent() {
         <div
           style={{
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
             background: 'rgba(244,114,94,0.1)',
             color: 'var(--coral-bright, #f4726e)',
             fontSize: 13,
@@ -176,7 +176,7 @@ export default function AuditLogsContent() {
             color: 'var(--text-muted)',
             background: 'var(--bg-base)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
           }}
         >
           No audit events found.
@@ -196,7 +196,7 @@ export default function AuditLogsContent() {
               style={{
                 background: 'var(--bg-base)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 overflow: 'hidden',
               }}
             >
@@ -265,7 +265,7 @@ export default function AuditLogsContent() {
                           color: 'var(--text-secondary)',
                           background: 'var(--bg-elevated)',
                           padding: '8px 10px',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           overflowX: 'auto',
                           margin: 0,
                         }}
@@ -293,7 +293,7 @@ export default function AuditLogsContent() {
                 style={{
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-lg)',
                   padding: 18,
                   display: 'flex',
                   flexDirection: 'column',
@@ -361,7 +361,7 @@ export default function AuditLogsContent() {
                             color: 'var(--text-secondary)',
                             background: 'var(--bg-base)',
                             padding: '8px 10px',
-                            borderRadius: 6,
+                            borderRadius: 'var(--radius-sm)',
                             overflowX: 'auto',
                             margin: 0,
                           }}

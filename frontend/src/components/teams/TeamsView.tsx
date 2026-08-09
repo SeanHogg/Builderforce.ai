@@ -40,21 +40,21 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 const KIND_ACCENT: Record<TeamMemberKind, string> = {
   human: '#3b82f6',
   cloud_agent: 'var(--coral-bright)',
-  host_agent: '#22c55e',
+  host_agent: 'var(--success)',
 };
 
 const btnPrimary: React.CSSProperties = {
   padding: '7px 16px', fontSize: 13, fontWeight: 600,
   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)',
-  background: 'transparent', border: '1px solid var(--coral-bright)', borderRadius: 8, cursor: 'pointer',
+  background: 'transparent', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13, color: 'var(--text-primary)',
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box',
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', boxSizing: 'border-box',
 };
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6,
@@ -109,7 +109,7 @@ function MemberPill({ kind }: { kind: TeamMemberKind }) {
   return (
     <span
       style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-sm)',
         background: 'color-mix(in srgb, ' + KIND_ACCENT[kind] + ' 15%, transparent)',
         color: KIND_ACCENT[kind], letterSpacing: 0.3, whiteSpace: 'nowrap',
       }}
@@ -330,7 +330,7 @@ export function TeamsView() {
       </SlideOutPanel>
 
       {/* Team list */}
-      <section style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20 }}>
+      <section style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
             {t('heading')}
@@ -347,7 +347,7 @@ export function TeamsView() {
         </div>
 
         {error && (
-          <div style={{ padding: '10px 14px', background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+          <div style={{ padding: '10px 14px', background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)', fontSize: 13, marginBottom: 12 }}>
             {error}
           </div>
         )}
@@ -372,7 +372,7 @@ export function TeamsView() {
                   textAlign: 'left', padding: 16, display: 'flex', flexDirection: 'column', gap: 8,
                   background: 'var(--bg-base)',
                   border: `1px solid ${hoveredId === team.id ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                  borderRadius: 12, cursor: 'pointer',
+                  borderRadius: 'var(--radius-lg)', cursor: 'pointer',
                   boxShadow: hoveredId === team.id ? '0 4px 14px rgba(0,0,0,0.10)' : 'none',
                   transform: hoveredId === team.id ? 'translateY(-1px)' : 'none',
                   transition: 'border-color 120ms, box-shadow 120ms, transform 120ms',

@@ -9,7 +9,7 @@ const btn = (variant: 'primary' | 'tertiary'): React.CSSProperties => ({
   padding: '6px 12px',
   fontSize: 13,
   fontWeight: 600,
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   border: variant === 'primary' ? 'none' : '1px solid var(--border-subtle)',
   background: variant === 'primary' ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-deep)',

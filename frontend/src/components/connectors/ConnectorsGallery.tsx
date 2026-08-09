@@ -43,7 +43,7 @@ const cardGrid: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
   display: 'flex',
   flexDirection: 'column',
@@ -54,14 +54,14 @@ const cardStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  width: '100%', padding: '9px 11px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box',
 };
 const labelStyle: React.CSSProperties = {
@@ -180,12 +180,12 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('gallery.actionCount', { count: c.actionCount })}</span>
                   {c.origin === 'tenant' && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '1px 6px' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>
                       {t('gallery.custom')}
                     </span>
                   )}
                   {c.status === 'draft' && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '1px 6px' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>
                       {t('gallery.draft')}
                     </span>
                   )}
@@ -425,11 +425,11 @@ function ActionsTab({ detail }: { detail: ConnectorDetail }) {
         <div key={a.key} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--text-primary)' }}>{a.label}</span>
-            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '1px 5px', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 'var(--radius-sm)', padding: '1px 5px', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
               {a.method}
             </span>
             {a.mutates && (
-              <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '1px 5px', border: '1px solid var(--coral-bright)', color: 'var(--coral-bright)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 'var(--radius-sm)', padding: '1px 5px', border: '1px solid var(--coral-bright)', color: 'var(--coral-bright)' }}>
                 {t('actions.writes')}
               </span>
             )}

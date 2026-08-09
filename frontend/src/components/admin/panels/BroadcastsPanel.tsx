@@ -44,7 +44,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
         minWidth: 130,
         padding: '12px 14px',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         background: 'var(--surface-card)',
       }}
     >

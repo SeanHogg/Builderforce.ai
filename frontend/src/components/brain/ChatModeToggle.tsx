@@ -39,7 +39,7 @@ export function ChatModeToggle({ value, onChange }: ChatModeToggleProps) {
         gap: 2,
         flexShrink: 0,
         padding: 2,
-        borderRadius: 9999,
+        borderRadius: 'var(--radius-full)',
         border: '1px solid var(--border-subtle, rgba(128,128,128,0.3))',
         background: 'var(--bg-base, transparent)',
       }}
@@ -60,7 +60,7 @@ export function ChatModeToggle({ value, onChange }: ChatModeToggleProps) {
               gap: 5,
               height: 'var(--chat-ctl-size, 32px)',
               padding: '0 16px',
-              borderRadius: 9999,
+              borderRadius: 'var(--radius-full)',
               border: 'none',
               fontSize: 13,
               fontWeight: active ? 600 : 500,

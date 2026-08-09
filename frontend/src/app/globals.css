@@ -422,7 +422,7 @@ textarea::placeholder {
   color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -590,7 +590,7 @@ html[data-theme='light'] .stars {
 .quickstart-skin .code-block {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -635,7 +635,7 @@ html[data-theme='light'] .stars {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-interactive);
   color: var(--text-muted);
   cursor: pointer;
@@ -683,7 +683,7 @@ html[data-theme='light'] .stars {
   gap: 4px;
   background: var(--surface-overlay);
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 html[data-theme='light'] .nebula {
@@ -702,7 +702,7 @@ html[data-theme='light'] .nebula {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -738,7 +738,7 @@ html[data-theme='light'] .nebula {
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
   background: var(--surface-card-strong);
   cursor: pointer;
@@ -792,7 +792,7 @@ html[data-theme='light'] .nebula {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   backdrop-filter: blur(12px);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
 }
 
 .glass-card:hover {
@@ -1355,7 +1355,7 @@ html[data-theme='light'] .nebula {
 }
 /* Clicking a meter's trend chart drills into its Insights report. */
 .usage-meter .usage-meter-chart-link {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   opacity: 0.92;
   transition: opacity 0.2s, background 0.2s;
 }
@@ -2153,7 +2153,7 @@ select.input option {
 
 .admin-page .badge {
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
 }
@@ -2286,7 +2286,7 @@ select.input option {
   height: 100%;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg);
 }
@@ -2321,7 +2321,7 @@ select.input option {
 
 .bs-chat-item {
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin-bottom: 2px;
   cursor: pointer;
   border: 1px solid transparent;
@@ -2381,7 +2381,7 @@ select.input option {
 .bs-bubble {
   max-width: 75%;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -2420,7 +2420,7 @@ select.input option {
   font-size: 12px;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .bs-action-btn:hover {
@@ -2546,7 +2546,7 @@ select.input option {
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-base);
   color: var(--text-secondary);
   font-size: 13px;
@@ -2616,7 +2616,7 @@ select.input option {
   width: 34px;
   height: 34px;
   margin-top: -6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--coral-bright), var(--coral-mid));
   color: #fff;
   box-shadow: 0 3px 10px color-mix(in srgb, var(--coral-bright) 45%, transparent);
@@ -2638,7 +2638,7 @@ select.input option {
     margin-right: 2px;
     padding: 0;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -2692,7 +2692,7 @@ select.input option {
     width: 40px;
     height: 40px;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -2874,7 +2874,7 @@ select.input option {
 .emulation-bar__btn {
   flex-shrink: 0;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: transparent;
   color: inherit;
@@ -2924,7 +2924,7 @@ select.input option {
   z-index: 10000;
   background: #292524;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   list-style: none;
   margin: 0;
   padding: 4px 0;
@@ -2965,7 +2965,7 @@ select.input option {
   z-index: 10001;
   background: #1c1917;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   min-width: 220px;
   font-size: 11px;
@@ -3098,7 +3098,7 @@ select.input option {
   padding: 3px 8px;
   font-size: 11px;
   border: 1px solid var(--border, rgba(255, 255, 255, 0.2));
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary, #e4e4e7);
   cursor: pointer;
@@ -3111,7 +3111,7 @@ select.input option {
   margin-left: 4px;
   background: var(--error, #ef4444);
   color: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0 5px;
   font-size: 10px;
 }
@@ -3286,7 +3286,7 @@ select.input option {
   color: var(--coral-bright);
   background: var(--surface-coral-soft);
   border: 1px solid var(--border-accent);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 2px 7px;
 }
 
@@ -3303,7 +3303,7 @@ select.input option {
   align-items: center;
   gap: 5px;
   padding: 9px 13px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-display);
   font-size: 0.92rem;
   font-weight: 500;
@@ -3330,7 +3330,7 @@ select.input option {
   padding: 8px;
   background: var(--chrome-strong);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
   opacity: 0;
   visibility: hidden;
@@ -3358,7 +3358,7 @@ select.input option {
 .mh-panel-link {
   display: block;
   padding: 9px 11px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   font-size: 0.88rem;
   color: var(--text-secondary);
   text-decoration: none;
@@ -3393,7 +3393,7 @@ select.input option {
   align-items: center;
   gap: 9px;
   padding: 7px 9px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   font-size: 0.8rem;
   color: var(--text-secondary);
   text-decoration: none;
@@ -3411,7 +3411,7 @@ select.input option {
   color: var(--text-primary);
   text-decoration: none;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   transition: background 0.18s ease;
 }
 .mh-signin:hover { background: var(--surface-interactive); }
@@ -3422,7 +3422,7 @@ select.input option {
   color: #fff;
   text-decoration: none;
   padding: 9px 18px;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
   box-shadow: 0 6px 18px var(--shadow-coral-mid);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -3467,7 +3467,7 @@ select.input option {
 .mh-drawer-link {
   display: block;
   padding: 12px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 500;
@@ -3607,7 +3607,7 @@ select.input option {
   height: auto;
   display: block;
   margin: 28px auto;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 /* Document-scale Markdown typography (see DocumentMarkdown.tsx). Shared by every
@@ -3663,13 +3663,13 @@ select.input option {
   border-left: 3px solid var(--border, #444);
   color: var(--text-muted, #9ca3af);
   background: var(--surface, rgba(127, 127, 127, 0.06));
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 .markdown-body code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;
   padding: 0.15em 0.4em;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: var(--surface, rgba(127, 127, 127, 0.12));
   border: 1px solid var(--border-subtle, var(--border, #333));
 }
@@ -3677,7 +3677,7 @@ select.input option {
   margin: 1.1em 0;
   padding: 1em;
   overflow-x: auto;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface, #111827);
   border: 1px solid var(--border, #333);
 }
@@ -3693,7 +3693,7 @@ select.input option {
   border: none;
   border-top: 1px solid var(--border, #333);
 }
-.markdown-body img { max-width: 100%; height: auto; border-radius: 10px; }
+.markdown-body img { max-width: 100%; height: auto; border-radius: var(--radius-lg); }
 .markdown-body table {
   width: 100%;
   margin: 1.1em 0;
@@ -3709,7 +3709,7 @@ select.input option {
 }
 .markdown-body th { background: var(--surface, rgba(127, 127, 127, 0.08)); font-weight: 600; }
 /* Keyboard users can bypass repeated navigation; hidden only until focused. */
-.skip-to-content { position: fixed; z-index: 20000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: 8px; background: #fff; color: #111; font-weight: 700; }
+.skip-to-content { position: fixed; z-index: 20000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: var(--radius-md); background: #fff; color: #111; font-weight: 700; }
 .skip-to-content:focus { transform: translateY(0); outline: 3px solid #2563eb; outline-offset: 2px; }
 
 /* Privacy choices — compact toast-like card that stays clear of the primary
@@ -3724,7 +3724,7 @@ select.input option {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, #4d9eff 22%);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 18px 55px rgba(0, 0, 0, .48), 0 0 0 1px rgba(77, 158, 255, .04) inset;
   backdrop-filter: blur(18px);
   font-family: var(--font-body);
@@ -3732,11 +3732,11 @@ select.input option {
 .privacy-choice-heading { display: flex; align-items: center; gap: 10px; }
 .privacy-choice-heading h2 { margin: 0; font: 700 14px/1.3 var(--font-display); letter-spacing: -.01em; }
 .privacy-choice-heading > div > span { display: block; margin-top: 2px; color: var(--text-muted); font-size: 11px; }
-.privacy-choice-icon { display: grid; flex: 0 0 34px; width: 34px; height: 34px; place-items: center; color: #79adff; background: rgba(77, 158, 255, .12); border: 1px solid rgba(77, 158, 255, .2); border-radius: 10px; }
-.privacy-choice-gpc { margin-left: auto; padding: 4px 7px; color: #6ee7b7; background: rgba(16, 185, 129, .1); border: 1px solid rgba(16, 185, 129, .22); border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.privacy-choice-icon { display: grid; flex: 0 0 34px; width: 34px; height: 34px; place-items: center; color: #79adff; background: rgba(77, 158, 255, .12); border: 1px solid rgba(77, 158, 255, .2); border-radius: var(--radius-lg); }
+.privacy-choice-gpc { margin-left: auto; padding: 4px 7px; color: #6ee7b7; background: rgba(16, 185, 129, .1); border: 1px solid rgba(16, 185, 129, .22); border-radius: var(--radius-full); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .privacy-choice-copy { margin: 12px 0 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
 .privacy-choice-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.privacy-choice-button { min-height: 38px; padding: 8px 12px; border-radius: 9px; font: 700 12px/1 var(--font-display); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.privacy-choice-button { min-height: 38px; padding: 8px 12px; border-radius: var(--radius-md); font: 700 12px/1 var(--font-display); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
 .privacy-choice-button:hover:not(:disabled) { transform: translateY(-1px); }
 .privacy-choice-button:focus-visible, .privacy-choice-footer button:focus-visible, .privacy-choice-footer a:focus-visible { outline: 2px solid #79adff; outline-offset: 2px; }
 .privacy-choice-primary { color: #fff; background: linear-gradient(135deg, #4d9eff, #2563eb); border: 1px solid #579fff; box-shadow: 0 5px 16px rgba(37, 99, 235, .24); }
@@ -3747,7 +3747,7 @@ select.input option {
 .privacy-choice-footer { display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: 11px; color: var(--text-muted); font-size: 11px; }
 .privacy-choice-footer button, .privacy-choice-footer a { padding: 1px; color: var(--text-muted); background: none; border: 0; font: inherit; text-decoration: none; cursor: pointer; }
 .privacy-choice-footer button:hover, .privacy-choice-footer a:hover { color: #79adff; text-decoration: underline; }
-.privacy-choice-settings { margin: 13px 0 14px; padding: 2px 11px; background: color-mix(in srgb, var(--bg-base) 86%, transparent); border: 1px solid var(--border-subtle); border-radius: 11px; }
+.privacy-choice-settings { margin: 13px 0 14px; padding: 2px 11px; background: color-mix(in srgb, var(--bg-base) 86%, transparent); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
 .privacy-choice-setting { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 14px; }
 .privacy-choice-setting + .privacy-choice-setting { border-top: 1px solid var(--border-subtle); }
 .privacy-choice-setting strong { display: block; margin-bottom: 2px; font-size: 12px; }
@@ -3756,7 +3756,7 @@ select.input option {
 .privacy-choice-toggle { width: 34px; height: 18px; accent-color: #4d9eff; cursor: pointer; }
 .privacy-choice-gpc-note { margin: 0 0 9px; color: #6ee7b7; font-size: 10px; line-height: 1.4; }
 @media (max-width: 600px) {
-  .privacy-choice-card { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto; padding: 14px; border-radius: 14px; }
+  .privacy-choice-card { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto; padding: 14px; border-radius: var(--radius-lg); }
 }
 
 /* ---------------------------------------------------------------------------

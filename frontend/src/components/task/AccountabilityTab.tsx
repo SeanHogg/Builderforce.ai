@@ -34,7 +34,7 @@ const STATE_TONE: Record<string, { bg: string; fg: string }> = {
 function StateChip({ state, label }: { state: string; label: string }) {
   const tone = STATE_TONE[state] ?? STATE_TONE.pending;
   return (
-    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: tone.bg, color: tone.fg, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: tone.bg, color: tone.fg, whiteSpace: 'nowrap' }}>
       {label}
     </span>
   );
@@ -74,7 +74,7 @@ function GapList({ gaps, tone, title }: { gaps: AccountabilityGap[]; tone: keyof
   const c = GAP_TONE[tone];
   const tr = (key: string, values?: Record<string, string>) => (t.has(key as never) ? t(key as never, values as never) : key);
   return (
-    <div style={{ border: `1px solid ${c.border}`, background: c.bg, borderRadius: 10, padding: '10px 12px' }}>
+    <div style={{ border: `1px solid ${c.border}`, background: c.bg, borderRadius: 'var(--radius-lg)', padding: '10px 12px' }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: c.fg, marginBottom: 6 }}>{title}</div>
       <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
         {gaps.map((g, i) => (
@@ -207,7 +207,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
           {t('signedHeader', { done: report.completedCount, total: report.requiredCount })}
         </div>
-        <div style={{ flex: 1, minWidth: 120, height: 8, borderRadius: 999, background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
+        <div style={{ flex: 1, minWidth: 120, height: 8, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
           <div style={{ width: `${report.percentComplete}%`, height: '100%', background: report.percentComplete >= 100 ? 'var(--success, #16a34a)' : 'var(--coral-bright, #f97316)' }} />
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{report.percentComplete}%</div>
@@ -265,7 +265,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                               setSummary(''); setVerdict('approved');
                             }}
                             style={{
-                              padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap',
+                              padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
                               color: 'var(--text-secondary)', cursor: 'pointer',
                             }}
@@ -283,7 +283,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                               value={verdict}
                               onChange={(e) => setVerdict(e.target.value as HumanVerdict)}
                               aria-label={t('table.verdict')}
-                              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
                             >
                               {HUMAN_VERDICTS.map((v) => (
                                 <option key={v} value={v} style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
@@ -295,15 +295,15 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                               value={summary}
                               onChange={(e) => setSummary(e.target.value)}
                               placeholder={NEEDS_REASON.has(verdict) ? t('signoff.reasonRequired') : t('signoff.summaryPlaceholder')}
-                              style={{ flex: '1 1 200px', minWidth: 0, padding: '7px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                              style={{ flex: '1 1 200px', minWidth: 0, padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
                             />
                             <button
                               type="button"
                               onClick={submitSignoff}
                               disabled={busy || (NEEDS_REASON.has(verdict) && !summary.trim())}
                               style={{
-                                padding: '7px 14px', fontSize: 13, fontWeight: 700, borderRadius: 8, border: 'none',
-                                background: 'var(--coral-bright, #f97316)', color: '#fff',
+                                padding: '7px 14px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-md)', border: 'none',
+                                background: 'var(--coral-bright, #f97316)', color: 'var(--text-on-accent)',
                                 cursor: busy ? 'not-allowed' : 'pointer',
                                 opacity: busy || (NEEDS_REASON.has(verdict) && !summary.trim()) ? 0.6 : 1,
                               }}
@@ -325,7 +325,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
 
       {/* Resource Assessment (manager) */}
       {canManage && (
-        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('assess.title')}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('assess.help')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -333,7 +333,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
               value={addRole}
               onChange={(e) => setAddRole(e.target.value)}
               aria-label={t('assess.rolePlaceholder')}
-              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}
+              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}
             >
               <option value="" style={{ background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}>{t('assess.rolePlaceholder')}</option>
               {roles.map((r) => (
@@ -344,12 +344,12 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
               value={addNote}
               onChange={(e) => setAddNote(e.target.value)}
               placeholder={t('assess.notePlaceholder')}
-              style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}
+              style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}
             />
             <button
               onClick={assess}
               disabled={!addRole || busy}
-              style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', cursor: addRole && !busy ? 'pointer' : 'not-allowed', background: 'var(--coral-bright, #f97316)', color: '#fff', opacity: addRole && !busy ? 1 : 0.6 }}
+              style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', cursor: addRole && !busy ? 'pointer' : 'not-allowed', background: 'var(--coral-bright, #f97316)', color: 'var(--text-on-accent)', opacity: addRole && !busy ? 1 : 0.6 }}
             >
               {t('assess.add')}
             </button>
@@ -358,7 +358,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
             <button
               onClick={materialize}
               disabled={busy}
-              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: busy ? 'not-allowed' : 'pointer' }}
+              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: busy ? 'not-allowed' : 'pointer' }}
             >
               {t('assess.materialize')}
             </button>

@@ -85,14 +85,14 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 
 function btnStyle(disabled = false): React.CSSProperties {
   return {
-    padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+    padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--border-subtle)', background: 'var(--surface-raised, #1c2128)',
     color: 'var(--text-secondary)', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
   };
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)',
+  padding: '6px 8px', fontSize: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-deep, #0d1117)', color: 'var(--text-primary)', minWidth: 120,
 };
 
@@ -182,7 +182,7 @@ export function QaContent() {
       </div>
 
       {error && (
-        <div style={{ padding: '8px 12px', marginBottom: 16, borderRadius: 6, background: 'rgba(248,81,73,0.1)', color: '#f85149', fontSize: 12 }}>
+        <div style={{ padding: '8px 12px', marginBottom: 16, borderRadius: 'var(--radius-sm)', background: 'rgba(248,81,73,0.1)', color: '#f85149', fontSize: 12 }}>
           {error}
         </div>
       )}
@@ -378,8 +378,8 @@ function HeatBar({ heat, max }: { heat: number; max: number }) {
   const pct = max > 0 ? Math.round((heat / max) * 100) : 0;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ display: 'inline-block', width: 60, height: 6, borderRadius: 3, background: 'var(--border-subtle)' }}>
-        <span style={{ display: 'block', width: `${pct}%`, height: 6, borderRadius: 3, background: '#d29922' }} />
+      <span style={{ display: 'inline-block', width: 60, height: 6, borderRadius: 'var(--radius-sm)', background: 'var(--border-subtle)' }}>
+        <span style={{ display: 'block', width: `${pct}%`, height: 6, borderRadius: 'var(--radius-sm)', background: '#d29922' }} />
       </span>
       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{heat}</span>
     </span>
@@ -410,7 +410,7 @@ function FindingsPanel({ explorationId, busy, onRun }: {
   if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. 🎉</Empty>;
 
   return (
-    <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)' }}>
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)' }}>
       <Table head={['Severity', 'Type', 'Route', 'Heat', 'Message', '']}>
         {findings.map((f) => (
           <tr key={f.id}>
@@ -623,7 +623,7 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
       {trend.findings.total > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           {SEVERITY_ORDER.filter((s) => trend.findings.bySeverity[s]).map((s) => (
-            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
+            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
               {s}: {trend.findings.bySeverity[s]}
             </span>
           ))}
@@ -638,7 +638,7 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
             {trend.daily.map((d) => (
               <div key={d.date} title={`${d.date}: ${d.findings} findings, ${d.ciFailures} CI failures`}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minWidth: 4 }}>
-                <span style={{ display: 'block', height: `${(d.ciFailures / peakFindings) * 100}%`, background: '#f85149', borderRadius: '2px 2px 0 0' }} />
+                <span style={{ display: 'block', height: `${(d.ciFailures / peakFindings) * 100}%`, background: '#f85149', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'}} />
                 <span style={{ display: 'block', height: `${(d.findings / peakFindings) * 100}%`, background: '#d29922' }} />
               </div>
             ))}
@@ -661,7 +661,7 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
 
 function Metric({ label, value, hint, color }: { label: string; value: string; hint?: string; color?: string }) {
   return (
-    <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)', minWidth: 130 }}>
+    <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)', minWidth: 130 }}>
       <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1.3 }}>{value}</div>
       {hint && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{hint}</div>}

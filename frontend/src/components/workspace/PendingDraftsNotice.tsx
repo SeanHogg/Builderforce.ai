@@ -28,7 +28,7 @@ export function PendingDraftsNotice() {
       aria-label={t('pendingTitle')}
       style={{
         display: 'flex', flexDirection: 'column', gap: 10,
-        padding: 16, borderRadius: 12,
+        padding: 16, borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border-subtle)',
         background: 'var(--bg-elevated)',
       }}
@@ -44,7 +44,7 @@ export function PendingDraftsNotice() {
               href={`/create/${draft.sessionId}`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
-                minHeight: 40, padding: '8px 14px', borderRadius: 10,
+                minHeight: 40, padding: '8px 14px', borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border)', background: 'var(--bg-surface)',
                 color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.88rem', fontWeight: 600,
               }}

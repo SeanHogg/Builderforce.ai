@@ -65,8 +65,8 @@ export class ErrorBoundary extends React.Component<
           justifyContent: 'center',
           padding: 32,
           fontFamily: 'var(--font-body, system-ui, sans-serif)',
-          background: 'var(--bg-deep, #050810)',
-          color: 'var(--text-primary, #f0f4ff)',
+          background: 'var(--bg-deep, var(--bg-deep))',
+          color: 'var(--text-primary, var(--text-primary))',
         }}
       >
         <div style={{ maxWidth: 560, width: '100%' }}>
@@ -74,7 +74,7 @@ export class ErrorBoundary extends React.Component<
             style={{
               fontSize: 24,
               fontWeight: 700,
-              color: 'var(--error, #f87171)',
+              color: 'var(--error, var(--error))',
               fontFamily: 'var(--font-display, system-ui, sans-serif)',
               marginBottom: 8,
             }}
@@ -84,7 +84,7 @@ export class ErrorBoundary extends React.Component<
           <p
             style={{
               fontSize: 16,
-              color: 'var(--text-secondary, #8892b0)',
+              color: 'var(--text-secondary, var(--text-secondary))',
               marginBottom: 24,
             }}
           >
@@ -95,7 +95,7 @@ export class ErrorBoundary extends React.Component<
             <details
               style={{
                 marginBottom: 24,
-                background: 'var(--bg-elevated, #111827)',
+                background: 'var(--bg-elevated, var(--bg-elevated))',
                 border: '1px solid var(--border, rgba(136,146,176,0.15))',
                 borderRadius: 'var(--radius-md, 8px)',
                 overflow: 'hidden',
@@ -106,7 +106,7 @@ export class ErrorBoundary extends React.Component<
                   padding: '10px 14px',
                   cursor: 'pointer',
                   fontSize: 14,
-                  color: 'var(--text-muted, #5a6480)',
+                  color: 'var(--text-muted, var(--text-muted))',
                 }}
               >
                 Stack trace
@@ -119,7 +119,7 @@ export class ErrorBoundary extends React.Component<
                   overflowX: 'auto',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
-                  color: 'var(--text-secondary, #8892b0)',
+                  color: 'var(--text-secondary, var(--text-secondary))',
                   maxHeight: 300,
                   overflowY: 'auto',
                   borderTop: '1px solid var(--border, rgba(136,146,176,0.15))',
@@ -154,7 +154,7 @@ const primaryBtnStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md, 8px)',
   border: 'none',
   cursor: 'pointer',
-  background: 'var(--coral-bright, #4d9eff)',
+  background: 'var(--coral-bright, var(--coral-bright))',
   color: 'var(--text-on-accent, #fff)',
 };
 
@@ -165,8 +165,8 @@ const secondaryBtnStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md, 8px)',
   border: '1px solid var(--border, rgba(136,146,176,0.15))',
   cursor: 'pointer',
-  background: 'var(--bg-elevated, #111827)',
-  color: 'var(--text-primary, #f0f4ff)',
+  background: 'var(--bg-elevated, var(--bg-elevated))',
+  color: 'var(--text-primary, var(--text-primary))',
   textDecoration: 'none',
   display: 'inline-flex',
   alignItems: 'center',

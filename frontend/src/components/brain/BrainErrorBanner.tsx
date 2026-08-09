@@ -70,7 +70,7 @@ export function BrainErrorBanner({
         padding: '8px 12px',
         background: 'var(--error-bg)',
         color: 'var(--error-text)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
       }}
     />
   );

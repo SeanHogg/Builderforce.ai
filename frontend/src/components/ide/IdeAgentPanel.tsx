@@ -67,13 +67,13 @@ export function IdeAgentPanel({ projectId }: { projectId: number }) {
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') createFromPrompt(); }}
             placeholder="Describe a task for the agent…"
-            style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
+            style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
           />
           <button
             type="button"
             onClick={createFromPrompt}
             disabled={creating || !prompt.trim()}
-            style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, background: 'var(--coral-bright)', color: '#fff', cursor: creating || !prompt.trim() ? 'default' : 'pointer', opacity: creating || !prompt.trim() ? 0.7 : 1, whiteSpace: 'nowrap' }}
+            style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 'var(--radius-md)', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', cursor: creating || !prompt.trim() ? 'default' : 'pointer', opacity: creating || !prompt.trim() ? 0.7 : 1, whiteSpace: 'nowrap' }}
           >
             {creating ? 'Adding…' : '+ Task'}
           </button>
@@ -84,7 +84,7 @@ export function IdeAgentPanel({ projectId }: { projectId: number }) {
           <Select
             value={selectedId ?? ''}
             onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
-            style={{ padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
+            style={{ padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
           >
             {tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
           </Select>

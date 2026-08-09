@@ -122,7 +122,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
           <button
             onClick={() => setIsCreating(true)}
             title="New file"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
           >+</button>
         </div>
       )}
@@ -132,7 +132,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
           <button
             onClick={() => setIsCreating(true)}
             title="New file"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
           >+</button>
         </div>
       )}
@@ -150,7 +150,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
             placeholder="src/newfile.ts"
             style={{
               width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              fontSize: '0.78rem', padding: '4px 8px', borderRadius: 6,
+              fontSize: '0.78rem', padding: '4px 8px', borderRadius: 'var(--radius-sm)',
               outline: 'none', border: '1px solid var(--coral-bright)',
               fontFamily: "'JetBrains Mono', monospace", boxSizing: 'border-box',
             }}

@@ -124,7 +124,7 @@ export default function PermissionsPanel() {
                             textTransform: 'uppercase',
                             letterSpacing: '0.04em',
                             padding: '2px 6px',
-                            borderRadius: 4,
+                            borderRadius: 'var(--radius-sm)',
                             whiteSpace: 'nowrap',
                             color: isEnforced ? 'var(--success-text, #166534)' : 'var(--text-secondary, #6b7280)',
                             background: isEnforced ? 'var(--success-bg, rgba(34,197,94,0.15))' : 'var(--surface-2, rgba(127,127,127,0.12))',

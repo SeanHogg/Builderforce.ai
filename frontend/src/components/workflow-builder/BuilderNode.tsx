@@ -59,7 +59,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
         minWidth: 168,
         background: 'var(--bg-elevated, #1a1c23)',
         border: `1px solid ${selected ? accent : 'var(--border-subtle, rgba(255,255,255,0.1))'}`,
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         boxShadow: selected ? `0 0 0 1px ${accent}` : 'none',
         overflow: 'hidden',
         fontFamily: 'inherit',

@@ -66,7 +66,7 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
             <div
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
-                padding: 18, borderRadius: 12,
+                padding: 18, borderRadius: 'var(--radius-lg)',
                 background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
               }}
             >
@@ -113,7 +113,7 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
           <div
             style={{
               display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start',
-              padding: 18, borderRadius: 12,
+              padding: 18, borderRadius: 'var(--radius-lg)',
               background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
             }}
           >
@@ -126,9 +126,9 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
               type="button"
               onClick={() => { onGoToPublish(); onClose(); }}
               style={{
-                padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                padding: '9px 16px', borderRadius: 'var(--radius-lg)', border: 'none', cursor: 'pointer',
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff', fontWeight: 600, fontSize: 13.5, fontFamily: 'var(--font-display)',
+                color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 13.5, fontFamily: 'var(--font-display)',
               }}
             >
               {t('device.goToPublish')}
@@ -141,7 +141,7 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
 }
 
 const secondaryButton: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
   background: 'var(--bg-deep)', color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-display)',
 };

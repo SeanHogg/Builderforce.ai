@@ -51,10 +51,10 @@ export function DashboardQualityTab() {
             onClick={() => setOpen(true)}
             style={{
               padding: '8px 16px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: 'none',
               background: 'var(--coral-bright)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               fontSize: 14,
               fontWeight: 600,
               cursor: 'pointer',
@@ -82,7 +82,7 @@ export function DashboardQualityTab() {
               autoFocus
               style={{
                 padding: '10px 12px',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-base)',
                 color: 'var(--text-primary)',
@@ -97,10 +97,10 @@ export function DashboardQualityTab() {
             disabled={!name.trim() || creating}
             style={{
               padding: '10px 16px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               border: 'none',
               background: 'var(--coral-bright)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               fontSize: 14,
               fontWeight: 600,
               cursor: !name.trim() || creating ? 'default' : 'pointer',

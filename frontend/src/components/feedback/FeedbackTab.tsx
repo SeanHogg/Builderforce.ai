@@ -28,7 +28,7 @@ import { feedbackApi, FEEDBACK_KINDS, type FeedbackKind } from '@/lib/feedbackAp
 const HIDDEN_PREFIXES = ['/embed', '/login', '/register', '/onboarding'];
 
 const input: React.CSSProperties = {
-  padding: '9px 12px', fontSize: 13, borderRadius: 8, width: '100%', boxSizing: 'border-box',
+  padding: '9px 12px', fontSize: 13, borderRadius: 'var(--radius-md)', width: '100%', boxSizing: 'border-box',
   border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
 const label: React.CSSProperties = {
@@ -107,7 +107,7 @@ export function FeedbackTab() {
           padding: 16px 7px;
           border: 1px solid var(--border-subtle, #2c313a);
           border-right: none;
-          border-radius: 8px 0 0 8px;
+          border-radius: var(--radius-md) 0 0 var(--radius-md);
           cursor: pointer;
           background: var(--bg-elevated, #1d222a);
           color: var(--text-secondary, #98a2b3);
@@ -119,7 +119,7 @@ export function FeedbackTab() {
         }
         .feedback-edge-tab:hover {
           background: var(--coral-bright, #f4726e);
-          color: #fff;
+          color: var(--text-on-accent);
           border-color: var(--coral-bright, #f4726e);
         }
         .feedback-edge-tab:focus-visible {
@@ -142,8 +142,8 @@ export function FeedbackTab() {
                   type="button"
                   onClick={reset}
                   style={{
-                    padding: '9px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
-                    background: 'var(--coral-bright)', color: '#fff', border: 'none',
+                    padding: '9px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none',
                   }}
                 >
                   {t('form.another')}
@@ -152,7 +152,7 @@ export function FeedbackTab() {
                   type="button"
                   onClick={close}
                   style={{
-                    padding: '9px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                    padding: '9px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                     background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)',
                   }}
                 >
@@ -208,8 +208,8 @@ export function FeedbackTab() {
                 onClick={submit}
                 disabled={sending}
                 style={{
-                  padding: '11px 16px', fontSize: 14, fontWeight: 600, borderRadius: 8,
-                  background: 'var(--coral-bright)', color: '#fff', border: 'none',
+                  padding: '11px 16px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-md)',
+                  background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none',
                   cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1,
                 }}
               >

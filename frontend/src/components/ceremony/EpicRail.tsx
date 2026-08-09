@@ -33,7 +33,7 @@ function EpicCard({
       onClick={() => onOpen(epic)}
       style={{
         padding: 10,
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         cursor: 'pointer',
         background: over ? 'var(--surface-coral-soft)' : 'var(--bg-base)',
         border: `1px ${over ? 'dashed var(--coral-bright)' : 'solid var(--border-subtle)'}`,
@@ -93,7 +93,7 @@ export function EpicRail({
         flexDirection: 'column',
         gap: 8,
         padding: 12,
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-deep)',
         border: '1px solid var(--border-subtle)',
         maxHeight: isMobile ? 260 : '100%',

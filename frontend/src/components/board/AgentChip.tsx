@@ -64,7 +64,7 @@ export function AgentChip({ label, status, meta, title, onClick }: AgentChipProp
     gap: 5,
     maxWidth: '100%',
     padding: '2px 8px',
-    borderRadius: 999,
+    borderRadius: 'var(--radius-full)',
     fontSize: 10,
     fontWeight: 600,
     border: `1px solid ${active ? color : 'var(--border-subtle)'}`,

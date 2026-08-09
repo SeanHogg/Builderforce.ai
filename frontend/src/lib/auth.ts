@@ -665,6 +665,26 @@ export async function listTenantMembers(
   return data.users ?? [];
 }
 
+/**
+ * Drop the shell's held team roster after a membership write — the client half of
+ * the api's `membershipChanged`.
+ *
+ * The api clears the roster cache and the footer would otherwise keep the copy it
+ * already holds, so a person you just invited did not appear beside their team
+ * until the next full page load. Dynamically imported because `AuthContext`
+ * imports THIS file, and a static import of the hook module would close that
+ * loop. Best-effort: a roster that cannot be refreshed self-heals on the next
+ * mount.
+ */
+async function refreshTeamRoster(): Promise<void> {
+  try {
+    const { invalidateTeamRoster } = await import('./team/useTeamRoster');
+    invalidateTeamRoster();
+  } catch {
+    // no-op — see above.
+  }
+}
+
 /** Remove a member from the workspace. Requires manager role. */
 export async function removeTenantMember(
   tenantToken: string,
@@ -681,6 +701,7 @@ export async function removeTenantMember(
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to remove member');
   }
+  await refreshTeamRoster();
 }
 
 /** Change an existing member's workspace role. Requires manager (owner to touch owners). */
@@ -701,6 +722,7 @@ export async function updateMemberRole(
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to change role');
   }
+  await refreshTeamRoster();
 }
 
 /** A pending (not-yet-accepted) workspace invitation. */
@@ -737,6 +759,9 @@ export async function inviteByEmail(
     throw new Error(body.error ?? 'Failed to invite user');
   }
   const body = await res.json().catch(() => ({})) as { status?: 'added' | 'pending' };
+  // 'added' means the invitee already had an account and is a member NOW — the
+  // footer roster is stale the instant this resolves.
+  if ((body.status ?? 'added') === 'added') await refreshTeamRoster();
   return { status: body.status ?? 'added', email: email.toLowerCase().trim() };
 }
 

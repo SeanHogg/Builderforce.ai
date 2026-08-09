@@ -40,7 +40,7 @@ export function ProjectHealthGauges({ project, size = 104 }: ProjectHealthGauges
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 12,
         padding: '10px 8px', margin: '2px 0 4px',
-        background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+        background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
       }}
     >
       <GaugeChart
@@ -97,7 +97,7 @@ export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
             display: 'inline-flex', alignItems: 'center', gap: 6,
             fontSize: 12, fontWeight: 700, color: health.color,
             background: 'var(--bg-base)', border: `1px solid ${health.color}`,
-            borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
+            borderRadius: 'var(--radius-full)', padding: '2px 8px', whiteSpace: 'nowrap',
           }}
         >
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: health.color, flexShrink: 0 }} aria-hidden />
@@ -111,8 +111,8 @@ export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
         title={t('doneAria', { pct: health.progressPct, completed: health.completed, total: health.total })}
         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
       >
-        <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden', minWidth: 48 }}>
-          <div style={{ width: `${health.progressPct}%`, height: '100%', background: 'var(--accent)', borderRadius: 999 }} />
+        <div style={{ flex: 1, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden', minWidth: 48 }}>
+          <div style={{ width: `${health.progressPct}%`, height: '100%', background: 'var(--accent)', borderRadius: 'var(--radius-full)' }} />
         </div>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
           {t('donePct', { pct: health.progressPct })}

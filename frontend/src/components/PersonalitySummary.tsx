@@ -56,7 +56,7 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
         fontSize: 11,
         fontWeight: 600,
         padding: '2px 8px',
-        borderRadius: 9999,
+        borderRadius: 'var(--radius-full)',
         background: 'var(--surface-2)',
         color: 'var(--text-strong)',
         border: '1px solid var(--border)',
@@ -69,7 +69,7 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
   return (
     <section
       aria-label={t('title')}
-      style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--surface)' }}
+      style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14, background: 'var(--surface)' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: notable.length ? 12 : 0, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 16 }} aria-hidden>🧠</span>
@@ -105,9 +105,9 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-label={name}
-                  style={{ height: 6, borderRadius: 9999, background: 'var(--surface-2)', overflow: 'hidden' }}
+                  style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', overflow: 'hidden' }}
                 >
-                  <div style={{ width: `${value}%`, height: '100%', background: 'var(--accent, #6366f1)', borderRadius: 9999 }} />
+                  <div style={{ width: `${value}%`, height: '100%', background: 'var(--accent, #6366f1)', borderRadius: 'var(--radius-full)' }} />
                 </div>
               </div>
             );

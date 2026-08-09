@@ -14,7 +14,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
  */
 
 const button: React.CSSProperties = {
-  padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+  padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 interface Props {
@@ -48,7 +48,7 @@ export function EmbedConsentModal({ version, onAgree, onCancel }: Props) {
           <button
             type="button"
             onClick={onAgree}
-            style={{ ...button, background: 'var(--accent, #2563eb)', color: '#fff', border: 'none' }}
+            style={{ ...button, background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none' }}
           >
             {t('agreeAndEnable')}
           </button>

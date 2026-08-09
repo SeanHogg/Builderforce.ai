@@ -129,7 +129,7 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
 }
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 
 function SectionTitle({ children }: { children: React.ReactNode }) {

@@ -34,7 +34,7 @@ export function PowerMeter({
         gap: 2,
       }}
     >
-      <div style={{ width: '100%', height: 6, borderRadius: 3, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+      <div style={{ width: '100%', height: 6, borderRadius: 'var(--radius-sm)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width 0.2s, background 0.2s' }} />
       </div>
       <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1 }}>

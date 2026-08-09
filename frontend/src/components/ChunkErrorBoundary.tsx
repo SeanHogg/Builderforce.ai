@@ -89,7 +89,7 @@ function ChunkErrorFallback({
             onClick={() => void recoverFromChunkError(true)}
             style={{
               padding: '6px 12px',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--border-subtle)',
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
@@ -134,10 +134,10 @@ function ChunkErrorFallback({
             style={{
               marginTop: 8,
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
               padding: '10px 24px',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               fontFamily: 'var(--font-display, system-ui, sans-serif)',
               fontWeight: 600,
               cursor: 'pointer',

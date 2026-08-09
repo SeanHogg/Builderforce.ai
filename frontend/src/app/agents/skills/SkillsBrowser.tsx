@@ -201,7 +201,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         }
         .cc-btn {
           padding: 10px 22px;
-          border-radius: 11px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: var(--text-primary);
           background: var(--surface-interactive, rgba(136,146,176,0.08));
@@ -221,7 +221,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           margin-bottom: 16px;
           padding: 16px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 50%, transparent);
         }
         .cc-skills-filter {
@@ -241,7 +241,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skills-filter select {
           padding: 8px 10px;
           border: 1px solid var(--border-subtle);
-          border-radius: 9px;
+          border-radius: var(--radius-md);
           background: var(--bg-deep);
           color: var(--text-primary);
           font-family: inherit;
@@ -260,7 +260,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skill-card {
           padding: 18px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           display: flex;
           flex-direction: column;
@@ -283,7 +283,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           padding: 3px 8px;
           background: rgba(77,158,255,0.12);
           color: var(--coral-bright);
-          border-radius: 5px;
+          border-radius: var(--radius-sm);
           white-space: nowrap;
         }
         .cc-skill-author {

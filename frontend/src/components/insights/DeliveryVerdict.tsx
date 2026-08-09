@@ -61,7 +61,7 @@ function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslat
   return (
     <div
       style={{
-        background: 'var(--bg-elevated)', borderRadius: 12, padding: 20,
+        background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20,
         border: '1px solid var(--border-subtle)', borderLeft: `5px solid ${color}`,
       }}
     >
@@ -85,7 +85,7 @@ function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslat
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600,
                     color: TONE_COLOR[r.tone], background: 'var(--bg-base)', border: `1px solid ${TONE_COLOR[r.tone]}`,
-                    padding: '4px 10px', borderRadius: 999,
+                    padding: '4px 10px', borderRadius: 'var(--radius-full)',
                   }}
                 >
                   <span aria-hidden>{r.tone === 'good' ? '✓' : r.tone === 'warn' ? '!' : '✕'}</span>

@@ -12,7 +12,7 @@ import { ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const th: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 11, color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 13, whiteSpace: 'nowrap' };
@@ -27,7 +27,7 @@ function ScoreBar({ m }: { m: MemberEngagement }) {
     <span style={{ width: `${(pts / 100) * 100}%`, background: color, display: 'inline-block', height: '100%' }} title={`${pts.toFixed(0)} / ${cap}`} />
   );
   return (
-    <span style={{ display: 'inline-flex', width: 120, height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--border-subtle)' }}>
+    <span style={{ display: 'inline-flex', width: 120, height: 8, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--border-subtle)' }}>
       {seg(m.breakdown.activityPts, 40, '#39d353')}
       {seg(m.breakdown.platformPts, 25, '#6366f1')}
       {seg(m.breakdown.toolingPts, 20, '#8a4be0')}

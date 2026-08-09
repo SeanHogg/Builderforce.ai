@@ -12,8 +12,8 @@ import { PmEmpty, PmError, StatusPill } from './pmShared';
 import { EpicPanel } from './EpicPanel';
 
 const newEpicButtonStyle: React.CSSProperties = {
-  padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)',
-  color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 /**

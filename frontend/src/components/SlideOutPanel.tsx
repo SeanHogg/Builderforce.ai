@@ -174,7 +174,7 @@ export function SlideOutPanel({
                 alignItems: 'center',
                 justifyContent: 'center',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-base)',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',

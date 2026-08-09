@@ -534,7 +534,6 @@
       "calendar": "Kalender",
       "facts": "Fakten",
       "snapshots": "Reviews",
-      "persona": "Persona",
       "plan": "Planung",
       "incidents": "Vorfälle",
       "oncall": "Bereitschaft",
@@ -548,7 +547,8 @@
       "autonomy": "Autonomie",
       "coordination": "Koordination",
       "memory": "Gedächtnis",
-      "rehearsal": "Probelauf"
+      "rehearsal": "Probelauf",
+      "viewpoint": "Blickwinkel"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -1414,7 +1414,6 @@
       "error": "Deine Verfügbarkeit konnte nicht aktualisiert werden. Bitte versuche es erneut."
     },
     "accountTab": "Konto",
-    "sessionsTab": "Sitzungen",
     "subnavLabel": "Einstellungsbereiche",
     "emailTab": "E-Mail",
     "logsTab": "Protokolle",
@@ -10781,19 +10780,19 @@
     "sourcePlaceholder": "z. B. Onboarding-Anruf"
   },
   "personaLens": {
-    "pageTitle": "Lens-Persona",
-    "title": "Deine Lens-Persona",
-    "subtitle": "Wähle die Rolle, die du einnimmst. Sie ordnet und hebt die Analyse-Lenses hervor, die dich betreffen — sie ändert nie deinen Zugriff.",
+    "pageTitle": "Blickwinkel",
+    "title": "Dein Blickwinkel",
+    "subtitle": "Wähle die Rolle, in der du arbeitest. Sie ordnet die Analyse-Ansichten neu und hebt die für dich wichtigen hervor — sie ändert nie, worauf du zugreifen kannst.",
     "loading": "Wird geladen…",
     "primary": "Primär",
-    "save": "Persona speichern",
+    "save": "Blickwinkel speichern",
     "saving": "Wird gespeichert…",
-    "saved": "Persona gespeichert",
-    "saveFailed": "Persona konnte nicht gespeichert werden",
-    "highlightsFor": "Hervorgehobene Lenses für {persona}",
+    "saved": "Blickwinkel gespeichert",
+    "saveFailed": "Blickwinkel konnte nicht gespeichert werden",
+    "highlightsFor": "Hervorgehobene Ansichten für {persona}",
     "home": "Start",
     "viewingAs": "Ansicht als",
-    "viewShapingNote": "Eine Persona formt nur deine Ansicht. Jede Lens respektiert weiterhin deine Workspace-Rolle — du erhältst nie Zugriff, den du sonst nicht hättest.",
+    "viewShapingNote": "Ein Blickwinkel prägt nur deine Ansicht. Jede Analyse respektiert weiterhin deine Workspace-Rolle — du erhältst nie Zugriff, den du sonst nicht hättest.",
     "personas": {
       "ceo": "CEO",
       "cfo": "CFO",

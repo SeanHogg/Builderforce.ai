@@ -81,7 +81,7 @@ export function ValueStreamGraph() {
       position: pos.get(n.id) ?? { x: 0, y: 0 },
       data: { label: `${n.name} · ${n.completionPct}%` },
       style: {
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: `${n.onCriticalPath ? 3 : 2}px solid ${n.onCriticalPath ? CRITICAL_COLOR : (STATUS_COLOR[n.status] ?? '#6b7280')}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
@@ -156,7 +156,7 @@ export function ValueStreamGraph() {
         <Canvas3DControlsProvider>
           {/* The scene fills this box, so it has to be the box it is positioned
               against — see `.scene` in Canvas3DView.module.css. */}
-          <div ref={boardRef} style={{ position: 'relative', height: 420, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+          <div ref={boardRef} style={{ position: 'relative', height: 420, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
             <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onInit={(instance) => { flowRef.current = instance; }} fitView fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }} minZoom={CANVAS_FIT_MIN_ZOOM} proOptions={{ hideAttribution: true }}>
               <Background color="var(--border-subtle)" gap={18} />
               <CanvasCommands

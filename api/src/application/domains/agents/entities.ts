@@ -15,6 +15,8 @@ import {
   aiVoiceAgentCalls,
   answerCache,
   enrichmentCache,
+  executionClaimEvidence,
+  executionClaims,
   geocoderCache,
   modelLocks,
   workflowActions,
@@ -36,4 +38,7 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   /** A lock is held or it is not. Editing one by hand is how two workers get the
    *  same model at the same time. */
   entity(modelLocks, { readOnly: true }),
+  /** Completion provenance is append-only runtime history. */
+  entity(executionClaims, { readOnly: true }),
+  entity(executionClaimEvidence, { readOnly: true }),
 ]);

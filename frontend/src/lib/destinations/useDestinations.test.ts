@@ -3,13 +3,13 @@ import { destinationHref } from './useDestinations';
 import type { GatedDestination } from './useDestinations';
 
 const base: GatedDestination = {
-  id: 'settings.persona', labelKey: 'tab.persona', groupLabelKey: 'group.settings',
-  href: '/settings/persona', icon: '🎯', feature: 'psychometricPersona', locked: false,
+  id: 'settings.viewpoint', labelKey: 'tab.viewpoint', groupLabelKey: 'group.settings',
+  href: '/settings/viewpoint', icon: '🎯', feature: 'psychometricPersona', locked: false,
 };
 
 describe('destinationHref', () => {
   it('goes to the page when the tenant is entitled', () => {
-    expect(destinationHref(base)).toBe('/settings/persona');
+    expect(destinationHref(base)).toBe('/settings/viewpoint');
   });
 
   it('sends a locked destination to pricing rather than into a 402', () => {

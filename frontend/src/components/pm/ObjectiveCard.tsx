@@ -24,18 +24,18 @@ import { useConfirm } from '@/components/ConfirmProvider';
  */
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 9px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 12px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '7px 12px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const ghostBtn: React.CSSProperties = {
   ...btnStyle, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)',
 };
 const classBtn = (active: boolean, color: string): React.CSSProperties => ({
-  padding: '4px 10px', borderRadius: 7, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+  padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
   border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
   background: active ? color : 'transparent', color: active ? '#fff' : 'var(--text-secondary)',
 });
@@ -177,7 +177,7 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {o.links.length === 0 && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('okr.noLinks')}</span>}
             {o.links.map((l) => (
-              <span key={l.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontSize: '0.74rem' }}>
+              <span key={l.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontSize: '0.74rem' }}>
                 <span style={{ color: 'var(--text-muted)' }}>{t(`okr.linkKind.${l.kind}`)}</span>
                 {l.label}
                 <button type="button" disabled={busy} onClick={() => run(() => pmoApi.objectives.removeLink(o.id, l.id))} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }} aria-label={t('okr.removeLink')}>✕</button>

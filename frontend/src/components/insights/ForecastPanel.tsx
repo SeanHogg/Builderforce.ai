@@ -25,7 +25,7 @@ import { forecastApi, type ForecastInsights, type ForecastMetric, type ForecastU
 const METRICS: ForecastMetric[] = ['cost', 'cycle_time', 'cfr', 'throughput'];
 
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 
@@ -142,7 +142,7 @@ export function ForecastPanel({ initialMetric = 'cost', initialDays = 90 }: { in
                 <button
                   type="button"
                   onClick={() => dismiss(a.day)}
-                  style={{ padding: '3px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.76rem', cursor: 'pointer' }}
+                  style={{ padding: '3px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.76rem', cursor: 'pointer' }}
                 >
                   {t('forecast.dismiss')}
                 </button>

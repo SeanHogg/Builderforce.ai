@@ -11,7 +11,7 @@ import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
@@ -57,7 +57,7 @@ export function TenantActivityPanel() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           {[7, 30, 90].map((d) => (
             <button key={d} onClick={() => setDays(d)} style={{
-              padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer',
               border: '1px solid var(--border-subtle)',
               background: days === d ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
               color: days === d ? '#fff' : 'var(--text-secondary)',

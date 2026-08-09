@@ -137,7 +137,7 @@ export function TrendChart({
         <div style={legendStyle}>
           {series.map((s, si) => (
             <span key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color ?? colorAt(si) }} />
+              <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color ?? colorAt(si) }} />
               {s.label}
             </span>
           ))}

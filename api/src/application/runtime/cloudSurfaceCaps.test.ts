@@ -66,20 +66,17 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
 describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)', () => {
   it('advertises exactly what the image implements', () => {
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
-      'finish', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest',
+      'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest',
       'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'run_command', 'write_file',
+      'read_file', 'release_resource', 'run_command', 'workspace_note', 'workspace_read',
+      'write_file',
     ]);
   });
 
-  it('does NOT advertise `coordinate` — the image has no handler for those four tools', () => {
-    // Not a gap: the container commits through the Worker's `write` op, and THAT path
-    // takes the same implicit lease (`claimWriteLease`), so a container run is already
-    // serialised against durable runs. Advertising the tools without an image handler
-    // would 400 mid-run — the exact defect the `repo.edit` omission guards against.
-    expect(CONTAINER_SURFACE_CAPS.has('coordinate')).toBe(false);
+  it('backs `coordinate` through the Worker-owned lease and blackboard stores', () => {
+    expect(CONTAINER_SURFACE_CAPS.has('coordinate')).toBe(true);
     for (const t of ['claim_resource', 'release_resource', 'workspace_note', 'workspace_read']) {
-      expect(names(CONTAINER_AGENT_TOOLS)).not.toContain(t);
+      expect(names(CONTAINER_AGENT_TOOLS)).toContain(t);
     }
   });
 

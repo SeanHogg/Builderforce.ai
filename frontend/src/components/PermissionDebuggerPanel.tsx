@@ -64,10 +64,10 @@ export default function PermissionDebuggerPanel() {
   }
 
   /** Status colours come from the shared semantic tokens, not literal hex, so the
-   *  panel stays legible in light mode (a raw #22c55e on a light surface fails
+   *  panel stays legible in light mode (a raw var(--success) on a light surface fails
    *  contrast where var(--success) is theme-tuned). */
   function statusColor(status: string) {
-    if (status === 'granted') return 'var(--success, #22c55e)';
+    if (status === 'granted') return 'var(--success, var(--success))';
     if (status === 'soft-gate') return 'var(--warning, #eab308)';
     return 'var(--error, #ef4444)';
   }

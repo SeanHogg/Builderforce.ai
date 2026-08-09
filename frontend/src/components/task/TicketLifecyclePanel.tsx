@@ -101,7 +101,7 @@ export function verdictBanner(v: TicketAutonomyVerdict): Banner {
 
 const cardStyle: CSSProperties = {
   border: '1px solid var(--border-subtle)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   background: 'var(--bg-elevated)',
   padding: 12,
 };
@@ -267,7 +267,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
               type="button"
               onClick={load}
               style={{
-                marginTop: 10, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8,
+                marginTop: 10, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
                 color: 'var(--text-secondary)', cursor: 'pointer',
               }}
@@ -294,7 +294,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                 {verdict.hasLiveRun && (
                   <span
                     style={{
-                      fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                      fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)',
                       color: TONE_COLOR.accent, background: tint('accent', 14),
                       border: `1px solid ${tint('accent', 34)}`, whiteSpace: 'nowrap',
                     }}
@@ -510,7 +510,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                           <span
                             aria-hidden
                             style={{
-                              width: 26, height: 26, borderRadius: 999, flexShrink: 0,
+                              width: 26, height: 26, borderRadius: 'var(--radius-full)', flexShrink: 0,
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                               fontSize: 12, lineHeight: 1, color: TONE_COLOR[tone],
                               background: tint(tone, 14),
@@ -529,7 +529,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                             </span>
                             {e.isBackward === true && (
                               <span style={{
-                                fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
+                                fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-full)',
                                 color: TONE_COLOR.warn, background: tint('warn', 14),
                                 border: `1px solid ${tint('warn', 34)}`, whiteSpace: 'nowrap',
                               }}>
@@ -566,7 +566,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                               style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%',
                                 fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px',
-                                borderRadius: 999, color: 'var(--text-muted)',
+                                borderRadius: 'var(--radius-full)', color: 'var(--text-muted)',
                                 background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)',
                                 minWidth: 0, overflow: 'hidden',
                               }}
@@ -578,7 +578,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                             </span>
                             {e.agentRef && (
                               <span style={{
-                                fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 999,
+                                fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 'var(--radius-full)',
                                 color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)',
                                 maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                               }}>
@@ -591,7 +591,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                               <span
                                 title={t('timeline.dispatchedBy', { who: e.dispatchedBy })}
                                 style={{
-                                  fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 999,
+                                  fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 'var(--radius-full)',
                                   color: 'var(--text-muted)', background: 'var(--bg-hover)',
                                   border: '1px solid var(--border-subtle)',
                                   maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

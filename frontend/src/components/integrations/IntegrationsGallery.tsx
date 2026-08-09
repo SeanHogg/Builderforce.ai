@@ -41,7 +41,7 @@ const cardGrid: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
   display: 'flex',
   flexDirection: 'column',
@@ -51,11 +51,11 @@ const cardStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 type PanelTab = 'credentials' | 'connections' | 'activity';
@@ -170,7 +170,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {p.supportsDiscovery && (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '1px 6px' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>
                             {t('gallery.migratable')}
                           </span>
                         )}

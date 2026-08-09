@@ -58,14 +58,14 @@ export default function NewKnowledgeClient() {
     <PageContainer>
       <div style={{ display: 'grid', gap: 28 }}>
         <header>
-          <Link href="/knowledge" style={{ color: 'var(--accent, #60a5fa)', textDecoration: 'none', fontSize: 13 }}>
+          <Link href="/knowledge" style={{ color: 'var(--accent, var(--info))', textDecoration: 'none', fontSize: 13 }}>
             ← {t('backToList')}
           </Link>
           <h1 style={{ margin: '8px 0 0', fontSize: 24 }}>{t('galleryTitle')}</h1>
           <p style={{ margin: '6px 0 0', color: 'var(--text-muted, #9ca3af)', maxWidth: 680 }}>{t('gallerySubtitle')}</p>
         </header>
 
-        {error && <div style={{ color: 'var(--error-text, #f87171)' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>}
 
         <section>
           <h2 style={{ fontSize: 15, margin: '0 0 12px' }}>{t('startBlank')}</h2>
@@ -138,7 +138,7 @@ function TemplateCard({
       style={{
         textAlign: 'left',
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border, #333)',
         background: 'var(--surface, #1a1a1a)',
         color: 'inherit',
@@ -153,7 +153,7 @@ function TemplateCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 22 }}>{icon}</span>
         {badge && (
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)', fontWeight: 600 }}>
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)', fontWeight: 600 }}>
             {badge}
           </span>
         )}

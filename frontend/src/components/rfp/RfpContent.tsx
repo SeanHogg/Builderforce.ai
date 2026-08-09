@@ -21,12 +21,12 @@ import type { Project } from '@/lib/types';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
 const DEFAULT_BRAND: BrandPalette = {
-  primary: '#334155', secondary: '#64748b', accent: '#0ea5e9', text: '#111827', background: '#ffffff', logoUrl: '',
+  primary: '#334155', secondary: '#64748b', accent: '#0ea5e9', text: 'var(--bg-elevated)', background: '#ffffff', logoUrl: '',
 };
 
 const EMPTY: RfpRequestInput = {
@@ -215,7 +215,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 34, height: 34, padding: 0, border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'transparent' }} aria-label={label} />
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 34, height: 34, padding: 0, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent' }} aria-label={label} />
         <input className="input" value={value} onChange={(e) => onChange(e.target.value)} style={{ minWidth: 0 }} />
       </div>
     </label>

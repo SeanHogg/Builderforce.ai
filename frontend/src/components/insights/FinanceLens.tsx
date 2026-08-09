@@ -25,12 +25,12 @@ function scopeBody(scope: string): { scopeKind: string; projectId?: number; init
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 const STATUS_TONE: Record<BudgetState, string> = {

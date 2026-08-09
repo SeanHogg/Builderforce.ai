@@ -27,13 +27,13 @@ function TypeBadge({ type }: { type: CartItem['type'] }) {
       style={{
         display: 'inline-block',
         padding: '1px 7px',
-        borderRadius: 4,
+        borderRadius: 'var(--radius-sm)',
         fontSize: 10,
         fontWeight: 700,
         letterSpacing: '0.05em',
         textTransform: 'uppercase',
         background: colors[type],
-        color: '#fff',
+        color: 'var(--text-on-accent)',
       }}
     >
       {type}
@@ -124,7 +124,7 @@ export default function ShoppingCart() {
             </svg>
             <span style={{ fontWeight: 700, fontSize: 16 }}>Cart</span>
             {count > 0 && (
-              <span style={{ background: 'var(--accent, #6366f1)', color: '#fff', borderRadius: 10, padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
+              <span style={{ background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
                 {count}
               </span>
             )}
@@ -153,7 +153,7 @@ export default function ShoppingCart() {
               <button
                 type="button"
                 onClick={closeCart}
-                style={{ marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 16px', cursor: 'pointer', fontSize: 13 }}
+                style={{ marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text)', padding: '8px 16px', cursor: 'pointer', fontSize: 13 }}
               >
                 Browse Marketplace
               </button>
@@ -168,7 +168,7 @@ export default function ShoppingCart() {
                     alignItems: 'flex-start',
                     gap: 12,
                     padding: 12,
-                    borderRadius: 10,
+                    borderRadius: 'var(--radius-lg)',
                     background: 'var(--bg-base, rgba(255,255,255,0.03))',
                     border: '1px solid var(--border)',
                   }}
@@ -181,7 +181,7 @@ export default function ShoppingCart() {
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                       <TypeBadge type={item.type} />
                     </div>
-                    <div style={{ fontSize: 13, color: item.price === 0 ? '#22c55e' : 'var(--text-muted)', fontWeight: 600 }}>
+                    <div style={{ fontSize: 13, color: item.price === 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
                       {formatPrice(item)}
                     </div>
                   </div>
@@ -216,10 +216,10 @@ export default function ShoppingCart() {
                   style={{
                     width: '100%',
                     padding: '12px 0',
-                    borderRadius: 10,
+                    borderRadius: 'var(--radius-lg)',
                     border: 'none',
                     background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    color: '#fff',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: 15,
                     cursor: 'pointer',
@@ -249,9 +249,9 @@ export default function ShoppingCart() {
                       flex: 1,
                       textAlign: 'center',
                       padding: '10px 0',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      color: '#fff',
+                      color: 'var(--text-on-accent)',
                       fontWeight: 600,
                       fontSize: 13,
                       textDecoration: 'none',
@@ -266,7 +266,7 @@ export default function ShoppingCart() {
                       flex: 1,
                       textAlign: 'center',
                       padding: '10px 0',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--border)',
                       color: 'var(--text)',
                       fontWeight: 600,

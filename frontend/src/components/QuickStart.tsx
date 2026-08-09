@@ -353,9 +353,9 @@ export default function QuickStart() {
           margin-right: 8px;
         }
         .cc-code-block {
-          background: #0a0f1a;
+          background: var(--bg-surface);
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           overflow: hidden;
           font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
           font-size: 0.875rem;
@@ -385,7 +385,7 @@ export default function QuickStart() {
           color: rgba(240,244,255,0.6);
           border: 1px solid transparent;
           padding: 4px 10px;
-          border-radius: 7px;
+          border-radius: var(--radius-sm);
           font-size: 0.78rem;
           font-family: var(--font-display);
           cursor: pointer;
@@ -412,7 +412,7 @@ export default function QuickStart() {
           color: rgba(240,244,255,0.45);
           border: 1px solid transparent;
           padding: 3px 9px;
-          border-radius: 6px;
+          border-radius: var(--radius-sm);
           font-size: 0.72rem;
           font-family: var(--font-display);
           cursor: pointer;
@@ -466,7 +466,7 @@ export default function QuickStart() {
           color: rgba(240,244,255,0.45);
           border: 1px solid rgba(255,255,255,0.12);
           padding: 3px 10px;
-          border-radius: 999px;
+          border-radius: var(--radius-full);
           font-size: 0.72rem;
           font-family: var(--font-display);
           cursor: pointer;
@@ -486,7 +486,7 @@ export default function QuickStart() {
         }
         .cc-code-content {
           padding: 18px 20px;
-          color: #f0f4ff;
+          color: var(--text-primary);
         }
         .cc-code-line {
           padding: 4px 0;
@@ -516,7 +516,7 @@ export default function QuickStart() {
           cursor: pointer;
           padding: 4px 8px;
           font-size: 0.95rem;
-          border-radius: 6px;
+          border-radius: var(--radius-sm);
           transition: color 0.15s, background 0.15s;
         }
         .cc-copy-btn:hover {
@@ -536,7 +536,7 @@ export default function QuickStart() {
           gap: 4px;
         }
         .cc-macos-tagline {
-          color: #f0f4ff;
+          color: var(--text-primary);
           font-weight: 600;
         }
         .cc-macos-subtitle {
@@ -551,7 +551,7 @@ export default function QuickStart() {
           color: var(--coral-bright);
           border: 1px solid rgba(77,158,255,0.3);
           padding: 8px 16px;
-          border-radius: 9px;
+          border-radius: var(--radius-md);
           font-size: 0.85rem;
           font-family: var(--font-display);
           text-decoration: none;

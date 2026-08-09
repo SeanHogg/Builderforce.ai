@@ -135,7 +135,7 @@ export function IdeProjectDetailsModal({
         </p>
 
         {error && (
-          <div style={{ borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
+          <div style={{ borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
             {error}
           </div>
         )}
@@ -207,7 +207,7 @@ export function IdeProjectDetailsModal({
               style={{
                 padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600,
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff', border: 'none', borderRadius: 10,
+                color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)',
                 cursor: saving || !name.trim() ? 'not-allowed' : 'pointer',
                 opacity: saving || !name.trim() ? 0.7 : 1,
               }}
@@ -226,7 +226,7 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   padding: '10px 14px',
   outline: 'none',
 };
@@ -235,7 +235,7 @@ const secondaryBtn: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   padding: '6px 12px',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
   background: 'transparent',
   color: 'var(--coral-bright)',

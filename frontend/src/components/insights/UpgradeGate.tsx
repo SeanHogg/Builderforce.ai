@@ -26,7 +26,7 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
       aria-label={t('upgrade.title')}
       style={{
         display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start',
-        padding: '20px 22px', borderRadius: 12, border: '1px solid var(--border-subtle)',
+        padding: '20px 22px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)',
         background: 'var(--surface-sunken, rgba(37,99,235,0.06))',
       }}
     >
@@ -38,8 +38,8 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
       <Link
         href="/pricing?upgrade=pro"
         style={{
-          marginTop: 4, padding: '8px 16px', borderRadius: 8, textDecoration: 'none',
-          background: 'var(--accent, #2563eb)', color: '#fff', fontWeight: 600, fontSize: '0.84rem',
+          marginTop: 4, padding: '8px 16px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
+          background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.84rem',
         }}
       >
         {t('upgrade.cta')}

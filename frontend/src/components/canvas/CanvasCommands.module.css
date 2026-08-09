@@ -54,7 +54,7 @@
   color: var(--canvas-ink, var(--text-primary, currentColor));
   background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, white)) 92%, transparent);
   border: 1px solid var(--canvas-line, var(--border-subtle, #d8e1ed));
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 2px 8px var(--canvas-shadow, rgba(0, 0, 0, .2));
   font-size: 17px;
   line-height: 1;

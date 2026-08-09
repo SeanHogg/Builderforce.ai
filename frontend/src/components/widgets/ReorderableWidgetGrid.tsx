@@ -34,7 +34,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
 
   const handleBtn: CSSProperties = {
     border: 'none', background: 'transparent', cursor: 'pointer',
-    color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1, padding: '2px 4px', borderRadius: 6,
+    color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)',
   };
 
   return (
@@ -50,7 +50,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
               opacity: drag.draggingKey === id ? 0.4 : 1,
               outline: drag.dropKey === id ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
               outlineOffset: 2,
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               transition: 'opacity 120ms ease',
             }}
             {...drag.dropTargetProps(id)}
@@ -59,7 +59,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
                 not the whole card — is the drag source here: a widget card owns its own
                 clicks and inner controls. */}
             <div
-              style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-elevated)', borderRadius: 6, padding: '1px 2px' }}
+              style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '1px 2px' }}
             >
               <span
                 {...drag.dragHandleProps(id)}

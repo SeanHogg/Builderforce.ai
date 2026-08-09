@@ -192,7 +192,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {error && <div style={{ color: 'var(--error-text, #ef4444)', fontSize: 12 }}>{error}</div>}
-          {success && <div style={{ color: 'var(--success-text, #22c55e)', fontSize: 12 }}>{success}</div>}
+          {success && <div style={{ color: 'var(--success-text, var(--success))', fontSize: 12 }}>{success}</div>}
 
           {loading ? (
             <div style={{ color: 'var(--muted)', fontSize: 13 }}>{tc('loading')}</div>

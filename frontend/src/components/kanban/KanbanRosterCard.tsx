@@ -17,7 +17,7 @@ import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workfor
 import { Select } from '@/components/Select';
 
 const chip = (bg: string, fg: string): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)',
   fontSize: 11, fontWeight: 600, background: bg, color: fg,
 });
 
@@ -102,7 +102,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
   };
 
   const cardStyle: React.CSSProperties = {
-    background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16,
+    background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
   };
 
   return (
@@ -148,7 +148,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
           return (
           <div key={role.roleKey} style={{
             display: 'flex', flexDirection: 'column', gap: 8,
-            padding: '8px 10px', borderRadius: 8, background: 'var(--surface-2)',
+            padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
@@ -168,7 +168,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
                     type="button"
                     onClick={() => setAssigningRole(assigningRole === role.roleKey ? null : role.roleKey)}
                     style={{
-                      fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                      fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                       background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)',
                     }}
                   >
@@ -180,8 +180,8 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
                       onClick={() => onCreateAgent(role)}
                       disabled={creating === role.roleKey}
                       style={{
-                        fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-                        background: 'var(--accent, #2563eb)', color: '#fff', border: 'none',
+                        fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                        background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none',
                       }}
                     >
                       {creating === role.roleKey ? t('creating') : t('createAgent')}

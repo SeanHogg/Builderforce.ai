@@ -23,7 +23,7 @@ import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -246,7 +246,7 @@ export default function PromptsPage() {
       )}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', padding: '10px 18px', borderRadius: 999, fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,0.3)', zIndex: 100 }}>
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', padding: '10px 18px', borderRadius: 'var(--radius-full)', fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,0.3)', zIndex: 100 }}>
           {toast}
         </div>
       )}

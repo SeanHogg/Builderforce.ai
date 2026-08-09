@@ -5,7 +5,6 @@
  * shared <DestinationIndex>, so no single view is an endless scroll:
  *   - Account (default): profile, language, connected accounts, get-hired opt-in
  *   - Personality: the user's own psychometric profile
- *   - Sessions: personal account security (moved here from /security)
  *   - Email: email language + lifecycle-mail consent (CAN-SPAM surface)
  *   - Workspace: workspace identity + jump-off links (owner tools)
  *   - Manager: workspace-wide AI Manager autonomy defaults (0363)
@@ -14,7 +13,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import PageContainer from '@/components/PageContainer';
@@ -36,7 +35,6 @@ import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
 import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
-import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
 import ManagerDefaults from '@/components/settings/ManagerDefaults';
 import SettingsLogs from '@/components/settings/SettingsLogs';
@@ -57,7 +55,7 @@ function ApiKeysSettingsLink({ label }: { label: string }) {
         style={{
           padding: '6px 12px', fontSize: 12, fontWeight: 600,
           background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+          border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
         }}
       >
         {label} →
@@ -69,7 +67,7 @@ function ApiKeysSettingsLink({ label }: { label: string }) {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -89,9 +87,20 @@ const OAUTH_PROVIDERS = [
 
 export default function SettingsClient() {
   const t = useTranslations('settings');
+  const router = useRouter();
   const sub = useSearchParams().get('sub') ?? '';
   const user = getStoredUser();
   const tenant = getStoredTenant();
+
+  // Account security was reachable TWICE: as this sub-view and as the `/security`
+  // destination the Settings index already lists. `/security` survives (operator
+  // decision, PRD 21 §7 decision 2) because it is a real deep-linkable URL that
+  // `panelWidth()` already routes to a sheet. Every `?sub=sessions` link ever
+  // shared still resolves — a deleted destination that 404s is not a decision,
+  // it is a broken link.
+  useEffect(() => {
+    if (sub === 'sessions') router.replace('/security');
+  }, [router, sub]);
 
   type LinkedAccount = { provider: string; email: string | null; displayName: string | null };
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
@@ -171,7 +180,6 @@ export default function SettingsClient() {
   const subTabs: IndexItem[] = [
     { id: '', label: t('accountTab'), icon: '👤', href: '/settings', group: t('groupYou') },
     { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality', group: t('groupYou') },
-    { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions', group: t('groupYou') },
     { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email', group: t('groupYou') },
     ...(tenant ? [
       { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace', group: t('groupWorkspace') },
@@ -244,7 +252,7 @@ export default function SettingsClient() {
                     alignItems: 'center',
                     gap: 12,
                     padding: '10px 12px',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)',
                   }}
@@ -252,7 +260,7 @@ export default function SettingsClient() {
                   <span style={{
                     width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontWeight: 700, fontSize: '0.75rem', background: 'var(--bg-surface)',
-                    borderRadius: 6, flexShrink: 0,
+                    borderRadius: 'var(--radius-sm)', flexShrink: 0,
                   }}>{icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
@@ -270,7 +278,7 @@ export default function SettingsClient() {
                       style={{
                         padding: '4px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
                         background: 'none', color: 'var(--text-muted)',
-                        border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                       }}
                     >
                       {unlinking === id ? '…' : t('disconnect')}
@@ -282,7 +290,7 @@ export default function SettingsClient() {
                       style={{
                         padding: '4px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
                         background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-                        border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                       }}
                     >
                       {t('connect')}
@@ -344,7 +352,7 @@ export default function SettingsClient() {
             style={{
               padding: '6px 12px', fontSize: 12, fontWeight: 600,
               background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
             }}
           >
             {t('switchWorkspace')}
@@ -354,7 +362,7 @@ export default function SettingsClient() {
             style={{
               padding: '6px 12px', fontSize: 12, fontWeight: 600,
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
             }}
           >
             {t('manageMemberSessions')} →
@@ -375,19 +383,17 @@ export default function SettingsClient() {
 
       {sub === 'personality'
         ? renderPersonality()
-        : sub === 'sessions'
-          ? <AccountSecurityPanel />
-          : sub === 'email'
-            ? <EmailPreferencesCard />
-            : sub === 'workspace'
-              ? renderWorkspace()
-              : sub === 'manager'
-                ? <ManagerDefaults />
-                : sub === 'spend'
-                  ? <TeamSpendLimits />
-                  : sub === 'logs'
-                    ? <SettingsLogs />
-                  : renderAccount()}
+        : sub === 'email'
+        ? <EmailPreferencesCard />
+        : sub === 'workspace'
+          ? renderWorkspace()
+          : sub === 'manager'
+            ? <ManagerDefaults />
+            : sub === 'spend'
+              ? <TeamSpendLimits />
+              : sub === 'logs'
+                ? <SettingsLogs />
+                : renderAccount()}
     </PageContainer>
   );
 }

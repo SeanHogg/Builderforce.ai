@@ -70,7 +70,7 @@ export function PremiumModelUnlock() {
 const wrapStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8,
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-  borderRadius: 12, padding: 16, maxWidth: '100%',
+  borderRadius: 'var(--radius-lg)', padding: 16, maxWidth: '100%',
 };
 const rowStyle: React.CSSProperties = {
   display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
@@ -78,7 +78,7 @@ const rowStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 12, fontWeight: 600,
   background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, minHeight: 36,
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', minHeight: 36,
 };
 const hintStyle: React.CSSProperties = {
   fontSize: 11, color: 'var(--text-secondary)',

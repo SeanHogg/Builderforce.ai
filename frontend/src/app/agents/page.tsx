@@ -187,7 +187,7 @@ export default async function AgentsHome() {
           color: var(--text-primary); text-align: center; margin: 0 0 20px;
         }
         .cc-faq-item {
-          border: 1px solid var(--border-subtle); border-radius: 14px;
+          border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
           background: var(--surface-card); padding: 4px 18px; margin-bottom: 10px;
         }
         .cc-faq-q {
@@ -305,7 +305,7 @@ export default async function AgentsHome() {
           background: rgba(77,158,255,0.1);
           color: var(--coral-bright);
           padding: 1px 6px;
-          border-radius: 4px;
+          border-radius: var(--radius-sm);
           font-size: 0.875em;
         }
         .cc-features-grid {
@@ -318,7 +318,7 @@ export default async function AgentsHome() {
           padding: 24px;
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: inherit;
           transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
@@ -372,7 +372,7 @@ export default async function AgentsHome() {
           gap: 6px;
           padding: 18px 20px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           text-decoration: none;
           color: var(--text-primary);

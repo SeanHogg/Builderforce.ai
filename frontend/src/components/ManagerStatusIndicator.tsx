@@ -46,7 +46,7 @@ export function ManagerStatusIndicator() {
         alignItems: 'center',
         gap: 6,
         padding: '4px 10px',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         textDecoration: 'none',
         fontSize: '0.78rem',
         fontWeight: 600,

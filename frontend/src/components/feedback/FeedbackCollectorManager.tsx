@@ -21,11 +21,11 @@ import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const ingestBase = `${AUTH_API_URL}/api/feedback-ingest`;
 
-const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20 };
-const input: React.CSSProperties = { padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box' };
-const btnPrimary: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-const btnSubtle: React.CSSProperties = { padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' };
-const pre: React.CSSProperties = { background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12, fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
+const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 };
+const input: React.CSSProperties = { padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box' };
+const btnPrimary: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const btnSubtle: React.CSSProperties = { padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const pre: React.CSSProperties = { background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
 const sectionTitle: React.CSSProperties = { fontWeight: 600, fontSize: 14, marginBottom: 8 };
 
 export function FeedbackCollectorManager() {

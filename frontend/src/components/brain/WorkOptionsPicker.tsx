@@ -55,7 +55,7 @@ export function WorkOptionsPicker({ mode, onPick, disabled }: WorkOptionsPickerP
               gap: 9,
               minHeight: 56,
               padding: '11px 12px',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--border-subtle, rgba(128,128,128,0.3))',
               background: 'var(--bg-elevated, rgba(128,128,128,0.06))',
               color: 'var(--text-primary, #111)',

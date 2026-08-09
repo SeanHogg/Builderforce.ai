@@ -33,7 +33,7 @@ function loadNotesOnce(): Promise<ReleaseNote[]> {
 const CATEGORY_ACCENT: Record<'new' | 'improvement' | 'fix', string> = {
   new: '#6366f1',
   improvement: '#10b981',
-  fix: '#f59e0b',
+  fix: 'var(--warning)',
 };
 
 function categoryKey(category: string): 'new' | 'improvement' | 'fix' {
@@ -87,7 +87,7 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
                       fontWeight: 700,
                       letterSpacing: 0.4,
                       textTransform: 'uppercase',
-                      borderRadius: 9999,
+                      borderRadius: 'var(--radius-full)',
                       padding: '2px 10px',
                       color: accent,
                       background: `color-mix(in srgb, ${accent} 15%, transparent)`,

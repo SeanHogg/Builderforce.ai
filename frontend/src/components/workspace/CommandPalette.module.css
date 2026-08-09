@@ -30,7 +30,7 @@
   max-height: min(70vh, 560px);
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--panel-drawer-bg, var(--bg-elevated));
   box-shadow: 0 18px 48px var(--shadow-color, rgba(0, 0, 0, 0.4));
 }
@@ -89,7 +89,7 @@
   min-height: 44px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: none;
   color: var(--text-primary);
   font-family: var(--font-body, sans-serif);
@@ -164,7 +164,7 @@
 .foot kbd {
   padding: 1px 5px;
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-surface);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.68rem;

@@ -133,7 +133,7 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{t('noProjects')}</p>
           )}
           {error && (
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--error-text, #f87171)' }}>{error}</p>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--error-text, var(--error))' }}>{error}</p>
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -144,9 +144,9 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
               type="submit"
               disabled={!canSubmit}
               style={{
-                padding: '8px 18px', borderRadius: 10, border: 'none', fontWeight: 600, fontSize: 14,
+                padding: '8px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 600, fontSize: 14,
                 cursor: canSubmit ? 'pointer' : 'not-allowed', opacity: canSubmit ? 1 : 0.6,
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark, #d94f4a))', color: '#fff',
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark, #d94f4a))', color: 'var(--text-on-accent)',
               }}
             >
               {submitting ? t('submitting') : t('submit')}
@@ -169,6 +169,6 @@ const labelStyle: React.CSSProperties = {
 };
 const fieldStyle: React.CSSProperties = {
   width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 12px', outline: 'none',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '10px 12px', outline: 'none',
   fontSize: 14, fontWeight: 400,
 };
