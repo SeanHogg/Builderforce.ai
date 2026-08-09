@@ -435,7 +435,8 @@
     "closeMenu": "关闭菜单",
     "bottom": {
       "product": "产品",
-      "pricing": "价格",
+    "pricing": "价格",
+    "about": "关于我们",
       "signIn": "登录"
     },
     "group": {
@@ -12534,6 +12535,7 @@
     "linkProduct": "产品",
     "linkCompare": "对比",
     "linkPricing": "价格",
+    "linkAbout": "关于我们",
     "linkMediaKit": "媒体资料包",
     "linkTutorials": "教程",
     "linkPromptLibrary": "提示词库",
@@ -12575,6 +12577,18 @@
   },
   "whatsNew": {
     "title": "产品更新",
+    "eyebrow": "最新动态",
+    "description": "探索 Builderforce 的最新功能、改进和问题修复。",
+    "updateCount": "共 {count} 项更新",
+    "searchLabel": "搜索产品更新",
+    "searchPlaceholder": "搜索更新或版本…",
+    "filterLabel": "按类别筛选更新",
+    "filters": { "all": "全部更新" },
+    "showingCount": "显示 {count} 项更新",
+    "latest": "最新",
+    "noResultsTitle": "没有匹配的更新",
+    "noResultsBody": "请尝试其他搜索词或清除筛选条件。",
+    "clearFilters": "清除筛选",
     "loading": "加载中…",
     "error": "无法加载更新日志，请稍后重试。",
     "empty": "暂无更新，敬请期待。",
@@ -12847,6 +12861,7 @@
     "examples": "{count, plural, one {# example} other {# examples}}",
     "toggleLabel": "Toggle {feature}",
     "loadError": "Could not load embedded capability settings.",
+    "selectWorkspace": "请先选择工作区，然后再管理嵌入式功能。",
     "saveError": "Could not save the embedded capability.",
     "copySnippet": "Copy install snippet",
     "copied": "Copied",
@@ -15488,6 +15503,17 @@
     "workspaceUnavailable": "此账号无法访问被邀请的工作区。",
     "signInLink": "使用收到邀请的邮箱登录",
     "useAnotherAccount": "使用其他账号"
+  },
+  "about": {
+    "seo": { "title": "关于 Builderforce.ai — 构建与经营一体化操作系统", "description": "了解 Builderforce：团队与 AI 智能体基于共享上下文进行创造、经营、治理和交付的互联操作系统。" },
+    "hero": { "eyebrow": "关于 Builderforce", "title": "构建产品。经营公司。一个系统。", "lead": "Builderforce 将 BurnRateOS 的创业生存智能融入人类与 AI 智能体共用的创意画布，把想法、业务和让想法成真的工作连接起来。", "primaryCta": "免费开始", "secondaryCta": "预约演示", "domains": "运营领域", "foundations": "共享基础", "workspace": "互联工作空间", "core": "从想法到成果", "visualAria": "Builderforce 操作系统连接产品、财务、收入和治理" },
+    "thesis": { "eyebrow": "我们为何存在", "title": "公司是一个系统，它的软件也应该如此。", "body": "创业公司不会在整齐的部门孤岛中失败。产品决策会改变现金跑道，客户反馈会改变路线图，安全要求会改变交付方式。Builderforce 让这些关系始终可见，并为人类和智能体提供从决策到行动的受治理路径。" },
+    "promises": { "eyebrow": "Builderforce 的不同", "title": "自由创造。清晰经营。受控交付。", "items": [{ "title": "从意图开始创造", "description": "在一个可视化画布上，将想法变成相互连接的网站、工作流、原型、数据集、模型、计划和产品。" }, { "title": "基于共享事实经营", "description": "连接产品、财务、收入、客户、人员、投资者、营销与风险，无需在每个工具中重建上下文。" }, { "title": "让决策转化为行动", "description": "让专业智能体与工作并肩，审查拟议变更、保留证据，并将获批工作送入交付。" }] },
+    "system": { "eyebrow": "我们构建了什么", "title": "完整运营视图，与执行紧密相连", "lead": "九个运营领域承载 BurnRateOS 的创业生存能力，三个基础能力为每个领域提供一致的智能、业务上下文、集成和受治理的 Builderforce 执行。", "domains": "运营领域", "foundations": "共享基础" },
+    "story": { "eyebrow": "我们的故事", "title": "两个必需的理念，汇成一个平台。", "bodyOne": "BurnRateOS 始于一个直白的观察：优秀团队即使持续交付，也仍可能耗尽时间或资金。它连接现金跑道、客户证据、运营节奏和商业决策，让进展以生存能力衡量，而不只是活动数量。", "bodyTwo": "Builderforce 始于问题的另一半：想法、产物、人员和 AI 智能体散落在彼此割裂的工具中。二者合一，形成从业务信号到创意决策、受治理执行和可衡量成果的完整闭环。" },
+    "principles": { "eyebrow": "我们的构建原则", "title": "智能体操作系统的原则", "items": [{ "title": "创业公司优先", "description": "每项能力都应帮助团队更快验证、节省资源、获得收入、降低风险，或构建客户真正重视的价值。" }, { "title": "默认互联", "description": "想法、公司数据、决策、产物、工作和成果应始终相连，而不是在另一个单点工具里变成副本。" }, { "title": "人类始终参与", "description": "智能体扩展团队，但不会消除责任。审查、审批、权限和明确归属都属于工作流的一部分。" }, { "title": "证据胜于表演", "description": "真实对象、可见边界、保留的执行记录和可衡量成果，比华丽却无法验证的回答更重要。" }] },
+    "trust": { "eyebrow": "安全与信任", "title": "治理应与工作同行，而不是事后补上。", "body": "角色、审批路径、凭证控制、审计历史、隐私工作流和系统证据均属于平台架构，帮助团队从实验更清晰地走向负责任的运营。", "cta": "了解信任与审计" },
+    "cta": { "eyebrow": "构建真正重要的事", "title": "带上你的下一个想法，以及它背后的公司。", "body": "从画布开始，连接运营上下文，为人类与智能体提供一个将意图转化为成果的共同空间。", "primary": "免费开始创作", "secondary": "探索全部能力" }
   },
   "routeMarketing": {
     "subtitle": "创建免费工作区即可使用{surface}，或登录以继续已有的工作。",

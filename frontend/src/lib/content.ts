@@ -1602,6 +1602,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     links: [
       { href: '/product', labelKey: 'linkProduct' },
       { href: '/pricing', labelKey: 'linkPricing' },
+      { href: '/about', labelKey: 'linkAbout' },
     ],
   },
   {

@@ -107,10 +107,9 @@
   --board-team: 44px;
   --board-composer-lane: 118px;
   --board-resting-height: clamp(420px, 56vh, 560px);
-  --board-picker-expansion: 290px;
 
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   height: var(--board-resting-height);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
@@ -118,14 +117,6 @@
   background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
   background-size: 22px 22px;
   box-shadow: 0 24px 60px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
-  transition: height 180ms ease;
-}
-
-/* Keep the composer at its resting position while the starting-point catalog
-   grows below it. The extra board height gives the shorter, scrolling catalog
-   real layout space instead of making the bottom anchor pull the prompt up. */
-.board:has(.promptWrap [aria-expanded='true']) {
-  height: calc(var(--board-resting-height) + var(--board-picker-expansion));
 }
 
 /* ── Session bar: live dot, what this board is, who is on it ── */
@@ -139,6 +130,7 @@
   height: var(--board-chrome);
   padding: 0 14px;
   border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   background: var(--surface-sunken);
 }
 .liveDot {
@@ -197,6 +189,7 @@
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-sunken);
   overflow: hidden;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 .teamLabel {
   flex: none;
@@ -422,7 +415,7 @@
      the catalog adds height above the prompt and can push it out of the viewport. */
   top: calc(var(--board-resting-height) - var(--board-team) - var(--board-composer-lane) + 20px);
   transform: translateX(-50%);
-  z-index: 3;
+  z-index: 10;
   width: min(600px, calc(100% - 40px));
   display: flex;
   flex-direction: column;

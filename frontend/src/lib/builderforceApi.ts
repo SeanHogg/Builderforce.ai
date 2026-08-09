@@ -4866,21 +4866,29 @@ export interface EmbedSetConfigResult {
   consentedBy: string | null;
 }
 
+/** Embed administration is always workspace-scoped. Fail locally instead of
+ * emitting a guaranteed unauthenticated request (and a misleading API ticket)
+ * while the shell is still exchanging/selecting the workspace JWT. */
+function embedRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  if (!getStoredTenantToken()) return Promise.reject(new Error('Workspace token required'));
+  return request<T>(path, opts);
+}
+
 export const embedApi = {
   /** Current tenant's embed enablement + capabilities (any member). */
-  getConfig: () => request<EmbedConfigResult>('/api/embed/config'),
+  getConfig: () => embedRequest<EmbedConfigResult>('/api/embed/config'),
   /**
    * Enable/disable + set capabilities (manager+). Pass `consentAcknowledged: true`
    * when enabling for the first time (or after a consent-version bump) — the API
    * returns 409 `EMBED_CONSENT_REQUIRED` otherwise.
    */
   setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[]; consentAcknowledged?: boolean }) =>
-    request<EmbedSetConfigResult>('/api/embed/config', {
+    embedRequest<EmbedSetConfigResult>('/api/embed/config', {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
   setFeature: (feature: CustomerEmbedFeatureKey, body: { enabled: boolean; consentAcknowledged?: boolean }) =>
-    request<{ feature: CustomerEmbedFeatureKey } & CustomerEmbedFeatureConfig>(`/api/embed/features/${feature}`, {
+    embedRequest<{ feature: CustomerEmbedFeatureKey } & CustomerEmbedFeatureConfig>(`/api/embed/features/${feature}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     }),

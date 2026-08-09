@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Icon } from '@/components/ui/Icon';
-import { getStoredTenant } from '@/lib/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { embedApi, type CustomerEmbedFeatureKey, type EmbedConfigResult } from '@/lib/builderforceApi';
 import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type EmbeddedCapabilityCategory } from '@/lib/embeddedCapabilities';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -17,6 +17,7 @@ type Filter = 'all' | EmbeddedCapabilityCategory;
 
 export function EmbeddedCapabilities() {
   const t = useTranslations('embedded');
+  const { tenant, tenantToken } = useAuth();
   const [tab, setTab] = useState<Tab>('features');
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -25,16 +26,20 @@ export function EmbeddedCapabilities() {
   const [saving, setSaving] = useState<CustomerEmbedFeatureKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const copy = useCopyToClipboard();
-  const role = getStoredTenant()?.role;
+  const role = tenant?.role;
   const canManage = role === 'owner' || role === 'manager';
 
   useEffect(() => {
+    // /api/embed/config is tenant-scoped. A person-level session can exist for a
+    // render before the shell has selected/exchanged a workspace JWT; calling in
+    // that gap produces a guaranteed 401 with no Authorization header.
+    if (!tenantToken) return;
     let cancelled = false;
     embedApi.getConfig()
       .then((value) => { if (!cancelled) setConfig(value); })
       .catch(() => { if (!cancelled) setError(t('loadError')); });
     return () => { cancelled = true; };
-  }, [t]);
+  }, [t, tenantToken]);
 
   const activeCount = config
     ? Object.values(config.customerFeatures).filter((item) => item.enabled).length
@@ -98,6 +103,7 @@ export function EmbeddedCapabilities() {
     </div>
 
     {error && <div className={styles.error} role="alert">{error}</div>}
+    {!tenantToken && <div className={styles.notice} role="status">{t('selectWorkspace')}</div>}
 
     {tab === 'features' && <>
       <div className={styles.toolbar}>

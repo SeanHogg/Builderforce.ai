@@ -91,7 +91,7 @@ export function PromptUseCasePicker({ placement, align = 'center', onSelect }: {
     </div>
   );
 
-  return <div ref={rootRef} className={styles.root} data-placement={placement} data-align={align}>{placement === 'top' ? <>{panel}{tab}</> : <>{tab}{panel}</>}</div>;
+  return <div ref={rootRef} className={styles.root} data-open={open ? 'true' : 'false'} data-placement={placement} data-align={align}>{placement === 'top' ? <>{panel}{tab}</> : <>{tab}{panel}</>}</div>;
 }
 
 const USE_CASE_ICONS = ['□', '◎', '▶', '▣', '◇', '⌘', '◖', '✉', '▤', '▥', '↗', '✦', '🧠', '▷', '◉', '▦', '◆', '⌗', '⬡', '◈'];

@@ -42,6 +42,7 @@ const FLAT_LINKS: SimpleLink[] = [
   // Models is a prefilled filter into the one marketplace, same as Talent / Workforce.
   { href: '/marketplace?category=models', labelKey: 'models' },
   { href: '/pricing', labelKey: 'pricing' },
+  { href: '/about', labelKey: 'about' },
 ];
 
 // One active-link matcher shared with the Sidebar — no drift between surfaces.

@@ -4692,21 +4692,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * every other chat product people already use puts it. It is deliberately NOT part
    * of the Brain surface: it stays put and stays reachable whether Brain is inline in
    * its Object, docked to either edge, or closed entirely.
-   */
+  */
   const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
-    <PromptUseCasePicker placement="bottom" align="end" onSelect={setPrompt} />
+    <PromptUseCasePicker placement="top" align="end" onSelect={setPrompt} />
   </div>;
 
   const composer = !presentMode && <div className={styles.composerDock} data-tour="creation-brain-dock">
-    {/* Keep the settled receipt mounted after the run. Token consumption used
-        to disappear at the exact moment the answer arrived because this whole
-        component was conditional on `thinking`. */}
-    <BrainActivityIndicator
-      running={thinking}
-      trace={brainTrace}
-      startedAt={brainRunStartedAt}
-      variant="composer"
-    />
+    <div className={styles.composerUtilities}>
+      {/* Keep the settled receipt mounted after the run. Token consumption used
+          to disappear at the exact moment the answer arrived because this whole
+          component was conditional on `thinking`. */}
+      <BrainActivityIndicator
+        running={thinking}
+        trace={brainTrace}
+        startedAt={brainRunStartedAt}
+        variant="composer"
+      />
+      {promptStarter}
+    </div>
     <ChatInput
       className={styles.composer}
       value={prompt}
@@ -5124,7 +5127,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           collaborators={members.filter((member) => member.userId !== currentUserId)}
           joinedCollaborator={joinedCollaborator}
         />}
-        {promptStarter}
         {composer}
         {/* The way back to a closed Brain. An inline Brain that still has its Object on
             the board already offers one ("Open Brain chat"), so the pill would be a

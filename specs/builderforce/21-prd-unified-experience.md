@@ -1,8 +1,11 @@
 # PRD 21 — The Unified Experience: one design system, one canvas shell, and the 549 destinations that never become pages
 
-> **Status:** BUILT (E0–E6) · 2026-08-08 — **residuals closed 2026-08-09**: literal-hex files
+> **Status:** shell BUILT (E0–E6) · 2026-08-08 — **residuals closed 2026-08-09**: literal-hex files
 > 341 → **0** (the ratchet is now an allowlist, not a count) and the panel body is a named size
 > container. Nothing outstanding in the Gap Register's design-system block.
+> **§11 (the unified MENU — what is in it, what it is called, where it sits) is DESIGN, added
+> 2026-08-09.** E0–E6 built the shell and left the *contents* of the left panel as five separate
+> lists; §11 is the sequence (M0–M5) that makes them one.
 > **Consolidates:** [PRD 19 — BurnRateOS consolidation](./19-prd-burnrateos-consolidation.md) ·
 > [PRD 20 — The Consolidated Data Model](./20-prd-consolidated-data-model.md)
 > **Supersedes for experience decisions:** the navigation architecture "The Session Is The Anchor"
@@ -418,6 +421,10 @@ reachable another way, and today `⌘K` is the only other way in — so removing
 Reliability and the rest would put real destinations behind a keystroke. They are secondary here,
 not absent.
 
+> **Superseded in part by §11.** Keeping the destinations was right; calling the block `Workspace`
+> and letting a *second* block (`Product Domains`) sit under it was not. §11 replaces both with one
+> registry grouped by the Idea → Make → Run arc. Read §11 before touching this surface.
+
 ### 3.3 The footer — the team
 
 The always-on C-suite agents sit beside the humans you invited. One chip shape, one drag, one
@@ -618,3 +625,497 @@ Neither is an engineering call, and both block a specific step.
   regions ×3, the Canvas object kinds ×2, the board's series colours inside a 5,000-line component)
   became one declaration each. That is why §2.7 now ends with the four ways of "fixing" a literal
   that are worse than leaving it, and why the colour ratchet asks for a REASON rather than a number.
+
+---
+
+## 11 · The unified menu — one destination registry, one arc, one storefront
+
+> **Status:** design, 2026-08-09. E0–E6 built the *shell*: a panel over a mounted board, three
+> widths, one design system. What they did not touch is what is *in* the left panel — and there the
+> product still carries seven separate lists of destinations. §11 is that half. It changes no shell
+> mechanic; §§0–10 stay authoritative for those.
+
+### 11.0 The rule
+
+**A destination appears in exactly one registry, is named exactly once, and is placed by two facts
+it already carries: its OWNER (which seat) and its STAGE (idea · make · run).**
+
+1. **The left panel is the arc.** Idea → Make → Run, plus Measure, Market and Admin. It answers
+   *where am I in the journey* — the only question a first-time visitor can actually ask.
+2. **The footer is the roster.** One chip per seat, always listed. It answers *who owns this*. A
+   seat is never *also* a nav item — §4 settled that, and the code currently does it twice.
+3. **A destination never points at a marketing page from inside the app.** The signed-out twin is a
+   field on the same row, not a second registry.
+4. **The marketplace is the second front door.** Canvas is "I have an idea". Marketplace is "I have
+   a business". Both end in the same place: a company you run with the whole Run stack behind it.
+
+### 11.1 The finding — seven registries for one product
+
+Measured 2026-08-09 against live source.
+
+| # | Registry | File | Rows | Renders as |
+|---|---|---|---|---|
+| 1 | `NAV_GROUPS` | `frontend/src/lib/navGroups.ts` | 15 groups + 48 tabs | left panel, **WORKSPACE** block |
+| 2 | `BURNRATE_DOMAINS` | `frontend/src/lib/burnrateCatalog.ts` | 9 domains + 3 foundations | left panel, **PRODUCT DOMAINS** block → **marketing pages** |
+| 3 | `DOMAINS` (kernel) | `frontend/src/lib/kernel/kernelApi.ts` | 15 seats | `/seat/<domain>` + `RosterNav` |
+| 4 | Team roster | `GET /api/roster/team` | humans + agents | footer `TeamBar` (§3.3) |
+| 5 | `ADMIN_GROUP_META` | `frontend/src/lib/adminGroups.ts` | 10 groups | admin index |
+| 6 | `CATEGORY_IDS` | `app/marketplace/MarketplacePageClient.tsx:56` | 8 categories | marketplace tabs |
+| 7 | `system_features` | BurnRateOS Postgres (incoming, PRD 19) | 9 categories + ~120 leaves, persona- and plan-gated, **recursive** | its own sidebar |
+
+**The CFO exists four times:**
+
+| Where | Called | Goes to |
+|---|---|---|
+| `BURNRATE_DOMAINS` | Business Intelligence `CFO` | `/business-intelligence` — **a marketing page** |
+| kernel `DOMAINS` | finance | `/seat/finance` |
+| footer `TeamBar` | CFO | drag-to-seat |
+| `NAV_GROUPS` → Insights | Finance | `/insights/finance` |
+
+Four names, four icons, four hrefs, one job. On screen today the left panel renders **WORKSPACE**
+above **PRODUCT DOMAINS** (`Product Management CPO`, `Business Intelligence CFO`, `Agile Survival
+CTO`, `Sales & Revenue CRO`) while the footer simultaneously renders `CMO · Manager · Recruiter ·
+CFO · CRO · HR · Security · CEO · Support`. **Two rosters, disjoint, visible at once** — and the
+left one navigates out of the product.
+
+**Why it happened.** Each list was correct when written. `NAV_GROUPS` predates the seats.
+`BURNRATE_DOMAINS` landed as *marketing* taxonomy and was later reused as navigation because it was
+the only list that knew about CFO/CMO/CRO. Kernel `DOMAINS` came from PRD 20's data model. The
+roster came from E0. Nobody added a duplicate; four people each added the first one for their layer.
+**A registry is not prevented by review — it is prevented by there being only one place a
+destination can be declared** (§11.7.1).
+
+### 11.2 The unified model
+
+One row shape, one array, four renderers.
+
+```ts
+// frontend/src/lib/destinations.ts — THE registry
+export type Stage = 'idea' | 'make' | 'run' | 'measure' | 'market' | 'admin';
+
+export interface Destination {
+  /** Stable and unique across the whole product. */
+  id: string;
+  /** PRD 20 §3 owner. `'platform'` means no teammate — panel only (§4). */
+  seat: Domain | 'platform';
+  /** Where in Idea → Make → Run this sits. Decides the LEFT PANEL grouping. */
+  stage: Stage;
+  /** i18n key under `nav`. THE name — marketing, app rail, ⌘K and the seat index all read it. */
+  labelKey: string;
+  icon: string;
+  /** The in-app destination. Never a marketing route. */
+  href: string;
+  /** The signed-out twin, when one exists. Rendered only by the public shell. */
+  marketingHref?: string;
+  /** How this destination presents when someone signed in opens it (§11.4.5).
+   *  `'panel'` — mounts over the canvas at `full` width; the stage never unmounts.
+   *  `'page'` — a real page; only auth, legal and the blog qualify (§3.6). */
+  surface?: 'panel' | 'page';
+  /** Progressive disclosure: the row is always LISTED; the rung gates its STATE (§11.4.4). */
+  rung: number;
+  plan?: 'free' | 'pro' | 'scale';
+  /** Level 2 — this row is a leaf of a seat's workbench index. */
+  parent?: string;
+  /** Marketplace family, when this destination is also listable (§11.5). */
+  listable?: 'talent' | 'company' | 'thing';
+}
+```
+
+| Surface | Projection over the one array |
+|---|---|
+| Left panel | `group by stage`, top-level rows only (`!parent`) |
+| Footer roster | `group by seat`, joined to `GET /api/roster/team` for presence + avatar |
+| `⌘K` | flat search |
+| Seat workbench index (§3.4's index column) | `filter(parent === seat)` — where the ~120 BurnRateOS leaves land |
+| Public shell / marketing | `filter(marketingHref)`, same `labelKey` — so a marketing page can never describe a feature by a name the product does not use |
+
+`NAV_GROUPS`, `BURNRATE_DOMAINS`, `ADMIN_GROUP_META` and `CATEGORY_IDS` become derived selectors
+over this array in the migration pass, then are deleted. Kernel `DOMAINS` stays — it is the *seat*
+enum, and `Destination.seat` references it.
+
+### 11.3 The arc — Idea → Make → Run
+
+The operator's framing, made into an information architecture: *one canvas — idea to real — with
+all the AI and business tools you need to go from a business idea to a company.*
+
+| Stage | The question | What lives here | Owning seats |
+|---|---|---|---|
+| **Idea** | *what if?* | Canvas · Challenges · Ideas & scratch pad · Validation lab · Market & competitor research · Pitch & narrative | Brain · CPO · CEO |
+| **Make** | *build it* | Projects · Delivery board · Sprints & ceremonies · Agents & runtime · Quality · Knowledge · Deploy & embed | Manager · CTO · platform |
+| **Run** | *run it as a company* | Finance · Revenue & CRM · Growth & marketing · People & HR · Hiring · Investors & fundraising · Governance & SOC 2 · Support · Commerce & billing | CFO · CRO · CMO · HR · Recruiter · CEO · Security · Support |
+| **Measure** | *is it working?* | Insights — the one analytics hub | platform |
+| **Market** | *sell · buy · hire · be found* | Marketplace: talent · companies · things | platform |
+| **Admin** | *settings* | Settings · Security · Billing · Tenants · Platform admin | platform |
+
+**Stage is not a synonym for seat.** A seat can own rows in more than one stage — the CEO owns Pitch
+in Idea and Investors in Run. That is precisely why two axes are needed, and why they must be two
+**columns on one row** rather than two registries.
+
+#### 11.3.1 BurnRateOS's nine categories, mapped
+
+Verified against `api/prisma/migrations/20260411_seed_feature_tree/migration.sql` plus the twelve
+later menu migrations.
+
+| BurnRateOS category | Leaves | Stage | Seat | Destination |
+|---|---|---|---|---|
+| Product Management | 8 | idea → make | CPO / Manager | `/projects?tab=pm` |
+| Agile Survival | 7 | make | CTO / Manager | `/projects?tab=ceremonies` |
+| Business Intelligence | 8 | run | **CFO** | `/seat/finance` |
+| Operational Cadence | 8 | run | **HR** | `/seat/people` |
+| Customer Engagement | 8 | run | **CRO** | `/seat/support` + `/quality?tab=feedback` |
+| Investor Intelligence | 13 | idea (pitch) + run | **CEO** | `/seat/investor` |
+| Revenue & Growth | 20+ | run | **CRO** + **CMO** | `/seat/revenue` · `/seat/growth` |
+| Governance & Collaboration | 14 | run | **Security** | `/seat/governance` |
+| **AI Assistant** | 4 | — | Brain | **deleted — see below** |
+
+#### 11.3.2 "AI Assistant" is deleted, and that is the largest simplification the merge buys
+
+In BurnRateOS the AI was a *department*: `/ai/coach`, `/ai/hub`, `/ai-assistant/insights`,
+`/ai-assistant/predictive`, `/ai/competitor-monitor`, `/ai/contract-analyzer`,
+`/ai/email-classifier`, `/ai/expense-categorizer`, `/ai/pitch-deck-feedback`, `/ai/voice-agent` —
+ten destinations whose only shared property is *the implementation uses a model*.
+
+In Builderforce the AI is the *surface*. Each of those ten is a capability of the seat that owns the
+work: expense categorisation is the CFO's, contract analysis is Security's, competitor monitoring is
+the CMO's, pitch-deck feedback is the CEO's. **They become tools on a teammate, not rooms in a
+building.** BurnRateOS itself started this — migration `20260412_consolidate_ai_menu` deleted four
+and reparented six to their owner domains. This finishes it.
+
+The corollary is load-bearing: **there is no "AI" item in the unified menu at all.** A menu item
+named after the technology is the tell that the product has not decided who the work belongs to.
+
+### 11.4 The surfaces
+
+#### 11.4.1 The left panel
+
+```
+┌────────────────────────┐
+│  ✦ New                 │   always: empty board + prompt, one meaning everywhere
+├────────────────────────┤
+│  ● ACTIVE              │   the live session (canvas OR chat — one stream, 0409 `mode`)
+│    Bakery landing      │
+│  RECENTS               │
+│    LLM startup comp…   │
+├────────────────────────┤
+│  IDEA                  │
+│    Canvas · Challenges │
+│  MAKE                  │
+│    Projects · Quality  │
+│    Knowledge · Deploy  │
+│  RUN                   │   ← the eight seats' domains, by NAME not by acronym
+│    Finance        CFO  │
+│    Revenue        CRO  │
+│    Growth         CMO  │
+│    People          HR  │
+│    Hiring   Recruiter  │
+│    Investors      CEO  │
+│    Governance Security │
+│    Support     Support │
+│  MEASURE  Insights     │
+│  MARKET   Marketplace  │
+├────────────────────────┤
+│  Settings              │
+│  Sean Hogg        MAX  │
+└────────────────────────┘
+```
+
+Three deliberate departures from what ships today:
+
+1. **PRODUCT DOMAINS is deleted as a block.** Its nine rows are not lost — they are the RUN group,
+   under their *product* names with the seat as a trailing chip rather than as the identity. "You
+   are going to Finance, which the CFO owns" reads correctly; "you are going to CFO" does not.
+2. **The `seat` nav group is deleted.** `/seat/delivery` as a menu item was a door labelled *door*.
+   Each seat's surface is reached by its RUN row or by its footer chip; `/seat/<domain>` remains the
+   route both resolve to.
+3. **`dashboard` is deleted.** §6.8 already requires sign-in to land on the last board; a Dashboard
+   nav item is the thing that undoes it.
+
+**Every stage header collapses, and the state persists.** With PRD 18/19 landed the Run group alone
+carries nine rows, and a person who lives in Make should not scroll past a company they only touch
+on Fridays. The header is a `<button aria-expanded>` with a rotating chevron — not a hover
+affordance, because the stage underneath is a drag surface and a hover-opened region at the left
+edge eats drags. Collapse is per-group, keyed by `stage`, and stored beside the rail's
+collapsed/expanded preference so the panel reopens the way it was left.
+
+Collapsed-rail behaviour is unchanged: identity compresses, text flies out. Sessions leave the rail
+and return as a click-opened flyout; stage groups become icon runs with their eyebrow as tooltip —
+and a collapsed *group* inside an expanded rail is a different state from a collapsed *rail*, so
+the two preferences are stored separately and neither infers the other.
+
+#### 11.4.2 The footer — the roster, and the only seat list
+
+Behaviour is unchanged from §3.3 (one row shape, drag **and** keyboard, disable-never-hide). What
+changes is that it becomes the **only** place a seat is enumerated. A left-panel RUN row is a
+*domain*; a footer chip is a *person*. Clicking either opens the same panel; only the chip drags.
+
+#### 11.4.3 The seat workbench — where 549 destinations actually go
+
+Level 2 is §3.4's index column, and it is `destinations.filter(d => d.parent === seat)`:
+
+```
+CFO · Finance                       ▸ Runway
+  ── PLAN ──                          £412k · 14.2 months
+  Runway · Burn rate                  ┌──────────────────────────┐
+  Break-even · Forecast               │  chart                    │
+  ── MEASURE ──                       └──────────────────────────┘
+  Cashflow · Cohort retention         Assumptions · Sensitivity · Monte Carlo
+  CAC · LTV · payback
+  ── OPERATE ──
+  Expenses · Bank sync · Invoicing
+  ── REPORT ──
+  Board pack · Variance
+```
+
+Fourteen items fit vertically; a tab bar cannot hold them — the same argument §3.4 already made and
+`DestinationIndex` already implements (it turns vertical past six items on its own). **No new
+component is needed for level 2.** The registry is the work; the renderers exist.
+
+**The width control returns to the panel header.** §3.4 declares three widths and `panelWidth()`
+picks one, but a *policy* choosing the width is not the same as a *person* choosing it — a Gantt in
+a 660px drawer and a settings form in 94% are both wrong, and only the reader knows which. So
+`SlideOutPanel` gains a three-step control in its header (`440 · 660 · 94%`), keyboard-reachable,
+with `panelWidth()` supplying the default rather than the final answer. The choice persists per
+destination, because the person who widens Finance wants Finance wide every time and does not want
+Settings to follow it. Widening never navigates and never remounts the stage.
+
+#### 11.4.5 A reference page is a panel, not a page
+
+`/soc2`, `/integrations`, `/survival-focused-agile` and the other eight domain pages are the last
+place the product still navigates *away* from the board. They carry `surface: 'panel'`:
+
+| Who is looking | What the route resolves to |
+|---|---|
+| signed out | a real page, real URL, real SEO, inside `MarketingShell` — unchanged (§3.6) |
+| signed in | the **same route component**, mounted in `ShellPanel` at `full` width over the board |
+
+Three things this buys, and one it does not cost:
+
+- **One implementation, two shells.** A marketing page that drifts from the product lies. `/soc2`
+  signed out explains the controls; signed in it shows *your* controls, from the same component
+  reading the same endpoint at a different rung.
+- **The session survives a curiosity.** Someone mid-agent-turn who wants to check whether an HRMS
+  is supported opens Integrations, reads it, presses `Esc`, and the turn is still running. Today
+  that is a full navigation and the answer to "is my work still there" is *no*.
+- **SEO is untouched**, because the signed-out path is the one crawlers take and its URL shape does
+  not change. This is what makes it cheap: no redirect map, no slug migration.
+
+The cost is the one §3.4 already paid — these routes must measure the **panel**, not the viewport,
+via `@container panel`. A domain page written against `@media (max-width: 700px)` lays itself out
+for a screen it does not have. That is a per-route fix at M3, not a blocker.
+
+#### 11.4.6 The public header is the same registry
+
+The signed-out header is a fourth renderer, not a fourth list. Two corrections it needs, both from
+the operator's 2026-08-09 review:
+
+1. **`Home` is deleted.** The logo already is home; a `Home` item is the second way to do the one
+   thing every logo in every product already does. Six items become five plus the mark.
+2. **`Get Started →` opens the canvas, not a signup form.** The board is real, local-first and
+   theirs before an account exists (`newLocalCreationSession()`, `LOCAL_CREATION_PREFIX`), so the
+   primary CTA should hand over the product. A signup wall in front of a product that works without
+   one is an acquisition cost spent on a form.
+
+`Product ▾` is the arc — Idea / Make / Run columns rendered from `stage`. `Learn ▾` is the
+reference set. Every item in both menus carries `surface:'panel'`, so a signed-in visitor clicking
+`SOC 2` from the marketing header lands on their board with the panel open rather than being thrown
+out of their session into a brochure.
+
+#### 11.4.4 Progressive disclosure — one field, not a prop
+
+| Rung | Left panel | Footer |
+|---|---|---|
+| visitor with an idea | Idea + Market live; Make/Run **listed and dim** | all seats listed, only Brain active |
+| shipped something, no account | unchanged | unchanged |
+| signed in | + Recents activates | + your own row |
+| tracking work | + Make and Measure activate | Manager, CPO activate |
+| someone joins | unchanged | + the actual people in the room |
+| **claimed or formed a company** | **+ Run activates** | CFO/CEO/CMO/CRO/HR/Recruiter/Security/Support activate |
+| several companies | + company chip in the session bar | unchanged — seats are TENANT-level |
+
+**A dim row is an invitation; a missing row is a secret.** Clicking a dim row opens its workbench in
+preview — real index, real empty states, one honest line, and one button that hands you to the seat
+that owns the unlock (§11.5: the CEO owns company formation). This is §2.6 rule 7 applied to the
+menu rather than to a control.
+
+### 11.5 The marketplace — three listing families, one storefront
+
+Today `CATEGORY_IDS` is `all · personas · skills · workforce · talent · models · gigs · publish` —
+eight tabs mixing *what is sold* with *who sells it* with *a verb*. The ask is to add companies;
+adding a ninth tab to that list is how it reaches fifteen.
+
+| Family | Kinds | Who lists | Who is buying |
+|---|---|---|---|
+| **Talent** | person · agent · gig | freelancers, agencies, agent authors | anyone hiring |
+| **Company** | business · service · product · storefront | claimed company owners | customers, partners, investors, acquirers |
+| **Thing** | model · skill · persona · prompt · template · canvas | builders | anyone |
+
+`publish` is not a family — it is the **verb**, and it belongs on a primary button. `all` is the
+absence of a filter, not a filter.
+
+#### 11.5.1 A company listing is not a new concept
+
+It is `companies` + `account_company_relationships(kind='OWNER')` — the company-graph v1 BurnRateOS
+shipped in April 2026 and PRD 19 §3.2 already adopted. Nothing here needs designing; it needs
+**surfacing**:
+
+- **`Company.accountId` is deliberately NULLABLE** — NULL is an unclaimed row in the global business
+  graph, enriched from a data provider. That one nullable column is what lets a single table be both
+  *the business you operate* and *a company in someone's CRM*.
+- **The claim flow exists** — `claimedByUserId`, `claimVerificationMethod ∈ DOMAIN_DNS_TXT |
+  EMAIL_AT_DOMAIN | MANUAL_REVIEW`, a DNS TXT token, verification stamps.
+- **The relationship kinds exist** — `OWNER | CUSTOMER | PROSPECT | INVESTOR_TARGET |
+  PORTFOLIO_COMPANY | PARTNER | COMPETITOR | VENDOR | OTHER`.
+
+So one directory row feeds five consumers with no duplication:
+
+```
+                       ┌─→ OWNER             → the Run stack scopes to it
+  companies row  ──────┼─→ CUSTOMER/PROSPECT → CRO's CRM pipeline
+  (accountId NULL      ├─→ INVESTOR_TARGET   → CEO's fundraising pipeline
+   until claimed)      ├─→ PORTFOLIO_COMPANY → an investor persona's portfolio
+                       └─→ VENDOR            → Security's vendor + DPA register
+```
+
+hired.video's `companies` (employer profiles a candidate browses) arrive as rows **with no OWNER
+relationship** — PRD 19 §2 row 19 already made that call. The three-way "company" collision
+therefore resolves to one table: the directory a jobseeker browses is the directory a founder claims
+their business in.
+
+#### 11.5.2 Claiming is the rung that turns the business on
+
+```
+  browse the directory → "this is my business" → verify (DNS TXT / email@domain)
+        │                                                  │
+        │                                                  ▼
+        │                                      accountId = your tenant
+        │                                      OWNER relationship written
+        └────── or: the CEO agent forms a new company ─────┤
+                                                           ▼
+                              RUN activates · eight seats go live · the company
+                              chip appears in the session bar
+```
+
+**The unlock is the claim, not the plan.** Plan gating stays exactly where PRD 19 §2 row 14 put it
+(`planFeatures` + `featureGate`, one evaluator, miss = 402) and decides *depth* — how many
+scenarios, how many seats, whether Monte Carlo runs. It does not decide whether the Finance row
+exists. Someone who claimed a bakery sees Finance on the free plan with their real numbers in it.
+
+#### 11.5.3 What a claimed company gets
+
+The Run group in full is PRD 18 + PRD 19 pointed at one company:
+
+| Row | Behind it | From |
+|---|---|---|
+| Finance | runway · burn · break-even · forecast + sensitivity + Monte Carlo · ARR · cohort retention · CAC/LTV/payback · expenses + AI classification · bank sync · invoicing · TCO | PRD 19 B1 |
+| Revenue | contacts + provenance · deals · pipelines · quota · sequences · enrichment · dedup · business phone | PRD 19 B3 |
+| Growth | campaigns (one engine) · landing pages · lead forms · nurture flows · A/B tests · NPS · referrals · SEO · brand kit · content calendar · heatmaps | PRD 19 B4 |
+| People | employees · goals · reviews · 1:1s · check-ins · pulse · scorecards · org design · headcount plan · HRMS connectors | PRD 18 T3 + PRD 19 B7 |
+| Hiring | jobs · pipelines · screening · interviews · scorecards · résumé tailoring · candidate packets | PRD 18 T1/T2 |
+| Investors | pitch decks + slide analytics · investor updates + approvals · data room · due diligence · funding rounds · portfolio health · deal flow | PRD 19 B2 |
+| Governance | SOC 2 controls + evidence · vendors · DPAs · PII assets · security training · compliance calendar · DSR | PRD 19 B8 |
+| Support | tickets · knowledge base · live chat · CSAT | PRD 19 §2 row 7 |
+| Commerce | plans · invoices · cart/orders · payouts · affiliates · AI credits | PRD 18 T6 + PRD 19 B9 |
+
+Nine rows. Each is one seat, one panel, one index column, N leaves. **That is how 549 destinations
+become a menu you can read.**
+
+### 11.6 What gets deleted
+
+Deletion is the deliverable; an addition that leaves the old list standing is the failure mode this
+section exists to prevent.
+
+| Deleted | Replaced by | Milestone |
+|---|---|---|
+| `BURNRATE_PRODUCT_DOMAINS` as a nav rail (`.nav-domain-section` in `Sidebar.tsx`) | the RUN group | M1 |
+| `burnrateCatalog.ts` (whole file) | `destinations.ts` + the `marketingHref` field | M1 |
+| `NAV_GROUPS` / `FOR_HIRE_NAV_GROUPS` / `FREELANCER_NAV_GROUPS` / `SALES_NAV_GROUPS` | one array + an account-type selector | M1 |
+| The `seat` nav group · the `dashboard` nav group | RUN rows + footer chips · last-board landing (§6.8) | M1 |
+| The public header's `Home` item | the logo, which was always home (§11.4.6) | M1 |
+| The signup-form destination behind `Get Started →` | `/create/new` — a real local-first board (§11.4.6) | M1 |
+| Standalone page rendering for the nine domain pages + `/soc2` + `/integrations` when signed in | `surface:'panel'` over the mounted board (§11.4.5) | M3 |
+| `ADMIN_GROUP_META` as its own list | `stage:'admin'`, `parent:'admin'` rows | M3 |
+| `CATEGORY_IDS` literal | the `listable` families | M4 |
+| BurnRateOS "AI Assistant" category, `/ai/hub`, `/ai/coach` | the composer and the owning seats | M3 |
+| BurnRateOS hard-coded "Hubs" block (`/bi/hub`, `/ops/hub`, `/ai/hub`, `/agile/holistic`) | the seat workbench home | M3 |
+| BurnRateOS `system_features` **as a menu mechanism** | the registry; the table survives as *entitlement only* | M3 |
+
+> **`system_features` deserves its own line.** BurnRateOS drives its sidebar from a database table
+> carrying `menuLabel`, `menuIcon`, `menuOrder`, `route`, `parentFeatureId` and `allowedPersonas`.
+> It is a good entitlement store and a bad navigation store: a route rename becomes a migration, a
+> label is untranslatable (that side ships no i18n at all), and the tree can render a link to a
+> route that no longer exists. **Split it:** `enabled(featureKey, tenant)` is data and survives;
+> label / icon / order / route / parent are code and move into the registry, where next-intl and the
+> type system can see them.
+
+### 11.7 Sequence
+
+| # | Work | Gate |
+|---|---|---|
+| **M0** | `destinations.ts` + the `Destination` type; populate from all five existing lists **with no UI change**. Add the ratchet (§11.7.1) baselined at today's numbers. | Every currently-reachable route resolves through the registry; ratchet green |
+| **M1** | Left panel renders from the registry, grouped by stage, with collapsible headers. `burnrateCatalog.ts`, the `seat` group and the `dashboard` group are deleted. The public header drops `Home` and repoints its CTA at the canvas. `SlideOutPanel` gets its width control back. | Zero references to `burnrateCatalog`; no marketing href reachable from the app rail; the CTA lands on a board |
+| **M2** | The footer is the only seat enumeration; a RUN row and a footer chip resolve to the same panel. | One roster endpoint, one seat list, drag + keyboard parity retained (§6.4, §6.5) |
+| **M3** | Seat workbench index = `filter(parent === seat)`. Absorb `ADMIN_GROUP_META` and, as PRD 19 tracks land, the `system_features` leaves; demote that table to entitlement. **Flip the reference destinations to `surface:'panel'`** (§11.4.5) and fix their viewport-vs-container queries. | §6.3 still holds; every ported leaf has a `parent`; a signed-in `/soc2` opens over a board whose agent turn survives it |
+| **M4** | Marketplace: three families, the `company` listing kind, the claim flow surfaced, `publish` becomes a button. | Browse → claim → verify → RUN activates |
+| **M5** | Progressive disclosure through one `earned(rung)` helper; dim rows open a real preview. | A visitor sees every row; a claimed company activates eight seats |
+
+Against PRD 18/19: **M0–M2 block no track's schema or API, and gate every track's left-panel
+entry.** A track registers its destinations in the same pass that lands its surface — §5.1's rule,
+restated for the menu.
+
+#### 11.7.1 The ratchet — the item that makes it permanent
+
+`frontend/scripts/check-destinations.mjs`, wired into `npm test` beside `check:design-tokens` and
+`check:design-scale`:
+
+1. **One declaration.** Any array literal outside `destinations.ts` whose elements carry both an
+   `href`/`route` and a `labelKey`/`menuLabel` fails the build. Allowlist entries carry a written
+   reason — the pattern §2.7 settled on after a count-based ratchet went slack.
+2. **No duplicate labels.** Two rows resolving to the same `labelKey` fail.
+3. **No marketing href in an app surface.** A `Destination.href` matching `PUBLIC_SHELL_PREFIXES`
+   fails unless the row also sets `marketingHref` and the app rail reads `href`.
+4. **Every seat is covered.** Each kernel `DOMAINS` entry either owns ≥1 destination or is
+   explicitly `platform`.
+5. **The registry count is deliberately NOT ratcheted** — PRD 18/19 add hundreds of leaves. What is
+   ratcheted is the number of *registries*, and that number is 1.
+
+**M0 and the ratchet land together.** Without it, M1–M5 are undone by the first track that ships a
+surface — the same argument §5 makes about E6.
+
+### 11.8 Acceptance criteria
+
+1. `frontend/src/lib/destinations.ts` is the only file declaring a navigable destination's label,
+   icon, href and parent. Enforced by `npm run check:destinations`.
+2. No seat is enumerated in two places: the footer roster is the only seat list.
+3. No in-app navigation control resolves to a route in `PUBLIC_SHELL_PREFIXES`.
+4. The left panel renders `Idea · Make · Run · Measure · Market · Admin`, in that order, at every
+   rung — rows dim, never disappear (§2.6 rule 7).
+5. Every BurnRateOS `system_features` leaf and every hired.video page group has exactly one `parent`
+   in the registry before its track's UI ships.
+6. The marketplace exposes exactly three families; `publish` is an action, not a filter.
+7. A company can be browsed unclaimed, claimed with verification, and the claim activates the RUN
+   group and the eight business seats for that tenant.
+8. Every registry string is a `labelKey` present in all five catalogs with real translations.
+9. Both themes, 360px, `@container panel` for anything rendered inside a panel (§3.4).
+10. `check:design-tokens`, `check:design-scale` and `check:destinations` all pass.
+11. Every left-panel stage header collapses, is a `<button aria-expanded>`, and its state persists
+    independently of the rail's collapsed state (§11.4.1).
+12. `SlideOutPanel` exposes a keyboard-reachable three-step width control; the choice persists per
+    destination and never remounts the stage (§11.4.4).
+13. Every `surface:'panel'` destination renders identically signed out (as a page) and signed in
+    (in `ShellPanel` at `full`), from one component, with its public URL unchanged (§11.4.5).
+14. The public header has no `Home` item, and its primary CTA resolves to a real board (§11.4.6).
+
+### 11.9 Open decisions — operator, not engineering
+
+Added to §7's two, which remain.
+
+3. **"Run" vs "Real".** The operator's phrase is *idea to REAL*; the group's job is *running the
+   business*. `REAL` is the better marketing word, `RUN` the better verb for a menu heading. §11
+   currently writes `run`. *Blocks M1's copy and the `Stage` union.*
+4. **Does the marketplace list a company that never opted in?** Browsing unclaimed rows is what
+   makes the directory useful on day one, and it is how hired.video's employer profiles arrive. It
+   also means publishing profiles of businesses that did not ask. A data-protection call, not a
+   schema question. *Blocks M4.*
+5. **Whose custom domain does a claimed company's storefront use** — the site-backend work (0412) or
+   the whitelabel table PRD 18 T6 ports? Both exist; PRD 19 §2's one-owner rule applies and neither
+   PRD has claimed the row. *Blocks M4's publish path.*

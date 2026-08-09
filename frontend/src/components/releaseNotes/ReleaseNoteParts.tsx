@@ -16,6 +16,7 @@
  */
 
 import { useLocale, useTranslations } from 'next-intl';
+import { useMemo } from 'react';
 import { toStage, type ReleaseNoteStage } from '@/lib/releaseNotesApi';
 
 const CATEGORY_ACCENT: Record<'new' | 'improvement' | 'fix', string> = {
@@ -106,6 +107,24 @@ export function ReleaseNoteBody({ body }: { body: string | null }) {
 /** One date format for every product-update surface, in the reader's locale. */
 export function useReleaseNoteDate(): (iso: string) => string {
   const locale = useLocale();
-  return (iso: string) =>
-    new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(iso));
+  return useMemo(
+    () => {
+      const formatter = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric' });
+      return (iso: string) => formatter.format(new Date(iso));
+    },
+    [locale],
+  );
+}
+
+/** Stable month headings keep the catalog grouped without repeating a full date
+ *  on every visual boundary. */
+export function useReleaseNoteMonth(): (iso: string) => string {
+  const locale = useLocale();
+  return useMemo(
+    () => {
+      const formatter = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' });
+      return (iso: string) => formatter.format(new Date(iso));
+    },
+    [locale],
+  );
 }

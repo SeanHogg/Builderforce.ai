@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EMBED_CAPABILITIES, type EmbedCapability } from '@seanhogg/builderforce-embedded';
 import { embedApi } from '@/lib/builderforceApi';
-import { getStoredTenant } from '@/lib/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { EmbedConsentModal } from './EmbedConsentModal';
 import { EmbedInstallSnippet } from './EmbedInstallSnippet';
 
@@ -30,7 +30,8 @@ const cardStyle: React.CSSProperties = {
 
 export function EmbedIntegrationSettings() {
   const t = useTranslations('embedded.surfaces');
-  const role = getStoredTenant()?.role;
+  const { tenant, tenantToken } = useAuth();
+  const role = tenant?.role;
   const canManage = role === 'owner' || role === 'manager';
 
   const [enabled, setEnabled] = useState(false);
@@ -45,7 +46,7 @@ export function EmbedIntegrationSettings() {
   const [consentOpen, setConsentOpen] = useState(false);
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || !tenantToken) return;
     let cancelled = false;
     embedApi
       .getConfig()
@@ -62,9 +63,9 @@ export function EmbedIntegrationSettings() {
     return () => {
       cancelled = true;
     };
-  }, [canManage, t]);
+  }, [canManage, t, tenantToken]);
 
-  if (!canManage) return null;
+  if (!canManage || !tenantToken) return null;
 
   const needsConsent = enabled && consentVersion !== requiredVersion;
 

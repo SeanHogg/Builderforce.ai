@@ -20,9 +20,11 @@ describe('PromptUseCasePicker', () => {
     const tab = screen.getByRole('button', { name: 'Choose a starting point' });
 
     expect(root.lastElementChild).toBe(tab);
+    expect(root).toHaveAttribute('data-open', 'false');
     expect(screen.getByText('Wireframe').closest('button')).toHaveAttribute('tabindex', '-1');
 
     fireEvent.click(tab);
+    expect(root).toHaveAttribute('data-open', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Wireframe' }));
 
     expect(onSelect).toHaveBeenCalledWith('Create a product wireframe.');

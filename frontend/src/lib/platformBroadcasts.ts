@@ -104,25 +104,6 @@ function broadcastSocketUrl(): string {
   return `${AUTH_API_URL.replace(/^http/, 'ws')}/api/guest/messages/ws`;
 }
 
-/**
- * A normal HTTP request to the relay returns 426 when the route exists (the
- * actual connection must be a WebSocket upgrade). Probe first so a frontend
- * deployed ahead of its API does not create a noisy failed WebSocket every five
- * seconds. Browsers do not expose the failed handshake status to WebSocket
- * clients, so this capability check has to happen before `new WebSocket()`.
- */
-async function broadcastSocketAvailable(): Promise<boolean> {
-  try {
-    const res = await apiRequestStream('/api/guest/messages/ws', {
-      auth: 'none',
-      expectedErrors: [404, 426, 503],
-    });
-    return res.status === 426;
-  } catch {
-    return false;
-  }
-}
-
 export interface PlatformBroadcastsState {
   broadcasts: PlatformBroadcast[];
   dismiss: (id: number) => void;
@@ -149,27 +130,21 @@ export function usePlatformBroadcasts(): PlatformBroadcastsState {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Live refresh. Capability-check before connecting because WebSocket does not
-  // expose a failed handshake's HTTP status. An older API deployment therefore
-  // degrades quietly to the mount fetch instead of filling the console forever.
+  // Live refresh. Connect with the WebSocket API directly so the request carries
+  // the required Upgrade header; an ordinary HTTP probe of this URL receives the
+  // endpoint's intentional 426 response and appears as a failed request in DevTools.
   useEffect(() => {
     if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
     let closed = false;
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
 
-    const connect = async () => {
+    const connect = () => {
       if (closed) return;
-      if (!(await broadcastSocketAvailable()) || closed) {
-        // Re-probe quietly: this tab can recover after a staggered API deploy
-        // without repeatedly attempting a WebSocket handshake to a missing URL.
-        if (!closed) retry = setTimeout(() => { void connect(); }, 60_000);
-        return;
-      }
       try {
         socket = new WebSocket(broadcastSocketUrl());
       } catch {
-        retry = setTimeout(() => { void connect(); }, 5000);
+        retry = setTimeout(connect, 5000);
         return;
       }
       socket.onmessage = (event) => {
@@ -179,11 +154,11 @@ export function usePlatformBroadcasts(): PlatformBroadcastsState {
         } catch { /* non-JSON frames are not ours */ }
       };
       socket.onclose = () => {
-        if (!closed) retry = setTimeout(() => { void connect(); }, 5000);
+        if (!closed) retry = setTimeout(connect, 5000);
       };
       socket.onerror = () => { try { socket?.close(); } catch { /* already gone */ } };
     };
-    void connect();
+    connect();
 
     return () => {
       closed = true;

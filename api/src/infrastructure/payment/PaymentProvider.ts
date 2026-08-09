@@ -68,6 +68,16 @@ export interface CheckoutSessionResult {
   externalSubscriptionId: string | null;
 }
 
+export interface BusinessPhoneCheckoutOpts {
+  tenantId: number;
+  billingEmail: string;
+  currency: string;
+  activationCents: number;
+  monthlyCents: number;
+  successUrl: string;
+  cancelUrl: string;
+}
+
 /** Options to start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) —
  *  used to unlock PREMIUM (any-paid-OpenRouter) model selection, which needs a
  *  funding instrument on file even though it's metered per-request, not a plan. */
@@ -102,7 +112,10 @@ export interface WebhookEvent {
     | 'payment.succeeded'        // one-off or first payment succeeded
     | 'payment.failed'           // payment declined
     | 'card.validated'           // explicit card-validation (SetupIntent) succeeded
-    | 'card.validation_failed';  // explicit card-validation could not complete
+    | 'card.validation_failed'   // explicit card-validation could not complete
+    | 'addon.activated'
+    | 'addon.past_due'
+    | 'addon.cancelled';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -129,6 +142,7 @@ export interface WebhookEvent {
   discountRedemptionId?: string;
   /** Signed checkout/subscription metadata identifying the attributed referral. */
   salesReferralId?: string;
+  purchaseKind?: 'business_phone';
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;
@@ -141,6 +155,9 @@ export interface PaymentProvider {
    * Throws {@link PaymentNotConfiguredError} when the Stripe secrets are absent.
    */
   createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult>;
+
+  /** Purchase the Business Phone recurring add-on plus its one-time activation. */
+  createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult>;
 
   /**
    * Start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) so the tenant

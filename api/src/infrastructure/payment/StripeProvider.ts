@@ -24,6 +24,7 @@
  */
 
 import type {
+  BusinessPhoneCheckoutOpts,
   PaymentProvider,
   CheckoutSessionOpts,
   CheckoutSessionResult,
@@ -125,6 +126,33 @@ export class StripeProvider implements PaymentProvider {
       externalCustomerId: session.customer ?? null,
       externalSubscriptionId: null, // arrives via webhook after payment
     };
+  }
+
+  async createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult> {
+    this.requireConfigured();
+    const currency = opts.currency.toLowerCase();
+    const params = new URLSearchParams({
+      mode: 'subscription', customer_email: opts.billingEmail, success_url: opts.successUrl, cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': '1', 'line_items[0][price_data][currency]': currency,
+      'line_items[0][price_data][unit_amount]': String(opts.activationCents),
+      'line_items[0][price_data][product_data][name]': 'BuilderForce Business Phone activation',
+      'line_items[1][quantity]': '1', 'line_items[1][price_data][currency]': currency,
+      'line_items[1][price_data][unit_amount]': String(opts.monthlyCents),
+      'line_items[1][price_data][recurring][interval]': 'month',
+      'line_items[1][price_data][product_data][name]': 'BuilderForce Business Phone',
+      'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'business_phone',
+      'subscription_data[metadata][tenantId]': String(opts.tenantId),
+      'subscription_data[metadata][purchaseKind]': 'business_phone',
+    });
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe business-phone checkout error: ${err.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string; customer: string | null };
+    return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
   }
 
   private async ensureDiscountCoupon(discount: NonNullable<CheckoutSessionOpts['discount']>): Promise<string> {
@@ -309,6 +337,14 @@ export class StripeProvider implements PaymentProvider {
         }
 
         const customerDetails = obj['customer_details'] as Record<string, string> | undefined;
+        if (meta['purchaseKind'] === 'business_phone') {
+          return {
+            type: 'addon.activated', purchaseKind: 'business_phone',
+            ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+            externalCustomerId: customer, externalSubscriptionId: sub ?? '',
+            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'], raw: event,
+          };
+        }
         const rawSeats = parseInt(meta['seats'] ?? '1', 10);
 
         // A Checkout Session carries no card details of its own, so read them off the
@@ -344,6 +380,13 @@ export class StripeProvider implements PaymentProvider {
         const status = obj['status'] as string;
         const customer = obj['customer'] as string;
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
+        if (meta['purchaseKind'] === 'business_phone') {
+          const rawTenantId = Number(meta['tenantId']);
+          const addonType = status === 'active' || status === 'trialing' ? 'addon.activated'
+            : status === 'past_due' || status === 'unpaid' ? 'addon.past_due'
+              : status === 'canceled' ? 'addon.cancelled' : null;
+          return addonType ? { type: addonType, purchaseKind: 'business_phone', ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event } : null;
+        }
 
         // Only statuses that carry an actual billing verdict may move the tenant's
         // plan. Anything else (incomplete, paused, …) is acknowledged and ignored —
@@ -361,6 +404,11 @@ export class StripeProvider implements PaymentProvider {
       }
 
       case 'customer.subscription.deleted': {
+        const meta = (obj['metadata'] ?? {}) as Record<string, string>;
+        if (meta['purchaseKind'] === 'business_phone') {
+          const rawTenantId = Number(meta['tenantId']);
+          return { type: 'addon.cancelled', purchaseKind: 'business_phone', ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: obj['customer'] as string, externalSubscriptionId: obj['id'] as string, raw: event };
+        }
         return {
           type: 'subscription.cancelled',
           externalCustomerId: obj['customer'] as string,

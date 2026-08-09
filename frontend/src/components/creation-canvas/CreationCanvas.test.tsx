@@ -775,12 +775,13 @@ describe('CreationCanvas', () => {
     // chat product works. Nesting the prompt in the side panel is what broke that.
     const prompt = screen.getByLabelText('Ask Brain about this canvas');
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).not.toContainElement(prompt);
-    // Starting points use the free band above the Brain Object. They are not a
-    // tab attached to the composer, where they used to cover the transcript.
+    // The composer utility row owns both status and starting points, keeping the
+    // former at the left edge and the latter at the right without moving the input.
     const starter = screen.getByRole('button', { name: 'Choose a starting point' });
-    expect(prompt.closest('[data-tour="creation-brain-dock"]')).not.toContainElement(starter);
+    expect(prompt.closest('[data-tour="creation-brain-dock"]')).toContainElement(starter);
     expect(starter.closest('[data-tour="creation-prompt-starter"]')).not.toBeNull();
     expect(starter.closest('[data-align="end"]')).not.toBeNull();
+    expect(starter.closest('[data-placement="top"]')).not.toBeNull();
   });
 
   it('moves Brain into its Object rather than putting a second chat on the board', () => {

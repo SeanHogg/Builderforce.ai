@@ -20,6 +20,17 @@ export interface PublicPricingContract {
   publishedAt: string;
   plans: PublicPricingPlan[];
   managedAgentHostMonthly: number;
+  businessPhone: {
+    activation: number;
+    monthly: number;
+    includedMinutes: number;
+    includedSms: number;
+    includedMms: number;
+    overagePerMinute: number;
+    overagePerSms: number;
+    overagePerMms: number;
+    eligiblePlans: Array<'pro' | 'teams'>;
+  };
   pricing: {
     currency: string;
     pro: { monthly: number; yearly: number; yearlySavingsPercent: number };

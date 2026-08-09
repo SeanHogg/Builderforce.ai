@@ -31,6 +31,7 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
 
   it('renders marketing/public routes in the public shell', () => {
     expect(classifyShell('/')).toBe('public');
+    expect(classifyShell('/about')).toBe('public');
     expect(classifyShell('/product')).toBe('public');
     expect(classifyShell('/blog')).toBe('public');
     expect(classifyShell('/blog/some-post')).toBe('public');

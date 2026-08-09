@@ -23,6 +23,17 @@ export interface PricingDocument {
   currency: string;
   plans: PricingPlanContent[];
   managedAgentHostMonthly: number;
+  businessPhone: {
+    activation: number;
+    monthly: number;
+    includedMinutes: number;
+    includedSms: number;
+    includedMms: number;
+    overagePerMinute: number;
+    overagePerSms: number;
+    overagePerMms: number;
+    eligiblePlans: Array<'pro' | 'teams'>;
+  };
 }
 export interface PublishedPricingContract extends PricingDocument {
   publishedAt: string;
@@ -40,6 +51,17 @@ export const PUBLIC_PRICING_CACHE_KEY = 'platform-pricing:published:v1';
 export const DEFAULT_PRICING_DOCUMENT: PricingDocument = {
   currency: 'USD',
   managedAgentHostMonthly: 49,
+  businessPhone: {
+    activation: 19.95,
+    monthly: 9.95,
+    includedMinutes: 200,
+    includedSms: 300,
+    includedMms: 15,
+    overagePerMinute: 0.05,
+    overagePerSms: 0.012,
+    overagePerMms: 0.10,
+    eligiblePlans: ['pro', 'teams'],
+  },
   plans: [
     { id: 'free', name: 'Free', description: 'Start creating free, then upgrade any time.', monthly: 0, yearly: 0, priceSuffix: '/month forever', minimumSeats: 1, features: ['1 AgentHost', '5 projects', '10K tokens / day'], excluded: ['Approval workflows', 'Fleet mesh + remote dispatch', 'Full telemetry + audit trail', 'Custom agent roles'], ctaLabel: 'Create free account', ctaHref: '/register', highlighted: false },
     { id: 'pro', name: 'Pro', description: 'For sustained creative delivery with more capacity and control.', monthly: 29, yearly: 290, priceSuffix: '/month', minimumSeats: 1, features: ['Up to 3 AgentHosts', 'Unlimited projects', '1M tokens / day', 'Approval workflows', 'Fleet mesh + remote dispatch', 'Full telemetry + audit trail', 'Custom agent roles', 'Priority support'], excluded: ['Shared team approval inbox', 'Per-seat cost controls'], ctaLabel: 'Get Pro', ctaHref: '/pricing?upgrade=pro', highlighted: true },
@@ -70,7 +92,18 @@ export function validatePricingDocument(raw: unknown): PricingDocument {
   const byId = new Map(value.plans.map((plan) => [(plan as PricingPlanContent).id, plan]));
   const managed = Number(value.managedAgentHostMonthly);
   if (!value.currency?.trim() || !Number.isFinite(managed) || managed < 0) throw new Error('Invalid pricing metadata');
-  return { currency: value.currency.trim().toUpperCase(), managedAgentHostMonthly: managed, plans: (['free', 'pro', 'teams'] as const).map((id) => validatePlan(byId.get(id), id)) };
+  const phone = value.businessPhone ?? DEFAULT_PRICING_DOCUMENT.businessPhone;
+  const phoneNumbers = [phone.activation, phone.monthly, phone.includedMinutes, phone.includedSms, phone.includedMms, phone.overagePerMinute, phone.overagePerSms, phone.overagePerMms].map(Number);
+  if (phoneNumbers.some((number) => !Number.isFinite(number) || number < 0)) throw new Error('Invalid business phone pricing');
+  return {
+    currency: value.currency.trim().toUpperCase(),
+    managedAgentHostMonthly: managed,
+    businessPhone: {
+      activation: phoneNumbers[0], monthly: phoneNumbers[1], includedMinutes: phoneNumbers[2], includedSms: phoneNumbers[3], includedMms: phoneNumbers[4],
+      overagePerMinute: phoneNumbers[5], overagePerSms: phoneNumbers[6], overagePerMms: phoneNumbers[7], eligiblePlans: ['pro', 'teams'],
+    },
+    plans: (['free', 'pro', 'teams'] as const).map((id) => validatePlan(byId.get(id), id)),
+  };
 }
 
 function publicContract(document: PricingDocument, publishedAt: Date | string): PublishedPricingContract {
