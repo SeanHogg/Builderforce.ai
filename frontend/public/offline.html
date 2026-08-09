@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#111827" />
+    <title>Builderforce.ai — Offline</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0b1020; color: #f8fafc; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; }
+      main { width: min(32rem, calc(100% - 3rem)); text-align: center; }
+      img { width: 5rem; height: 5rem; border-radius: 1.25rem; }
+      h1 { margin: 1.5rem 0 .75rem; font-size: clamp(1.75rem, 7vw, 2.5rem); }
+      p { color: #cbd5e1; line-height: 1.6; }
+      button { border: 0; border-radius: .75rem; padding: .75rem 1rem; background: #f97360; color: #111827; font: inherit; font-weight: 700; cursor: pointer; }
+      button:focus-visible { outline: 3px solid #f8fafc; outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icon-192.png" alt="" />
+      <h1>You’re offline</h1>
+      <p>Builderforce can’t reach the network right now. Your browser-held work remains on this device. Reconnect, then try again.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

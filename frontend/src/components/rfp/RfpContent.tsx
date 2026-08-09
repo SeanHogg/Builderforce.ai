@@ -192,7 +192,7 @@ export default function RfpContent() {
 
           <div>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('field.economics')}</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 6 }}>
               <PctField label={t('field.margin')} value={draft.marginPct} onChange={(v) => setDraft({ ...draft, marginPct: v })} />
               <PctField label={t('field.marketing')} value={draft.marketingPct} onChange={(v) => setDraft({ ...draft, marketingPct: v })} />
               <PctField label={t('field.contingency')} value={draft.contingencyPct} onChange={(v) => setDraft({ ...draft, contingencyPct: v })} />

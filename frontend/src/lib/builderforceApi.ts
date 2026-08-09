@@ -9,6 +9,7 @@ import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -539,7 +540,7 @@ export const brain = {
    *  the timeline can rehydrate them after a reload. Best-effort; the caller drops
    *  the promise. Clears the local read cache so the next GET reflects the append. */
   appendChatTrace: (chatId: number, events: BrainChatTraceEventInput[]) => {
-    brainTraceCache.delete(chatId);
+    invalidateClientCache(`brain-trace:${chatId}`);
     return request<{ appended: number }>(`/api/brain/chats/${chatId}/trace`, {
       method: 'POST',
       body: JSON.stringify({ events }),
@@ -557,12 +558,10 @@ export const brain = {
    * would be wrong in precisely the way that wastes the session it was captured for.
    */
   getChatTrace: async (chatId: number, opts?: { refresh?: boolean }): Promise<BrainChatTraceRow[]> => {
-    if (opts?.refresh) brainTraceCache.delete(chatId);
-    const cached = brainTraceCache.get(chatId);
-    if (cached) return cached;
-    const { trace } = await request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`);
-    brainTraceCache.set(chatId, trace);
-    return trace;
+    const key = `brain-trace:${chatId}`;
+    if (opts?.refresh) invalidateClientCache(key);
+    return getOrSetClientCached(key, () =>
+      request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`).then(({ trace }) => trace));
   },
 };
 
@@ -591,9 +590,6 @@ export interface BrainChatTraceEventInput {
   ttftMs?: number;
   turnSeq?: number;
 }
-
-/** Per-chat client cache for the persisted trace GET (cleared on append). */
-const brainTraceCache = new Map<number, BrainChatTraceRow[]>();
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
 export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';

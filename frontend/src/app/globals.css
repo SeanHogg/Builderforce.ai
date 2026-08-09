@@ -1799,6 +1799,33 @@ html[data-theme='light'] .nebula {
   padding: var(--space-3) var(--space-3) var(--space-1);
 }
 
+/* The body of a destination opened over the board (PRD 21 §3.4).
+   ---------------------------------------------------------------------------
+   A route rendered here is the SAME route that used to own the whole screen, and
+   the trade PRD 21 makes is that it renders unchanged — that is the only reason
+   the shell survives the hundreds of surfaces PRD 18/19 bring. What it must not
+   do is measure the VIEWPORT. A panel at 660px on a 2560px monitor is a narrow
+   column inside a wide window, so `@media (max-width: 700px)` never fires and
+   the destination lays itself out for a screen it does not have.
+
+   `container-type: inline-size` fixes that at the seam rather than at the six
+   hundred call sites: a destination inside a panel asks the PANEL how wide it is.
+
+       @container panel (max-width: 640px) { .myGrid { grid-template-columns: 1fr } }
+
+   `container-type: inline-size` also establishes containment, which is why the
+   size properties below are restated: the body still has to fill its flex row
+   and scroll its own overflow. Wide content (a table, a Gantt) scrolls HERE,
+   inside the panel, instead of pushing the drawer past the viewport. */
+.ui-panel-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  container-type: inline-size;
+  container-name: panel;
+}
+
 /* Eyebrow — mono, small, tracked (§2.3). One declaration, so a panel crumb and a
    footer group label cannot drift into two different eyebrows. */
 .ui-eyebrow {

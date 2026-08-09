@@ -14,6 +14,7 @@
 
 import type { SemanticCache } from '@seanhogg/builderforce-memory';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /** True only where an on-device WebGPU SSM embedder can exist. Shared with
  *  `MambaModelProvider` so the WebGPU gate lives in exactly one place (DRY). */
@@ -24,7 +25,7 @@ export function hasWebGPU(): boolean {
 /** Cosine-similarity threshold above which a stored answer is reused. */
 const DEFAULT_THRESHOLD = 0.92;
 
-let cachePromise: Promise<SemanticCache | null> | undefined;
+const CACHE_KEY = 'semantic-response-cache:runtime';
 
 /**
  * Lazily build (once) the semantic response cache backed by an on-device SSM embedder.
@@ -32,7 +33,7 @@ let cachePromise: Promise<SemanticCache | null> | undefined;
  * degrade to a direct network call.
  */
 export function getSemanticResponseCache(): Promise<SemanticCache | null> {
-  return (cachePromise ??= buildSemanticResponseCache());
+  return getOrSetClientCached(CACHE_KEY, () => buildSemanticResponseCache());
 }
 
 async function buildSemanticResponseCache(): Promise<SemanticCache | null> {
@@ -86,5 +87,5 @@ export async function withSemanticResponseCache(
 
 /** Reset the memoised cache (tests / disposal). */
 export function resetSemanticResponseCache(): void {
-  cachePromise = undefined;
+  invalidateClientCache(CACHE_KEY);
 }

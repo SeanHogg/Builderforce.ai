@@ -1,3 +1,109 @@
+## ✅ RESOLVED 2026-08-09 — PRD 21's last two residuals: the literal-hex sweep reaches ZERO, and the panel gets a size container
+
+*[PRD 21](./specs/builderforce/21-prd-unified-experience.md) §2.9 item 1 + §3.4. These were the only
+two entries left in the Gap Register's "Unified design system — the retrofit" block after E0–E6
+shipped on 2026-08-08. Both are closed, and the register section is now empty.*
+
+### The colour half: 341 files → 0, and the ratchet stops being a number
+
+The register said the remaining half "needs a reading of the element rather than of the value:
+`#fff` is ink on a filled control in one place and a surface in the next, and no codemod can tell
+which." That is true of the VALUE and false of the POSITION, which is what made the rest tractable:
+
+| Pass | What it decided | Sites |
+|---|---|---|
+| **Redundant fallback** | `var(--x, #hex)` where `--x` IS declared — the literal is unreachable | **1,155** across 261 files |
+| **Semantic value** | a red in a colour position is failure wherever it appears | **260** across 71 files |
+| **Ink by property** | `#fff` in a `color:`/`fill` whose sibling branch is a token is `--text-on-accent` | **68** across 58 files |
+| **By hand** | the rest, one element at a time | ~100 |
+
+**All 152 occurrences of `#f4726e` were the pre-rebrand coral**, sitting as a dead fallback behind
+`var(--coral-bright)` — a colour that is not in the brand at all (§2.1 trap 1), surviving every grep
+and teaching the next author the wrong value.
+
+`check-design-scale.mjs` no longer counts literal-hex FILES. `literalHexFiles` is `0` and
+`COLOUR_EXEMPT` is an allowlist where every entry carries its reason — a number lets 341 sit there
+looking like progress, a list makes the next person say out loud why a token cannot reach their
+case. The six categories that survive: where the tokens are declared (`globals.css`, the board's
+module, the landing hero's lit scene); documents opened outside the app; generated project source;
+third-party brand marks; colour the AUTHOR picks and we persist; and consumers that never read a
+stylesheet.
+
+**Eleven tokens added** so nothing had to stay literal for want of a name: `--teal-bright`,
+`--pink-bright`, `--purple-bright`, `--sky-bright`, `--yellow-bright`, `--orange-bright` (the
+categorical wheel ran out at series six, which is why `CHART_PALETTE` still held five raw
+literals); `--error-strong` (severity is an ordinal ramp — a fatal is not "very error");
+`--ink-on-light` and `--ink-on-categorical` (a stacked-bar segment cannot measure a fill that is a
+`var()`, and does not need to: the whole `*-bright` family is pale on slate and deep on paper, which
+is one relationship); plus `--ev-*` and `--canvas-obj-*` below.
+
+### Nine defects the sweep surfaced — all shipped, all fixed here
+
+Six were left by EARLIER passes of this same migration, which is the argument for the allowlist:
+
+1. **`LandingCanvasHero.module.css` declared `--text-primary: var(--text-primary)`** — a cycle,
+   invalid at computed-value time, which stripped the token from every descendant of the hero.
+2. **`Terminal.tsx` set the xterm cursor to `var(--text-on-accent)`.** xterm paints its own canvas
+   from a plain JS theme object and never reads our stylesheet, so the cursor was simply gone.
+3. **`layout.tsx` set the light `theme-color` meta to `var(--text-on-accent)`.** The browser chrome
+   reads that tag before any CSS exists; the light-mode address bar was unthemed.
+4. **`vanillaDefaults.ts` emitted `borderRadius: 'var(--radius-xl)'` into a React Native
+   scaffold**, where `borderRadius` is a number. The generated mobile app's cards and buttons were
+   broken.
+5. **`printDocument.ts` and `creationDeliverables.ts` wrote tokens into standalone documents** — a
+   print sheet in an isolated iframe and a downloadable landing page, neither of which has our
+   `:root`.
+6. **`RfpContent.tsx`'s `DEFAULT_BRAND.text` was `var(--bg-elevated)`** — white ink on the白
+   proposal page wherever it resolved, invalid where it did not. That palette is written into a
+   `.html` the customer opens outside BuilderForce.
+7. **`EmailPreferencesCard` drew its `<option>`s `background:'#ffffff'` with
+   `color:var(--bg-elevated)`** — white on white the moment the light theme is on. Fixed by moving
+   onto the house `Select`, which renders its own listbox for exactly this reason.
+8. **Two `<input type="color">` defaults were `var()`s** (`websiteAccent`, the drawing `stroke`).
+   That control accepts `#rrggbb` and nothing else: it showed black and wrote black on first touch.
+   Those four values now live in `creation-canvas/authoredColors.ts` — colour the author picks,
+   persisted as data, literal on purpose.
+9. **`embed/[view]/page.tsx` used `--border-subtle`, a translucent hairline, as its dark TEXT
+   colour.** The effect above it already puts the host's theme on `<html>`, so the chrome now just
+   reads the tokens instead of branching on `frame.theme` with two literals.
+
+### Three DRY violations closed in the same pass
+
+- **The Evermind brain-region palette existed three times** — inline `<style>` in
+  `EvermindBrainMap`, again in `EvermindStudioCenter`, a third time in the Canvas module — and only
+  two of the three had a light override. Now one `--ev-*` family in `globals.css`, both themes.
+- **The Canvas object-kind palette existed twice** — the board's minimap and the dashboard's session
+  tiles — and had already drifted (`website` was the brand blue in one and its own hue in the
+  other). Now `--canvas-obj-*` in `globals.css`, because the dashboard is not inside `.canvasShell`
+  and a board-scoped declaration would leave it unresolved. That is exactly how the copy arose.
+- **The board's series / presence / frame / edge / runtime-ink colours** moved out of a
+  five-thousand-line component into `CreationCanvas.module.css` beside the rest of the board's
+  palette, per §2.6 rule 9.
+
+### The panel half: a destination can finally measure the panel
+
+The register's fix for the second entry was "per-destination, in each track's UI pass, not in the
+shell" — and measuring it showed why that was the wrong shape. The tree is already fluid: 107 files
+use `auto-fit`/`auto-fill`, there is not one `minWidth` above 700px, and the calendars that need
+seven columns already wrap themselves in an intended `overflow-x`. Exactly **three** rigid
+`repeat(3, 1fr)` grids existed (`BulkImport` ×2, `ErrorGroupDetail`, `RfpContent`); they are now
+`auto-fit`.
+
+What was actually missing was a seam. A panel is 440 or 660px inside a window that is routinely
+2560px, so a destination reaching for `@media (max-width: …)` asks about a screen it does not have
+and the query never fires. `SlideOutPanel`'s body is now `.ui-panel-body`, a **named size
+container** (`container-type: inline-size; container-name: panel`), so a destination writes
+`@container panel (…)` and gets the truth. Asserted in `unifiedExperience.test.tsx` beside the other
+§6 criteria.
+
+### Also closed
+
+**`AgentExecutionPanel.test.tsx` "opens a changed file in the Monaco diff viewer"** — logged as a P2
+failure under Test health; all 13 of that file's tests pass. The full frontend suite is **155 files
+/ 1,535 tests green**, `tsgo --noEmit` clean, and both design guards pass.
+
+---
+
 ## ✅ RESOLVED 2026-08-08 — The CSP allowlisted a font vendor the app never loaded
 
 *Found during the PRD 22 browser-performance re-audit. `next.config.js` allowlisted

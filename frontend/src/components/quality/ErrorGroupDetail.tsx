@@ -109,7 +109,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
               {g.type ? `${g.type} · ` : ''}{t(`level.${g.level}`)} · {t(`status.${g.status}`)}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 16 }}>
               <Metric label={t('detail.events')} value={g.eventCount} />
               <Metric label={t('detail.users')} value={detail?.affectedUsers ?? g.userCount} />
               <Metric label={t('detail.environment')} value={g.environment ?? '—'} />

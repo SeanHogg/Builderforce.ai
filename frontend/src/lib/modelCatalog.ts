@@ -14,6 +14,7 @@
 
 import { BRAND } from './content';
 import { apiRequest } from './apiClient';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
 export type ModelTier = 'FREE' | 'PRO' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
 
@@ -136,7 +137,7 @@ function toRecord(m: CatalogModel): ModelRecord {
 }
 
 // Per-tab dedupe so concurrent callers / page remounts share one request.
-let inflight: Promise<ModelRecord[]> | null = null;
+const CATALOG_CACHE_KEY = 'model-catalog:public';
 
 async function fetchCatalog(): Promise<ModelRecord[]> {
   const json = await apiRequest<{ data?: CatalogModel[] }>('/llm/v1/catalog', {
@@ -152,14 +153,8 @@ async function fetchCatalog(): Promise<ModelRecord[]> {
  * records so the page is useful.
  */
 export async function getModelCatalog(): Promise<ModelRecord[]> {
-  if (!inflight) {
-    inflight = fetchCatalog().catch((err) => {
-      inflight = null; // allow a retry on the next call
-      throw err;
-    });
-  }
   try {
-    return [...BUILDERFORCE_MODELS, ...(await inflight)];
+    return [...BUILDERFORCE_MODELS, ...(await getOrSetClientCached(CATALOG_CACHE_KEY, () => fetchCatalog()))];
   } catch {
     return [...BUILDERFORCE_MODELS];
   }

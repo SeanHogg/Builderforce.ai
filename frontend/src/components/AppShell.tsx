@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';
@@ -11,12 +12,16 @@ import { useEmulation } from '@/lib/EmulationContext';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { NavCountsProvider } from '@/lib/navCounts';
-import { CanvasStage } from './canvas/CanvasStage';
 import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
 import { TeamBar } from './team/TeamBar';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
+
+const CanvasStage = dynamic(
+  () => import('./canvas/CanvasStage').then((module) => module.CanvasStage),
+  { ssr: false },
+);
 
 function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);

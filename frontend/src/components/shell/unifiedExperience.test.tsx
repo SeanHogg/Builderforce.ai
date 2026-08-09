@@ -77,4 +77,31 @@ describe('PRD 21 §6 — acceptance', () => {
     const { container } = renderIndex(<DestinationIndex items={[item('only')]} activeId="only" ariaLabel="Sub-views" />);
     expect(container.querySelector('.ui-index')).toBeNull();
   });
+
+  /**
+   * §3.4 — a destination inside a panel must be able to measure the PANEL.
+   *
+   * The panel is 440 or 660px wide inside a window that is routinely 2560px, so
+   * a route that reaches for `@media (max-width: …)` asks the wrong question and
+   * lays itself out for a screen it does not have. The size container is what
+   * makes the right question answerable, and it lives in the primitive so no
+   * destination has to remember to establish one. jsdom does not implement
+   * container queries, so this asserts the seam rather than the reflow: the body
+   * carries the class, and the class declares the container.
+   */
+  it('§3.4 the panel body is a named size container, not a viewport reader', () => {
+    const panel = read('components/SlideOutPanel.tsx');
+    expect(panel).toContain('className="ui-panel-body"');
+    // …and never re-inlines the sizing it used to hand-roll here.
+    expect(panel).not.toContain("style={{ flex: 1, overflow: 'auto', minWidth: 0, minHeight: 0 }}");
+
+    const css = read('app/globals.css');
+    const rule = /\.ui-panel-body\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
+    expect(rule).toContain('container-type: inline-size');
+    expect(rule).toContain('container-name: panel');
+    // Containment replaces the flex sizing, so the body must restate it or the
+    // destination collapses to its content height inside the drawer.
+    expect(rule).toContain('overflow: auto');
+    expect(rule).toContain('min-width: 0');
+  });
 });

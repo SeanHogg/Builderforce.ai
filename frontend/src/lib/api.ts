@@ -12,6 +12,7 @@ import {
   isWorkerForProjects,
   type RequestOptions,
 } from './apiClient';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type {
   Project,
   IdeProject,
@@ -50,23 +51,17 @@ function projectsRequest<T>(path: string, opts: RequestOptions = {}): Promise<T>
 // each firing their own. Browser-side, so this is request coalescing — not the
 // server's cross-isolate getOrSetCached, which can't run here. Cleared on settle,
 // so there's no staleness window: later (sequential) calls always re-fetch.
-let inFlightProjects: Promise<Project[]> | null = null;
+const PROJECTS_CACHE_KEY = 'projects:list';
 
 export async function fetchProjects(): Promise<Project[]> {
-  if (inFlightProjects) return inFlightProjects;
-  inFlightProjects = (async () => {
+  return getOrSetClientCached(PROJECTS_CACHE_KEY, async () => {
     if (isWorkerForProjects()) {
       const arr = await projectsRequest<Project[]>('/api/projects');
       return Array.isArray(arr) ? arr : [];
     }
     const res = await apiRequest<{ projects: Project[] }>('/api/projects');
     return res?.projects ?? [];
-  })();
-  try {
-    return await inFlightProjects;
-  } finally {
-    inFlightProjects = null;
-  }
+  }, { ttlMs: 0 });
 }
 
 export async function fetchProject(id: number | string): Promise<Project> {
@@ -93,6 +88,7 @@ export async function createProject(data: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
   const p = res as Project;
   return {
     ...p,
@@ -116,11 +112,13 @@ export async function updateProject(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
   return res as Project;
 }
 
 export async function deleteProject(id: number | string): Promise<void> {
   await projectsRequest(`/api/projects/${id}`, { method: 'DELETE' });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
 }
 
 // ---------------------------------------------------------------------------

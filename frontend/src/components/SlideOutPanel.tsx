@@ -245,7 +245,10 @@ export function SlideOutPanel({
               {index}
             </div>
           )}
-          <div style={{ flex: 1, overflow: 'auto', minWidth: 0, minHeight: 0 }}>
+          {/* `.ui-panel-body` carries the size container (§3.4): a destination
+              in here measures the PANEL, not the viewport, which is the only
+              breakpoint that means anything at 440/660px inside a 2560px window. */}
+          <div className="ui-panel-body">
             {children}
           </div>
         </div>

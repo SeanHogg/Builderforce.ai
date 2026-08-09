@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getTeamRoster, type TeamRosterMember } from '@/lib/kernel/kernelApi';
 import { useAuth } from '@/lib/AuthContext';
+import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
  * The ONE client read of the team roster (PRD 21 §4.1).
@@ -22,46 +23,38 @@ import { useAuth } from '@/lib/AuthContext';
 
 type Audience = 'tenant' | 'guest';
 
-let cached: TeamRosterMember[] | null = null;
-let cachedFor: Audience | null = null;
-let inFlight: Promise<TeamRosterMember[]> | null = null;
+const CACHE_PREFIX = 'team-roster:';
 const subscribers = new Set<(members: TeamRosterMember[]) => void>();
 
 function load(audience: Audience): Promise<TeamRosterMember[]> {
-  if (cached && cachedFor === audience) return Promise.resolve(cached);
-  inFlight ??= getTeamRoster()
+  return getOrSetClientCached(`${CACHE_PREFIX}${audience}`, () => getTeamRoster())
     .then((members) => {
-      cached = members;
-      cachedFor = audience;
       for (const notify of subscribers) notify(members);
       return members;
-    })
-    .finally(() => { inFlight = null; });
-  return inFlight;
+    });
 }
 
 /** Drop the held roster. Call after any write that changes who is on the team —
  *  the api invalidates its own key, and this is the client side of that. */
 export function invalidateTeamRoster(): void {
-  const audience = cachedFor ?? 'tenant';
-  cached = null;
-  cachedFor = null;
+  const audience: Audience = readClientCached(`${CACHE_PREFIX}tenant`) ? 'tenant' : 'guest';
+  invalidateClientCache(CACHE_PREFIX);
   void load(audience);
 }
 
 export function useTeamRoster(): { members: TeamRosterMember[]; loading: boolean } {
   const { hasTenant } = useAuth();
   const audience: Audience = hasTenant ? 'tenant' : 'guest';
-  const fresh = cached != null && cachedFor === audience;
-  const [members, setMembers] = useState<TeamRosterMember[]>(fresh ? cached! : []);
+  const cached = readClientCached<TeamRosterMember[]>(`${CACHE_PREFIX}${audience}`);
+  const fresh = cached != null;
+  const [members, setMembers] = useState<TeamRosterMember[]>(cached ?? []);
   const [loading, setLoading] = useState(!fresh);
 
   useEffect(() => {
     let live = true;
     const notify = (next: TeamRosterMember[]) => { if (live) setMembers(next); };
     subscribers.add(notify);
-    if (cached != null && cachedFor !== audience) { cached = null; cachedFor = null; }
-    setLoading(cached == null);
+    setLoading(readClientCached(`${CACHE_PREFIX}${audience}`) == null);
     load(audience)
       .then(notify)
       // A roster that cannot be read leaves the footer empty rather than broken:

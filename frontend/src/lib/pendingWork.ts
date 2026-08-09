@@ -2,6 +2,7 @@
 
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import {
   creationGraphFromSnapshot,
   listLocalCreationSessions,
@@ -160,29 +161,19 @@ export function readLastCanvas(): LastCanvas | null {
 // the resume bridge mounting together cost ONE request)
 // ---------------------------------------------------------------------------
 
-let recentCache: { ts: number; tenant: string; sessions: CreationSessionSummary[] } | null = null;
-let recentInflight: Promise<CreationSessionSummary[]> | null = null;
+const RECENT_CACHE_PREFIX = 'canvas:recent:';
 
 export function invalidateRecentCanvases(): void {
-  recentCache = null;
+  invalidateClientCache(RECENT_CACHE_PREFIX);
 }
 
 export function fetchRecentCanvases(): Promise<CreationSessionSummary[]> {
   const tenant = scopeKey();
-  // The tenant check is not an optimisation — a cache hit from the workspace the
-  // user just left would show another tenant's canvas titles in this one.
-  if (recentCache && recentCache.tenant === tenant && Date.now() - recentCache.ts < RECENT_TTL_MS) {
-    return Promise.resolve(recentCache.sessions);
-  }
-  if (recentInflight) return recentInflight;
-  recentInflight = creationSessionsApi.list('active')
+  return getOrSetClientCached(`${RECENT_CACHE_PREFIX}${tenant}`, () => creationSessionsApi.list('active')
     .then((result) => {
       const sessions = [...result.sessions].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
-      recentCache = { ts: Date.now(), tenant, sessions };
       return sessions;
     })
     // A failed read must not pin an empty list for the whole window.
-    .catch(() => [] as CreationSessionSummary[])
-    .finally(() => { recentInflight = null; });
-  return recentInflight;
+    .catch(() => [] as CreationSessionSummary[]), { ttlMs: RECENT_TTL_MS });
 }

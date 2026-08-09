@@ -6,6 +6,7 @@ import { byoVendorLabel, perMillionUsd, type ChatModelOptions } from '@seanhogg/
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
+import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
  * Shared loader for the gateway model list. `models` is the full plan pool;
@@ -75,18 +76,17 @@ export interface LlmModelLists {
 
 const EMPTY: LlmModelLists = { models: [], freeModels: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
-let cache: LlmModelLists | null = null;
-let inflight: Promise<LlmModelLists> | null = null;
+const CACHE_KEY = 'llm-models:lists';
 
 function load(): Promise<LlmModelLists> {
-  if (cache) return Promise.resolve(cache);
+  const cached = readClientCached<LlmModelLists>(CACHE_KEY);
+  if (cached) return Promise.resolve(cached);
   // The local Creation Canvas is intentionally usable by guests. It mounts this
   // shared picker too, but tenant model/catalog endpoints require a workspace JWT.
   // Do not manufacture noisy 401 support tickets for an expected guest session;
   // guest inference chooses its model server-side.
   if (!getStoredTenantToken()) return Promise.resolve(EMPTY);
-  if (!inflight) {
-    inflight = Promise.all([
+  return getOrSetClientCached(CACHE_KEY, () => Promise.all([
       llmApi.models(),
       // Tenant models are tenant-scoped + optional; a failure must not block the pool.
       tenantModelApi.list().then((r) => r.models).catch(() => [] as TenantModel[]),
@@ -119,32 +119,26 @@ function load(): Promise<LlmModelLists> {
         const premiumModels = canUsePremiumModels
           ? await getPremiumModelCatalog().catch(() => [] as ModelRecord[])
           : [];
-        cache = {
+        const value: LlmModelLists = {
           models: models ?? [], freeModels: res.freeModels ?? (res.effectivePlan === 'free' ? models ?? [] : []), codingModels: res.codingModels ?? [], teacherModels, tenantModels,
           isPaid, byoModels, byoProviders, fundingSurface, canChooseModel, canUseFrontierModels,
           canUsePremiumModels,
           ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),
           premiumModels,
         };
-        return cache;
+        return value;
       })
-      .catch(() => {
-        inflight = null; // allow a later retry after a transient failure
-        return EMPTY;
-      });
-  }
-  return inflight;
+      .catch(() => EMPTY));
 }
 
 /** Drop the module cache so the next mount re-fetches (call after creating/editing
  *  a tenant model, so freshly-saved "LLMs" show up in every picker). */
 export function invalidateLlmModels(): void {
-  cache = null;
-  inflight = null;
+  invalidateClientCache(CACHE_KEY);
 }
 
 export function useLlmModels(): LlmModelLists {
-  const [state, setState] = useState<LlmModelLists>(cache ?? EMPTY);
+  const [state, setState] = useState<LlmModelLists>(readClientCached(CACHE_KEY) ?? EMPTY);
   useEffect(() => {
     let alive = true;
     load().then((r) => { if (alive) setState(r); });

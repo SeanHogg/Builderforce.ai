@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import dynamic from 'next/dynamic';
 import {
   addEdge,
   Background,
@@ -19,7 +20,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
-import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import type { Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
@@ -79,7 +80,6 @@ import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJour
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
-import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
@@ -105,14 +105,12 @@ import { markdownHtmlDocument, printCanvasObject } from '@/lib/printDocument';
 import { canvasObjectSvg } from '@/lib/renderedSvg';
 import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActions';
 import { listEvermindModels } from '@/lib/studioModelsApi';
-import { AITrainingPanel } from '@/components/AITrainingPanel';
 import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import type { IdeProject } from '@/lib/types';
 import { CanvasBuildPanel } from './CanvasBuildPanel';
-import { CanvasGamePanel } from './CanvasGamePanel';
 import { gamePayloadFrom } from '@/lib/gameTargets';
 import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
@@ -120,6 +118,23 @@ import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseL
 import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { signInHref } from '@/lib/auth';
+
+const Canvas3DView = dynamic(
+  () => import('@/components/canvas/Canvas3DView').then((module) => module.Canvas3DView),
+  { ssr: false },
+);
+const VoiceConfigPanel = dynamic(
+  () => import('@/components/ide/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
+  { ssr: false },
+);
+const AITrainingPanel = dynamic(
+  () => import('@/components/AITrainingPanel').then((module) => module.AITrainingPanel),
+  { ssr: false },
+);
+const CanvasGamePanel = dynamic(
+  () => import('./CanvasGamePanel').then((module) => module.CanvasGamePanel),
+  { ssr: false },
+);
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';

@@ -394,7 +394,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         <h2 style={h2Style}>{t('bulkDryRunTitle')}</h2>
 
         {/* Summary stats (FR-3.6) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
           <StatCard label={t('bulkTotalRows')} value={dryRunResult.totalRows} tone="neutral" />
           <StatCard label={t('bulkValidRows')} value={dryRunResult.validCount} tone="success" />
           <StatCard label={t('bulkErrorRows')} value={dryRunResult.errorCount} tone={hasErrors ? 'error' : 'neutral'} />
@@ -518,7 +518,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         <h2 style={h2Style}>{t('bulkSuccessTitle')}</h2>
 
         {/* FR-3.9: confirmation with counts */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
           <StatCard label={t('bulkImportedCount')} value={importedCount} tone="success" />
           <StatCard label={t('bulkSkippedCount')} value={skippedCount} tone={skippedCount > 0 ? 'error' : 'neutral'} />
           <StatCard label={t('bulkTotalProcessed')} value={importedCount + skippedCount} tone="neutral" />
