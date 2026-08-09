@@ -78,7 +78,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           border-radius: var(--radius-lg);
           color: var(--text-primary);
           font-family: inherit;
-          font-size: 0.95rem;
+          font-size: var(--font-size-body);
         }
         .cc-nl-input:focus {
           outline: none;
@@ -104,7 +104,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
         }
         .cc-nl-status {
           margin: 12px 0 0;
-          font-size: 0.875rem;
+          font-size: var(--font-size-small);
         }
         .cc-error { color: var(--red-bright); }
         .cc-ok { color: var(--cyan-bright); }

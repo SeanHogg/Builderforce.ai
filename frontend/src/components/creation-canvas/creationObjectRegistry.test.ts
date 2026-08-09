@@ -80,6 +80,38 @@ describe('creation object registry', () => {
     expect(course.modules[0]!.lessons[0]).toEqual({ title: 'Sourcing', nested: { safe: true } });
   });
 
+  it('shows Brain the lessons of a course that is already on the board', () => {
+    // The read-side twin of the sanitizer bug above. A teacher agent asked to
+    // work through the material one step at a time and check understanding was
+    // handed modules with titles and no lessons, so it re-invented the
+    // curriculum instead of teaching the one the learner was looking at.
+    const context = creationObjectAiContext({
+      kind: 'course', title: 'Recruiting and Hiring',
+      course: {
+        modules: [{
+          id: 'sourcing', title: '3. Inclusive sourcing',
+          lessons: [{ id: 'sourcing-channels', title: 'Widen the channel mix', activity: 'Audit last quarter’s sources.' }],
+          assessment: { question: 'What widens a candidate pool?', choices: ['One job board', 'Several channels'], answer: 1 },
+        }],
+      },
+    } as never);
+
+    const course = context.course as { modules: Array<{ lessons: Array<{ title: string }>; assessment: { choices: string[] } }> };
+    expect(course.modules[0]!.lessons[0]).toMatchObject({ title: 'Widen the channel mix' });
+    expect(course.modules[0]!.assessment.choices).toEqual(['One job board', 'Several channels']);
+  });
+
+  it('keeps the default nesting budget for every other field', () => {
+    // The deeper budget is scoped to `course`; nothing else gained context depth.
+    const context = creationObjectAiContext({
+      kind: 'diagnostics', title: 'Audit',
+      results: [{ group: 'a', items: [{ nested: { tooDeep: 'dropped' } }] }],
+    } as never);
+    const results = context.results as Array<{ group: string; items: unknown[] }>;
+    expect(results[0]!.group).toBe('a');
+    expect(results[0]!.items).toEqual([]);
+  });
+
   it('retains authored agent tests and evaluation results', () => {
     expect(sanitizeCreationObjectPatch('agent', { testPrompt: 'Where is my order?', testExpected: 'ask for order number' })).toMatchObject({ testPrompt: 'Where is my order?', testExpected: 'ask for order number' });
     expect(sanitizeCreationObjectPatch('evaluation', { passRate: 80, runCount: 5, testResults: [{ passed: true }] })).toMatchObject({ passRate: 80, runCount: 5, testResults: [{ passed: true }] });

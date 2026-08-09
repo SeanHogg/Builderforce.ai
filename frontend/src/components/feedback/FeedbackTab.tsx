@@ -111,7 +111,7 @@ export function FeedbackTab() {
           cursor: pointer;
           background: var(--bg-elevated);
           color: var(--text-secondary);
-          font-size: 12px;
+          font-size: var(--font-size-small);
           font-weight: 600;
           letter-spacing: 0.04em;
           box-shadow: -2px 0 12px rgba(0, 0, 0, 0.18);
@@ -127,7 +127,7 @@ export function FeedbackTab() {
           outline-offset: 2px;
         }
         @media (max-width: 640px) {
-          .feedback-edge-tab { padding: 12px 6px; font-size: 11px; }
+          .feedback-edge-tab { padding: 12px 6px; font-size: var(--font-size-eyebrow); }
         }
       `}</style>
 

@@ -19,7 +19,7 @@
   background: var(--surface-panel, var(--bg-elevated));
   border-top: 1px solid var(--border-subtle);
   box-shadow: 0 -4px 18px var(--shadow-color);
-  font-size: 0.78rem;
+  font-size: var(--font-size-small);
   color: var(--text-secondary);
 }
 
@@ -50,7 +50,7 @@
   border-radius: var(--radius-full, 50%);
   display: grid;
   place-items: center;
-  font-size: 0.6rem;
+  font-size: var(--font-size-field-label);
   font-weight: 700;
   background: var(--surface-interactive);
   color: var(--text-primary);
@@ -68,7 +68,7 @@
 }
 
 .more {
-  font-size: 0.7rem;
+  font-size: var(--font-size-eyebrow);
   color: var(--text-muted);
   padding-left: 2px;
 }
@@ -96,7 +96,7 @@
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: var(--font-size-eyebrow);
   padding: 5px 9px;
   cursor: pointer;
   white-space: nowrap;
@@ -139,7 +139,7 @@
 }
 
 .followPill {
-  font-size: 0.68rem;
+  font-size: var(--font-size-eyebrow);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--violet-bright);
@@ -150,7 +150,7 @@
 }
 
 .error {
-  font-size: 0.72rem;
+  font-size: var(--font-size-eyebrow);
   color: var(--error-text);
   white-space: nowrap;
 }
@@ -196,7 +196,7 @@
   right: 0;
   bottom: 0;
   padding: 2px 5px;
-  font-size: 0.58rem;
+  font-size: var(--font-size-field-label);
   color: var(--text-on-accent);
   background: var(--panel-overlay-bg);
   overflow: hidden;
@@ -223,11 +223,11 @@
   }
 
   .ctl > [aria-hidden='true'] {
-    font-size: 0.85rem;
+    font-size: var(--font-size-small);
   }
 
   .leave {
-    font-size: 0.74rem;
+    font-size: var(--font-size-eyebrow);
   }
 
   .film {

@@ -78,22 +78,22 @@ export default function MarketingDeck() {
           pointer-events: none; content: ''; }
         .mdk-chapter {
           font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em;
-          font-size: clamp(2.8rem, 8vw, 5.4rem); line-height: .85;
+          font-size: var(--font-size-hero); line-height: .85;
           color: var(--accent); opacity: .24; margin-bottom: 18px;
         }
         .mdk-eyebrow {
           display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px;
-          font-family: var(--font-display); font-size: 0.72rem; font-weight: 800;
+          font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 800;
           letter-spacing: 0.16em; text-transform: uppercase;
           color: var(--accent);
         }
         .mdk-title {
           font-family: var(--font-display); font-weight: 800; letter-spacing: -0.045em;
-          font-size: clamp(2.5rem, 6.2vw, 5rem); line-height: .98;
+          font-size: var(--font-size-hero); line-height: .98;
           color: var(--text-primary); margin: 0 0 22px; max-width: 920px;
         }
         .mdk-tagline {
-          font-size: clamp(1.05rem, 2vw, 1.28rem); line-height: 1.65;
+          font-size: var(--font-size-lede); line-height: 1.65;
           color: var(--text-secondary); margin: 0; max-width: 720px;
         }
         .mdk-steps {
@@ -105,26 +105,26 @@ export default function MarketingDeck() {
           background: var(--bg-surface, var(--surface, rgba(0,0,0,0.02)));
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.08));
           border-radius: var(--radius-lg); padding: 14px 16px;
-          color: var(--text-primary); font-size: clamp(0.95rem, 1.8vw, 1.05rem);
+          color: var(--text-primary); font-size: var(--font-size-lede);
         }
         .mdk-step-num {
           flex: 0 0 auto; width: 26px; height: 26px; border-radius: var(--radius-full);
           display: inline-flex; align-items: center; justify-content: center;
-          font-family: var(--font-display); font-weight: 700; font-size: 0.82rem;
+          font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-small);
           color: var(--text-on-accent); background: var(--accent);
         }
         .mdk-see {
           margin: 28px 0 0; max-width: 760px; border: 1px solid var(--border-accent); border-radius: var(--radius-lg);
-          padding: 16px 20px; font-size: clamp(0.98rem, 2vw, 1.12rem); font-weight: 600;
+          padding: 16px 20px; font-size: var(--font-size-lede); font-weight: 600;
           color: var(--text-primary); background: var(--accent-subtle);
         }
         .mdk-see-label {
-          display: block; font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
+          display: block; font-size: var(--font-size-eyebrow); letter-spacing: 0.16em; text-transform: uppercase;
           font-weight: 700; opacity: 0.85; margin-bottom: 4px;
         }
         .mdk-ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-start; margin-top: 32px; }
         .mdk-btn {
-          font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
+          font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title);
           padding: 12px 26px; border-radius: var(--radius-lg); cursor: pointer; border: none;
           text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
         }
@@ -145,14 +145,14 @@ export default function MarketingDeck() {
           opacity: 0.5; transition: opacity 0.15s, transform 0.15s;
         }
         .mdk-dot[aria-current="true"] { width: 28px; opacity: 1; background: var(--accent); }
-        .mdk-progress { font-family: var(--font-display); font-weight: 600; font-size: 0.85rem;
+        .mdk-progress { font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-small);
           color: var(--text-muted); min-width: 54px; }
         .mdk-nav { display: flex; gap: 10px; }
         @media (max-width: 560px) {
           .mdk { padding-top: 30px; }
           .mdk-stage { min-height: 0; }
           .mdk-card { padding: 28px 22px; }
-          .mdk-title { font-size: clamp(2.15rem, 12vw, 3.2rem); }
+          .mdk-title { font-size: var(--font-size-hero); }
           .mdk-steps { grid-template-columns: 1fr; }
           .mdk-controls { flex-direction: column-reverse; }
           .mdk-nav { width: 100%; }

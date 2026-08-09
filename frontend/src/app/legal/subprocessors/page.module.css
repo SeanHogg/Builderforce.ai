@@ -1,7 +1,7 @@
 .intro {
   max-width: 760px;
   color: var(--text-secondary);
-  font-size: 1.05rem;
+  font-size: var(--font-size-card-title);
 }
 
 .tableShell {
@@ -17,7 +17,7 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 0.88rem;
+  font-size: var(--font-size-small);
   line-height: 1.58;
 }
 
@@ -26,7 +26,7 @@
   color: var(--text-muted);
   background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.7rem;
+  font-size: var(--font-size-eyebrow);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-align: left;
@@ -82,15 +82,15 @@
   color: var(--coral-bright);
   border: 1px solid currentColor;
   border-radius: 50%;
-  font-size: 0.72rem;
+  font-size: var(--font-size-eyebrow);
   font-weight: 800;
   font-style: normal;
 }
 
-.note p { margin: 0; font-size: 0.86rem; line-height: 1.6; }
+.note p { margin: 0; font-size: var(--font-size-small); line-height: 1.6; }
 
 @media (max-width: 640px) {
-  .intro { font-size: 0.96rem; }
+  .intro { font-size: var(--font-size-body); }
   .tableShell { overflow: visible; background: transparent; border: 0; box-shadow: none; }
   .table, .table tbody { display: grid; gap: 12px; }
   .table thead { display: none; }
@@ -112,7 +112,7 @@
   .table td::before {
     content: attr(data-label);
     color: var(--text-muted);
-    font-size: 0.66rem;
+    font-size: var(--font-size-eyebrow);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;

@@ -135,6 +135,12 @@
   --font-size-hero: clamp(2.6rem, 7.4vw, 5.1rem);
   --font-size-page-title: clamp(1.85rem, 4.4vw, 2.9rem);
   --font-size-section: clamp(1.25rem, 2.6vw, 1.62rem);
+  /* Lede — the sentence under a hero. §2.3 shipped with eight roles and no
+     slot for it, so every marketing page invented one: 1.12rem on the route
+     teaser, 1.18rem on /evermind, 1.16rem on /compare, 1.1rem on /product. It
+     is a real, repeated role and it is cheaper to name it than to keep
+     pretending hero subcopy is a card title. */
+  --font-size-lede: clamp(1rem, 2vw, 1.18rem);
   --font-size-card-title: 1rem;
   --font-size-body: 0.95rem;
   --font-size-small: 0.82rem;
@@ -1885,6 +1891,13 @@ html[data-theme='light'] .nebula {
   font-weight: 700;
   letter-spacing: -.022em;
   line-height: 1.15;
+}
+.ui-text-lede {
+  font-family: var(--font-body);
+  font-size: var(--font-size-lede);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text-secondary);
 }
 .ui-text-card-title {
   font-family: var(--font-display);

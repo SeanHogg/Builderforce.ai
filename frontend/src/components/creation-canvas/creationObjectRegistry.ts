@@ -357,16 +357,40 @@ const CONTEXT_ARRAY_LIMITS: Readonly<Partial<Record<string, number>>> = {
   // without carrying every coordinate of a 500-point plot into the prompt.
   mapPoints: 12,
 };
+const DEFAULT_CONTEXT_DEPTH_LIMIT = 3;
+/**
+ * Per-field nesting budgets, for the same reason {@link CONTEXT_ARRAY_LIMITS}
+ * exists: three levels is the right default for the snapshot, and wrong for the
+ * one field that is legitimately deeper.
+ *
+ * A `course` nests `course → modules[] → module → lessons[] → lesson`, so at the
+ * default the lesson objects were dropped and Brain was handed a course whose
+ * modules had titles and nothing else. That is fatal to the thing a Course is
+ * FOR: a teacher agent asked to work through the material one step at a time,
+ * check understanding, and mark progress could not read a single lesson or
+ * assessment off the board, so it re-invented the curriculum instead of teaching
+ * the one the learner was looking at.
+ */
+const CONTEXT_DEPTH_LIMITS: Readonly<Partial<Record<string, number>>> = {
+  course: 5,
+};
 
-function safeContextValue(value: unknown, depth = 0, arrayLimit = DEFAULT_CONTEXT_ARRAY_LIMIT): unknown {
+function safeContextValue(
+  value: unknown,
+  depth = 0,
+  arrayLimit = DEFAULT_CONTEXT_ARRAY_LIMIT,
+  depthLimit = DEFAULT_CONTEXT_DEPTH_LIMIT,
+): unknown {
   if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'string') return value.slice(0, 2_000);
-  if (depth >= 3) return undefined;
-  if (Array.isArray(value)) return value.slice(0, arrayLimit).map((item) => safeContextValue(item, depth + 1)).filter((item) => item !== undefined);
+  if (depth >= depthLimit) return undefined;
+  // Nested arrays keep the DEFAULT budget rather than inheriting the top-level
+  // field's — a wide `columns` list does not license 64 nested rows underneath it.
+  if (Array.isArray(value)) return value.slice(0, arrayLimit).map((item) => safeContextValue(item, depth + 1, DEFAULT_CONTEXT_ARRAY_LIMIT, depthLimit)).filter((item) => item !== undefined);
   if (typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, MAX_TABULAR_COLUMNS).flatMap(([key, item]) => {
       if (SENSITIVE_CONTEXT_KEY.test(key)) return [];
-      const safe = safeContextValue(item, depth + 1);
+      const safe = safeContextValue(item, depth + 1, DEFAULT_CONTEXT_ARRAY_LIMIT, depthLimit);
       return safe === undefined ? [] : [[key, safe]];
     }));
   }
@@ -375,7 +399,12 @@ function safeContextValue(value: unknown, depth = 0, arrayLimit = DEFAULT_CONTEX
 
 export function creationObjectAiContext(data: CreationNodeData): Record<string, unknown> {
   return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
-    const value = safeContextValue(data[field], 0, CONTEXT_ARRAY_LIMITS[field] ?? DEFAULT_CONTEXT_ARRAY_LIMIT);
+    const value = safeContextValue(
+      data[field],
+      0,
+      CONTEXT_ARRAY_LIMITS[field] ?? DEFAULT_CONTEXT_ARRAY_LIMIT,
+      CONTEXT_DEPTH_LIMITS[field] ?? DEFAULT_CONTEXT_DEPTH_LIMIT,
+    );
     return value === undefined ? [] : [[field, value]];
   }));
 }

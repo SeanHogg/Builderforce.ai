@@ -72,19 +72,19 @@ export default async function CompetitorComparePage({
       <style>{`
         .vs { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
         .vs-hero { text-align: center; padding: 44px 24px 28px; max-width: 900px; margin: 0 auto; width: 100%; }
-        .vs-eyebrow { font-family: var(--font-display); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px; }
-        .vs-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(1.9rem, 5vw, 3rem); color: var(--text-primary); margin: 0 0 16px; }
-        .vs-tagline { font-size: clamp(1rem, 2vw, 1.18rem); color: var(--text-primary); font-weight: 600; margin: 0 0 14px; }
-        .vs-sub { font-size: clamp(0.95rem, 2vw, 1.05rem); color: var(--text-secondary); line-height: 1.7; margin: 0; }
+        .vs-eyebrow { font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px; }
+        .vs-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.08; font-size: var(--font-size-hero); color: var(--text-primary); margin: 0 0 16px; }
+        .vs-tagline { font-size: var(--font-size-lede); color: var(--text-primary); font-weight: 600; margin: 0 0 14px; }
+        .vs-sub { font-size: var(--font-size-lede); color: var(--text-secondary); line-height: 1.7; margin: 0; }
         .vs-cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
-        .vs-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
+        .vs-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: var(--font-size-body); text-decoration: none; }
         .vs-btn-primary { background: linear-gradient(135deg, var(--coral-bright), var(--error)); color: var(--text-on-accent); }
         .vs-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .vs-section { max-width: 900px; margin: 0 auto; padding: 24px; width: 100%; }
         .vs-criteria { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
         .vs-criterion { border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); padding: 20px; }
-        .vs-cat { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--text-primary); margin: 26px 0 10px; }
-        .vs-cat-blurb { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.6; }
+        .vs-cat { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-card-title); color: var(--text-primary); margin: 26px 0 10px; }
+        .vs-cat-blurb { font-size: var(--font-size-small); color: var(--text-secondary); margin: 0 0 12px; line-height: 1.6; }
       `}</style>
 
       <main className="vs">

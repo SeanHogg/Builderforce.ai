@@ -52,12 +52,12 @@ const styles = `
   .bdp-inner { max-width: 960px; margin: 0 auto; }
   .bdp-head { text-align: center; margin-bottom: 32px; }
   .bdp-badge {
-    display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    display: inline-block; font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
     padding: 4px 10px; border-radius: var(--radius-full); margin-bottom: 12px;
     background: var(--surface-cyan-soft, rgba(0,229,204,0.16)); color: var(--cyan-bright, var(--cyan-bright));
   }
-  .bdp-title { margin: 0 0 10px; font-size: clamp(26px, 4vw, 38px); font-weight: 800; color: var(--text-primary, var(--text-primary)); }
-  .bdp-lead { margin: 0 auto; max-width: 620px; font-size: 16px; line-height: 1.6; color: var(--text-secondary); }
+  .bdp-title { margin: 0 0 10px; font-size: var(--font-size-page-title); font-weight: 800; color: var(--text-primary, var(--text-primary)); }
+  .bdp-lead { margin: 0 auto; max-width: 620px; font-size: var(--font-size-card-title); line-height: 1.6; color: var(--text-secondary); }
   .bdp-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
   @media (max-width: 760px) { .bdp-grid { grid-template-columns: 1fr; } }
   .bdp-card {
@@ -66,12 +66,12 @@ const styles = `
     border: 1px solid var(--border, rgba(255,255,255,0.12));
   }
   .bdp-card-alt { background: var(--surface-2, rgba(255,255,255,0.05)); }
-  .bdp-card-title { margin: 0 0 6px; font-size: 20px; font-weight: 700; color: var(--text-primary, var(--text-primary)); }
-  .bdp-card-sub { margin: 0 0 18px; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+  .bdp-card-title { margin: 0 0 6px; font-size: var(--font-size-section); font-weight: 700; color: var(--text-primary, var(--text-primary)); }
+  .bdp-card-sub { margin: 0 0 18px; font-size: var(--font-size-small); line-height: 1.5; color: var(--text-secondary); }
   .bdp-list { margin: 0 0 20px; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
-  .bdp-list li { font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+  .bdp-list li { font-size: var(--font-size-small); line-height: 1.5; color: var(--text-secondary); }
   .bdp-cta {
     display: inline-block; padding: 11px 18px; border-radius: var(--radius-lg); text-decoration: none;
-    background: var(--accent, var(--coral-bright)); color: var(--text-on-accent); font-weight: 700; font-size: 15px;
+    background: var(--accent, var(--coral-bright)); color: var(--text-on-accent); font-weight: 700; font-size: var(--font-size-body);
   }
 `;

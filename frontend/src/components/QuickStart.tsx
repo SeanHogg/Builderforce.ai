@@ -344,7 +344,7 @@ export default function QuickStart() {
         .cc-section-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.5rem, 3vw, 2rem);
+          font-size: var(--font-size-page-title);
           margin-bottom: 24px;
           color: var(--text-primary);
         }
@@ -358,7 +358,7 @@ export default function QuickStart() {
           border-radius: var(--radius-lg);
           overflow: hidden;
           font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-          font-size: 0.875rem;
+          font-size: var(--font-size-small);
         }
         .cc-code-header {
           display: flex;
@@ -386,7 +386,7 @@ export default function QuickStart() {
           border: 1px solid transparent;
           padding: 4px 10px;
           border-radius: var(--radius-sm);
-          font-size: 0.78rem;
+          font-size: var(--font-size-small);
           font-family: var(--font-display);
           cursor: pointer;
           transition: all 0.15s;
@@ -413,7 +413,7 @@ export default function QuickStart() {
           border: 1px solid transparent;
           padding: 3px 9px;
           border-radius: var(--radius-sm);
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
           font-family: var(--font-display);
           cursor: pointer;
           transition: all 0.15s;
@@ -437,14 +437,14 @@ export default function QuickStart() {
         }
         .cc-os-detected {
           color: rgba(240,244,255,0.55);
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
         }
         .cc-os-change-btn {
           background: transparent;
           color: rgba(240,244,255,0.4);
           border: none;
           padding: 0;
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
           font-family: var(--font-display);
           cursor: pointer;
           text-decoration: underline;
@@ -467,7 +467,7 @@ export default function QuickStart() {
           border: 1px solid rgba(255,255,255,0.12);
           padding: 3px 10px;
           border-radius: var(--radius-full);
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
           font-family: var(--font-display);
           cursor: pointer;
           transition: all 0.15s;
@@ -515,7 +515,7 @@ export default function QuickStart() {
           border: none;
           cursor: pointer;
           padding: 4px 8px;
-          font-size: 0.95rem;
+          font-size: var(--font-size-body);
           border-radius: var(--radius-sm);
           transition: color 0.15s, background 0.15s;
         }
@@ -541,7 +541,7 @@ export default function QuickStart() {
         }
         .cc-macos-subtitle {
           color: rgba(136,146,176,0.9);
-          font-size: 0.82rem;
+          font-size: var(--font-size-small);
         }
         .cc-macos-btn {
           display: inline-flex;
@@ -552,7 +552,7 @@ export default function QuickStart() {
           border: 1px solid rgba(77,158,255,0.3);
           padding: 8px 16px;
           border-radius: var(--radius-md);
-          font-size: 0.85rem;
+          font-size: var(--font-size-small);
           font-family: var(--font-display);
           text-decoration: none;
           transition: all 0.15s;
@@ -566,12 +566,12 @@ export default function QuickStart() {
         }
         .cc-macos-meta {
           color: rgba(136,146,176,0.7);
-          font-size: 0.74rem;
+          font-size: var(--font-size-eyebrow);
         }
         .cc-quickstart-note {
           margin: 14px 2px 0;
           color: var(--text-secondary);
-          font-size: 0.82rem;
+          font-size: var(--font-size-small);
         }
       `}</style>
     </section>

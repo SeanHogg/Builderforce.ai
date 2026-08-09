@@ -172,7 +172,7 @@ export default function IntegrationsPage() {
         .cc-int-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(2rem, 5vw, 3rem);
+          font-size: var(--font-size-hero);
           margin: 0;
           color: var(--text-primary);
         }
