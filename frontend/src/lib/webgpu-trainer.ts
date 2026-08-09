@@ -236,6 +236,8 @@ export class WebGPUTrainer {
   }
 
   async init(): Promise<void> {
+    this.gpuDevice?.destroy();
+    this.gpuDevice = null;
     this.options.onLog('Initialising exact-gradient browser LoRA engine…');
     if (hasWebGPUSupport()) {
       try { this.gpuDevice = (await initWebGPU({ powerPreference: 'high-performance' })).device; }
@@ -258,6 +260,7 @@ export class WebGPUTrainer {
     if (!this.ready) throw new Error('Trainer not initialised. Call init() first.');
     this.stopped = false;
     const mode = this.options.dataMode ?? 'workspace';
+    let gpuAdapter: WebGPULoRAAdapterEngine | null = null;
 
     try {
       let examples = localExamples.map((item) => item.trim()).filter(Boolean);
@@ -302,10 +305,10 @@ export class WebGPUTrainer {
       if (sequences.length === 0) throw new Error('Tokenizer produced no trainable sequences.');
 
       const before = Float32Array.from(model.emb);
-      const gpuAdapter = this.gpuDevice ? new WebGPULoRAAdapterEngine(this.gpuDevice, lora, lora.mergedEmb()) : null;
+      gpuAdapter = this.gpuDevice ? new WebGPULoRAAdapterEngine(this.gpuDevice, lora, lora.mergedEmb()) : null;
       this.options.onLog(`Training ${lora.adapter.numParams().toLocaleString()} adapter parameters; base weights are frozen.`);
       for (let epoch = 1; epoch <= params.epochs; epoch += 1) {
-        if (this.stopped) { gpuAdapter?.destroy(); return; }
+        if (this.stopped) return;
         let loss = 0;
         if (gpuAdapter) {
           let total = 0, count = 0, pending = 0;
@@ -337,8 +340,6 @@ export class WebGPUTrainer {
         }
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
-      gpuAdapter?.destroy();
-
       if (model.emb.some((value, index) => value !== before[index])) {
         throw new Error('Frozen-base invariant failed: base weights changed during LoRA training.');
       }
@@ -392,12 +393,19 @@ export class WebGPUTrainer {
       }
       this.options.onError(err);
       throw err;
+    } finally {
+      gpuAdapter?.destroy();
+      this.gpuDevice?.destroy();
+      this.gpuDevice = null;
+      this.ready = false;
     }
   }
 
   destroy(): void {
     this.stopped = true;
     this.ready = false;
+    this.gpuDevice?.destroy();
+    this.gpuDevice = null;
   }
 }
 

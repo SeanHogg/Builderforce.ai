@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { getRouteMarketing } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
@@ -20,6 +21,7 @@ import { signInHref } from '@/lib/auth';
  * this component only renders it and decides its own section visibility.
  */
 export default function RouteMarketing({ pathname }: { pathname: string }) {
+  const t = useTranslations('routeMarketing');
   const m = getRouteMarketing(pathname);
   const loginHref = signInHref(pathname);
   const metaDesc = m.seoDescription ?? m.description;
@@ -54,19 +56,20 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         <div className="rm-icon" aria-hidden="true">{m.icon}</div>
         <h1 className="rm-title">{m.title}</h1>
         <p className="rm-desc">{m.description}</p>
-        <p className="rm-sub">
-          Create a free workspace to use {m.title}, or sign in to continue existing work.
-        </p>
+        <p className="rm-sub">{t('subtitle', { surface: m.title })}</p>
         <div className="rm-actions">
-          <Link href="/create/new" className="rm-btn-primary">✦ Start creating free</Link>
-          <Link href={loginHref} className="rm-btn-secondary">Sign In</Link>
-          <Link href="/creation-canvas" className="rm-btn-ghost">Explore the canvas →</Link>
+          <Link href="/create/new" className="rm-btn-primary">
+            <span aria-hidden="true">✦</span>
+            {t('startFree')}
+          </Link>
+          <Link href={loginHref} className="rm-btn-secondary">{t('signIn')}</Link>
+          <Link href="/creation-canvas" className="rm-btn-ghost">{t('exploreCanvas')} →</Link>
         </div>
       </section>
 
       {m.highlights && m.highlights.length > 0 && (
         <section className="rm-highlights">
-          <div className="rm-inside-head">How {m.title} works</div>
+          <div className="rm-inside-head">{t('howItWorks', { surface: m.title })}</div>
           <div className="rm-hl-grid">
             {m.highlights.map((h) => (
               <div key={h.title} className="rm-hl-card">
@@ -80,7 +83,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
 
       {m.figures && m.figures.length > 0 && (
         <section className="rm-figures">
-          <div className="rm-inside-head">See how it works</div>
+          <div className="rm-inside-head">{t('seeHowItWorks')}</div>
           {m.figures.map((f) => (
             <figure key={f.src} className="rm-figure">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -92,7 +95,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
       )}
 
       <section className="rm-inside">
-        <div className="rm-inside-head">What you get with Builderforce.ai</div>
+        <div className="rm-inside-head">{t('whatYouGet')}</div>
         <div className="rm-grid">
           {PRODUCT_SECTIONS.map((s) => (
             <Link key={s.id} href={`/product#${s.id}`} className="rm-card">
@@ -106,7 +109,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
 
       {m.faq && m.faq.length > 0 && (
         <section className="rm-faq">
-          <div className="rm-inside-head">Frequently asked questions</div>
+          <div className="rm-inside-head">{t('faqHeading')}</div>
           <div className="rm-faq-list">
             {m.faq.map((q) => (
               <details key={q.question} className="rm-faq-item">
@@ -119,7 +122,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
       )}
 
       {m.relatedSurface && (
-        <RelatedArticles surface={m.relatedSurface} heading="Related reading" />
+        <RelatedArticles surface={m.relatedSurface} heading={t('relatedReading')} />
       )}
 
       <style>{`
@@ -217,6 +220,13 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-faq-q::after { content: '+'; color: var(--coral-bright); font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
         .rm-faq-item[open] .rm-faq-q::after { content: '–'; }
         .rm-faq-a { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
+
+        /* PRD 21 §2.6 rule 6 — every transition respects the OS preference. The
+           lifts below are decorative; the hover border/shadow still reads. */
+        @media (prefers-reduced-motion: reduce) {
+          .rm-btn-primary, .rm-card { transition: none; }
+          .rm-btn-primary:hover, .rm-card:hover { transform: none; }
+        }
       `}</style>
     </div>
   );

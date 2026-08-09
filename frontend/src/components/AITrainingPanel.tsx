@@ -111,6 +111,15 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
+  useEffect(() => () => {
+    trainerRef.current?.destroy();
+    trainerRef.current = null;
+    mambaRef.current?.dispose();
+    mambaRef.current = null;
+    mambaProviderRef.current?.dispose();
+    mambaProviderRef.current = null;
+  }, []);
+
   // Load datasets and jobs when the panel opens
   useEffect(() => {
     if (!workspaceEnabled) return;
@@ -255,7 +264,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   }, [config, selectedModel, selectedDatasetId, projectId, dataMode, localTrainingText, baseCheckpoint, tokenizerSpec, canUseBrowserTraining, appendLog, onJobCompleted, onLocalArtifactCompleted, t]);
 
   const handleStopTraining = useCallback(() => {
-    trainerRef.current?.stop();
+    trainerRef.current?.destroy();
+    trainerRef.current = null;
     setIsTraining(false);
     appendLog(t('logStopped'));
   }, [appendLog, t]);

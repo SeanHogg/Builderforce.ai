@@ -137,7 +137,25 @@ continuous session" ships a shell that destroys the session on every click.
 *and* from the brand. Never hardcode: they flip per theme like everything else.
 `--violet-bright` `#a78bfa`/`#6d28d9` · `--indigo-bright` `#7c83fd`/`#4338ca` ·
 `--emerald-bright` `#34d399`/`#047857` · `--amber-bright` `#fbbf24`/`#b45309` ·
-`--red-bright` `#ff6b6b`/`#b91c1c`.
+`--red-bright` `#ff6b6b`/`#b91c1c` · `--teal-bright` `#14b8a6`/`#0f766e` ·
+`--pink-bright` `#ec4899`/`#be185d` · `--purple-bright` `#8b5cf6`/`#7e22ce` ·
+`--sky-bright` `#38bdf8`/`#0369a1` · `--yellow-bright` `#eab308`/`#a16207` ·
+`--orange-bright` `#f97316`/`#c2410c`. Eleven, because the shared `CHART_PALETTE` needs ten and the
+first five ran out at series six — which is why it carried raw literals until 2026-08-09.
+
+**Ink on a computed fill.** Two more, for the surfaces whose fill is decided at runtime rather than
+by the theme. `--ink-on-light` (`#16241c`, both themes) is for a surface that is light in BOTH — a
+DevEx score chip is an HSL ramp at 68–88% lightness, so it is pale on slate as much as on paper.
+`--ink-on-categorical` (`#0b1220` dark / `#ffffff` light) is the label printed ON a categorical
+fill: the whole `*-bright` family is pale on slate and deep on paper, so that is one relationship
+and one token — a chart segment cannot measure a fill that is a `var()`, and does not need to.
+
+**Severity.** `--error-strong` (`#fb7185`/`#7f1d1d`) is the rung above `--error`. A fatal is not
+"very error"; a swatch you cannot tell from the one below it is not carrying information.
+
+**Two families that are identities rather than palette.** `--ev-*` (Evermind's brain regions) and
+`--canvas-obj-*` (Canvas object kinds) are declared in `globals.css` for both themes, because more
+than one surface reads each of them. Each existed as two or three drifting copies before that.
 
 **Elevation.** Dark builds depth from **matte darkness**; light builds it from **warm neutral
 shade**. `--shadow-xs` · `--shadow-sm` · `--shadow-lg`. **Accent-coloured shadow is a dark-mode
@@ -232,29 +250,54 @@ sources; the canvas is the drop target; focus + `Enter` is the required keyboard
    quietly convert it into a shell-themed surface.
 10. **Run the guards before claiming done:** `npm run check:design-tokens` and the component's tests.
 
-### 2.7 The finding
+### 2.7 The finding, and where it ended up
 
-The system exists on paper and is not adopted.
+The system existed on paper and was not adopted.
 
-| Measure | Today |
-|---|---|
-| Files importing `@/components/ui` | **3** (was 2 before this PRD's first fix) |
-| Files hand-rolling `border: '1px solid var(--border-subtle)'` | **301** |
-| Inline `style={{…}}` sites in `frontend/src` | **~9,400** |
-| Files carrying a literal hex | **315** |
-| Distinct `border-radius` values across 26 CSS modules | **20+**, against a documented 5-step scale |
-| Design-token guard (`check-design-tokens.mjs`) | **Passes** — 245 declared, every reference resolves |
+| Measure | When this PRD was written | 2026-08-09 |
+|---|---|---|
+| Files importing `@/components/ui` | **3** (was 2 before this PRD's first fix) | 12 |
+| Files hand-rolling `border: '1px solid var(--border-subtle)'` | **301** | unchanged — see below |
+| Inline `style={{…}}` sites in `frontend/src` | **~9,400** | unchanged — see below |
+| Files carrying a literal hex | **315** (405 on the ratchet's wider sweep) | **0** |
+| Distinct `border-radius` values across 26 CSS modules | **20+**, against a documented 5-step scale | **9**, each a live expression |
+| Design-token guard (`check-design-tokens.mjs`) | **Passes** — 245 declared | Passes — 287 declared |
 
-The guard is why *undeclared-token* bugs are gone. It could not see a literal hex or an off-scale
-radius, which is why every other row above was still true.
+The token guard is why *undeclared-token* bugs are gone. It could not see a literal hex or an
+off-scale radius, which is why every other row was still true.
 
-**It can now.** `check-design-scale.mjs` counts both and is wired into `npm test` as a SHRINK-ONLY
-ratchet, baselined at **405** files carrying a literal hex and **2,087** off-scale radius values
-(a wider sweep than the table above: it reads every `.ts`/`.tsx`/`.css` under `src`, counts each
-corner of a multi-value declaration, and exempts only `globals.css`, where both themes are
-declared, and tests). A count that goes UP fails the build. A count that comes in BELOW its
-baseline ALSO fails, with the instruction to lower the baseline — which is what stops a ratchet
-from quietly going slack as the sweep continues.
+**It can now.** `check-design-scale.mjs` reads every `.ts`/`.tsx`/`.css` under `src`, counts each
+corner of a multi-value declaration, and is wired into `npm test`.
+
+- **Radius: shrink-only.** Baselined at 2,087, now **9**. A count that goes UP fails the build; a
+  count that comes in BELOW its baseline ALSO fails, with the instruction to lower the baseline —
+  which is what stops a ratchet from quietly going slack.
+- **Colour: no longer a count.** The baseline is **0** and `COLOUR_EXEMPT` is an allowlist where
+  every entry carries a written reason. A number lets 341 files sit there looking like progress; a
+  list makes the next author say out loud why a token cannot reach their case. Six reasons qualify:
+  where the tokens are declared, documents opened outside this app, generated project source,
+  third-party brand marks, colour the AUTHOR picks and we persist, and consumers that never read a
+  stylesheet.
+
+**The two "unchanged" rows are deliberate.** Hand-rolled borders and inline styles are a
+*primitive-adoption* measure, not a *correctness* one: an inline `border: '1px solid
+var(--border-subtle)'` is themed correctly and renders right in both themes — it is verbose, not
+broken. The literal-hex row was the one that shipped bugs, and it is the one that is closed. Moving
+9,400 inline styles onto `<Surface>` is a continuing sweep with no ratchet, because a ratchet that
+counts verbosity would fail builds over nothing.
+
+**A literal is not always the wrong answer, and four ways of "fixing" one are worse than leaving
+it.** Each of these shipped in an earlier pass of this very migration and was found by the sweep
+that closed it (see DONE.md, 2026-08-09):
+
+1. **A consumer that never reads our CSS.** xterm paints its own canvas from a JS theme object;
+   `<meta name="theme-color">` is read by the browser chrome before a stylesheet exists.
+2. **A document opened somewhere else** — a print sheet, a downloadable landing page, a generated
+   React Native scaffold where `borderRadius` must be a number.
+3. **A control whose VALUE is a colour.** `<input type="color">` takes `#rrggbb` and nothing else;
+   given a `var()` it shows black and writes black on first touch.
+4. **A cycle.** `--text-primary: var(--text-primary)` in a scope meaning to OVERRIDE it is invalid
+   at computed-value time and takes the token from every descendant.
 
 ### 2.8 The decisions
 
