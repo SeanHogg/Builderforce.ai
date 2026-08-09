@@ -175,11 +175,12 @@ function column(decl, tableName) {
     ? { table: ref[1], col: ref[2], onDelete: (ref[3] ?? '').match(/onDelete\s*:\s*'([^']+)'/)?.[1] ?? null }
     : null;
 
-  return { name, sql, fk };
+  return { prop: m[1], name, sql, fk };
 }
 
 /** The constraints callback → CREATE INDEX statements. */
-function indexes(body, table) {
+function indexes(body, table, columns) {
+  const sqlNameByProperty = new Map(columns.map((c) => [c.prop, c.name]));
   const out = [];
   const re = /\b(uniqueIndex|index)\(\s*'([^']+)'\s*\)\s*\.on\(([^)]*)\)/g;
   for (const m of body.matchAll(re)) {
@@ -190,7 +191,9 @@ function indexes(body, table) {
       .map((s) => {
         const c = s.match(/^t\.([\w$]+)$/);
         if (!c) throw new Error(`${table}: index ${m[2]} has an expression column \`${s}\` — write this index by hand`);
-        return c[1];
+        const sqlName = sqlNameByProperty.get(c[1]);
+        if (!sqlName) throw new Error(`${table}: index ${m[2]} refers to unknown column property \`${c[1]}\``);
+        return sqlName;
       });
     out.push({ name: m[2], unique: m[1] === 'uniqueIndex', cols });
   }
@@ -225,7 +228,7 @@ export function parseModule(path) {
     let columns; let idx; let error = null;
     try {
       columns = splitTop(colsSrc).map((d) => column(d, table));
-      idx = parts[2] ? indexes(parts[2], table) : [];
+      idx = parts[2] ? indexes(parts[2], table, columns) : [];
     } catch (e) {
       columns = []; idx = []; error = e instanceof Error ? e.message : String(e);
     }
@@ -260,7 +263,7 @@ export function renderTable(t, resolveRef) {
   const sql = [`CREATE TABLE IF NOT EXISTS ${t.table} (\n${lines.join(',\n')}\n);`];
   for (const i of t.indexes) {
     sql.push(
-      `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${t.table} (${i.cols.map(snake).join(', ')});`,
+      `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${t.table} (${i.cols.join(', ')});`,
     );
   }
   return sql.join('\n');

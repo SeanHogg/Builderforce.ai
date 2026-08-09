@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { getRouteMarketing } from '@/lib/routeMarketing';
+import { getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { ButtonLink, Surface, surfaceClassName } from '@/components/ui';
@@ -30,17 +30,30 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
   // Client-set <title>/description so each feature route has a unique, crawlable
   // head (these routes render client-side, so there is no server metadata
   // export). Modern crawlers execute JS and read both this and the JSON-LD below.
+  //
+  // The `noindex` half matters as much as the title. Every authenticated route
+  // renders this teaser to a logged-out visitor, which quietly turned operator
+  // tooling — Platform Admin, the workspace switcher — into indexable pages. The
+  // root layout declares `robots: 'index, follow'`, so a route that must stay
+  // out of the index has to say so here, and has to put the tag BACK on unmount
+  // or one visit to /admin would suppress the whole site for that session.
   useEffect(() => {
     const prevTitle = document.title;
     document.title = `${m.title} — Builderforce.ai`;
     const tag = document.querySelector('meta[name="description"]');
     const prevDesc = tag?.getAttribute('content') ?? null;
     if (tag) tag.setAttribute('content', metaDesc);
+
+    const robots = document.querySelector('meta[name="robots"]');
+    const prevRobots = robots?.getAttribute('content') ?? null;
+    if (robots && isNoindexTeaserRoute(pathname)) robots.setAttribute('content', 'noindex, follow');
+
     return () => {
       document.title = prevTitle;
       if (tag && prevDesc !== null) tag.setAttribute('content', prevDesc);
+      if (robots && prevRobots !== null) robots.setAttribute('content', prevRobots);
     };
-  }, [m.title, metaDesc]);
+  }, [m.title, metaDesc, pathname]);
 
   return (
     <div className="route-mkt">

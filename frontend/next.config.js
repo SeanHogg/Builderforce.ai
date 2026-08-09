@@ -10,9 +10,11 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  // Both production output tracing and Turbopack must see the linked packages
-  // beside frontend/ in this monorepo.
-  outputFileTracingRoot: path.join(__dirname, '..'),
+  // next-on-pages invokes Vercel from this directory. Keep output tracing rooted
+  // here so Vercel reports `.next` relative to frontend/; using the repository
+  // root makes the packager look for the doubled `frontend/frontend/.next`.
+  // Linked-package module resolution is handled by the aliases below.
+  outputFileTracingRoot: __dirname,
   // Cloudflare Pages (next-on-pages) does not run Next's default image
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.

@@ -735,7 +735,7 @@ CREATE TABLE IF NOT EXISTS event_matchmaking (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_event_matchmaking_pair ON event_matchmaking (tenant_id, event_ref, party_aref, party_bref);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_event_matchmaking_pair ON event_matchmaking (tenant_id, event_ref, party_a_ref, party_b_ref);
 
 CREATE TABLE IF NOT EXISTS email_otp_challenges (
   id SERIAL PRIMARY KEY,

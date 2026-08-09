@@ -1,3 +1,125 @@
+## ✅ RESOLVED 2026-08-09 — The public-surface audit: 137 routes inventoried, and the half of PRD 21 that had no implementation gets one
+
+*Triggered by a one-line observation — "this document outlines a design system, I don't see this
+being used on the marketing pages" — which turned out to be exactly half right, and the half it was
+right about had a mechanical cause rather than a cultural one.*
+
+### What the inventory found
+
+Every route was classified by what an anonymous visitor actually gets, which is not what the folder
+structure suggests:
+
+| Tier | Routes | What a logged-out visitor sees |
+|---|---:|---|
+| Marketing | 41 | `MarketingShell` + real SEO content (`PUBLIC_SHELL_PREFIXES`) |
+| **Teaser** | **86** | `MarketingShell` + `RouteMarketing` — a full marketing page, not a gate |
+| Guest app | 2 | The real operator shell on a local-first board (PRD 21 §0) |
+| Auth | 3 | Footer-only chrome |
+| Embed | 5 | No chrome; postMessage/token trust |
+
+**The middle row is the finding.** `ConditionalAppShell` renders a teaser for *every* authenticated
+route, so the public surface is **127 pages, not 41** — and one component, `RouteMarketing.tsx`, is
+the entire public face of 86 of them.
+
+### The palette was adopted. The type scale had nothing to adopt.
+
+| | Colour | Type |
+|---|---|---|
+| Tokens declared | 287 | **0** |
+| Roles with a class | n/a | **1 of 8** (`.ui-eyebrow`) |
+| Ratchet | yes | **no** |
+| Result on the public surface | **0** literal hex, 9 off-scale radii | **89 distinct sizes over 1,185 uses**, 129 distinct `clamp()` ramps |
+
+§2.3 had spent this PRD's whole life as a table in a document with nothing behind it. There was
+nothing to import, so every author typed a number — and the three role-shaped classes that did
+exist each contradicted the spec they implemented, giving the tree **three different page titles**
+(`.page-title` flat `1.5rem`, `.ui-page-header__title` `clamp(1.5rem,2.5vw,2rem)`, and §2.3's own
+`clamp(1.85rem,4.4vw,2.9rem)`). The difference from radius was never discipline; it was that one
+scale existed in code and the other did not.
+
+**Closed:** nine `--font-size-*` tokens and ten `.ui-text-*` role classes (size + weight + tracking
++ line height together, because picking the size alone is how one page title became three);
+`.page-title`, `.section-title`, `.card-title`, `.ui-page-header__title` and `__eyebrow` all
+reconciled onto them; **1,037 declarations migrated** across the public surface (438 in CSS, 599 in
+JSX `style={{…}}`); and a third shrink-only ratchet in `check-design-scale.mjs`, baselined at 3,960,
+wired into `npm test`.
+
+**A ninth role was added, deliberately.** §2.3's eight had no slot for a *lede* — the sentence under
+a hero — so every marketing page invented one (1.12rem on the teaser, 1.18rem on /evermind, 1.16rem
+on /compare, 1.1rem on /product). Naming it is cheaper than pretending hero subcopy is a card title.
+
+**Two codemod bugs, found by reading the diff rather than the count.** Fixed-band assignment sent a
+1.8rem stat number to Page title (2.9rem, +61%) when Section (1.62rem, −10%) was plainly nearer —
+type is perceived multiplicatively, so assignment is now nearest-by-log-ratio. And a 0.78rem
+*uppercase, tracked* eyebrow was mapped to body-small: size alone cannot tell a role, so the
+enclosing block is now read for `text-transform: uppercase` + `letter-spacing`, which also picks the
+right FAMILY (mono, not sans).
+
+### Reduced motion: the class, not the 41 instances
+
+61 public files animated; 23 declared `prefers-reduced-motion`. A per-file sweep would have closed
+those 41 and left the 42nd to the next author, so `globals.css` now carries a global floor with a
+`.motion-essential` opt-out. `transform` is neutralised separately — with only the duration
+collapsed, a hover lift still *jumps* to the moved position — and the duration is `0.01ms` rather
+than `none` because a zeroed duration still fires `transitionend`, which several surfaces advance
+their state on.
+
+### `RouteMarketing`: the fourth parallel vocabulary, deleted
+
+The public face of 86 routes shipped 95 lines of unscoped global CSS re-declaring the button, card
+and eyebrow that `<Button>`, `<Surface>` and `.ui-eyebrow` already own — eyebrow at `0.82rem` sans
+against a documented `0.68rem` mono, buttons at `padding: 13px 26px`, off the space ramp entirely.
+Now on the primitives, with only layout left in the block. Its nine chrome strings are localized in
+all five catalogs; it was **entirely unlocalized**, on 86 public routes.
+
+**`surfaceClassName()` was extracted to make that possible.** `<Surface>` renders a `<div>`, and
+many real surfaces are not divs — a card that navigates is an `<a>`, an FAQ row is a `<details>`.
+Without it each either nested a div inside a link (breaking the click target and the a11y tree) or,
+which is what actually happened 633 times, re-inlined `border: 1px solid var(--border-subtle)`.
+
+### The trust surface was English-only, and is now correct rather than merely translated
+
+All seven `/legal/*` pages plus the shared `CompliancePage.tsx` had zero i18n. Chrome is now
+translated in all five locales (`legal.*` — nav, headings, contact, titles, the compliance-centre
+cards). The **document bodies stay English on purpose**: a DPA, a privacy-rights notice and a
+subprocessor list are binding instruments, and a machine translation of a contractual term is a
+liability, not a feature. Each page now carries a translated notice saying the English text is
+authoritative and governs — which is the standard practice, and is what "localized" has to mean for
+a contract. Route-local hardcoded strings: **362 → 249**.
+
+### SEO: what the site serves and what it says it serves now agree
+
+16 real marketing pages were indexable but absent from `sitemap.ts` — all seven `/legal/*`, `/soc2`,
+the seven `/agents/*` sub-pages, `/book-demo`, `/demo`. Added. The 86-route teaser tier is now
+**derived** from the same registry that renders it (`indexableTeaserRoutes()`), because the
+hand-listed version named twelve and silently omitted the rest, so a surface added to the registry
+never reached the sitemap and nobody found out.
+
+**And the inverse defect, which the audit surfaced on the way past:** because every authenticated
+route renders a teaser, `/admin`, `/tenants`, `/settings` and `/agent-worker` had quietly become
+indexable pages. They keep their teaser — a deep link is still not a dead end — and now emit
+`noindex, follow`, restored on unmount so one visit to `/admin` cannot suppress the whole site for
+the session.
+
+### Three corrections to PRD 21 itself
+
+§2 says it is the implementable reference and that `globals.css` wins any disagreement, so these are
+bugs in the document, fixed there:
+
+- **§2.2 omitted the entire `--surface-*` family.** Every card on `/`, `/product`, `/pricing`,
+  `/soc2`, `/evermind` and the teaser is `--surface-card`; an agent building "from §2 alone" would
+  have reached for `--bg-elevated` and produced a surface matching no neighbour.
+- **§2.3 now states plainly that it was the one part of §2 an agent could not build from**, with the
+  three contradicting classes tabulated.
+- **§2.7 gains the three measures that were never taken** — distinct font sizes, distinct clamp
+  ramps, and marketing primitive adoption.
+
+**Verified:** `check:design-tokens` (296 tokens, 62 `.ui-*` classes), `check:design-scale` (0 hex,
+9 radii, 3,960 sizes — all three at baseline), full frontend suite **157 files / 1,545 tests green**,
+`tsc --noEmit` clean.
+
+---
+
 ## ✅ RESOLVED 2026-08-09 — PRD 21's last two residuals: the literal-hex sweep reaches ZERO, and the panel gets a size container
 
 *[PRD 21](./specs/builderforce/21-prd-unified-experience.md) §2.9 item 1 + §3.4. These were the only
