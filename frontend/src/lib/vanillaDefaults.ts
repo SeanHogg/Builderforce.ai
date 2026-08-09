@@ -179,7 +179,7 @@ export default function App() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#0f1020' },
   header: { paddingTop: 64, paddingHorizontal: 24, paddingBottom: 16 },
-  title: { fontSize: 28, fontWeight: '700', color: '#fff' },
+  title: { fontSize: 28, fontWeight: '700', color: '#ffffff' },
   subtitle: { fontSize: 14, color: '#9ca3af', marginTop: 4 },
   content: { padding: 24 },
   card: {
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardLabel: { fontSize: 14, color: '#9ca3af' },
-  counter: { fontSize: 48, fontWeight: '700', color: '#fff', marginVertical: 8 },
+  counter: { fontSize: 48, fontWeight: '700', color: '#ffffff', marginVertical: 8 },
   button: {
     backgroundColor: '#e2654a',
     paddingVertical: 14,
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonPressed: { opacity: 0.75 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });`,
   'vite.config.js': MOBILE_VITE_CONFIG,
 };

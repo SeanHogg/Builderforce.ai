@@ -99,8 +99,17 @@ container** (`container-type: inline-size; container-name: panel`), so a destina
 ### Also closed
 
 **`AgentExecutionPanel.test.tsx` "opens a changed file in the Monaco diff viewer"** — logged as a P2
-failure under Test health; all 13 of that file's tests pass. The full frontend suite is **155 files
-/ 1,535 tests green**, `tsgo --noEmit` clean, and both design guards pass.
+failure under Test health; all 13 of that file's tests pass, so the entry was stale.
+
+**`CreationCanvas.test.tsx`'s five 3D-view tests** — found failing during this pass and confirmed
+pre-existing (they fail identically with every change here stashed). `Canvas3DView` is a
+`next/dynamic` import with `ssr: false`, so clicking *Toggle 3D view* flips the mode synchronously
+and the chunk lands a microtask later: a `getByTestId('canvas-3d-view')` on the next line asks
+before the module exists. All five now go through one `enterThreeD()` helper that uses `findByTestId`
+— the query that waits, and the honest one, because it is what a real first entry into 3D does.
+
+The full frontend suite is **157 files / 1,545 tests green**, `tsgo --noEmit` clean, and all three
+`npm test` guards pass.
 
 ---
 

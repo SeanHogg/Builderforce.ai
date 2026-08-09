@@ -3044,6 +3044,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
         return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
       }
+      // A Course seeds the worked "Build an LLM" sample so a human dragging one
+      // out of the palette gets something real to read. That default is a TRAP
+      // for a generated object: a course titled "Recruiting and Hiring" with no
+      // authored `course` inherits the LLM curriculum verbatim, which reads as
+      // the product having built the wrong subject rather than as a missing
+      // argument. Refuse it and say what to send instead.
+      if (args.kind === 'course' && !(authored.course as { modules?: unknown } | undefined)?.modules) {
+        return { error: 'A generated course must include the authored curriculum in fields.course as { modules: [{ id, title, description, lessons: [{ id, title, objective, content, activity, durationMinutes }], assessment: { question, choices, answer, explanation } }] }. Without it the object would show the sample "Build an LLM" curriculum under your title.' };
+      }
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };

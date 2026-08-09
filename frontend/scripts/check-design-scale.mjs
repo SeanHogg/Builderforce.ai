@@ -64,6 +64,20 @@ const BASELINE = {
   /** Not a budget any more — see COLOUR_EXEMPT. Every literal outside it fails. */
   literalHexFiles: 0,
   offScaleRadii: 9,
+  /**
+   * Literal font sizes, i.e. a size typed as a number instead of named as a
+   * role. This is the third ratchet and it exists because §2.3 spent this
+   * PRD's whole life as a table with nothing behind it: there was no
+   * `--font-size-*` token and only one of eight roles had a class, so there was
+   * nothing to import and every author typed a number. The public surface alone
+   * carried 89 distinct values over 1,185 uses, against a radius scale — five
+   * values, tokens, and the ratchet above — sitting at nine.
+   *
+   * Baselined AFTER the public-surface migration (1,494 → 457 on the marketing
+   * tree, of which 378 are the board's own stylesheet). The rest of the app is
+   * the sweep this number now drives, exactly as 2,087 → 9 drove the radii.
+   */
+  offScaleFontSizes: 3960,
 };
 
 /**
@@ -163,6 +177,44 @@ const LITERAL_HEX = /(?<![\w&])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8
 const RADIUS = /border-?[Rr]adius:\s*((?:var\([^)]*\)|[^;,}\n])+)/g;
 
 /**
+ * `font-size: X` in CSS and `fontSize: X` in a style object.
+ *
+ * The nine roles (§2.3 plus Lede) are `--font-size-*` tokens, so a `var()` is
+ * on the scale by construction and only a literal can be off it. `inherit` is
+ * not a size — it is "whatever my parent already chose" — and is how a nested
+ * element keeps its role rather than re-picking one.
+ */
+const FONT_SIZE = /font-?[Ss]ize:\s*((?:var\([^)]*\)|clamp\([^)]*\)|[^;,}\n])+)/g;
+const FONT_SIZE_KEYWORDS = new Set(['inherit', 'unset', 'initial', 'revert', 'smaller', 'larger', '0']);
+
+/**
+ * Files whose font sizes are not this product's UI, each with a reason.
+ *
+ * The board declares its own scale for the same reason §2.6 rule 9 lets it
+ * declare its own palette: a canvas object's label is drawn at a zoom-dependent
+ * size in an art surface, not set in the shell's type ramp. The rest are the
+ * documents opened OUTSIDE this app and the consumers that never read our CSS —
+ * the same list, and the same reasons, as COLOUR_EXEMPT above.
+ */
+const FONT_SIZE_EXEMPT = [
+  /^app\/globals\.css$/,
+  /\.test\.(tsx?|css)$/,
+  /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
+  /^lib\/printDocument\.ts$/,
+  /^lib\/creationDeliverables\.ts$/,
+  /^lib\/courseLms\.ts$/,
+  /^lib\/renderedSvg\.ts$/,
+  /^lib\/gamePoster\.ts$/,
+  /^lib\/creativeGeometry\.ts$/,
+  /^lib\/vanillaDefaults\.ts$/,
+  /^components\/rfp\/RfpContent\.tsx$/,
+  /^app\/projects\/rfp\/\[id\]\/RfpDetailClient\.tsx$/,
+  /^components\/blog\/BlogCover\.tsx$/,
+  /^components\/ide\/DevicePreview\.tsx$/,
+  /^components\/Terminal\.tsx$/,
+];
+
+/**
  * Files whose radii are not this product's UI, each with a reason.
  *
  * `DevicePreview` draws PHYSICAL devices — a phone's corner is 44px because the
@@ -212,6 +264,7 @@ function radiusParts(value) {
 const files = collect(srcDir);
 const hexFiles = [];
 const offScale = [];
+const offScaleType = [];
 
 for (const file of files) {
   const rel = relative(srcDir, file).split('\\').join('/');
@@ -222,6 +275,19 @@ for (const file of files) {
     hexFiles.push(rel);
   }
   LITERAL_HEX.lastIndex = 0;
+
+  if (!FONT_SIZE_EXEMPT.some((pattern) => pattern.test(rel))) {
+    for (const match of text.matchAll(FONT_SIZE)) {
+      const value = match[1].trim().replace(/^['"`]|['"`]$/g, '');
+      // A token IS the scale; a keyword is not a size at all.
+      if (value.startsWith('var(') || FONT_SIZE_KEYWORDS.has(value)) continue;
+      // A template hole or a bound expression is resolved at runtime; the guard
+      // cannot judge it and must not claim to.
+      if (value.includes('${') || /^[A-Za-z_$]/.test(value)) continue;
+      const line = text.slice(0, match.index).split('\n').length;
+      offScaleType.push(`${rel}:${line}  font-size: ${value}`);
+    }
+  }
 
   if (RADIUS_EXEMPT.some((pattern) => pattern.test(rel))) continue;
 
@@ -236,7 +302,11 @@ for (const file of files) {
   }
 }
 
-const measured = { literalHexFiles: hexFiles.length, offScaleRadii: offScale.length };
+const measured = {
+  literalHexFiles: hexFiles.length,
+  offScaleRadii: offScale.length,
+  offScaleFontSizes: offScaleType.length,
+};
 const failures = [];
 const slack = [];
 
@@ -268,6 +338,21 @@ if (failures.length > 0) {
     for (const r of offScale.slice(0, 12)) console.error(`    • ${r}`);
     console.error('    The scale is --radius-sm/md/lg/xl/full (6 / 8 / 12 / 16 / pill).');
   }
+  if (measured.offScaleFontSizes > BASELINE.offScaleFontSizes) {
+    console.error('\n  Literal font sizes (sample):');
+    for (const f of offScaleType.slice(0, 12)) console.error(`    • ${f}`);
+    console.error('    Name the ROLE, do not type the size. The nine roles are');
+    console.error('    --font-size-hero / page-title / section / lede / card-title /');
+    console.error('    body / small / eyebrow / field-label, and each has a matching');
+    console.error('    .ui-text-* class carrying its weight, tracking and line height.');
+    console.error('    Prefer the class: a role is all four, and picking only the size');
+    console.error('    is how one "page title" became three different ones.');
+    console.error('');
+    console.error('    If the size is genuinely not this product\'s UI — the board\'s own');
+    console.error('    art surface, a document opened outside this app, a consumer that');
+    console.error('    never reads our CSS — add the file to FONT_SIZE_EXEMPT above WITH');
+    console.error('    ITS REASON. The list is the review.');
+  }
   console.error('');
   process.exit(1);
 }
@@ -283,5 +368,6 @@ if (slack.length > 0) {
 
 console.log(
   `✅  Design-scale ratchets held — ${measured.literalHexFiles} files with a literal hex, `
-  + `${measured.offScaleRadii} off-scale radii (both at baseline).`,
+  + `${measured.offScaleRadii} off-scale radii, ${measured.offScaleFontSizes} literal font sizes `
+  + `(all three at baseline).`,
 );
