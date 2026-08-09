@@ -12,19 +12,19 @@ export interface EmbeddedCapabilityDefinition {
 
 /** Canonical presentation registry for the customer-site embed control plane. */
 export const EMBEDDED_CAPABILITIES: readonly EmbeddedCapabilityDefinition[] = [
-  { key: 'feedback_widget', icon: 'message-square', category: 'engage', apiName: 'feedback', examples: 2 },
-  { key: 'support_widget', icon: 'life-buoy', category: 'engage', apiName: 'support', examples: 2 },
-  { key: 'lead_forms', icon: 'file-input', category: 'engage', apiName: 'forms', examples: 4 },
-  { key: 'onboarding', icon: 'compass', category: 'engage', apiName: 'onboarding', examples: 2 },
+  { key: 'feedback_widget', icon: 'message', category: 'engage', apiName: 'feedback', examples: 2 },
+  { key: 'support_widget', icon: 'message', category: 'engage', apiName: 'support', examples: 2 },
+  { key: 'lead_forms', icon: 'document', category: 'engage', apiName: 'forms', examples: 4 },
+  { key: 'onboarding', icon: 'target', category: 'engage', apiName: 'onboarding', examples: 2 },
   { key: 'usage_tracking', icon: 'activity', category: 'measure', apiName: 'analytics', examples: 5 },
-  { key: 'heatmaps', icon: 'mouse-pointer-click', category: 'measure', apiName: 'heatmaps', examples: 1 },
-  { key: 'feature_management', icon: 'toggle-right', category: 'measure', apiName: 'flags', examples: 3 },
-  { key: 'cookie_consent', icon: 'cookie', category: 'govern', apiName: 'consent', examples: 1 },
-  { key: 'terms_gate', icon: 'shield-check', category: 'govern', apiName: 'terms', examples: 1 },
-  { key: 'push_notifications', icon: 'bell', category: 'engage', apiName: 'push', examples: 4 },
+  { key: 'heatmaps', icon: 'activity', category: 'measure', apiName: 'heatmaps', examples: 1 },
+  { key: 'feature_management', icon: 'flag', category: 'measure', apiName: 'flags', examples: 3 },
+  { key: 'cookie_consent', icon: 'check', category: 'govern', apiName: 'consent', examples: 1 },
+  { key: 'terms_gate', icon: 'shield', category: 'govern', apiName: 'terms', examples: 1 },
+  { key: 'push_notifications', icon: 'alert', category: 'engage', apiName: 'push', examples: 4 },
   { key: 'sourcing', icon: 'search', category: 'operate', apiName: 'sourcing', examples: 4 },
-  { key: 'hr_widget', icon: 'users', category: 'operate', apiName: 'hr', examples: 1 },
-  { key: 'status_page', icon: 'server-cog', category: 'operate', apiName: 'status', examples: 2 },
+  { key: 'hr_widget', icon: 'people', category: 'operate', apiName: 'hr', examples: 1 },
+  { key: 'status_page', icon: 'monitor', category: 'operate', apiName: 'status', examples: 2 },
 ] as const;
 
 export const EMBEDDED_CAPABILITY_KEYS = EMBEDDED_CAPABILITIES.map(({ key }) => key);
