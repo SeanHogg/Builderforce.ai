@@ -272,20 +272,20 @@ const styles = `
     pointer-events: auto;
   }
   .demo-tour-progress {
-    font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--cyan-bright, var(--cyan-bright)); margin-bottom: 8px;
   }
-  .demo-tour-title { margin: 0 0 8px; font-size: var(--font-size-card-title); font-weight: 700; color: var(--text-primary, var(--text-primary)); }
-  .demo-tour-body { margin: 0 0 16px; font-size: var(--font-size-small); line-height: 1.55; color: var(--text-secondary); }
+  .demo-tour-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--text-primary, var(--text-primary)); }
+  .demo-tour-body { margin: 0 0 16px; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
   .demo-tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .demo-tour-nav { display: flex; align-items: center; gap: 8px; }
   .demo-tour-skip {
-    background: none; border: none; cursor: pointer; font-family: inherit; font-size: var(--font-size-small);
+    background: none; border: none; cursor: pointer; font-family: inherit; font-size: 13px;
     color: var(--text-muted); padding: 6px 4px;
   }
   .demo-tour-skip:hover { color: var(--text-primary, var(--text-primary)); }
   .demo-tour-btn {
-    font-family: inherit; font-size: var(--font-size-small); font-weight: 700; border-radius: var(--radius-md); cursor: pointer;
+    font-family: inherit; font-size: 13.5px; font-weight: 700; border-radius: var(--radius-md); cursor: pointer;
     padding: 8px 14px; border: 1px solid transparent;
   }
   .demo-tour-btn.primary { background: var(--accent, var(--coral-bright)); color: var(--text-on-accent); }

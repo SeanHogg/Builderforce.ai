@@ -58,13 +58,13 @@ export default function RelatedArticles({
         .related-articles-head {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-section);
+          font-size: 1.5rem;
           color: var(--text-primary);
           margin: 0 0 6px;
         }
         .related-articles-head .related-accent { color: var(--coral-bright); margin-right: 8px; }
         .related-articles-sub {
-          font-size: var(--font-size-body);
+          font-size: 0.95rem;
           color: var(--text-secondary);
           margin: 0 0 20px;
         }

@@ -82,13 +82,13 @@ export function GuestRoomMeeting({ code, name, onLeave }: { code: string; name: 
       <style>{`
         .gr-meeting { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
         .gr-meeting-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-        .gr-meeting-title { display: flex; align-items: baseline; gap: 8px; font-size: var(--font-size-small); font-weight: 600; color: var(--text-primary); }
-        .gr-meeting-title small { font-size: var(--font-size-eyebrow); font-weight: 500; color: var(--text-muted); }
+        .gr-meeting-title { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .gr-meeting-title small { font-size: 11px; font-weight: 500; color: var(--text-muted); }
         .gr-meeting-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        .gr-media-btn { padding: 6px 10px; font-size: var(--font-size-small); font-weight: 600; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-primary); cursor: pointer; min-height: 32px; }
+        .gr-media-btn { padding: 6px 10px; font-size: 12px; font-weight: 600; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-primary); cursor: pointer; min-height: 32px; }
         .gr-media-off { background: var(--danger-bg, rgba(220, 38, 38, 0.12)); border-color: var(--danger); color: var(--danger); }
         .gr-media-leave { background: transparent; color: var(--text-muted); }
-        .gr-meeting-error { margin: 0; font-size: var(--font-size-small); color: var(--danger); }
+        .gr-meeting-error { margin: 0; font-size: 12px; color: var(--danger); }
         @media (max-width: 480px) {
           .gr-meeting-actions { width: 100%; }
           .gr-media-btn { flex: 1 1 auto; }

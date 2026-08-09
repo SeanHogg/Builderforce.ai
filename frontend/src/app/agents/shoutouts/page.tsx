@@ -28,7 +28,7 @@ export default function ShoutoutsPage() {
         .cc-page-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-hero);
+          font-size: clamp(2rem, 5vw, 3rem);
           margin: 0;
           color: var(--text-primary);
         }
@@ -79,12 +79,12 @@ export default function ShoutoutsPage() {
         .cc-shoutout-quote {
           color: var(--text-secondary);
           line-height: 1.55;
-          font-size: var(--font-size-body);
+          font-size: 0.92rem;
           margin: 0;
         }
         .cc-shoutout-author {
           color: var(--coral-bright);
-          font-size: var(--font-size-small);
+          font-size: 0.82rem;
         }
         .cc-shoutouts-toolbar {
           display: flex;

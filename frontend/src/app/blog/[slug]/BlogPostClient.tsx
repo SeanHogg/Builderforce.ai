@@ -43,7 +43,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          font-size: var(--font-size-small);
+          font-size: 0.875rem;
           color: var(--coral-bright);
           text-decoration: none;
           margin-bottom: 28px;
@@ -61,12 +61,12 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           margin-bottom: 16px;
         }
         .bpost-date {
-          font-size: var(--font-size-small);
+          font-size: 0.82rem;
           color: var(--text-muted);
           font-family: var(--font-display);
         }
         .bpost-tag {
-          font-size: var(--font-size-eyebrow);
+          font-size: 0.7rem;
           font-weight: 600;
           padding: 2px 9px;
           border-radius: var(--radius-full);
@@ -77,13 +77,13 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           letter-spacing: 0.08em;
         }
         .bpost-author {
-          font-size: var(--font-size-small);
+          font-size: 0.82rem;
           color: var(--text-muted);
         }
 
         .bpost-title {
           font-family: var(--font-display);
-          font-size: var(--font-size-hero);
+          font-size: clamp(1.8rem, 4vw, 2.8rem);
           font-weight: 700;
           letter-spacing: -0.03em;
           line-height: 1.15;
@@ -92,7 +92,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
         }
 
         .bpost-description {
-          font-size: var(--font-size-card-title);
+          font-size: 1.05rem;
           color: var(--text-secondary);
           line-height: 1.7;
           margin-bottom: 36px;
@@ -102,7 +102,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
 
         /* ── MARKDOWN CONTENT ── */
         .bpost-content {
-          font-size: var(--font-size-body);
+          font-size: 0.97rem;
           line-height: 1.8;
           color: var(--text-secondary);
         }
@@ -116,10 +116,10 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           margin: 2em 0 0.6em;
           line-height: 1.25;
         }
-        .bpost-content h1 { font-size: var(--font-size-page-title); letter-spacing: -0.025em; }
-        .bpost-content h2 { font-size: var(--font-size-section); letter-spacing: -0.02em; }
-        .bpost-content h3 { font-size: var(--font-size-section); }
-        .bpost-content h4 { font-size: var(--font-size-card-title); }
+        .bpost-content h1 { font-size: 1.9rem; letter-spacing: -0.025em; }
+        .bpost-content h2 { font-size: 1.4rem; letter-spacing: -0.02em; }
+        .bpost-content h3 { font-size: 1.15rem; }
+        .bpost-content h4 { font-size: 1rem; }
         .bpost-content p { margin: 0 0 1.2em; }
         .bpost-content ul,
         .bpost-content ol {
@@ -138,7 +138,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
         }
         .bpost-content code {
           font-family: var(--font-mono);
-          font-size: var(--font-size-small);
+          font-size: 0.87em;
           background: var(--bg-elevated, rgba(255,255,255,0.07));
           padding: 2px 6px;
           border-radius: var(--radius-sm);
@@ -156,14 +156,14 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           background: none;
           padding: 0;
           border-radius: 0;
-          font-size: var(--font-size-small);
+          font-size: 0.88rem;
           color: var(--text-secondary);
         }
         .bpost-content table {
           width: 100%;
           border-collapse: collapse;
           margin: 1.4em 0;
-          font-size: var(--font-size-body);
+          font-size: 0.9rem;
         }
         .bpost-content th,
         .bpost-content td {

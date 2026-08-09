@@ -65,7 +65,7 @@ export default function BlogPageClient() {
           border-radius: var(--radius-full);
           padding: 5px 16px;
           font-family: var(--font-display);
-          font-size: var(--font-size-eyebrow);
+          font-size: 0.72rem;
           font-weight: 600;
           color: var(--coral-bright);
           letter-spacing: 0.12em;
@@ -74,7 +74,7 @@ export default function BlogPageClient() {
         }
         .blog-hero-title {
           font-family: var(--font-display);
-          font-size: var(--font-size-hero);
+          font-size: clamp(2rem, 5vw, 3.2rem);
           font-weight: 700;
           letter-spacing: -0.03em;
           line-height: 1.1;
@@ -85,7 +85,7 @@ export default function BlogPageClient() {
           margin-bottom: 16px;
         }
         .blog-hero-desc {
-          font-size: var(--font-size-card-title);
+          font-size: 1.05rem;
           color: var(--text-secondary);
           max-width: 520px;
           margin: 0 auto;
@@ -123,7 +123,7 @@ export default function BlogPageClient() {
           background: var(--surface-card);
           color: var(--text-secondary);
           font-family: var(--font-display);
-          font-size: var(--font-size-body);
+          font-size: 0.9rem;
           font-weight: 600;
           cursor: pointer;
           transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;

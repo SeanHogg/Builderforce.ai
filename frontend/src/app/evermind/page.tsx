@@ -52,33 +52,33 @@ export default async function EvermindPage() {
         .ev-hero-content { position: relative; z-index: 1; width: 100%; max-width: 820px; display: flex; flex-direction: column; align-items: center; }
         .ev-eyebrow {
           display: inline-flex; align-items: center; gap: 8px;
-          font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 600;
+          font-family: var(--font-display); font-size: 0.74rem; font-weight: 600;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan-bright);
           border: 1px solid var(--border-accent); border-radius: var(--radius-full); padding: 5px 16px;
           margin-bottom: 22px; background: rgba(0,229,204,0.06);
         }
         .ev-title {
           font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.06;
-          font-size: var(--font-size-hero); margin: 0 0 18px;
+          font-size: clamp(2.4rem, 6vw, 3.8rem); margin: 0 0 18px;
           color: var(--text-primary);
         }
         .ev-title .ev-grad {
           background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        .ev-sub { font-size: var(--font-size-lede); color: rgba(222,230,246,0.92); line-height: 1.7; margin: 0 0 32px; }
+        .ev-sub { font-size: clamp(1rem, 2vw, 1.18rem); color: rgba(222,230,246,0.92); line-height: 1.7; margin: 0 0 32px; }
         .ev-actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
         .ev-btn-primary {
           display: inline-flex; align-items: center; gap: 8px; padding: 15px 30px; border-radius: var(--radius-lg);
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent);
-          font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-body); text-decoration: none;
+          font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; text-decoration: none;
           box-shadow: 0 6px 22px var(--shadow-coral-mid); transition: transform 0.22s ease, box-shadow 0.22s ease;
         }
         .ev-btn-primary:hover { transform: translateY(-3px); box-shadow: 0 12px 32px var(--shadow-coral-strong); }
         .ev-btn-secondary {
           display: inline-flex; align-items: center; gap: 8px; padding: 15px 30px; border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-primary);
-          font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-body); text-decoration: none; backdrop-filter: blur(12px);
+          font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; text-decoration: none; backdrop-filter: blur(12px);
         }
         .ev-btn-secondary:hover { border-color: var(--border-accent); transform: translateY(-3px); }
 
@@ -93,34 +93,34 @@ export default async function EvermindPage() {
         }
 
         .ev-section { max-width: 1100px; margin: 0 auto; padding: 0 24px 64px; width: 100%; }
-        .ev-h2 { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-page-title); color: var(--text-primary); margin: 0 0 10px; }
+        .ev-h2 { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2rem); color: var(--text-primary); margin: 0 0 10px; }
         .ev-h2 .ev-accent { color: var(--coral-bright); margin-right: 8px; }
-        .ev-lead { font-size: var(--font-size-card-title); color: var(--text-secondary); line-height: 1.75; max-width: 820px; margin: 0 0 28px; }
+        .ev-lead { font-size: 1rem; color: var(--text-secondary); line-height: 1.75; max-width: 820px; margin: 0 0 28px; }
 
         .ev-law {
           display: grid; grid-template-columns: 1fr; gap: 16px; align-items: center;
           border: 1px solid var(--border-accent); border-radius: var(--radius-xl); padding: 32px;
           background: linear-gradient(135deg, rgba(77,158,255,0.07), rgba(0,229,204,0.05));
         }
-        .ev-law-quote { font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-section); line-height: 1.5; color: var(--text-primary); margin: 0; }
+        .ev-law-quote { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.1rem, 2.4vw, 1.45rem); line-height: 1.5; color: var(--text-primary); margin: 0; }
         .ev-law-quote em { font-style: normal; color: var(--cyan-bright); }
 
         .ev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
         .ev-card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); padding: 24px 22px; backdrop-filter: blur(12px); }
-        .ev-card-icon { font-size: var(--font-size-section); display: block; margin-bottom: 12px; }
-        .ev-card-title { font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title); color: var(--text-primary); margin: 0 0 7px; }
-        .ev-card-desc { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.62; margin: 0; }
+        .ev-card-icon { font-size: 1.6rem; display: block; margin-bottom: 12px; }
+        .ev-card-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--text-primary); margin: 0 0 7px; }
+        .ev-card-desc { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.62; margin: 0; }
 
         .ev-edges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
         @media (max-width: 720px) { .ev-edges { grid-template-columns: 1fr; } }
         .ev-edge { padding: 20px; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); background: var(--surface-card); }
-        .ev-edge-label { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-card-title);
+        .ev-edge-label { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem;
           background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: block; margin-bottom: 6px; }
-        .ev-edge-desc { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.6; }
+        .ev-edge-desc { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.6; }
 
         .ev-table-wrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); }
-        .ev-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-small); min-width: 640px; }
+        .ev-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 640px; }
         .ev-table th { text-align: left; padding: 14px 16px; font-family: var(--font-display); font-weight: 600; border-bottom: 1px solid var(--border-subtle); }
         .ev-table th.ev-col-evermind { color: var(--cyan-bright); }
         .ev-table th.ev-col-frozen { color: var(--text-muted); }
@@ -130,27 +130,27 @@ export default async function EvermindPage() {
         .ev-table tr:last-child td { border-bottom: none; }
 
         .ev-faq details { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 4px 18px; margin-bottom: 10px; background: var(--surface-card); }
-        .ev-faq summary { cursor: pointer; padding: 14px 0; font-weight: 600; color: var(--text-primary); font-size: var(--font-size-card-title); list-style: none; }
+        .ev-faq summary { cursor: pointer; padding: 14px 0; font-weight: 600; color: var(--text-primary); font-size: 0.98rem; list-style: none; }
         .ev-faq summary::-webkit-details-marker { display: none; }
         .ev-faq details[open] summary { border-bottom: 1px solid var(--border-subtle); }
-        .ev-faq p { color: var(--text-secondary); line-height: 1.7; font-size: var(--font-size-body); padding: 14px 0 16px; margin: 0; }
+        .ev-faq p { color: var(--text-secondary); line-height: 1.7; font-size: 0.9rem; padding: 14px 0 16px; margin: 0; }
 
         .ev-cta { max-width: 820px; margin: 0 auto; padding: 0 24px 80px; }
         .ev-cta-box { text-align: center; padding: 52px 40px; border-radius: var(--radius-xl); border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px); }
-        .ev-cta-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-page-title); color: var(--text-primary); margin: 0 0 12px; }
-        .ev-cta-desc { font-size: var(--font-size-body); color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
+        .ev-cta-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2.1rem); color: var(--text-primary); margin: 0 0 12px; }
+        .ev-cta-desc { font-size: 0.97rem; color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
 
         .ev-figure { width: 100%; height: auto; display: block; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: var(--bg-deep); }
-        .ev-figcap { font-size: var(--font-size-small); color: var(--text-muted); margin: 0 0 4px; text-align: center; }
+        .ev-figcap { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 4px; text-align: center; }
         .ev-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; counter-reset: ev-step; }
         @media (max-width: 760px) { .ev-steps { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 460px) { .ev-steps { grid-template-columns: 1fr; } }
         .ev-step { position: relative; padding: 22px 18px 18px; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); background: var(--surface-card); }
         .ev-step::before { counter-increment: ev-step; content: counter(ev-step); display: inline-flex; align-items: center; justify-content: center;
-          width: 28px; height: 28px; border-radius: var(--radius-full); font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-small); color: var(--text-on-accent);
+          width: 28px; height: 28px; border-radius: var(--radius-full); font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; color: var(--text-on-accent);
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); margin-bottom: 12px; }
-        .ev-step-title { font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-body); color: var(--text-primary); margin: 0 0 6px; }
-        .ev-step-desc { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.55; margin: 0; }
+        .ev-step-title { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; color: var(--text-primary); margin: 0 0 6px; }
+        .ev-step-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.55; margin: 0; }
         .ev-api { border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); padding: 24px; background: var(--surface-card); }
       `}</style>
 

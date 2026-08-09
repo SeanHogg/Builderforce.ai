@@ -164,11 +164,11 @@ export function DemoShowcase() {
 const styles = `
   .demo-showcase { border-top: 1px solid var(--border-subtle); }
   .demo-showcase-inner { max-width: 1180px; margin: 0 auto; padding: clamp(72px,8vw,108px) clamp(18px,4vw,40px); }
-  .demo-showcase-eyebrow { margin: 0 0 12px; color: var(--accent); font-size: var(--font-size-small); font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
-  .demo-showcase-heading { max-width: 760px; margin: 0; color: var(--text-primary); font-size: var(--font-size-hero); line-height: 1.03; letter-spacing: -.04em; }
+  .demo-showcase-eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+  .demo-showcase-heading { max-width: 760px; margin: 0; color: var(--text-primary); font-size: clamp(36px,5vw,58px); line-height: 1.03; letter-spacing: -.04em; }
   .demo-showcase-lead {
     max-width: 720px; margin: 16px 0 0; text-align: left;
-    font-size: var(--font-size-card-title); line-height: 1.65; color: var(--text-secondary);
+    font-size: 17px; line-height: 1.65; color: var(--text-secondary);
   }
   .demo-showcase-track {
     display: flex; gap: 14px; margin-top: 36px; overflow-x: auto; padding: 3px 1px 22px;
@@ -197,15 +197,15 @@ const styles = `
     border-radius: var(--radius-lg); background: color-mix(in srgb, var(--card-accent) 12%, transparent);
     color: var(--card-accent); font: 750 11px/1 var(--font-mono); letter-spacing: .06em;
   }
-  .demo-card-title { margin: 6px 0 0; font-size: var(--font-size-card-title); font-weight: 750; color: var(--text-primary); }
-  .demo-card-audience { margin: 0; font-size: var(--font-size-small); font-weight: 600; letter-spacing: 0.02em; color: var(--card-accent); text-transform: uppercase; }
-  .demo-card-desc { margin: 0; font-size: var(--font-size-small); line-height: 1.6; color: var(--text-secondary); flex: 1 1 auto; }
-  .demo-card-cta { display: inline-flex; align-items: center; margin-top: 12px; font-size: var(--font-size-small); font-weight: 750; color: var(--card-accent); }
+  .demo-card-title { margin: 6px 0 0; font-size: 18px; font-weight: 750; color: var(--text-primary); }
+  .demo-card-audience { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--card-accent); text-transform: uppercase; }
+  .demo-card-desc { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-secondary); flex: 1 1 auto; }
+  .demo-card-cta { display: inline-flex; align-items: center; margin-top: 12px; font-size: 14px; font-weight: 750; color: var(--card-accent); }
   .demo-carousel-controls { display: flex; align-items: center; justify-content: center; gap: 16px; }
   .demo-carousel-arrow {
     width: 42px; height: 42px; display: grid; place-items: center; padding: 0; border-radius: 50%;
     border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary);
-    font: inherit; font-size: var(--font-size-card-title); font-weight: 700; line-height: 1; cursor: pointer;
+    font: inherit; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer;
     transition: border-color .18s ease, color .18s ease, transform .18s ease;
   }
   .demo-carousel-arrow:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
@@ -214,8 +214,8 @@ const styles = `
   .demo-carousel-dots { display: flex; align-items: center; gap: 7px; }
   .demo-carousel-dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--text-muted); opacity: .38; transition: width .18s ease; }
   .demo-carousel-dot.is-active { width: 22px; background: var(--accent); opacity: 1; }
-  .demo-showcase-error { margin: 16px auto 0; text-align: center; color: var(--error-text); font-size: var(--font-size-small); }
-  .demo-showcase-note { margin: 18px auto 0; text-align: center; font-size: var(--font-size-small); color: var(--text-muted); }
+  .demo-showcase-error { margin: 16px auto 0; text-align: center; color: var(--error-text); font-size: 14px; }
+  .demo-showcase-note { margin: 18px auto 0; text-align: center; font-size: 13px; color: var(--text-muted); }
   @media (max-width: 1040px) {
     .demo-card { flex-basis: calc((100% - 28px) / 3); }
   }

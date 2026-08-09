@@ -183,7 +183,7 @@ export default async function AgentsHome() {
           max-width: 760px; margin: 64px auto 0; padding: 0 24px; width: 100%;
         }
         .cc-faq-head {
-          font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section);
+          font-family: var(--font-display); font-weight: 700; font-size: 1.5rem;
           color: var(--text-primary); text-align: center; margin: 0 0 20px;
         }
         .cc-faq-item {
@@ -192,13 +192,13 @@ export default async function AgentsHome() {
         }
         .cc-faq-q {
           cursor: pointer; list-style: none; padding: 14px 0;
-          font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title);
+          font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
           color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; gap: 12px;
         }
         .cc-faq-q::-webkit-details-marker { display: none; }
-        .cc-faq-q::after { content: '+'; color: var(--coral-bright); font-size: var(--font-size-section); line-height: 1; flex-shrink: 0; }
+        .cc-faq-q::after { content: '+'; color: var(--coral-bright); font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
         .cc-faq-item[open] .cc-faq-q::after { content: '–'; }
-        .cc-faq-a { margin: 0 0 14px; font-size: var(--font-size-body); color: var(--text-secondary); line-height: 1.6; }
+        .cc-faq-a { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
 
         .cc-stars,
         .cc-nebula {
@@ -244,7 +244,7 @@ export default async function AgentsHome() {
         .cc-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-hero);
+          font-size: clamp(2.25rem, 6vw, 4rem);
           margin: 0;
           background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
           -webkit-background-clip: text;
@@ -253,7 +253,7 @@ export default async function AgentsHome() {
         }
         .cc-tagline {
           color: var(--text-secondary);
-          font-size: var(--font-size-lede);
+          font-size: clamp(1rem, 2vw, 1.2rem);
           margin: 16px auto 8px;
           max-width: 720px;
         }
@@ -278,7 +278,7 @@ export default async function AgentsHome() {
         .cc-h2 {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-page-title);
+          font-size: clamp(1.5rem, 3vw, 2rem);
           margin-bottom: 24px;
           color: var(--text-primary);
         }
@@ -306,7 +306,7 @@ export default async function AgentsHome() {
           color: var(--coral-bright);
           padding: 1px 6px;
           border-radius: var(--radius-sm);
-          font-size: var(--font-size-small);
+          font-size: 0.875em;
         }
         .cc-features-grid {
           display: grid;
@@ -335,13 +335,13 @@ export default async function AgentsHome() {
         .cc-feature-title {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: var(--font-size-card-title);
+          font-size: 1.05rem;
           color: var(--text-primary);
           margin: 0 0 6px;
         }
         .cc-feature-desc {
           color: var(--text-secondary);
-          font-size: var(--font-size-body);
+          font-size: 0.9rem;
           line-height: 1.55;
           margin: 0;
         }
@@ -390,11 +390,11 @@ export default async function AgentsHome() {
         .cc-cta-label {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: var(--font-size-body);
+          font-size: 0.95rem;
         }
         .cc-cta-sub {
           color: var(--text-secondary);
-          font-size: var(--font-size-small);
+          font-size: 0.8rem;
         }
       `}</style>
     </>

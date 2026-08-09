@@ -87,7 +87,7 @@
   max-width: 680px;
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-lede);
+  font-size: clamp(.98rem, 1.5vw, 1.1rem);
   line-height: 1.72;
 }
 
@@ -125,7 +125,7 @@
   letter-spacing: -.015em;
 }
 
-.cardText { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.65; }
+.cardText { margin: 0; color: var(--text-secondary); font-size: .88rem; line-height: 1.65; }
 
 .badgeRow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 24px; }
 
@@ -151,14 +151,14 @@
 .statLabel { color: var(--text-muted); font: 600 .72rem/1.45 var(--font-mono); letter-spacing: .02em; }
 
 .price { margin: 24px 0; color: var(--text-primary); font: 680 2rem/1 var(--font-display); letter-spacing: -.04em; }
-.price a { color: var(--coral-bright); font-size: var(--font-size-card-title); letter-spacing: 0; }
+.price a { color: var(--coral-bright); font-size: 1rem; letter-spacing: 0; }
 .perks { display: grid; gap: 11px; margin: 0; padding: 20px 0 0; list-style: none; border-top: 1px solid var(--border-subtle); }
-.perk { display: flex; gap: 10px; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.45; }
+.perk { display: flex; gap: 10px; color: var(--text-secondary); font-size: .84rem; line-height: 1.45; }
 .perk::before { content: '✓'; color: var(--coral-bright); font-weight: 800; }
 
 .form { display: flex; gap: 8px; margin-top: 28px; }
 .form > :global(.ui-input) { min-width: 0; flex: 1; }
-.formStatus { margin: 14px 0 0; color: var(--success-text); font-size: var(--font-size-small); }
+.formStatus { margin: 14px 0 0; color: var(--success-text); font-size: .84rem; }
 .formError { color: var(--error-text); }
 
 .faq { border-top: 1px solid var(--border-subtle); }
@@ -167,7 +167,7 @@
 .faqItem summary::-webkit-details-marker { display: none; }
 .faqItem summary::after { content: '+'; position: absolute; right: 4px; color: var(--coral-bright); font: 400 1.3rem/1 var(--font-mono); }
 .faqItem[open] summary::after { content: '−'; }
-.faqItem p { max-width: 700px; margin: -4px 0 22px; color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.7; }
+.faqItem p { max-width: 700px; margin: -4px 0 22px; color: var(--text-secondary); font-size: .9rem; line-height: 1.7; }
 
 .cta {
   position: relative;

@@ -169,13 +169,13 @@ const TOAST_CSS = `
   border: 1px solid var(--border-subtle, rgba(148,163,184,0.28)); border-radius: var(--radius-lg);
   padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.22);
 }
-.bf-toast-icon { flex-shrink: 0; font-size: var(--font-size-body); line-height: 1.4; font-weight: 700; }
+.bf-toast-icon { flex-shrink: 0; font-size: 0.95rem; line-height: 1.4; font-weight: 700; }
 .bf-toast-body { flex: 1; min-width: 0; }
-.bf-toast-title { font-size: var(--font-size-small); font-weight: 700; margin-bottom: 2px; color: var(--text-primary); }
-.bf-toast-msg { font-size: var(--font-size-small); line-height: 1.45; color: var(--text-secondary, var(--text-muted)); word-break: break-word; }
+.bf-toast-title { font-size: 0.82rem; font-weight: 700; margin-bottom: 2px; color: var(--text-primary); }
+.bf-toast-msg { font-size: 0.8rem; line-height: 1.45; color: var(--text-secondary, var(--text-muted)); word-break: break-word; }
 .bf-toast-x {
   flex-shrink: 0; background: transparent; border: none; cursor: pointer; padding: 0 2px;
-  color: var(--text-muted); font-size: var(--font-size-small); line-height: 1.4; border-radius: var(--radius-sm);
+  color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; border-radius: var(--radius-sm);
 }
 .bf-toast-x:hover { color: var(--text-primary); }
 @media (max-width: 480px) {

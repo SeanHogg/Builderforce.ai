@@ -141,7 +141,7 @@ export default function ShowcaseGrid({
           cursor: pointer;
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: var(--font-size-small);
+          font-size: 0.875rem;
           transition: all 0.15s;
         }
         .cc-filter.active {
@@ -188,18 +188,18 @@ export default function ShowcaseGrid({
         }
         .cc-author-name {
           font-weight: 600;
-          font-size: var(--font-size-body);
+          font-size: 0.9rem;
         }
         .cc-likes {
           color: var(--text-secondary);
-          font-size: var(--font-size-small);
+          font-size: 0.78rem;
         }
         .cc-tweet-quote {
           color: var(--text-secondary);
           line-height: 1.55;
           margin: 0;
           white-space: pre-wrap;
-          font-size: var(--font-size-body);
+          font-size: 0.92rem;
         }
         .cc-tweet-images {
           display: grid;
@@ -213,7 +213,7 @@ export default function ShowcaseGrid({
           max-height: 280px;
         }
         .cc-tweet-link {
-          font-size: var(--font-size-small);
+          font-size: 0.82rem;
           color: var(--coral-bright);
           margin-top: auto;
         }

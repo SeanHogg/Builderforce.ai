@@ -30,22 +30,22 @@ export default function ProsePage({
         .cc-prose-page h1 {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-hero);
+          font-size: clamp(2rem, 4vw, 2.75rem);
           margin: 0 0 12px;
           color: var(--text-primary);
         }
-        .cc-prose-page .lead { font-size: var(--font-size-card-title); margin: 0 0 32px; }
+        .cc-prose-page .lead { font-size: 1.05rem; margin: 0 0 32px; }
         .cc-prose-page section { margin-bottom: 36px; }
         .cc-prose-page h2 {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-section);
+          font-size: 1.4rem;
           margin: 24px 0 12px;
           color: var(--text-primary);
         }
         .cc-prose-page h3 {
           font-weight: 600;
-          font-size: var(--font-size-card-title);
+          font-size: 1.05rem;
           margin: 20px 0 8px;
           color: var(--text-primary);
         }

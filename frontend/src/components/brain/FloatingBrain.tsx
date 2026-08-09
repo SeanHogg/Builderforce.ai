@@ -160,7 +160,7 @@ export function FloatingBrain() {
               background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
               color: var(--text-on-accent);
               box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-              font-size: var(--font-size-section);
+              font-size: 26px;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -177,7 +177,7 @@ export function FloatingBrain() {
               border-radius: var(--radius-lg);
               background: var(--warning);
               color: var(--text-on-accent);
-              font-size: var(--font-size-eyebrow);
+              font-size: 11px;
               font-weight: 700;
               line-height: 20px;
               text-align: center;

@@ -59,7 +59,7 @@ export default function ShowcasePage() {
         .cc-page-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: var(--font-size-hero);
+          font-size: clamp(2rem, 5vw, 3rem);
           margin: 0;
           color: var(--text-primary);
         }
@@ -78,7 +78,7 @@ export default function ShowcasePage() {
         }
         .cc-cta-card h2 {
           font-family: var(--font-display);
-          font-size: var(--font-size-section);
+          font-size: 1.4rem;
           margin: 0 0 8px;
         }
         .cc-cta-card p {
@@ -109,7 +109,7 @@ export default function ShowcasePage() {
           text-align: center;
           color: var(--text-secondary);
           margin-top: 32px;
-          font-size: var(--font-size-body);
+          font-size: 0.9rem;
         }
         .cc-more a {
           color: var(--coral-bright);
