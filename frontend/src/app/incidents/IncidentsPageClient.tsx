@@ -13,6 +13,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
@@ -738,7 +739,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
         </div>
       )}
       {defs.length === 0 && (
-        <a href="/workflows" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>{t('workflows.create')}</a>
+        <Link href="/workflows" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>{t('workflows.create')}</Link>
       )}
 
       <div>
@@ -748,11 +749,11 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {runs.map((r) => (
-                <a key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
+                <Link key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
                   <span className="badge-muted">{r.status}</span>
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{r.definitionName || r.description || r.id}</span>
                   <span style={{ color: 'var(--text-muted)' }}>{fmt(r.createdAt)}</span>
-                </a>
+                </Link>
               ))}
             </div>
           )}

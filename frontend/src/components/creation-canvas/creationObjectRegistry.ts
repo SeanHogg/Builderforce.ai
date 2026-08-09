@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
@@ -100,7 +100,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'standup', label: 'Stand-up', icon: '◎', group: 'People', createData: () => ({ kind: 'standup', title: 'Impromptu stand-up', status: 'Gathering', participants: [], summary: 'Add staff members and agents from this canvas. Brain will facilitate current work, blockers, and follow-ups.' }) },
   { kind: 'agent', label: 'Agent', icon: '✦', group: 'Agents', createData: () => ({ kind: 'agent', title: 'New agent', status: 'Needs setup', model: 'auto', personality: '', instructions: '', subtitle: 'Give this collaborator a personality, knowledge, model, and direction.' }) },
   { kind: 'voice', label: 'Voice', icon: '◖', group: 'Agents', createData: () => ({ kind: 'voice', title: 'Voice note' }) },
-  { kind: 'video', label: 'Video', icon: '▶', group: 'Build', createData: () => ({ kind: 'video', title: 'Untitled video', status: 'Draft', mediaKind: 'video', capabilityId: 'creative.video', videoTimeline: { version: 1, fps: 30, width: 1920, height: 1080, backgroundColor: '#000000', clips: [] }, videoSources: [] }) },
+  { kind: 'video', label: 'Video', icon: '▶', group: 'Build', createData: () => ({ kind: 'video', title: 'Untitled video', status: 'Draft', mediaKind: 'video', capabilityId: 'creative.video', videoTimeline: emptyCanvasVideoTimeline(), videoSources: [] }) },
   { kind: 'image', label: 'Image', icon: '▣', group: 'Build', createData: () => ({ kind: 'image', title: 'Image studio', status: 'Draft', mediaKind: 'image', capabilityId: 'creative.image', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'animation', label: 'Animation', icon: '◉', group: 'Build', createData: () => ({ kind: 'animation', title: 'Animation studio', status: 'Draft', mediaKind: 'animation', capabilityId: 'creative.animation', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'podcast', label: 'Podcast', icon: '◖', group: 'Build', createData: () => ({ kind: 'podcast', title: 'Podcast studio', status: 'Draft', mediaKind: 'podcast', capabilityId: 'creative.podcast', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
@@ -220,7 +220,7 @@ const MUTABLE_FIELDS = {
   standup: ['content', 'participants', 'summary'],
   agent: ['content', 'model', 'personality', 'instructions', 'tools', 'autonomy', 'testPrompt', 'testExpected', 'testResponse', 'testStatus', 'testHistory'],
   voice: ['content', 'transcript', 'voiceId', 'audioUrl'],
-  video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames', 'mediaKind', 'capabilityId', 'videoTimeline', 'videoSources', 'selectedVideoClipId', 'renderedVideoUrl', 'renderedVideoMimeType'],
+  video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames', 'mediaKind', 'capabilityId', 'videoTimeline', 'videoSources', 'selectedVideoClipId', 'renderedVideoUrl', 'renderedVideoStorageKey', 'renderedVideoMimeType'],
   image: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   animation: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'mcpServer', 'mcpTool', 'mcpArguments'],
   podcast: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'duration', 'transcript', 'mcpServer', 'mcpTool', 'mcpArguments'],

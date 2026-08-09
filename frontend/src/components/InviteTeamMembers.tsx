@@ -5,6 +5,7 @@ import { Select } from '@/components/Select';
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { inviteByEmail } from '@/lib/auth';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
@@ -181,9 +182,9 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
         <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {t.rich('laterHint', {
             link: (chunks) => (
-              <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+              <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
                 {chunks}
-              </a>
+              </Link>
             ),
           })}
         </p>

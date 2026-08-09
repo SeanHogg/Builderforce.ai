@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
@@ -532,7 +533,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
   };
 
   const workforceLink = (chunks: React.ReactNode) => (
-    <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</a>
+    <Link href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</Link>
   );
 
   return (

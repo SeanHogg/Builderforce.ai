@@ -150,6 +150,27 @@ describe('spreadsheet objects are editable on the card', () => {
   });
 });
 
+describe('video objects are authored on the Canvas', () => {
+  const video: CreationNodeData = {
+    kind: 'video', title: 'Launch video', status: 'Editable',
+    videoSources: [{ id: 'shot-1', kind: 'image', captureKind: 'ai', url: 'data:image/png;base64,AAAA', fileName: 'opening.png', mimeType: 'image/png', durationSeconds: 4 }],
+    videoTimeline: { version: 1, fps: 30, width: 1920, height: 1080, backgroundColor: '#000000', clips: [{ id: 'clip-1', sourceId: 'shot-1', track: 'visual', startSeconds: 0, durationSeconds: 4, trimStartSeconds: 0, volume: 1, label: 'Opening' }] },
+  };
+
+  it('renders capture, music, playback, export, and timeline editing together', () => {
+    const onEditData = vi.fn();
+    renderNode(video, { onEditData });
+    expect(screen.getByRole('button', { name: 'Record screen' })).toBeTruthy();
+    expect(screen.getByText('Add music')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Export WebM' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Video timeline' })).toBeTruthy();
+    const start = screen.getByRole('spinbutton', { name: 'Start' });
+    fireEvent.change(start, { target: { value: '1.5' } });
+    expect(onEditData).toHaveBeenCalledWith('object-1', expect.objectContaining({ videoTimeline: expect.objectContaining({ clips: [expect.objectContaining({ startSeconds: 1.5 })] }) }));
+  });
+});
+
 describe('files library', () => {
   const files = canvasFiles([
     { id: 'n1', data: { kind: 'document', title: 'Market analysis', markdown: '# Market analysis\n\nBody' } as CreationNodeData },

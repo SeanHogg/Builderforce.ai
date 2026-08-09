@@ -41,6 +41,7 @@ import SettingsLogs from '@/components/settings/SettingsLogs';
 import AgentExecutionControl from '@/components/settings/AgentExecutionControl';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
+import NavigationFeaturesSettings from '@/components/settings/NavigationFeaturesSettings';
 
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
@@ -183,6 +184,7 @@ export default function SettingsClient() {
     { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email', group: t('groupYou') },
     ...(tenant ? [
       { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace', group: t('groupWorkspace') },
+      { id: 'features', label: t('featuresTab'), icon: '🎛', href: '/settings?sub=features', group: t('groupWorkspace') },
       // Workspace-scoped like the two around it: the AI Manager autonomy defaults every
       // project inherits (0363). Role-gated inside the panel, not hidden from the index.
       { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager', group: t('groupWorkspace') },
@@ -387,6 +389,8 @@ export default function SettingsClient() {
         ? <EmailPreferencesCard />
         : sub === 'workspace'
           ? renderWorkspace()
+          : sub === 'features'
+            ? <NavigationFeaturesSettings />
           : sub === 'manager'
             ? <ManagerDefaults />
             : sub === 'spend'

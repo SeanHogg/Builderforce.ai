@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
 import { safeRedirectPath } from '@/lib/safeRedirect';
 import type { AuthUser } from '@/lib/types';
@@ -118,7 +119,7 @@ export default function OAuthCallbackPage() {
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 24 }}>
             {error}
           </p>
-          <a
+          <Link
             href="/login"
             style={{
               display: 'inline-block',
@@ -133,7 +134,7 @@ export default function OAuthCallbackPage() {
             }}
           >
             {t('backToLogin')}
-          </a>
+          </Link>
         </div>
       </div>
     );

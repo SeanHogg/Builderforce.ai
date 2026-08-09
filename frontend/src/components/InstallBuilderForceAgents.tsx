@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import QuickStart from './QuickStart';
 
 interface InstallBuilderForceAgentsProps {
@@ -41,9 +42,9 @@ export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAg
       <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
         {t.rich('laterHint', {
           link: (chunks) => (
-            <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+            <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
               {chunks}
-            </a>
+            </Link>
           ),
         })}
       </p>

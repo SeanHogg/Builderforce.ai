@@ -1415,6 +1415,29 @@
   },
   "settings": {
     "title": "Einstellungen",
+    "featuresTab": "Funktionen",
+    "navigationFeatures": {
+      "title": "Funktionen aktivieren",
+      "description": "Arbeitsbereichsmodule für alle ein- oder ausschalten. Deaktivierte Module werden in der Navigation ausgeblendet; Dashboard, Canvas und Einstellungen bleiben immer aktiv.",
+      "selectedCount": "{selected} von {total} Funktionen ausgewählt",
+      "recommended": "Empfohlen",
+      "all": "Alle",
+      "clear": "Leeren",
+      "save": "Speichern",
+      "saved": "Navigationsfunktionen gespeichert.",
+      "saveFailed": "Navigationsfunktionen konnten nicht gespeichert werden.",
+      "descriptions": {
+        "seat": "Rollenübersicht durchsuchen und operative Sitze öffnen.",
+        "challenges": "Ein Briefing oder eine geschäftliche Herausforderung in ein funktionierendes System verwandeln.",
+        "projects": "Projekte, Aufgaben, Planung, Portfolios, Zeremonien und Angebote.",
+        "workforce": "Personen, Agenten, Teams, Meetings, Freigaben und Koordination.",
+        "insights": "Berichte zu KI, Lieferung, Finanzen, Entwicklererfahrung und Compliance.",
+        "growth": "Verbundene Postfächer, Kampagnen und Wachstumsabläufe.",
+        "quality": "Fehler, Collectors und Produktfeedback.",
+        "reliability": "Vorfälle, Monitoring, Bereitschaft, Eskalation und Berichte.",
+        "knowledge": "Wissen, Fähigkeiten, Personas, Prompts und strukturierte Fakten."
+      }
+    },
     "profile": "Profil",
     "workspace": "Arbeitsbereich",
     "language": "Sprache",
@@ -12957,6 +12980,39 @@
     "note": "Wähle eine Installationsmethode, kopiere den Befehl und führe ihn im Terminal aus."
   },
   "creationCanvas": {
+    "videoEditor": {
+      "editable": "Bearbeitbar",
+      "draft": "Entwurf",
+      "storingMedia": "Medien werden gespeichert…",
+      "finishingCapture": "Aufnahme wird abgeschlossen…",
+      "rendering": "Video wird im Browser gerendert",
+      "exported": "Exportiert",
+      "emptyPreview": "Importieren, aufnehmen oder Brain die erste Szene erstellen lassen.",
+      "pause": "Pause",
+      "play": "Abspielen",
+      "playhead": "Video-Abspielposition",
+      "importMedia": "Medien importieren",
+      "addMusic": "Musik hinzufügen",
+      "recordScreen": "Bildschirm aufnehmen",
+      "recordCamera": "Kamera aufnehmen",
+      "stopRecording": "Stoppen · {seconds}s",
+      "exportVideo": "WebM exportieren",
+      "captureUnsupported": "Dieser Browser kann keine Medien aufnehmen.",
+      "captureFailed": "Die Aufnahme konnte nicht gestartet werden.",
+      "mediaFailed": "Die Medien konnten nicht gespeichert werden.",
+      "renderFailed": "Das Video konnte in diesem Browser nicht gerendert werden.",
+      "timeline": "Video-Zeitleiste",
+      "track_visual": "Szenen",
+      "track_music": "Musik",
+      "track_voiceover": "Sprechertext",
+      "track_sfx": "Soundeffekte",
+      "start": "Start",
+      "length": "Länge",
+      "trim": "Schnitt",
+      "volume": "Lautstärke",
+      "removeClip": "{name} entfernen",
+      "emptyTrack": "Keine Clips"
+    },
     "comparison": {
       "promptTitle": "Gemeinsamer Vergleichsprompt",
       "sharedPrompt": "Läuft unverändert auf jedem ausgewählten Modell",
@@ -15379,5 +15435,23 @@
     "whatYouGet": "Das bietet Ihnen Builderforce.ai",
     "faqHeading": "Häufig gestellte Fragen",
     "relatedReading": "Weiterführende Artikel"
+  },
+  "burnrateMarketing": {
+    "shared":{"builtFor":"Entwickelt für {persona}","poweredBy":"Unterstützt von Builderforce.ai","publicCta":"Kostenlos starten","publicSecondaryCta":"Demo buchen","authenticatedCta":"Arbeitsbereich öffnen","authenticatedEyebrow":"Dein operativer Arbeitsbereich","featureHeading":"Enthaltene Funktionen","publicClosing":"Ersetze getrennte Einzeltools durch ein Betriebssystem, in dem jede Entscheidung die ausführenden Menschen und Agenten erreicht.","authenticatedClosing":"Arbeite in Builderforce mit bereits verbundenem Unternehmenskontext, Team, Agenten und Governance weiter."},
+    "index":{"eyebrow":"Das Betriebssystem für Startups","title":"Jede Funktion mit der Ausführung verbunden","description":"Die C-Suite-Produktstruktur von BurnRateOS ist jetzt Teil von Builderforce. Entdecke neun verbundene Bereiche und gemeinsame Grundlagen.","domains":"Produktbereiche","foundations":"Grundlagen","explore":"Entdecken"},
+    "domains":{
+      "productManagement":{"title":"Produktmanagement","tagline":"Discovery, Validierung und Roadmaps","hero":"Kundenbelege in die richtige Roadmap verwandeln","description":"Ideen formen, ein MVP strukturieren, Nachfrage validieren und Produktwetten mit der Umsetzung verbinden.","features":[{"title":"Product Discovery","description":"Chancen mit Kunden-, Markt- und Wettbewerbsbelegen bewerten."},{"title":"MVP-Strukturierung","description":"Eine Idee in testbaren Umfang und Annahmen überführen."},{"title":"Roadmap und Backlog","description":"Releases nach Wert, Nutzung, Aufwand und Strategie priorisieren."}]},
+      "businessIntelligence":{"title":"Business Intelligence","tagline":"Runway, Burn, Prognosen und Preise","hero":"Die Runway-Wirkung jeder Entscheidung kennen","description":"Liquidität, Umsatz, Bindung, Kosten und Szenarien gemeinsam mit der dahinterliegenden Arbeit modellieren.","features":[{"title":"Runway und Burn","description":"Liquidität, monatlichen Burn und Break-even verfolgen."},{"title":"Prognoseszenarien","description":"Annahmen, Sensitivität und Was-wäre-wenn-Pläne vergleichen."},{"title":"Unit Economics","description":"ARR, Bindung, CAC, LTV und Amortisation messen."}]},
+      "agileSurvival":{"title":"Agiles Überleben","tagline":"Jeder Sprint an die Runway gekoppelt","hero":"Liefern, ohne einen Sprint zu verschwenden","description":"Planung, Retrospektiven, Kanban, Kapazität und Risiko mit der finanziellen Sprintwirkung verbinden.","features":[{"title":"Überlebensorientierte Planung","description":"Mit sichtbarer Kapazität und Runway schätzen."},{"title":"Burn-bewusstes Kanban","description":"Fluss, Engpässe, Risiko und finanzielle Wirkung sehen."},{"title":"Retrospektiven und Velocity","description":"Liefersignale in Verbesserungen umsetzen."}]},
+      "salesRevenue":{"title":"Vertrieb und Umsatz","tagline":"ICP, Interessenten, Pipeline und Funnel","hero":"Eine für alle sichtbare Umsatzmaschine aufbauen","description":"Zielkonten, Kontakte, Sequenzen, Deals, Conversion und Prognosen verbinden.","features":[{"title":"ICP und Akquise","description":"Idealkunden definieren und Herkunft erhalten."},{"title":"Sequenzen und Kampagnen","description":"Ansprache, Antworten und Nachverfolgung koordinieren."},{"title":"Deals und Funnel","description":"Phasen, Quoten und Prognosebewegungen verwalten."}]},
+      "customerEngagement":{"title":"Kundenbindung","tagline":"Feedback, Support, Bindung und Gesundheit","hero":"Jedes Kundensignal in Aktion verwandeln","description":"Feedback, Support, Onboarding, Stimmung, Bindung, Churn und Account Health zusammenführen.","features":[{"title":"Kundenfeedback","description":"Feedback direkt in Produktentscheidungen leiten."},{"title":"Gesundheit und Bindung","description":"Nutzung, NPS, Stimmung und Churn-Risiko kombinieren."},{"title":"Support und Onboarding","description":"Tickets, Wissen und Folgemaßnahmen koordinieren."}]},
+      "investorIntelligence":{"title":"Investor Intelligence","tagline":"Finanzierung, Updates und Portfoliogesundheit","hero":"Investor Relations auf aktuellen Unternehmensdaten führen","description":"Pitch Decks, Updates, Datenräume, Due Diligence und Portfolioansichten erstellen.","features":[{"title":"Pitch Decks und Analysen","description":"Decks versionieren, teilen und pro Folie messen."},{"title":"Updates und Datenräume","description":"Freigegebene Kommunikation und Prüfmaterial vorbereiten."},{"title":"Portfolio Intelligence","description":"Finanzierung, Meilensteine, Gesundheit und Dealflow verfolgen."}]},
+      "operationalCadence":{"title":"Operative Kadenz","tagline":"Menschen, Ziele, Meetings und Rhythmen","hero":"Das Unternehmen ohne mehr Meetings ausrichten","description":"Ziele, Personal, Leistung, 1:1s, Check-ins, Notizen und Entscheidungen verbinden.","features":[{"title":"Ziele und Scorecards","description":"Ziele, Ergebnisse, Meilensteine und Kennzahlen verknüpfen."},{"title":"People Operations","description":"Personalplanung, Reviews, Check-ins und 1:1s koordinieren."},{"title":"Meetings und Entscheidungen","description":"Agenden, Transkripte und Verantwortliche erfassen."}]},
+      "governanceSecurity":{"title":"Governance und Sicherheit","tagline":"Kontrollen, Nachweise, Risiko und Datenschutz","hero":"Governance zum Teil der Arbeit machen","description":"SOC-Kontrollen, Nachweise, Vorfälle, Anbieter, Datenschutz, Freigaben und Audits betreiben.","features":[{"title":"Kontrollen und Nachweise","description":"SOC-Kontrollen, Nachweise und Schulungen verwalten."},{"title":"Sicherheits- und Anbieterrisiko","description":"Vorfälle, Anbieter, DPA, PII und Behebung verfolgen."},{"title":"Datenschutz und Freigaben","description":"Anfragen, Einwilligungen, Versionen und Signaturen verwalten."}]},
+      "marketingGrowth":{"title":"Marketing und Wachstum","tagline":"Kampagnen, Conversion und Inhalte","hero":"Aufmerksamkeit in messbares Wachstum verwandeln","description":"Landingpages, Kampagnen, Nurturing, Experimente, Inhalte, SEO und Analysen aufbauen.","features":[{"title":"Kampagnen und Nurturing","description":"Zielgruppen, Nachrichten, Zustellung und Follow-up koordinieren."},{"title":"Web und Conversion","description":"Seiten, Formulare, Experimente und Heatmaps erstellen."},{"title":"Inhalte und Distribution","description":"Content, SEO, Social, Empfehlungen, E-Mail und Push planen."}]},
+      "aiCoach":{"title":"KI-Coach","tagline":"Ein Assistent, alle C-Suite-Perspektiven","hero":"Die richtige Führungsperspektive in jede Entscheidung bringen","description":"CEO-, CFO-, CRO-, CMO-, CPO-, CTO-, CHRO- und CISO-Kontext im selben Brain nutzen.","features":[{"title":"Acht Führungsperspektiven","description":"Perspektiven wechseln, ohne Kontext zu verlieren."},{"title":"Domänenwerkzeuge","description":"Werkzeuge für Finanzen, Produkt, Wachstum und Risiko nutzen."},{"title":"Gesteuerte Aktion","description":"Von Beratung zu freigegebener, prüfbarer Ausführung wechseln."}]},
+      "integrations":{"title":"Integrationen und Migrationen","tagline":"Behalte deine Werkzeuge verbunden","hero":"Eine Betriebsebene über dem bestehenden Stack","description":"Zusammenarbeit, Entwicklung, Finanzen, CRM und Delivery mit klaren Grenzen verbinden.","features":[{"title":"Verbundene Dienste","description":"Signale aus bestehenden Systemen übernehmen."},{"title":"Migrationsabläufe","description":"Arbeit und Wissen aus isolierten Tools verschieben."},{"title":"Kontrollierter Zugriff","description":"Zugangsdaten, Scopes, Freigaben und Daten verwalten."}]},
+      "companiesContacts":{"title":"Unternehmen und Kontakte","tagline":"Der gemeinsame Geschäftsgraph","hero":"Ein Unternehmensgraph für alle Bereiche","description":"Eigenes Unternehmen, Kunden, Interessenten, Investoren, Partner, Anbieter und Kontakte einmal abbilden.","features":[{"title":"Unternehmensbeziehungen","description":"Eigentümer, Kunden, Partner und Anbieter modellieren."},{"title":"Kontaktherkunft","description":"Kennungen, Quellen, Anreicherung und Historie erhalten."},{"title":"Gemeinsamer Kontext","description":"Einen Graphen in Vertrieb, Finanzen, Produkt und Governance nutzen."}]}
+    }
   }
 }

@@ -61,6 +61,11 @@ import {
   reserveDiscount,
 } from '../../application/tenant/discountCodeService';
 import { getPublishedPricing } from '../../application/tenant/pricingConfiguration';
+import {
+  readNavigationFeatures,
+  validateNavigationFeatures,
+  writeNavigationFeatures,
+} from '../../application/tenant/navigationFeatures';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -368,6 +373,35 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const tenant = await tenantService.setDefaultAgentHost(id, agentHostId);
     return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
+  });
+
+  // Workspace menu preferences. Any workspace member may tailor the shared
+  // module set from Settings; core navigation is not represented in this list
+  // and therefore can never be hidden. Missing preferences default to all on so
+  // existing workspaces retain their current navigation after deployment.
+  router.get('/:id/navigation-features', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    return c.json({ enabled: readNavigationFeatures(row.settings) });
+  });
+
+  router.put('/:id/navigation-features', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({} as { enabled?: unknown }));
+    const enabled = validateNavigationFeatures(body.enabled);
+    if (!enabled) return c.json({ error: 'enabled must contain only known navigation feature ids' }, 400);
+    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    await db.update(tenants).set({
+      settings: writeNavigationFeatures(row.settings, enabled),
+      updatedAt: new Date(),
+    }).where(eq(tenants.id, id));
+    return c.json({ enabled });
   });
 
   // GET /api/tenants/:id/subscription

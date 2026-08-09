@@ -1415,6 +1415,29 @@
   },
   "settings": {
     "title": "设置",
+    "featuresTab": "功能",
+    "navigationFeatures": {
+      "title": "启用功能",
+      "description": "为工作区中的所有人开启或关闭模块。已停用的模块会从导航中隐藏；仪表板、画布和设置始终保持开启。",
+      "selectedCount": "已选择 {selected}/{total} 项功能",
+      "recommended": "推荐",
+      "all": "全部",
+      "clear": "清除",
+      "save": "保存",
+      "saved": "导航功能已保存。",
+      "saveFailed": "无法保存导航功能。",
+      "descriptions": {
+        "seat": "浏览角色名册并打开各个运营岗位。",
+        "challenges": "将简报或业务挑战转化为可运行的系统。",
+        "projects": "项目、任务、规划、项目组合、仪式和提案。",
+        "workforce": "人员、智能体、团队、会议、审批和协调。",
+        "insights": "人工智能、交付、财务、开发者体验和合规报告。",
+        "growth": "已连接的邮箱、营销活动和增长运营。",
+        "quality": "错误、收集器和产品反馈。",
+        "reliability": "事件、监控、值班、升级和报告。",
+        "knowledge": "知识、技能、角色、提示词和结构化事实。"
+      }
+    },
     "profile": "个人资料",
     "workspace": "工作区",
     "language": "语言",
@@ -12957,6 +12980,39 @@
     "note": "选择安装方式，复制命令，然后在终端中运行。"
   },
   "creationCanvas": {
+    "videoEditor": {
+      "editable": "可编辑",
+      "draft": "草稿",
+      "storingMedia": "正在保存媒体…",
+      "finishingCapture": "正在完成录制…",
+      "rendering": "正在浏览器中渲染视频",
+      "exported": "已导出",
+      "emptyPreview": "导入、录制或让 Brain 创建第一个镜头。",
+      "pause": "暂停",
+      "play": "播放",
+      "playhead": "视频播放头",
+      "importMedia": "导入媒体",
+      "addMusic": "添加音乐",
+      "recordScreen": "录制屏幕",
+      "recordCamera": "录制摄像头",
+      "stopRecording": "停止 · {seconds}秒",
+      "exportVideo": "导出 WebM",
+      "captureUnsupported": "此浏览器无法录制媒体。",
+      "captureFailed": "无法开始录制。",
+      "mediaFailed": "无法保存媒体。",
+      "renderFailed": "无法在此浏览器中渲染视频。",
+      "timeline": "视频时间线",
+      "track_visual": "场景",
+      "track_music": "音乐",
+      "track_voiceover": "旁白",
+      "track_sfx": "音效",
+      "start": "开始",
+      "length": "时长",
+      "trim": "裁剪",
+      "volume": "音量",
+      "removeClip": "移除 {name}",
+      "emptyTrack": "没有片段"
+    },
     "comparison": {
       "promptTitle": "共享比较提示词",
       "sharedPrompt": "在每个所选模型上原样运行",
@@ -15379,5 +15435,23 @@
     "whatYouGet": "Builderforce.ai 为你提供什么",
     "faqHeading": "常见问题",
     "relatedReading": "相关阅读"
+  },
+  "burnrateMarketing": {
+    "shared":{"builtFor":"为 {persona} 打造","poweredBy":"由 Builderforce.ai 提供支持","publicCta":"免费开始","publicSecondaryCta":"预约演示","authenticatedCta":"打开工作区","authenticatedEyebrow":"你的运营工作区","featureHeading":"包含的能力","publicClosing":"用一个运营系统替代相互割裂的工具，让每个决策都能到达负责执行的人和智能体。","authenticatedClosing":"在 Builderforce 实时工作区继续，企业上下文、团队、智能体和治理已经连接。"},
+    "index":{"eyebrow":"创业公司的运营系统","title":"让每个职能都连接到执行","description":"BurnRateOS 的高管产品结构现已整合到 Builderforce。探索九个互联的运营领域及其共享基础。","domains":"产品领域","foundations":"基础能力","explore":"探索"},
+    "domains":{
+      "productManagement":{"title":"产品管理","tagline":"发现、验证与路线图","hero":"把客户证据转化为正确的路线图","description":"梳理想法、规划 MVP、验证需求、确定战略待办优先级，并把产品投入连接到交付。","features":[{"title":"产品发现","description":"通过客户、市场和竞争证据捕获并评估机会。"},{"title":"MVP 规划","description":"把有潜力的想法变成可验证的范围和假设。"},{"title":"路线图与待办","description":"按业务价值、采用率、工作量和战略匹配度排序。"}]},
+      "businessIntelligence":{"title":"商业智能","tagline":"跑道、燃烧率、预测与定价","hero":"了解每个决策对资金跑道的影响","description":"在协调实际工作的同一系统中，对现金、收入、留存、费用和情景进行建模。","features":[{"title":"跑道与燃烧率","description":"实时跟踪现金、月度燃烧、盈亏平衡和资金跑道。"},{"title":"预测情景","description":"比较假设、敏感性和各种假设方案。"},{"title":"单位经济模型","description":"衡量 ARR、留存、CAC、LTV 和回收周期。"}]},
+      "agileSurvival":{"title":"敏捷生存","tagline":"每个迭代都关联资金跑道","hero":"不浪费任何一个迭代地交付","description":"把规划、复盘、看板、产能和交付风险与每个迭代的财务影响结合起来。","features":[{"title":"生存导向规划","description":"在承诺前同时查看产能和资金跑道。"},{"title":"成本感知看板","description":"查看流程、瓶颈、风险和延期的财务影响。"},{"title":"复盘与速度","description":"把交付信号转化为下个迭代的改进。"}]},
+      "salesRevenue":{"title":"销售与收入","tagline":"ICP、潜客、管道与漏斗","hero":"建立全团队可见的收入引擎","description":"把目标客户、联系人、序列、商机、转化信号和预测连接在同一流程中。","features":[{"title":"ICP 与潜客开发","description":"定义理想客户、丰富潜客并保留来源。"},{"title":"序列与营销活动","description":"协调触达、回复、跟进和转化信号。"},{"title":"商机与收入漏斗","description":"管理管道阶段、配额达成和预测变化。"}]},
+      "customerEngagement":{"title":"客户互动","tagline":"反馈、支持、留存与健康度","hero":"把每个客户信号转化为行动","description":"统一反馈、支持、引导、情绪、留存、流失和账户健康度。","features":[{"title":"客户反馈","description":"收集反馈并直接送入产品和交付决策。"},{"title":"健康度与留存","description":"结合参与度、NPS、情绪和流失指标。"},{"title":"支持与引导","description":"协调工单、知识、引导流程和后续行动。"}]},
+      "investorIntelligence":{"title":"投资者智能","tagline":"融资、更新与投资组合健康度","hero":"基于实时公司事实管理投资者关系","description":"创建路演材料、投资者更新、数据室、尽调流程、融资历史和投资组合视图。","features":[{"title":"路演材料与分析","description":"按版本共享并衡量每页的参与度。"},{"title":"更新与数据室","description":"准备已审批的投资者沟通和尽调材料。"},{"title":"投资组合智能","description":"跟踪融资、里程碑、健康评分和交易流。"}]},
+      "operationalCadence":{"title":"运营节奏","tagline":"人员、目标、会议与节奏","hero":"不增加会议也能保持公司一致","description":"连接目标、人员规划、绩效、一对一、签到、运营节奏、笔记和决策。","features":[{"title":"目标与记分卡","description":"关联目标、成果、里程碑和运营指标。"},{"title":"人员运营","description":"协调人员规划、绩效评估、签到和一对一。"},{"title":"会议与决策","description":"记录议程、转录、负责人和后续行动。"}]},
+      "governanceSecurity":{"title":"治理与安全","tagline":"控制、证据、风险与隐私","hero":"让治理成为工作的一部分","description":"在执行旁运营 SOC 控制、证据、事件、供应商、隐私资产、审批和审计轨迹。","features":[{"title":"控制与证据","description":"管理 SOC 控制、证据收集、培训和合规事件。"},{"title":"安全与供应商风险","description":"跟踪事件、供应商、DPA、PII 资产和整改。"},{"title":"隐私与审批","description":"处理数据请求、同意、版本、签署和审计。"}]},
+      "marketingGrowth":{"title":"营销与增长","tagline":"活动、转化与内容","hero":"把注意力转化为可衡量的增长","description":"在同一闭环中构建落地页、活动、培育流程、实验、内容、SEO 和分析。","features":[{"title":"活动与培育","description":"协调受众、消息、注册、投递和跟进。"},{"title":"网站与转化","description":"构建页面、表单、实验、热图和转化旅程。"},{"title":"内容与分发","description":"规划内容、SEO、社交、推荐、邮件和推送。"}]},
+      "aiCoach":{"title":"AI 教练","tagline":"一个助手，覆盖所有高管视角","hero":"为每个决策引入正确的高管视角","description":"通过同一个 Builderforce Brain 使用 CEO、CFO、CRO、CMO、CPO、CTO、CHRO 和 CISO 上下文。","features":[{"title":"八种高管视角","description":"切换视角时不丢失公司或项目上下文。"},{"title":"领域工具","description":"使用财务、产品、增长、人员和风险工具。"},{"title":"受治理的行动","description":"从建议走向已审批、可审计的执行。"}]},
+      "integrations":{"title":"集成与迁移","tagline":"连接你保留的工具","hero":"在现有技术栈之上的统一运营层","description":"连接协作、开发、财务、CRM 和交付系统，同时保持租户边界和审批控制。","features":[{"title":"已连接服务","description":"引入团队现有系统中的信号。"},{"title":"迁移流程","description":"把工作和知识迁出割裂的单点工具。"},{"title":"受控访问","description":"集中管理凭据、范围、审批和数据边界。"}]},
+      "companiesContacts":{"title":"公司与联系人","tagline":"共享的商业关系图","hero":"所有运营领域共用一个公司图谱","description":"只需一次表示你的公司、客户、潜客、投资者、合作伙伴、供应商和联系人。","features":[{"title":"公司关系","description":"表示所有者、客户、潜客、伙伴、投资者和供应商。"},{"title":"联系人来源","description":"保留标识、来源、丰富过程和编辑历史。"},{"title":"共享上下文","description":"在销售、财务、产品、支持和治理中使用同一图谱。"}]}
+    }
   }
 }

@@ -9,6 +9,8 @@ import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import MascotIcon from './MascotIcon';
 import { Icon } from '@/components/ui/Icon';
+import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
+import { navigationFeatureForPath } from '@/lib/navigationFeatures';
 
 interface BottomItem extends NavMatch {
   /** i18n key under the `nav` namespace (resolved in the component). */
@@ -88,7 +90,12 @@ export default function MobileBottomNav() {
   const isFreelancer = useIsFreelancer();
   const isSales = useIsSalesAssociate();
   const t = useTranslations('nav');
-  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer, isSales);
+  const { enabled } = useNavigationFeatures();
+  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer, isSales)
+    .filter((item) => {
+      const feature = navigationFeatureForPath(item.href);
+      return !feature || enabled.has(feature);
+    });
 
   return (
     <nav className="mobile-bottom-nav" aria-label={t('primaryAria')}>

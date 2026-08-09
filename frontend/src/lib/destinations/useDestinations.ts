@@ -7,6 +7,8 @@ import { useConsumption } from '@/lib/useConsumption';
 import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { navGroupsForAccountType } from '@/lib/navGroups';
 import { listDestinations, type Destination } from './registry';
+import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
+import { filterNavigationGroups } from '@/lib/navigationFeatures';
 
 /** A destination plus whether a paid plan stands between this user and it. */
 export interface GatedDestination extends Destination {
@@ -57,10 +59,14 @@ export function useDestinations(): GatedDestination[] {
   const isSuperadmin = !!user?.isSuperadmin;
   const consumption = useConsumption();
   const features = consumption?.features;
+  const { enabled } = useNavigationFeatures();
 
   return useMemo(() => {
     const isOwner = getStoredTenant()?.role === 'owner';
-    return listDestinations(navGroupsForAccountType(isFreelancer, availableForHire, isSales))
+    return listDestinations(filterNavigationGroups(
+      navGroupsForAccountType(isFreelancer, availableForHire, isSales),
+      enabled,
+    ))
       .filter((destination) => (!destination.superadminOnly || isSuperadmin) && (!destination.ownerOnly || isOwner))
       .map((destination) => {
         // No feature declared, or no snapshot yet → nothing is KNOWN to be
@@ -75,5 +81,5 @@ export function useDestinations(): GatedDestination[] {
             : {}),
         };
       });
-  }, [availableForHire, features, isFreelancer, isSales, isSuperadmin]);
+  }, [availableForHire, enabled, features, isFreelancer, isSales, isSuperadmin]);
 }

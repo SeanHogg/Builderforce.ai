@@ -9,7 +9,7 @@
 .captureBar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .captureBar label { display: inline-flex; align-items: center; }
 .captureBar input[type='file'] { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
-.captureBar .recording { border-color: var(--tone-danger-border); color: var(--tone-danger-text); }
+.captureBar .recording { border-color: var(--danger-border); color: var(--danger-text); }
 .status { margin: 0; color: var(--canvas-muted); font-size: 10px; }
 .timeline { display: grid; gap: var(--space-1); overflow-x: auto; }
 .timeline section { display: grid; grid-template-columns: 6.5rem minmax(26rem, 1fr); min-height: 3.25rem; border-block-start: 1px solid var(--canvas-line); }

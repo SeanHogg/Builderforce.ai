@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import ProsePage from '../ProsePage';
 
 export const metadata: Metadata = {
@@ -46,7 +47,7 @@ export default function ContactPage() {
             {' '}— real-time help and discussion
           </li>
           <li>
-            <a href="/agents/acknowledgements">Acknowledgements</a>
+            <Link href="/agents/acknowledgements">Acknowledgements</Link>
             {' '}— credits to the open-source projects this builds on
           </li>
         </ul>

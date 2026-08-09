@@ -15,6 +15,8 @@ import UsageMeter from './UsageMeter';
 import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import { BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCatalog';
+import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
+import { filterNavigationGroups } from '@/lib/navigationFeatures';
 
 /**
  * The left panel (PRD 21 §3.2).
@@ -98,13 +100,18 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
 export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname() || '';
   const t = useTranslations('nav');
+  const tb = useTranslations('burnrateMarketing');
   const ts = useTranslations('sessions');
   const { user, isAuthenticated } = useAuth();
 
   const isFreelancer = useIsFreelancer();
   const availableForHire = useAvailableForHire();
   const isSales = useIsSalesAssociate();
-  const allGroups = navGroupsForAccountType(isFreelancer, availableForHire, isSales);
+  const { enabled } = useNavigationFeatures();
+  const allGroups = filterNavigationGroups(
+    navGroupsForAccountType(isFreelancer, availableForHire, isSales),
+    enabled,
+  );
   const activeGroupId = findActiveGroup(pathname)?.id
     ?? allGroups.find((g) => g.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)))?.id;
   const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);
@@ -168,10 +175,10 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             ))}
           </div>
           <div className="nav-section nav-domain-section">
-            {!collapsed && <div className="ui-eyebrow nav-section__label">{t('productDomainsLabel')}</div>}
+            {!collapsed && <div className="ui-eyebrow nav-section__label">{tb('index.domains')}</div>}
             {BURNRATE_PRODUCT_DOMAINS.map((domain) => {
               const active = pathname === domain.marketingHref || pathname.startsWith(`${domain.marketingHref}/`);
-              const label = t(`burnrate.${domain.id}`);
+              const label = tb(`domains.${domain.id}.title`);
               return (
                 <Link
                   key={domain.id}

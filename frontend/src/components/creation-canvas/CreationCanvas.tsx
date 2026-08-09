@@ -62,7 +62,7 @@ import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
-import { CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { appendCanvasVideoSource, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
@@ -4114,8 +4114,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return generateEvermindMedia(model.slug, { prompt: typeof target.data.prompt === 'string' ? target.data.prompt : target.data.content as string | undefined, maxFrames: typeof target.data.maxFrames === 'number' ? target.data.maxFrames : 16 }).then((media) => ({ media, model }));
     }).then(({ media, model }) => {
       const previewUrl = media.frames[0] ? mediaFrameDataUrl(media.frames[0], media.width, media.height, media.channels) : null;
+      const aiFrameDuration = 1 / Math.min(12, Math.max(1, media.frameCount));
+      const aiSources: CanvasVideoSource[] = media.frames.flatMap((frame, index) => {
+        const url = mediaFrameDataUrl(frame, media.width, media.height, media.channels);
+        return url ? [{
+          id: crypto.randomUUID(),
+          kind: 'image' as const,
+          captureKind: 'ai' as const,
+          url,
+          fileName: `${target.data.title}-${index + 1}.png`,
+          mimeType: 'image/png',
+          durationSeconds: aiFrameDuration,
+          width: media.width,
+          height: media.height,
+        }] : [];
+      });
       const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), mimeType: media.modality === 'video' ? 'application/x-builderforce-video-frames' : 'image/png', resourceRef: media.model, validation: { status: media.frameCount > 0 ? 'passed' : 'failed', detail: `${media.frameCount} ${media.width}×${media.height} frames generated` }, metadata: { modelSlug: model.slug, frameCount: media.frameCount, width: media.width, height: media.height, channels: media.channels, usage: media.usage } };
-      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generated', modelSlug: model.slug, frameCount: media.frameCount, videoWidth: media.width, videoHeight: media.height, generatedFrames: media.frames, ...(previewUrl ? { videoUrl: previewUrl } : {}), deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      setNodes((current) => current.map((node) => {
+        if (node.id !== target.id) return node;
+        const priorSources = canvasVideoSourcesFrom(node.data.videoSources);
+        const nextTimeline = aiSources.reduce((value, source) => appendCanvasVideoSource(value, source, 'visual'), canvasVideoTimelineFrom(node.data.videoTimeline));
+        return { ...node, data: { ...node.data, status: 'Generated · Editable', modelSlug: model.slug, frameCount: media.frameCount, videoWidth: media.width, videoHeight: media.height, generatedFrames: media.frames, videoSources: [...priorSources, ...aiSources], videoTimeline: nextTimeline, duration: canvasVideoDuration(nextTimeline), ...(previewUrl ? { videoUrl: previewUrl } : {}), deliverables: withCreationDeliverable(node.data, delivered) } };
+      }));
       setNotice(t('noticeVideoGenerated', { frames: media.frameCount, model: model.name }));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { model: model.slug, frameCount: media.frameCount } }).catch(() => undefined);
     }).catch((error) => {

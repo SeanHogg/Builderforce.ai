@@ -1,5 +1,6 @@
 import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import ProsePage from '../ProsePage';
 
 export const metadata: Metadata = {
@@ -111,7 +112,7 @@ builderforce onboard --install-daemon</code></pre>
           <a href="https://hired.video/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
           architect, and maintainer of BuilderForce Agents and Builderforce.ai.{' '}
           <a href="https://github.com/SeanHogg" target="_blank" rel="noopener">GitHub</a> ·{' '}
-          <a href="/agents/contact">Contact</a>
+          <Link href="/agents/contact">Contact</Link>
         </p>
       </section>
 

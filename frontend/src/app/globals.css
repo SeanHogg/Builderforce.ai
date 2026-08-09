@@ -3803,13 +3803,13 @@ select.input option {
 .br-domain-primary, .br-domain-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 20px; border-radius: var(--radius-lg); font-weight: 700; text-decoration: none; }
 .br-domain-primary { background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent); box-shadow: 0 8px 28px var(--shadow-coral-mid); }
 .br-domain-secondary { border: 1px solid var(--border-subtle); color: var(--text-primary); background: var(--surface-card); }
-.br-domain-visual { min-height: 360px; padding: 36px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: radial-gradient(circle at 75% 10%, var(--shadow-coral-soft), transparent 45%), var(--surface-card); box-shadow: 0 30px 80px var(--shadow-soft); }
+.br-domain-visual { min-height: 360px; padding: 36px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: radial-gradient(circle at 75% 10%, var(--shadow-coral-soft), transparent 45%), var(--surface-card); box-shadow: var(--shadow-lg); }
 .br-domain-visual__icon { margin-bottom: 28px; }
 .br-domain-visual strong { font-family: var(--font-display); font-size: clamp(3rem, 7vw, 6rem); line-height: 1; }
 .br-domain-visual > span:not(.br-domain-visual__icon) { margin-top: 8px; color: var(--text-secondary); }
 .br-domain-signal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 38px; }
 .br-domain-signal-grid i { height: calc(34px + var(--signal-index) * 15px); align-self: end; border-radius: var(--radius-sm); background: linear-gradient(180deg, var(--coral-bright), color-mix(in srgb, var(--coral-bright) 18%, transparent)); }
-.br-domain-features { padding: 72px max(28px, calc((100vw - 1184px) / 2)); background: var(--surface-subtle); border-block: 1px solid var(--border-subtle); }
+.br-domain-features { padding: 72px max(28px, calc((100vw - 1184px) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
 .br-domain-grid, .br-feature-index__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .br-domain-card, .br-feature-index__card { padding: 26px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); }
 .br-domain-card__number { color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 800; }

@@ -142,6 +142,17 @@ describe('creation object registry', () => {
     expect(createDefaultCreationData('resume')).toMatchObject({ mediaKind: 'document', templateId: 'resume' });
   });
 
+  it('keeps the Canvas video timeline authorable by Brain and direct editing', () => {
+    const data = createDefaultCreationData('video');
+    expect(data).toMatchObject({ title: 'Untitled video', videoTimeline: { version: 1, clips: [] }, videoSources: [] });
+    const patch = sanitizeCreationObjectPatch('video', {
+      videoTimeline: { version: 1, fps: 30, width: 1920, height: 1080, backgroundColor: '#000000', clips: [{ id: 'clip-1', sourceId: 'source-1', track: 'visual', startSeconds: 0, durationSeconds: 4, trimStartSeconds: 0, volume: 1, label: 'Opening' }] },
+      videoSources: [{ id: 'source-1', kind: 'video', captureKind: 'ai', url: '/opening.webm', fileName: 'opening.webm', mimeType: 'video/webm', durationSeconds: 4 }],
+    });
+    expect(patch.videoTimeline).toMatchObject({ clips: [{ id: 'clip-1', label: 'Opening' }] });
+    expect(patch.videoSources).toEqual([expect.objectContaining({ captureKind: 'ai' })]);
+  });
+
   it('retains bounded evidence samples while excluding full rows, prompts, and secrets from Brain context', () => {
     const context = creationObjectAiContext({
       kind: 'projectComparison', title: 'Alpha vs Beta', status: 'Live evidence', fetchedAt: '2026-08-01T00:00:00.000Z',

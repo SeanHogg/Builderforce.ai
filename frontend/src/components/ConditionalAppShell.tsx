@@ -47,6 +47,7 @@ import { ProductUpdatesHost } from './releaseNotes/ProductUpdatesHost';
 import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
 import { ActiveCanvasProvider, shellHostsCanvasStage } from '@/lib/canvas/ActiveCanvasContext';
 import { LiveBar } from './live/LiveBar';
+import { NavigationFeaturesProvider } from '@/lib/NavigationFeaturesContext';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {
@@ -315,6 +316,7 @@ function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
     // the floating Brain drawer is mounted outside AppShell — so it read a null
     // scope and its chat history / new-chat scoping ignored the TopBar project
     // filter. Hoisting it here gives the switcher and the Brain ONE shared scope.
+    <NavigationFeaturesProvider>
     <ProjectScopeProvider>
     {/* The live session and the active canvas are the two things that must
         outlive a navigation, so they are mounted ABOVE the shell switch — a
@@ -411,6 +413,7 @@ function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
     </LiveSessionProvider>
     </ActiveCanvasProvider>
     </ProjectScopeProvider>
+    </NavigationFeaturesProvider>
   );
 }
 

@@ -4811,6 +4811,35 @@ export const tenantApiKeysApi = {
 // ---------------------------------------------------------------------------
 
 export type EmbedCapabilityKey = 'product' | 'agile' | 'security';
+export type CustomerEmbedFeatureKey =
+  | 'usage_tracking'
+  | 'support_widget'
+  | 'feedback_widget'
+  | 'heatmaps'
+  | 'feature_management'
+  | 'terms_gate'
+  | 'sourcing'
+  | 'lead_forms'
+  | 'push_notifications'
+  | 'onboarding'
+  | 'cookie_consent'
+  | 'hr_widget'
+  | 'status_page';
+
+export interface CustomerEmbedFeatureConfig {
+  enabled: boolean;
+  consentVersion: number | null;
+  consentedAt: string | null;
+  consentedBy: string | null;
+}
+
+export interface CustomerEmbedConsentEvent {
+  feature: CustomerEmbedFeatureKey;
+  action: 'OPT_IN' | 'OPT_OUT';
+  version: number;
+  at: string;
+  by: string;
+}
 
 export interface EmbedConfigResult {
   enabled: boolean;
@@ -4822,6 +4851,11 @@ export interface EmbedConfigResult {
   consentedBy: string | null;
   /** The version the host must (re-)consent to before enabling. */
   consentRequiredVersion: number;
+  customerFeatures: Record<CustomerEmbedFeatureKey, CustomerEmbedFeatureConfig>;
+  customerConsentLog: CustomerEmbedConsentEvent[];
+  customerFeatureKeys: CustomerEmbedFeatureKey[];
+  customerConsentRequiredVersion: number;
+  publicKey: string;
 }
 
 export interface EmbedSetConfigResult {
@@ -4842,6 +4876,11 @@ export const embedApi = {
    */
   setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[]; consentAcknowledged?: boolean }) =>
     request<EmbedSetConfigResult>('/api/embed/config', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  setFeature: (feature: CustomerEmbedFeatureKey, body: { enabled: boolean; consentAcknowledged?: boolean }) =>
+    request<{ feature: CustomerEmbedFeatureKey } & CustomerEmbedFeatureConfig>(`/api/embed/features/${feature}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     }),

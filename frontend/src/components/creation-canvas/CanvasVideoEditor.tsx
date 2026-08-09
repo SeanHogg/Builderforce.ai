@@ -32,9 +32,13 @@ function PreviewMedia({ clip, source, playhead, playing }: { clip: CanvasVideoCl
   useEffect(() => {
     const element = media.current;
     if (!element) return;
+    element.volume = Math.max(0, Math.min(1, clip.volume));
     if (Math.abs(element.currentTime - desiredTime) > 0.35) element.currentTime = desiredTime;
     if (playing) void element.play().catch(() => undefined); else element.pause();
   }, [desiredTime, playing]);
+  // Canvas media may be a data URL, a local blob, or an authenticated R2 URL;
+  // Next Image cannot optimize those editor-owned sources.
+  // eslint-disable-next-line @next/next/no-img-element
   if (source.kind === 'image') return <img src={source.url} alt={clip.label} />;
   if (source.kind === 'audio') return <audio ref={(node) => { media.current = node; }} src={source.url} preload="auto" />;
   return <video ref={(node) => { media.current = node; }} src={source.url} muted={clip.track === 'visual'} playsInline preload="auto" />;
@@ -50,7 +54,9 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [renderProgress, setRenderProgress] = useState(0);
+  const [problem, setProblem] = useState<string | null>(null);
   const capture = useCanvasMediaCapture();
+  const editable = !!onEdit;
 
   useEffect(() => {
     if (!playing) return;
@@ -73,10 +79,13 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
 
   const addFile = async (file: File, track?: CanvasVideoTrackKind, captureKind: 'import' | 'screen' | 'camera' = 'import') => {
     setBusy(t('storingMedia'));
+    setProblem(null);
     try {
       const source = await storeCanvasMedia(file, captureKind);
       const resolvedTrack = track ?? (source.kind === 'audio' ? 'music' : 'visual');
       commit(appendCanvasVideoSource(timeline, source, resolvedTrack), [...sources, source]);
+    } catch {
+      setProblem(t('mediaFailed'));
     } finally {
       setBusy(null);
     }
@@ -98,17 +107,22 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
 
   const exportVideo = async () => {
     setBusy(t('rendering'));
+    setProblem(null);
     setPlaying(false);
     setRenderProgress(0);
     try {
       const blob = await renderCanvasVideo(timeline, sources, setRenderProgress);
       const url = URL.createObjectURL(blob);
+      const fileName = `${data.title || 'video'}.webm`;
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${data.title || 'video'}.webm`;
+      anchor.download = fileName;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      commit(timeline, sources, { renderedVideoMimeType: blob.type, status: t('exported') });
+      const rendition = await storeCanvasMedia(new File([blob], fileName, { type: blob.type }), 'import');
+      commit(timeline, sources, { renderedVideoUrl: rendition.url, renderedVideoStorageKey: rendition.storageKey, renderedVideoMimeType: blob.type, status: t('exported') });
+    } catch {
+      setProblem(t('renderFailed'));
     } finally {
       setBusy(null);
     }
@@ -130,27 +144,28 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     </div>
 
     <div className={styles.captureBar}>
-      <label>{t('importMedia')}<input type="file" accept="video/*,image/*" onChange={picked('visual')} /></label>
-      <label>{t('addMusic')}<input type="file" accept="audio/*" onChange={picked('music')} /></label>
-      {!capture.mode && <button type="button" disabled={!capture.isSupported || !!busy} onClick={() => void capture.start('screen')}>{t('recordScreen')}</button>}
-      {!capture.mode && <button type="button" disabled={!capture.isSupported || !!busy} onClick={() => void capture.start('camera')}>{t('recordCamera')}</button>}
+      <label>{t('importMedia')}<input disabled={!editable} type="file" accept="video/*,image/*" onChange={picked('visual')} /></label>
+      <label>{t('addMusic')}<input disabled={!editable} type="file" accept="audio/*" onChange={picked('music')} /></label>
+      {!capture.mode && <button type="button" disabled={!editable || !capture.isSupported || !!busy} onClick={() => void capture.start('screen')}>{t('recordScreen')}</button>}
+      {!capture.mode && <button type="button" disabled={!editable || !capture.isSupported || !!busy} onClick={() => void capture.start('camera')}>{t('recordCamera')}</button>}
       {capture.mode && <button type="button" className={styles.recording} onClick={() => void finishCapture()}>{t('stopRecording', { seconds: Math.round(capture.durationMs / 1000) })}</button>}
       <button type="button" disabled={!timeline.clips.length || !!busy} onClick={() => void exportVideo()}>{t('exportVideo')}</button>
     </div>
     {capture.error && capture.error !== 'cancelled' && <p role="alert" className={styles.status}>{t(capture.error === 'unsupported' ? 'captureUnsupported' : 'captureFailed')}</p>}
+    {problem && <p role="alert" className={styles.status}>{problem}</p>}
     {busy && <p role="status" className={styles.status}>{busy}{busy === t('rendering') ? ` · ${Math.round(renderProgress * 100)}%` : ''}</p>}
 
-    <div className={styles.timeline} aria-label={t('timeline')}>
+    <div className={styles.timeline} role="region" aria-label={t('timeline')}>
       {TRACKS.map((track) => <section key={track}>
         <header><strong>{t(`track_${track}`)}</strong><span>{timeline.clips.filter((clip) => clip.track === track).length}</span></header>
         <div>
           {timeline.clips.filter((clip) => clip.track === track).map((clip) => <article key={clip.id} className={styles.clip}>
             <b title={clip.label}>{clip.label}</b>
-            <label>{t('start')}<input type="number" min="0" step="0.1" value={clip.startSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { startSeconds: Number(event.target.value) }))} /></label>
-            <label>{t('length')}<input type="number" min="0.1" step="0.1" value={clip.durationSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { durationSeconds: Number(event.target.value) }))} /></label>
-            <label>{t('trim')}<input type="number" min="0" step="0.1" value={clip.trimStartSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { trimStartSeconds: Number(event.target.value) }))} /></label>
-            {track !== 'visual' && <label>{t('volume')}<input type="range" min="0" max="2" step="0.05" value={clip.volume} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { volume: Number(event.target.value) }))} /></label>}
-            <button type="button" aria-label={t('removeClip', { name: clip.label })} onClick={() => commit(removeCanvasVideoClip(timeline, clip.id))}>×</button>
+            <label>{t('start')}<input disabled={!editable} type="number" min="0" step="0.1" value={clip.startSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { startSeconds: Number(event.target.value) }))} /></label>
+            <label>{t('length')}<input disabled={!editable} type="number" min="0.1" step="0.1" value={clip.durationSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { durationSeconds: Number(event.target.value) }))} /></label>
+            <label>{t('trim')}<input disabled={!editable} type="number" min="0" step="0.1" value={clip.trimStartSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { trimStartSeconds: Number(event.target.value) }))} /></label>
+            {track !== 'visual' && <label>{t('volume')}<input disabled={!editable} type="range" min="0" max="2" step="0.05" value={clip.volume} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { volume: Number(event.target.value) }))} /></label>}
+            <button disabled={!editable} type="button" aria-label={t('removeClip', { name: clip.label })} onClick={() => commit(removeCanvasVideoClip(timeline, clip.id))}>×</button>
           </article>)}
           {!timeline.clips.some((clip) => clip.track === track) && <span className={styles.emptyTrack}>{t('emptyTrack')}</span>}
         </div>
@@ -158,4 +173,3 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     </div>
   </div>;
 }
-
