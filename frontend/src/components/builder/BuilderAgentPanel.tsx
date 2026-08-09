@@ -5,7 +5,7 @@ import { Select } from '@/components/Select';
 import { tasksApi, agentHosts as agentHostsApi, type Task, type AgentHost } from '@/lib/builderforceApi';
 import { RunAgentControl } from '@/components/task/RunAgentControl';
 import { AgentExecutionPanel } from '@/components/agent/AgentExecutionPanel';
-import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
+import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 
 /**
  * BuilderAgentPanel — run a cloud agent / AI prompt against this project from inside

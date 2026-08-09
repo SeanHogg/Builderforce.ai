@@ -19,9 +19,9 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
-import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
-import { EvermindStudioCenter } from '@/components/ide/EvermindStudioCenter';
-import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
+import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
+import { EvermindStudioCenter } from '@/components/builder/EvermindStudioCenter';
+import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 
 export function EvermindStudioPanel({ projectId }: { projectId: number | string }) {
   const t = useTranslations('evermindStudio');

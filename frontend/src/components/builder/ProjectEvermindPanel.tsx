@@ -48,8 +48,8 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
   // prop-drilling through the host call sites) so the console header names WHICH
   // project's Evermind this is.
   const scopedName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
-  // IDE builds are backed by a hidden `is_ide_storage` project, which the shared
-  // list deliberately filters out — so every IDE host (Designer/Voice/Video/agent
+  // Canvas builds are backed by a hidden `is_ide_storage` project, which the shared
+  // list deliberately filters out — so every Builder host (Designer/Voice/Video/agent
   // panel) fell through to a nameless header. Fetch the project directly in that
   // case only; the list covers every other host with no request at all.
   const [fetchedName, setFetchedName] = useState<string | undefined>();
@@ -253,7 +253,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     errorGeneric: t('errorGeneric'),
   }), [t, format]);
 
-  // A margin-bottom to match the panel's old placement in the IDE agent stack.
+  // A margin-bottom to match the panel's placement in the Builder agent stack.
   return (
     <div style={{ marginBottom: 12 }}>
       <EvermindConsole adapter={adapter} canManage={canManage} projectName={projectName} showRecent={showRecent} onValidate={setHighlight} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />

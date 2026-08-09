@@ -11,7 +11,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
-import { GitHubDeployPanel } from './ide/GitHubDeployPanel';
+import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 
 interface SitePublishPanelProps {

@@ -44,7 +44,7 @@ export interface ProjectsContentProps {
 }
 
 /**
- * Projects content — full project list, create-project modal, open project → IDE.
+ * Projects content — full project list, create-project modal, open project → Canvas Builder.
  *
  * Reusable: rendered standalone by the Projects/Tasks page (Projects tab) and as
  * the Dashboard preview (with `limit`/`viewAllHref`), so the cards, table, button

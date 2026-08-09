@@ -9,7 +9,7 @@ import {
 /**
  * Non-`evermind` builds (video, voice, designer, finetune) deliberately have no
  * Evermind of their own and INHERIT their container project's — that is the intended
- * model, not an oversight (see the decision note on the IDE-project create handler).
+ * model, not an oversight (see the decision note on the legacy build create handler).
  *
  * The bug that made it feel like one: reads inherit but writes keep exact-id
  * semantics, so the console rendered the container's stats (hence `seeded: true`)

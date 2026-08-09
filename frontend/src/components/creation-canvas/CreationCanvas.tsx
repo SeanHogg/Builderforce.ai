@@ -49,8 +49,8 @@ import {
 import { GuestAiUnavailableError, runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
-import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
+import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
+import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution, type LlmError } from '@/lib/builderforceApi';
 import { ApiRequestError } from '@/lib/apiClient';
@@ -82,7 +82,7 @@ import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { Icon } from '@/components/ui/Icon';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
-import { VoiceOutput } from '@/components/ide/VoiceOutput';
+import { VoiceOutput } from '@/components/builder/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
@@ -131,7 +131,7 @@ const Canvas3DView = dynamic(
   { ssr: false },
 );
 const VoiceConfigPanel = dynamic(
-  () => import('@/components/ide/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
+  () => import('@/components/builder/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
   { ssr: false },
 );
 const AITrainingPanel = dynamic(

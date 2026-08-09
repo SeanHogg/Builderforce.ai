@@ -4,7 +4,7 @@
  * VoiceOutput — the Voice modality's CENTER pane: the generated speech is the
  * output, mirroring how Preview is the output for Designer. Shows the player plus
  * a live word-highlighted transcript while it plays; otherwise an empty/busy/
- * unavailable state. All the voice state lives in the IDE's useVoiceStudio hook;
+ * unavailable state. All the voice state lives in Builder's useVoiceStudio hook;
  * this component only renders what the green Run (Generate) button produced.
  */
 

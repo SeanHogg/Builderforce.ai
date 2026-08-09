@@ -3,7 +3,7 @@
 /**
  * GitHub Actions deploy — the CI half of the Publish tab.
  *
- * Publishing from the browser needs the IDE open and the WebContainer warm, and
+ * Publishing from the browser needs Builder open and the WebContainer warm, and
  * it leaves no record of how the build was produced. Handing the build to GitHub
  * gives a build per commit, a real log, and a deploy that happens without anyone
  * watching — the same site either way, because both paths land in the shared

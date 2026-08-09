@@ -2,7 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
-import { RepoSyncControl } from './ide/RepoSyncControl';
+import { RepoSyncControl } from './builder/RepoSyncControl';
 
 /**
  * Builder settings slide-out (opened from the header cog). Today it hosts the

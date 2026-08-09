@@ -29,7 +29,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
-import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
+import { EvermindStatusBadge } from '@/components/builder/EvermindStatusBadge';
 import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';

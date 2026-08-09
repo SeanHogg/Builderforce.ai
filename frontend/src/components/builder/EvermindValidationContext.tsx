@@ -8,7 +8,7 @@
  * source of truth for the highlight instead of prop-drilling a result through both.
  *
  * The accessor is null-safe: {@link ProjectEvermindPanel} renders on surfaces that
- * have no studio center (e.g. the IDE agent stack), so without a provider the hook
+ * have no studio center (e.g. the Builder agent stack), so without a provider the hook
  * returns an inert value and the console simply shows its own inline result.
  */
 

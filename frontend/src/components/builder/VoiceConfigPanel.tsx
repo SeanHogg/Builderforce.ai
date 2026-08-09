@@ -5,7 +5,7 @@
  * a generation (create/enrol a clone, pick the active voice, and the lines to
  * speak) lives here, the way Files/Train/Publish configure the other modalities.
  * The actual generation is the green Run (Generate) button in the top bar, which
- * calls `voice.synth()`. State is owned by the IDE's useVoiceStudio hook.
+ * calls `voice.synth()`. State is owned by Builder's useVoiceStudio hook.
  */
 
 import { Icon } from '@/components/ui/Icon';
@@ -14,7 +14,7 @@ import { useTranslations } from 'next-intl';
 import { MicRecorder, type PcmAudio } from '@/lib/captureAudio';
 import { hasWebGPU } from '@/lib/voiceEngine';
 import type { VoiceStudio } from '@/lib/voiceStudio';
-import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
+import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 
 const section: React.CSSProperties = {
   padding: '14px 14px 16px',

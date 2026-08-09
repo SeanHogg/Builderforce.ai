@@ -36,7 +36,7 @@ export const STATS = {
     creativeCanvas: 'Turn any idea into something real on Builderforce.ai. It’s one creative canvas where your team and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products—without the tool sprawl.',
     evermind: 'Evermind is Builderforce.ai\'s project model and memory system. Keyed write-through updates are designed to replace superseded project facts for supported browser and agent workflows.',
     systemOfRecord: 'Builderforce.ai keeps the creative journey connected from the first idea through review and delivery, giving teams one shared record of what humans and AI agents created, changed, approved, and shipped.',
-    defineANeed: 'Builderforce.ai lets any human define a need in any modality — plain language, a dataset, a process chart, or a persona — and compiles it into an agent that runs in the IDE, on the desktop, or in the cloud: one AgentSpec spine, compiled from many inputs and deployed to many surfaces.',
+    defineANeed: 'Builderforce.ai lets any human define a need in any modality — plain language, a dataset, a process chart, or a persona — and compiles it into an agent that runs on Canvas, on the desktop, or in the cloud: one AgentSpec spine, compiled from many inputs and deployed to many surfaces.',
     enterpriseInnovation: 'Builderforce.ai connects creative work to delivery: teams can shape an idea with AI, organize it into projects and workflows, and add governance and measurement as the work grows.',
     roleBasedInsight: 'Builderforce.ai brings creative context, delivery activity, model usage, approvals, and available cost data into role-specific operating views for teams and leaders.',
     humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop creative canvas where your team and AI agents turn ideas into connected, reviewable, deliverable work.',
@@ -311,7 +311,7 @@ export const FEATURES: Feature[] = [
     icon: '⚡',
     title: 'Memory-First Answering',
     shortDesc: 'Answer from the project\'s own memory before spending a paid model call.',
-    longDesc: 'The cheapest token is the one you never spend. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under the project (its own and its IDE builds\'), so a lesson taught once answers everywhere. Your token bill falls as the project\'s memory grows.',
+    longDesc: 'The cheapest token is the one you never spend. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under the project (its own and its Canvas builds), so a lesson taught once answers everywhere. Your token bill falls as the project\'s memory grows.',
   },
   {
     icon: '🗂️',
@@ -357,7 +357,7 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: '⚡',
-    title: 'Full IDE Workspace',
+    title: 'Canvas Builder Workspace',
     shortDesc: 'Monaco editor, terminal, preview, and AI chat in one engineering workspace.',
     longDesc: 'Monaco editor, terminal, AI chat, file explorer — everything you need in one collaborative project workspace.',
   },
@@ -1131,7 +1131,7 @@ export const AGENTS_FAQ: FaqItem[] = [
 export const PROJECTS_TASKS_FAQ: FaqItem[] = [
   {
     question: 'What is the Projects / Tasks workspace in Builderforce.ai?',
-    answer: 'Projects / Tasks is the single work-management surface where you organize everything your AI workforce builds. A project is a collaborative workspace with its own IDE, files, assigned agents, and workflows; the Tasks tab is a task board where work is planned, assigned to agents, and tracked through every status. Projects and Tasks live on one page with two tabs so you can move between organizing the work and tracking it without leaving the surface.',
+    answer: 'Projects / Tasks is the single work-management surface where you organize everything your AI workforce builds. A project is a collaborative workspace with Canvas builds, files, assigned agents, and workflows; the Tasks tab is a task board where work is planned, assigned to agents, and tracked through every status. Projects and Tasks live on one page with two tabs so you can move between organizing the work and tracking it without leaving the surface.',
   },
   {
     question: 'How do AI agents pick up and run tasks?',
@@ -1265,7 +1265,7 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
   },
   {
     name: 'Memory-first inference',
-    description: 'A token-saving pattern on Builderforce.ai where, before any paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the frontier LLM entirely on a confident hit. The decision is single-sourced so every surface (web and VS Code) behaves identically, and learning fans out to every Evermind under a project (its own head and its IDE builds\'), so a lesson taught once answers everywhere and the token bill falls as memory grows.',
+    description: 'A token-saving pattern on Builderforce.ai where, before any paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the frontier LLM entirely on a confident hit. The decision is single-sourced so every surface (web and VS Code) behaves identically, and learning fans out to every Evermind under a project (its own head and its Canvas builds), so a lesson taught once answers everywhere and the token bill falls as memory grows.',
   },
   {
     name: 'Role-gated accountability',

@@ -10,7 +10,7 @@ import { rendersAppShell } from '@/lib/shellRouting';
  * The route used to BE the canvas: `/create/<id>` rendered `<CreationCanvas>`, so
  * every navigation unmounted the board and every return re-fetched and re-laid it
  * out. That is also why switching between canvas-like surfaces (create,
- * brainstorm, the workflow builder, the IDE) could never be a mode change — each
+ * brainstorm, workflow authoring, and Builder) could never be a mode change — each
  * was a different component tree.
  *
  * Now the route only says WHAT should be on the stage; the shell decides where

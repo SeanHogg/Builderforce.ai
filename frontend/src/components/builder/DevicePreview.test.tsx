@@ -5,7 +5,7 @@ import { QrCode } from './QrCode';
 import { DEVICE_PRESETS, getDevicePreset } from '@/lib/devicePresets';
 
 /**
- * The IDE's modality test mocks these components out, so without this file
+ * Builder's modality test mocks these components out, so without this file
  * nothing ever renders them. What matters here is the behaviour the device
  * simulator exists for: the previewed app must lay out against the DEVICE's
  * viewport, not the pane's, and rotating or switching device must change that

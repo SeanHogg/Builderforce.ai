@@ -88,9 +88,9 @@ vi.mock('./AgentPublishPanel', () => ({ AgentPublishPanel: () => <div /> }));
 vi.mock('./SitePublishPanel', () => ({ SitePublishPanel: () => <div /> }));
 vi.mock('./AgentStateViewer', () => ({ AgentStateViewer: () => <div /> }));
 vi.mock('./PreviewFrame', () => ({ PreviewFrame: () => <div data-testid="center-preview-frame" /> }));
-vi.mock('./ide/DevicePreview', () => ({ DevicePreview: () => <div data-testid="center-device-preview" /> }));
-vi.mock('./ide/MobileDevicePanel', () => ({ MobileDevicePanel: () => <div data-testid="mobile-device-panel" /> }));
-vi.mock('./ide/BuilderProjectsSlideOutPanel', () => ({ BuilderProjectsSlideOutPanel: () => <div /> }));
+vi.mock('./builder/DevicePreview', () => ({ DevicePreview: () => <div data-testid="center-device-preview" /> }));
+vi.mock('./builder/MobileDevicePanel', () => ({ MobileDevicePanel: () => <div data-testid="mobile-device-panel" /> }));
+vi.mock('./builder/BuilderProjectsSlideOutPanel', () => ({ BuilderProjectsSlideOutPanel: () => <div /> }));
 vi.mock('./brain/BrainPanel', () => ({ BrainPanel: () => <div /> }));
 vi.mock('./BuilderSettingsPanel', () => ({ BuilderSettingsPanel: () => <div /> }));
 vi.mock('./ArtifactReviewModals', () => ({

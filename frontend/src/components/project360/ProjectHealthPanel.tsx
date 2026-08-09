@@ -22,7 +22,7 @@ import { getProject360 } from '@/lib/project360Api';
  * On the web the improve/workforce actions route into the project workspace (where
  * the Brain + board live) rather than firing a VS Code command. A `brain` action
  * carries a ready-made seed prompt, which we forward to the Canvas build link so the
- * IDE's Brain panel auto-sends it — one-click agent-seed parity with VS Code.
+ * Builder's Brain panel auto-sends it — one-click agent-seed parity with VS Code.
  */
 export function ProjectHealthPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('project360');
