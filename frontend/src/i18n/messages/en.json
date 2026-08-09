@@ -12556,6 +12556,15 @@
       "signIn": {
         "title": "Sign in"
       }
+    },
+    "tagline": {
+      "workforce": "People and agents on one team.",
+      "embedded": "Ship it to a real URL.",
+      "quality": "Errors, feedback and QA.",
+      "reliability": "Monitors, incidents and on-call.",
+      "knowledge": "SOPs, docs and everything reusable.",
+      "hiring": "Roles, ATS and résumés.",
+      "insights": "Delivery, spend and AI impact."
     }
   },
   "tutorials": {

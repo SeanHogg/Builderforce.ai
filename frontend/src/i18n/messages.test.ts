@@ -11,10 +11,12 @@ import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationO
 import {
   FOOTER_COLUMNS,
   LEARN_COLUMNS,
+  PRODUCT_COLUMNS,
+  PRODUCT_STAGES,
+  productFacesFor,
   NAV_GROUPS,
   FOR_HIRE_NAV_GROUPS,
   FREELANCER_NAV_GROUPS,
-  PRODUCT_COLUMNS,
   PUBLIC_DESTINATIONS,
   SALES_NAV_GROUPS,
   STAGES,
@@ -171,7 +173,13 @@ describe('message catalogs', () => {
       // menu shipping without one.
       ...PUBLIC_DESTINATIONS.map((entry) => destTitleKey(entry)),
       ...PUBLIC_DESTINATIONS.filter((entry) => MENU_COLUMNS.includes(entry.placement as never)).map(destTaglineKey),
-      ...MENU_COLUMNS.map((column) => `marketingNav.column.${column}`),
+      ...LEARN_COLUMNS.map((column) => `marketingNav.column.${column}`),
+      // The Product menu IS the rail, so every rail row it shows needs a name
+      // (the rail's own) and a one-liner (its explainer's, or its own).
+      ...PRODUCT_STAGES.flatMap((stage) => [
+        `nav.stage.${stage}`,
+        ...productFacesFor(stage).flatMap((face) => [`nav.${face.titleKey}`, face.taglineKey]),
+      ]),
       ...PUBLIC_DESTINATIONS.flatMap((entry) =>
         (entry.sections ?? []).map((section) => `referencePanel.section.${section.labelKey}`)),
       'marketingNav.megaFoot',

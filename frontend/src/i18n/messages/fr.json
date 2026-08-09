@@ -12555,6 +12555,15 @@
       "signIn": {
         "title": "Se connecter"
       }
+    },
+    "tagline": {
+      "workforce": "Des personnes et des agents dans une seule équipe.",
+      "embedded": "Publiez-le sur une vraie URL.",
+      "quality": "Erreurs, retours et assurance qualité.",
+      "reliability": "Supervision, incidents et astreintes.",
+      "knowledge": "Procédures, documents et tout le réutilisable.",
+      "hiring": "Postes, ATS et CV.",
+      "insights": "Livraison, dépenses et impact de l’IA."
     }
   },
   "tutorials": {

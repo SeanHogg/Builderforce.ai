@@ -12555,6 +12555,15 @@
       "signIn": {
         "title": "Iniciar sesión"
       }
+    },
+    "tagline": {
+      "workforce": "Personas y agentes en un mismo equipo.",
+      "embedded": "Publícalo en una URL real.",
+      "quality": "Errores, comentarios y control de calidad.",
+      "reliability": "Monitores, incidentes y guardias.",
+      "knowledge": "SOP, documentos y todo lo reutilizable.",
+      "hiring": "Puestos, ATS y currículums.",
+      "insights": "Entrega, gasto e impacto de la IA."
     }
   },
   "tutorials": {

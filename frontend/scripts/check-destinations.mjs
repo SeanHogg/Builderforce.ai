@@ -188,6 +188,22 @@ for (const column of footerBlock.matchAll(/ids:\s*\[([^\]]*)\]/g)) {
   }
 }
 
+// Two public pages may not claim the same rail row. The Product menu links a
+// destination to whichever page is bound to it, so a duplicate `groupId` would
+// pick a winner silently — and `/product-management` vs `/survival-focused-agile`
+// for "Projects" is exactly the case where the silent pick would be wrong.
+const boundGroups = new Set();
+for (const row of referenceBlock.matchAll(/groupId:\s*'([^']+)'/g)) {
+  const id = row[1];
+  if (boundGroups.has(id)) {
+    fail(`[public-face] Two public pages both claim to be the face of \`${id}\`. A row has one.`);
+  }
+  boundGroups.add(id);
+  if (!(groupBlock?.[0] ?? '').includes(`id: '${id}'`)) {
+    fail(`[public-face] A public page is bound to \`${id}\`, which is not a NAV_GROUPS row.`);
+  }
+}
+
 // ── 6 · Every declared panel section exists in the page that owns it ───────
 // The panel's index rail is declared on the registry row. If a page renames an
 // anchor, the rail silently scrolls nowhere — so the ids are asserted against

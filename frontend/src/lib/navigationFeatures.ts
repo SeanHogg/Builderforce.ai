@@ -2,7 +2,8 @@ import type { NavGroup } from './navGroups';
 
 /** Optional workspace modules. Core routes are deliberately absent. */
 export const NAVIGATION_FEATURE_IDS = [
-  'challenges',
+  // `challenges` was here until the nav row went: a toggle for a destination
+  // that no longer exists hides nothing and confuses the settings page.
   'projects',
   'workforce',
   'insights',

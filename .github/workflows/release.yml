@@ -260,8 +260,37 @@ jobs:
 
       - name: Publish server.json
         run: |
+          name=$(jq -r '.name' server.json)
+          version=$(jq -r '.version' server.json)
+
+          # Registry versions are immutable. A release runs on every push to
+          # main, so an unchanged manifest is an expected no-op rather than a
+          # failed release.
+          if curl -fsSG 'https://registry.modelcontextprotocol.io/v0.1/servers' \
+            --data-urlencode "search=$name" \
+            | jq -e --arg name "$name" --arg version "$version" \
+              '.servers[]? | select(.server.name == $name and .server.version == $version)' \
+              >/dev/null; then
+            echo "$name@$version is already published; skipping."
+            exit 0
+          fi
+
           ./mcp-publisher login github-oidc
-          ./mcp-publisher publish
+          # If another run publishes between the lookup and this call, accept
+          # only the registry's explicit duplicate-version response. Preserve
+          # all other failures.
+          set +e
+          output=$(./mcp-publisher publish 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            if printf '%s' "$output" | grep -Fq 'invalid version: cannot publish duplicate version'; then
+              echo "$name@$version was published concurrently; continuing."
+            else
+              exit "$status"
+            fi
+          fi
 
   deploy-api:
     name: Deploy API

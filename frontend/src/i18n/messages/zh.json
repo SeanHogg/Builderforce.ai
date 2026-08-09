@@ -12555,6 +12555,15 @@
       "signIn": {
         "title": "登录"
       }
+    },
+    "tagline": {
+      "workforce": "真人与智能体同属一个团队。",
+      "embedded": "发布到真实网址。",
+      "quality": "错误、反馈与质量保障。",
+      "reliability": "监控、事件与值班。",
+      "knowledge": "SOP、文档与一切可复用的内容。",
+      "hiring": "岗位、招聘系统与简历。",
+      "insights": "交付、支出与 AI 影响。"
     }
   },
   "tutorials": {

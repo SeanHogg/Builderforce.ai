@@ -19,6 +19,12 @@
   text-align: center;
 }
 
+/* The catalog intentionally escapes the fixed-height board. Promote the whole
+   hero while it is open so the following homepage section cannot paint over it. */
+.hero:has(.promptWrap [aria-expanded='true']) {
+  z-index: 2;
+}
+
 .inner {
   position: relative;
   z-index: 1;

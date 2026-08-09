@@ -8,15 +8,14 @@ import { useTranslations } from 'next-intl';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import {
   LEARN_COLUMNS,
-  PRODUCT_COLUMNS,
+  PRODUCT_STAGES,
   PUBLIC_NAV,
   columnOf,
   destTaglineKey,
   destTitleKey,
-  type MenuColumn,
-  type PublicDestination,
+  productFacesFor,
 } from '@/lib/navGroups';
-import { seatHueVar } from '@/lib/seats';
+import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { Icon } from '@/components/ui/Icon';
@@ -55,23 +54,76 @@ const isActive = (pathname: string, href: string) =>
 /** One row of a mega-menu — title, one line of what it is for, and the owning
  *  seat's own hue on the marker, so the menu, the features card and the roster
  *  chip agree about who is behind the domain. */
-function MegaLink({ entry, onNavigate }: { entry: PublicDestination; onNavigate?: () => void }) {
+interface MegaRow {
+  id: string;
+  href: string;
+  icon: string;
+  seat: SeatOrPlatform;
+  /** Full-path i18n keys — a row's copy lives in one of three namespaces and the
+   *  renderer must not need to know which. */
+  titleKey: string;
+  taglineKey: string;
+}
+
+function MegaLink({ row, onNavigate }: { row: MegaRow; onNavigate?: () => void }) {
   const t = useTranslations();
   return (
-    <Link href={entry.marketingHref} className="mh-mega-link" onClick={onNavigate}>
+    <Link href={row.href} className="mh-mega-link" onClick={onNavigate}>
       <span
         className="mh-mega-link-icon"
         aria-hidden="true"
-        style={{ '--seat': `var(${seatHueVar(entry.seat)})` } as React.CSSProperties}
+        style={{ '--seat': `var(${seatHueVar(row.seat)})` } as React.CSSProperties}
       >
-        <Icon source={entry.icon} size={18} />
+        <Icon source={row.icon} size={18} />
       </span>
       <span className="mh-mega-link-body">
-        <strong>{t(destTitleKey(entry))}</strong>
-        <small>{t(destTaglineKey(entry))}</small>
+        <strong>{t(row.titleKey)}</strong>
+        <small>{t(row.taglineKey)}</small>
       </span>
     </Link>
   );
+}
+
+/** The Product menu: the RAIL, stage by stage. Same rows, same names, same
+ *  order as the left panel — which is the whole point of it. */
+function productColumns(): MegaColumn[] {
+  return PRODUCT_STAGES.map((stage) => ({
+    key: stage,
+    headingKey: `nav.stage.${stage}`,
+    stageVar: `--stage-${stage}`,
+    rows: productFacesFor(stage).map((face) => ({
+      id: face.group.id,
+      href: face.href,
+      icon: face.group.icon,
+      seat: face.group.seat,
+      titleKey: `nav.${face.titleKey}`,
+      taglineKey: face.taglineKey,
+    })),
+  }));
+}
+
+/** The Learn menu: the public pages that are not the product itself. */
+function learnColumns(): MegaColumn[] {
+  return LEARN_COLUMNS.map((column) => ({
+    key: column,
+    headingKey: `marketingNav.column.${column}`,
+    stageVar: `--stage-${column}`,
+    rows: columnOf(column).map((entry) => ({
+      id: entry.id,
+      href: entry.marketingHref,
+      icon: entry.icon,
+      seat: entry.seat,
+      titleKey: destTitleKey(entry),
+      taglineKey: destTaglineKey(entry),
+    })),
+  }));
+}
+
+interface MegaColumn {
+  key: string;
+  headingKey: string;
+  stageVar: string;
+  rows: MegaRow[];
 }
 
 /**
@@ -103,33 +155,31 @@ function MegaMenu({
   footNoteKey,
   onNavigate,
 }: {
-  columns: readonly MenuColumn[];
+  columns: MegaColumn[];
   footNoteKey: string;
   onNavigate?: () => void;
 }) {
   const t = useTranslations();
-  const tm = useTranslations('marketingNav');
-  const grouped = columns.map((column) => ({ column, rows: columnOf(column) }));
-  const tracks = grouped.reduce((total, { rows }) => total + tracksFor(rows.length), 0);
+  const tracks = columns.reduce((total, { rows }) => total + tracksFor(rows.length), 0);
 
   return (
     <div className="mh-mega" style={{ '--mega-tracks': tracks } as React.CSSProperties}>
-      {grouped.map(({ column, rows }) => (
+      {columns.map((column) => (
         <div
-          key={column}
+          key={column.key}
           className="mh-mega-col"
           style={{
-            '--stage': `var(--stage-${column})`,
-            '--track-span': tracksFor(rows.length),
+            '--stage': `var(${column.stageVar})`,
+            '--track-span': tracksFor(column.rows.length),
           } as React.CSSProperties}
         >
           <h4 className="mh-mega-head">
             <i aria-hidden="true" />
-            {tm(`column.${column}`)}
+            {t(column.headingKey)}
           </h4>
           <div className="mh-mega-rows">
-            {rows.map((entry) => (
-              <MegaLink key={entry.id} entry={entry} onNavigate={onNavigate} />
+            {column.rows.map((row) => (
+              <MegaLink key={row.id} row={row} onNavigate={onNavigate} />
             ))}
           </div>
         </div>
@@ -254,11 +304,11 @@ export default function MarketingHeader() {
             onToggle={toggleMenu}
             active={pathname.startsWith('/product')}
           >
-            <MegaMenu columns={PRODUCT_COLUMNS} footNoteKey="marketingNav.megaFoot" onNavigate={closeMenu} />
+            <MegaMenu columns={productColumns()} footNoteKey="marketingNav.megaFoot" onNavigate={closeMenu} />
           </MegaTrigger>
 
           <MegaTrigger id="learn" label={t('learn')} open={menu === 'learn'} onToggle={toggleMenu}>
-            <MegaMenu columns={LEARN_COLUMNS} footNoteKey="marketingNav.megaFootLearn" onNavigate={closeMenu} />
+            <MegaMenu columns={learnColumns()} footNoteKey="marketingNav.megaFootLearn" onNavigate={closeMenu} />
           </MegaTrigger>
 
           {PUBLIC_NAV.map((l) => (
@@ -288,20 +338,20 @@ export default function MarketingHeader() {
           too: the drawer used to flatten Product into one undifferentiated list,
           which is the version of the menu that taught nobody the arc. */}
       <div className={`mh-drawer${open ? ' open' : ''}`}>
-        {[...PRODUCT_COLUMNS, ...LEARN_COLUMNS].map((column) => (
-          <div key={column} className="mh-drawer-group">
-            <div className="mh-drawer-group-label" style={{ '--stage': `var(--stage-${column})` } as React.CSSProperties}>
-              {t(`column.${column}`)}
+        {[...productColumns(), ...learnColumns()].map((column) => (
+          <div key={column.key} className="mh-drawer-group">
+            <div className="mh-drawer-group-label" style={{ '--stage': `var(${column.stageVar})` } as React.CSSProperties}>
+              {tRoot(column.headingKey)}
             </div>
-            {columnOf(column).map((entry) => (
+            {column.rows.map((row) => (
               <Link
-                key={entry.id}
-                href={entry.marketingHref}
+                key={row.id}
+                href={row.href}
                 className="mh-drawer-link mh-drawer-sub"
                 onClick={closeNav}
-                style={{ '--seat': `var(${seatHueVar(entry.seat)})` } as React.CSSProperties}
+                style={{ '--seat': `var(${seatHueVar(row.seat)})` } as React.CSSProperties}
               >
-                <Icon source={entry.icon} size={17} /> {tRoot(destTitleKey(entry))}
+                <Icon source={row.icon} size={17} /> {tRoot(row.titleKey)}
               </Link>
             ))}
           </div>

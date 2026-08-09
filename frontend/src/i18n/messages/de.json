@@ -12555,6 +12555,15 @@
       "signIn": {
         "title": "Anmelden"
       }
+    },
+    "tagline": {
+      "workforce": "Menschen und Agenten in einem Team.",
+      "embedded": "Bring es unter eine echte URL.",
+      "quality": "Fehler, Feedback und QA.",
+      "reliability": "Monitore, Vorfälle und Rufbereitschaft.",
+      "knowledge": "SOPs, Dokumente und alles Wiederverwendbare.",
+      "hiring": "Rollen, Bewerbersystem und Lebensläufe.",
+      "insights": "Lieferung, Ausgaben und KI-Wirkung."
     }
   },
   "tutorials": {

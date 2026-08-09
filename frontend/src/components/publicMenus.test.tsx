@@ -1,7 +1,16 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import en from '@/i18n/messages/en.json';
-import { PUBLIC_DESTINATIONS, columnOf, destTitleKey, footerColumns } from '@/lib/navGroups';
+import {
+  LEARN_COLUMNS,
+  NAV_GROUPS,
+  PRODUCT_STAGES,
+  PUBLIC_DESTINATIONS,
+  columnOf,
+  destTitleKey,
+  footerColumns,
+  productFacesFor,
+} from '@/lib/navGroups';
 import MarketingHeader from './MarketingHeader';
 import AppFooter from './AppFooter';
 
@@ -47,16 +56,44 @@ const copyAt = (key: string): string =>
 const RAW_KEY = /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+){2,}$/;
 
 describe('the marketing header renders the registry, not a raw key', () => {
-  it('shows every Product and Learn row under its column heading', () => {
+  it('shows the WHOLE rail under Product — the same rows the canvas shows', () => {
     renderWithCopy(<MarketingHeader />);
 
-    for (const column of ['idea', 'make', 'run', 'read', 'prove', 'buildWith'] as const) {
-      const heading = en.marketingNav.column[column];
-      expect(screen.getAllByText(heading).length, `${column} has no heading`).toBeGreaterThan(0);
+    for (const stage of PRODUCT_STAGES) {
+      expect(screen.getAllByText(copyAt(`nav.stage.${stage}`)).length, `${stage} has no heading`).toBeGreaterThan(0);
 
+      for (const face of productFacesFor(stage)) {
+        const title = copyAt(`nav.${face.titleKey}`);
+        expect(screen.getAllByText(title).length, `${face.group.id} is missing from the ${stage} column`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('carries the Make and Measure rows the menu used to omit entirely', () => {
+    // Reported from the running app: the menu was a projection of the twelve
+    // explainer pages, so five destinations the rail shows had no page in the
+    // registry and simply were not offered.
+    renderWithCopy(<MarketingHeader />);
+    for (const id of ['workforce', 'embedded', 'quality', 'reliability', 'knowledge', 'insights']) {
+      const group = NAV_GROUPS.find((row) => row.id === id)!;
+      expect(screen.getAllByText(copyAt(`nav.${group.labelKey}`)).length, `${id} is missing`).toBeGreaterThan(0);
+    }
+  });
+
+  it('no longer offers Challenges as a place — it is something the canvas does', () => {
+    renderWithCopy(<MarketingHeader />);
+    expect(NAV_GROUPS.some((row) => row.id === 'challenges')).toBe(false);
+    expect(screen.queryByText(copyAt('nav.group.challenges'))).toBeNull();
+  });
+
+  it('shows every Learn row under its column heading', () => {
+    renderWithCopy(<MarketingHeader />);
+
+    for (const column of LEARN_COLUMNS) {
+      expect(screen.getAllByText(en.marketingNav.column[column]).length, `${column} has no heading`).toBeGreaterThan(0);
       for (const entry of columnOf(column)) {
         const title = copyAt(destTitleKey(entry));
-        expect(screen.getAllByText(title).length, `${entry.id} is missing from the ${column} column`).toBeGreaterThan(0);
+        expect(screen.getAllByText(title).length, `${entry.id} is missing from ${column}`).toBeGreaterThan(0);
       }
     }
   });
@@ -71,8 +108,12 @@ describe('the marketing header renders the registry, not a raw key', () => {
 
   it('calls the storefront Marketplace, and offers no /agents destination', () => {
     const { container } = renderWithCopy(<MarketingHeader />);
-    expect(screen.getAllByText('Marketplace').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Talent / Workforce')).toBeNull();
+    // The bar link itself, not merely the string: "Talent / Workforce" is a
+    // legitimate name in this header now — it is the Make column's WORKFORCE
+    // destination — so the assertion has to be about what /marketplace is called.
+    const storefront = [...container.querySelectorAll('a[href="/marketplace"]')].map((a) => a.textContent?.trim());
+    expect(storefront).toContain('Marketplace');
+    expect(storefront).not.toContain('Talent / Workforce');
     expect(container.querySelector('a[href="/agents"]')).toBeNull();
   });
 
