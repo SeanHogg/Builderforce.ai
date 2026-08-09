@@ -117,24 +117,26 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       {rest.length > 0 && (
-        <>
+        <div className="nav-sessions__recents">
           <div className="ui-eyebrow nav-sessions__label">{t('recents')}</div>
-          {rest.map((entry) => (
-            <Link
-              key={entry.id}
-              href={`/create/${entry.id}`}
-              className="nav-item nav-sessions__item"
-              onClick={onNavigate}
-              // An unclaimed draft is explicitly marked: it lives in this browser
-              // only, and saying so is the difference between "I'll get to it" and
-              // losing it.
-              title={entry.draft ? t('draftHint') : undefined}
-            >
-              <span className="nav-item-label">{entry.title}</span>
-              {entry.draft && <span className="nav-sessions__draft">{t('draft')}</span>}
-            </Link>
-          ))}
-        </>
+          <div className="nav-sessions__recent-list">
+            {rest.map((entry) => (
+              <Link
+                key={entry.id}
+                href={`/create/${entry.id}`}
+                className="nav-item nav-sessions__item"
+                onClick={onNavigate}
+                // An unclaimed draft is explicitly marked: it lives in this browser
+                // only, and saying so is the difference between "I'll get to it" and
+                // losing it.
+                title={entry.draft ? t('draftHint') : undefined}
+              >
+                <span className="nav-item-label">{entry.title}</span>
+                {entry.draft && <span className="nav-sessions__draft">{t('draft')}</span>}
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

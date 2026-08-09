@@ -143,7 +143,11 @@ function authoredWebsite(saved) {
     assert(secondText.includes('Book a demo'), 'Follow-up did not apply the requested CTA.');
     for (const name of ['Home', 'About', 'Services', 'Contact']) assert(secondText.includes(name), `Follow-up is missing the ${name} page.`);
     assert(!JSON.stringify(second.timeline).includes('did not actually make one'), 'Brain reported a non-mutating canvas change.');
-    await page.getByRole('button', { name: 'About', exact: true }).click();
+    const aboutPage = page.getByRole('button', { name: 'About', exact: true, includeHidden: true });
+    assert(await aboutPage.count() === 1, `Rendered Website nav has ${await aboutPage.count()} About buttons.`);
+    const aboutVisibility = await aboutPage.evaluate((element) => ({ display: getComputedStyle(element).display, parentDisplay: getComputedStyle(element.parentElement).display, width: element.getBoundingClientRect().width }));
+    assert(aboutVisibility.display !== 'none' && aboutVisibility.parentDisplay !== 'none' && aboutVisibility.width > 0, `Rendered Website nav is hidden: ${JSON.stringify(aboutVisibility)}`);
+    await aboutPage.click();
     await page.getByText('About — Acme Analytics', { exact: true }).waitFor({ state: 'visible', timeout: 5000 });
 
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });

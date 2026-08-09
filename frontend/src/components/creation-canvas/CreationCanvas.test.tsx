@@ -780,6 +780,7 @@ describe('CreationCanvas', () => {
     const starter = screen.getByRole('button', { name: 'Choose a starting point' });
     expect(prompt.closest('[data-tour="creation-brain-dock"]')).not.toContainElement(starter);
     expect(starter.closest('[data-tour="creation-prompt-starter"]')).not.toBeNull();
+    expect(starter.closest('[data-align="end"]')).not.toBeNull();
   });
 
   it('moves Brain into its Object rather than putting a second chat on the board', () => {

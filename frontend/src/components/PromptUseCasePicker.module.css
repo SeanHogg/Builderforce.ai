@@ -1,4 +1,5 @@
 .root { width:100%; display:flex; flex-direction:column; align-items:center; color:var(--text-primary, var(--canvas-ink)); }
+.root[data-align='end'] { align-items:flex-end; }
 .tab { display:inline-flex; align-items:center; gap:7px; min-height:27px; padding:4px 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); background:var(--prompt-panel-bg, var(--bg-elevated)); color:inherit; font:600 11px/1.2 inherit; cursor:pointer; }
 .root[data-placement='top'] .tab { margin-bottom:-1px; border-radius:var(--radius-md) var(--radius-md) 0 0; border-bottom-color:transparent; }
 .root[data-placement='bottom'] .tab { margin-top:-1px; border-radius:0 0 var(--radius-md) var(--radius-md); border-top-color:transparent; }

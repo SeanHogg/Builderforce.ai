@@ -459,12 +459,16 @@
 .wysiwygStats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; background:color-mix(in srgb,var(--site-fg) 12%,transparent); }.wysiwygStats span { display:grid; gap:2px; padding:12px; background:var(--site-bg); text-align:center; }.wysiwygStats strong { font:750 16px/1 var(--font-sans); }.wysiwygStats small { color:color-mix(in srgb,var(--site-fg) 60%,transparent); font-size:6px; }.wysiwygQuote { margin:0; padding:18px 24px; background:color-mix(in srgb,var(--site-bg) 86%,white); text-align:center; }.wysiwygQuote blockquote { max-width:34ch; margin:0 auto 7px; color:var(--site-fg); font:600 12px/1.35 Georgia,serif; }.wysiwygQuote cite { color:color-mix(in srgb,var(--site-fg) 58%,transparent); font-size:6px; font-style:normal; }.wysiwygCta { padding:18px 20px; color:white; }.wysiwygCta h4 { color:inherit; }.wysiwygCta p { max-width:48ch; margin:0 0 9px; font-size:7px; line-height:1.5; opacity:.8; }.wysiwygCta button { border:0; border-radius:var(--radius-sm); padding:5px 8px; background:white; color:#171717; font-size:6px; }
 .websitePreview[data-theme='bold'] .wysiwygHero { background:var(--site-fg); }.websitePreview[data-theme='bold'] .wysiwygHero h3,.websitePreview[data-theme='bold'] .wysiwygHero p,.websitePreview[data-theme='bold'] .wysiwygHero small { color:var(--site-bg); }.websitePreview[data-theme='minimal'] .wysiwygArt { display:none; }.websitePreview[data-theme='minimal'] .wysiwygHero { grid-template-columns:1fr; background:var(--site-bg); }.websitePreview[data-theme='soft'] { border-radius:16px; }.websitePreview[data-theme='soft'] .wysiwygHero { background:linear-gradient(135deg,color-mix(in srgb,var(--site-bg) 80%,white),color-mix(in srgb,var(--site-bg) 70%,pink)); }.websitePreview[data-theme='technical'] .wysiwygHero h3,.websitePreview[data-theme='technical'] .wysiwygSection h4 { font-family:var(--font-mono); }
 .websitePreview[data-viewport='tablet'] .wysiwygHero { grid-template-columns:minmax(0,1fr) minmax(105px,.62fr); }
-.websitePreview[data-viewport='mobile'] .siteNav span { display:none; }
+.websitePreview[data-viewport='mobile'] .siteNav { gap:4px; padding-inline:6px; }
+.websitePreview[data-viewport='mobile'] .siteNav > strong,.websitePreview[data-viewport='mobile'] .siteNav > button { display:none; }
+.websitePreview[data-viewport='mobile'] .siteNav span { display:flex; justify-content:flex-start; overflow-x:auto; }
 .websitePreview[data-viewport='mobile'] .wysiwygHero { grid-template-columns:1fr; }
 .websitePreview[data-viewport='mobile'] .wysiwygArt { min-height:120px; order:-1; }
 .websitePreview[data-viewport='mobile'] .wysiwygFeatures { grid-template-columns:1fr; }
 @container (max-width:430px) {
-  .siteNav span { display:none; }
+  .siteNav { gap:4px; padding-inline:6px; }
+  .siteNav > strong,.siteNav > button { display:none; }
+  .siteNav span { display:flex; justify-content:flex-start; overflow-x:auto; }
   .wysiwygHero { grid-template-columns:1fr; padding:14px; }
   .wysiwygArt { min-height:105px; order:-1; }
   .wysiwygFeatures { grid-template-columns:1fr; }
@@ -957,8 +961,9 @@
 
 /* Starting points belong in the open band below the selection controls. Keeping
    this picker structurally separate from the bottom composer prevents it from
-   covering the last lines of an inline Brain conversation. It uses the same open-
-   board centring arithmetic as the selection toolbar and composer. */
+   covering the last lines of an inline Brain conversation. The catalog keeps the
+   same usable width as the composer, while its trigger anchors at the far right so
+   the centred processing receipt never competes with it. */
 .promptStarter { position:absolute; z-index:16; top:58px; right:calc(300px + var(--brain-dock-right, 0px)); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; justify-content:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
 
 /* The prompt is a page fixture, not part of the Brain surface:centred on the board

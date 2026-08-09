@@ -7,8 +7,9 @@ import { Icon } from '@/components/ui/Icon';
 
 type PromptUseCase = { category: string; label: string; prompt: string };
 
-export function PromptUseCasePicker({ placement, onSelect }: {
+export function PromptUseCasePicker({ placement, align = 'center', onSelect }: {
   placement: 'top' | 'bottom';
+  align?: 'center' | 'end';
   onSelect: (prompt: string) => void;
 }) {
   const t = useTranslations('promptUseCases');
@@ -90,7 +91,7 @@ export function PromptUseCasePicker({ placement, onSelect }: {
     </div>
   );
 
-  return <div ref={rootRef} className={styles.root} data-placement={placement}>{placement === 'top' ? <>{panel}{tab}</> : <>{tab}{panel}</>}</div>;
+  return <div ref={rootRef} className={styles.root} data-placement={placement} data-align={align}>{placement === 'top' ? <>{panel}{tab}</> : <>{tab}{panel}</>}</div>;
 }
 
 const USE_CASE_ICONS = ['□', '◎', '▶', '▣', '◇', '⌘', '◖', '✉', '▤', '▥', '↗', '✦', '🧠', '▷', '◉', '▦', '◆', '⌗', '⬡', '◈'];

@@ -1424,7 +1424,9 @@ html[data-theme='light'] .nebula {
 
 .nav-main {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
   overflow-x: hidden;
   min-height: 0;
 }
@@ -1596,6 +1598,9 @@ html[data-theme='light'] .nebula {
 }
 
 .nav-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   margin-bottom: 16px;
 }
 
@@ -1604,10 +1609,30 @@ html[data-theme='light'] .nebula {
 .nav-sessions {
   display: flex;
   flex-direction: column;
+  flex: 0 1 auto;
+  max-height: 42%;
+  min-height: 0;
+  overflow: hidden;
   gap: var(--space-1);
   padding: 0 var(--space-2) var(--space-3);
   margin-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Session count must not displace the destination menu. New Canvas and Active
+   stay visible; only the recents rows consume this bounded scrolling region. */
+.nav-sessions__recents {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nav-sessions__recent-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .nav-sessions__label,

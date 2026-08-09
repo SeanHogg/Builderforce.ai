@@ -70,6 +70,14 @@ const QUICK_START_KEYS = [
   'note',
 ] as const;
 
+const CREATION_CANVAS_TOUR_CONTROL_KEYS = [
+  'back',
+  'next',
+  'startCreating',
+  'tourCancel',
+  'tourClose',
+] as const;
+
 /** Tag handlers for `t.rich` — every tag renders its chunks unchanged. */
 const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> =>
   Object.fromEntries(
@@ -99,6 +107,15 @@ describe('message catalogs', () => {
     const missing = CREATION_OBJECT_REGISTRY
       .map(({ kind }) => kind)
       .filter((kind) => t(`creationCanvas.object.${kind}` as never) === `creationCanvas.object.${kind}`);
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every creation canvas tour control', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = CREATION_CANVAS_TOUR_CONTROL_KEYS.filter((control) => {
+      const key = `creationCanvas.${control}`;
+      return t(key as never) === key;
+    });
     expect(missing).toEqual([]);
   });
 

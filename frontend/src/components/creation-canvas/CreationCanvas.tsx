@@ -4674,7 +4674,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * its Object, docked to either edge, or closed entirely.
    */
   const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
-    <PromptUseCasePicker placement="bottom" onSelect={setPrompt} />
+    <PromptUseCasePicker placement="bottom" align="end" onSelect={setPrompt} />
   </div>;
 
   const composer = !presentMode && <div className={styles.composerDock} data-tour="creation-brain-dock">
