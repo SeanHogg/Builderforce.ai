@@ -53,8 +53,8 @@ Six were left by EARLIER passes of this same migration, which is the argument fo
 5. **`printDocument.ts` and `creationDeliverables.ts` wrote tokens into standalone documents** — a
    print sheet in an isolated iframe and a downloadable landing page, neither of which has our
    `:root`.
-6. **`RfpContent.tsx`'s `DEFAULT_BRAND.text` was `var(--bg-elevated)`** — white ink on the白
-   proposal page wherever it resolved, invalid where it did not. That palette is written into a
+6. **`RfpContent.tsx`'s `DEFAULT_BRAND.text` was `var(--bg-elevated)`** — white ink on the white proposal page wherever it
+   resolved, and invalid where it did not. That palette is written into a
    `.html` the customer opens outside BuilderForce.
 7. **`EmailPreferencesCard` drew its `<option>`s `background:'#ffffff'` with
    `color:var(--bg-elevated)`** — white on white the moment the light theme is on. Fixed by moving
