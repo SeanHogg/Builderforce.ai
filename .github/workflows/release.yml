@@ -337,12 +337,16 @@ jobs:
       - name: Build and deploy frontend
         working-directory: frontend
         env:
+          # Vercel's artifact collection exceeded Node's default ~4 GiB heap
+          # after building the 90-route frontend. The hosted runner has enough
+          # memory for a 6 GiB old-space ceiling.
+          NODE_OPTIONS: --max-old-space-size=6144
           NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile || pnpm install
-          npm run cf-build
+          pnpm run cf-build
           wrangler deploy --no-bundle
 
   deploy-help:
