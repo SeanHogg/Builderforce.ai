@@ -199,21 +199,21 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#0f1020' },
+  screen: { flex: 1, backgroundColor: '#050810' },
   header: { paddingTop: 64, paddingHorizontal: 24, paddingBottom: 16 },
-  title: { fontSize: 28, fontWeight: '700', color: '#ffffff' },
-  subtitle: { fontSize: 14, color: '#9ca3af', marginTop: 4 },
+  title: { fontSize: 28, fontWeight: '700', color: '#f0f4ff' },
+  subtitle: { fontSize: 14, color: '#8892b0', marginTop: 4 },
   content: { padding: 24 },
   card: {
-    backgroundColor: '#1a1b2e',
+    backgroundColor: '#111827',
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
   },
-  cardLabel: { fontSize: 14, color: '#9ca3af' },
-  counter: { fontSize: 48, fontWeight: '700', color: '#ffffff', marginVertical: 8 },
+  cardLabel: { fontSize: 14, color: '#8892b0' },
+  counter: { fontSize: 48, fontWeight: '700', color: '#f0f4ff', marginVertical: 8 },
   button: {
-    backgroundColor: '#e2654a',
+    backgroundColor: '#4d9eff',
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 12,
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonPressed: { opacity: 0.75 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });`,
   'vite.config.js': MOBILE_VITE_CONFIG,
 };
