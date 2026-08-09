@@ -1,5 +1,6 @@
-import { Icon } from '@/components/ui/Icon';
 'use client';
+
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Small inline badge that summarizes a key's browser-access posture.

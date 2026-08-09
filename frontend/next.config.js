@@ -5,16 +5,17 @@ const { version } = require('./package.json');
 
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+const developmentConnectOrigins = process.env.NODE_ENV === 'development' ? ' http://localhost:8787' : '';
 
 const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  // next-on-pages invokes Vercel from this directory. Keep output tracing rooted
-  // here so Vercel reports `.next` relative to frontend/; using the repository
-  // root makes the packager look for the doubled `frontend/frontend/.next`.
-  // Linked-package module resolution is handled by the aliases below.
-  outputFileTracingRoot: __dirname,
+  // Turbopack resolves the linked workspace packages below from the monorepo
+  // root. Next requires output tracing and Turbopack to use the same root;
+  // otherwise the Docker dev server fences out ../studio, ../voice, and the
+  // other mounted packages even though Node can resolve their symlinks.
+  outputFileTracingRoot: path.join(__dirname, '..'),
   // Cloudflare Pages (next-on-pages) does not run Next's default image
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.
@@ -189,7 +190,7 @@ const nextConfig = {
               // and cross-origin, so it reads nothing of ours; our own
               // clickjacking protection is `frame-ancestors`, which is unchanged.
               "frame-src 'self' blob: https: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
-              "connect-src 'self' https: wss:",
+              `connect-src 'self' https: wss:${developmentConnectOrigins}`,
               "manifest-src 'self'",
             ].join('; '),
           },

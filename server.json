@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.SeanHogg/builderforce",
   "title": "Builderforce",
-  "description": "Run your Builderforce workspace from any MCP client: tickets, boards, cloud agents, and connectors.",
+  "description": "Run your Builderforce workspace from any MCP client: create and move tickets, drive boards and swimlanes, read and update portfolios, initiatives and OKRs, dispatch cloud coding agents, and query executions — plus every connector and external MCP server your tenant has connected.",
   "repository": {
     "url": "https://github.com/SeanHogg/Builderforce.ai",
     "source": "github"

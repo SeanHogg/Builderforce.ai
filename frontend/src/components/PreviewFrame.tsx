@@ -1,5 +1,6 @@
-import { Icon } from '@/components/ui/Icon';
 'use client';
+
+import { Icon } from '@/components/ui/Icon';
 
 interface PreviewFrameProps {
   url?: string;
