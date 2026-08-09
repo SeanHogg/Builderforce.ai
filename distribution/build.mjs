@@ -34,7 +34,7 @@ const listing = JSON.parse(fs.readFileSync(path.join(DIR, 'listing.json'), 'utf8
 const serverJsonPath = path.join(ROOT, 'server.json');
 const serverJson = JSON.parse(fs.readFileSync(serverJsonPath, 'utf8'));
 const mismatches = [];
-if (serverJson.description !== listing.longDescription) mismatches.push('description');
+if (serverJson.description !== listing.shortDescription) mismatches.push('description');
 if (serverJson.title !== listing.title) mismatches.push('title');
 if (serverJson.websiteUrl !== listing.website) mismatches.push('websiteUrl');
 if (serverJson.remotes?.[0]?.url !== listing.mcp.endpoint) mismatches.push('remotes[0].url');
@@ -42,6 +42,10 @@ if (serverJson.remotes?.[0]?.type !== listing.mcp.transport) mismatches.push('re
 if (mismatches.length > 0) {
   console.error(`✗ server.json disagrees with distribution/listing.json: ${mismatches.join(', ')}`);
   console.error('  Update server.json to match the canonical copy, or change the copy.');
+  process.exit(1);
+}
+if (serverJson.description.length > 100) {
+  console.error(`✗ server.json description exceeds the MCP Registry limit (100): ${serverJson.description.length}`);
   process.exit(1);
 }
 
