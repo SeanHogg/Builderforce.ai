@@ -578,6 +578,10 @@ tenant-less table is opt-IN, held to three reference tables by a test.
 the ad manager, the LMS player, the boost checkout and the scenario planner live in
 `hired.video/api/src/routes` and BurnRateOS's Prisma models; each is a per-feature port under PRD 18
 and PRD 19 §2's ownership register. The entity layer is the floor those land on, not a substitute.
+Likewise, consolidating video data into `artifact`, `revision` and `rendition` does not reduce the
+hired.video editor to file storage or a generated manifest. PRD 18 T4 ports prompt-driven video
+authoring, capture, timeline/scene editing, audio mixing and export as capabilities of the existing
+Canvas over one editable `video` object — never as a separate Studio domain or destination.
 
 ### Step 6 · Collapse the middle layers onto the same fifteen modules (§6) — ✅ **KERNEL + ROSTER LANDED**
 

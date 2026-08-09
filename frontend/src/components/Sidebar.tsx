@@ -14,6 +14,7 @@ import SessionList from './SessionList';
 import UsageMeter from './UsageMeter';
 import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
+import { BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCatalog';
 
 /**
  * The left panel (PRD 21 §3.2).
@@ -165,6 +166,27 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                 locked={!isAuthenticated && !isStageRoute(pathname)}
               />
             ))}
+          </div>
+          <div className="nav-section nav-domain-section">
+            {!collapsed && <div className="ui-eyebrow nav-section__label">{t('productDomainsLabel')}</div>}
+            {BURNRATE_PRODUCT_DOMAINS.map((domain) => {
+              const active = pathname === domain.marketingHref || pathname.startsWith(`${domain.marketingHref}/`);
+              const label = t(`burnrate.${domain.id}`);
+              return (
+                <Link
+                  key={domain.id}
+                  href={domain.marketingHref}
+                  onClick={onMobileClose}
+                  className={`nav-item ${active ? 'active' : ''} flex items-center`}
+                  aria-current={active ? 'page' : undefined}
+                  data-label={label}
+                >
+                  <span className="nav-item-icon"><Icon source={domain.icon} size="1em" /></span>
+                  <span className="nav-item-label">{label}</span>
+                  {!collapsed && <span className="nav-domain-persona">{domain.persona}</span>}
+                </Link>
+              );
+            })}
           </div>
         </div>
 

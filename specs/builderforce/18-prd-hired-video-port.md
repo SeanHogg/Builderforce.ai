@@ -154,8 +154,10 @@ instead of calling them.
 
 ### 1.3 Canvas: fill the declared kinds
 
-The Creation Canvas keeps its contract. Each ported runtime mounts as the **editor body**
-for a kind that already exists, replacing the manifest-only placeholder:
+The Creation Canvas keeps its contract. **“Studio” is only the name of the hired.video source
+folder; it does not survive as a Builderforce destination, page, panel, project type or product
+area.** Each ported runtime mounts as the **editor body inside the existing Canvas** for a kind
+that already exists, replacing the manifest-only placeholder:
 
 | Canvas kind | hired.video runtime to port | Export path |
 |---|---|---|
@@ -168,6 +170,20 @@ for a kind that already exists, replacing the manifest-only placeholder:
 | `cad` | `CadStage` + `lib/studio/cad/*` | SVG / PDF / DXF |
 | `model3d` | `Cad3DStage` + `cad-3d-edit.ts` (react-three-fiber) | STL / STEP / GLB |
 | — (new) | `WebcamRecorder`, `useScreenRecording`, `useScreenshotCapture` | capture → R2 → widget |
+
+For `video`, AI authoring and direct manipulation operate on the **same Canvas object and the
+same persisted revision**. A person can prompt Brain to create or change a video, record their
+screen or camera, import media, arrange scenes and clips, overlay music/voice/SFX, preview, and
+export without opening another application surface. AI tool calls emit the same typed Canvas
+operations as pointer/keyboard editing; they must not create a parallel “AI video” document or a
+render-only manifest that cannot be edited afterward.
+
+The continuous authoring loop is:
+
+`prompt / capture / import → editable video object → timeline + scene + audio edits → preview → export / publish`
+
+Every step returns to the editable object. Exported renditions are children of that object, not a
+replacement for it.
 
 **Screen capture** is `getDisplayMedia` → `MediaRecorder` → R2 upload → a Video widget on the
 canvas (142 LOC in `use-screen-recording.ts`, 85 in `use-screenshot-capture.ts`, self-gating
@@ -332,13 +348,13 @@ Order by leverage, one runtime per slice, each independently shippable:
 6. `comic` / `interactive_comic`
 7. `cad` + `model3d` — `CadStage`, `Cad3DStage`, DXF/STL/STEP
 
-> **Hard dependency on the navigation architecture.** Each runtime mounts as a **stage mode**,
-> not a page — the Stage bucket goes from 5 routes to ~15. Slice 1 can land against today's
-> canvas, but **Phase 4 of the navigation design (canvas hoisted into the shell behind
-> active-canvas state) must land before slice 3**, or the hoist gets redone once per runtime.
-> The route classifier's Stage bucket becomes mode-aware: `/create/[id]` resolves `mediaKind`
-> to a runtime *inside* the already-mounted stage, so switching from a comic to a CAD model is
-> a state change, not a remount.
+> **Hard dependency on the navigation architecture.** Each runtime mounts as a **Canvas stage
+> mode**, never as a page, panel, “Studio” destination or separately mounted editor. Slice 1 can
+> land against today's canvas, but **Phase 4 of the navigation design (canvas hoisted into the
+> shell behind active-canvas state) must land before slice 3**, or the hoist gets redone once per
+> runtime. `/create/[id]` resolves the object's `mediaKind` to an editor body *inside* the
+> already-mounted Canvas. Switching from a document to a video or from a comic to a CAD model is
+> Canvas state, not navigation and not a remount.
 
 > **ONE display/camera capture primitive, two sinks.** `getDisplayMedia` has two callers the
 > moment both programs land: the live session broadcasts it over WebRTC (`useScreenShare`),
@@ -351,7 +367,9 @@ Order by leverage, one runtime per slice, each independently shippable:
 > — the same argument `useMediaRoom`'s own header makes about a second WebRTC stack.
 
 Per-slice mechanics:
-- Studio components are **leaf React** — they move nearly verbatim under `'use client'`.
+- Components sourced from hired.video's `components/studio` are **leaf React** — they move nearly
+  verbatim under `'use client'`; “Studio” is provenance only and is not used in Builderforce
+  navigation or user-facing copy.
   The work is the shell: React Router → App Router, i18next → next-intl, hired's Tailwind
   tokens → **canvas-palette tokens, not shell tokens**. Each runtime is a stage surface and
   declares its own light + dark ([[canvas-owns-its-palette]]); hoisting the board into the
@@ -550,7 +568,7 @@ kanban; `integrations` → connector platform; `analytics` → `activity_log` + 
 | `pages/tools/*` (21 AI tools incl. `ResumeTailor`, `Career360`, `AIResumeScorer`, `JobResumeMatch`, `SkillExtractor`, `SalaryCalculator`, `CompAnalyzer`, `InterviewQuestions`, `ProfileAudit`, `ValueProposition`, `VideoPitchLab`, …) + `Tools`, `ToolDetail` | 23 | T1 (résumé/JD tools) · T3 (career/salary tools) |
 | Jobs, companies, screening, interviews, references, take-home, sourcing, `pages/recruit/*`, `pages/recruiter/*`, `pages/services/*` (scorecards, screening templates, pitch decks, candidate detail, hiring onboarding) | ~40 | T2 |
 | `AICoach`, `pages/people/*` (7: hub, roster, goals, 1:1s, TCO, team health, surface), `PeopleOperations`, `PersonaSelection`, `People`, `PeopleDetail`, `Outreach`, `WarmIntros` | ~15 | T3 |
-| `pages/studio/*` (8 + `v2`), `EmbeddedStudioProject`, `PlayInvite`, `MarketplaceTemplatePreview` | ~12 | T4 |
+| `pages/studio/*` (8 + `v2`), `EmbeddedStudioProject`, `PlayInvite`, `MarketplaceTemplatePreview` | ~12 | T4 — source surfaces collapse into Canvas kinds and share/embed states; **no Studio destination is created** |
 | `pages/blog/*`, `pages/guides/*` (6), `pages/landing/*` (5), `pages/seo/*` (3), `pages/paid-media/*`, `Feed`, `PostDetail`, `Articles*`, `Events*`, `Companies`, `Competitors`, `SectorLanding`, `SectorsIndex`, `SitemapLocations`, `FeaturedCreators`, `Contributors` | ~30 | T5 |
 | Auth (`Login`, `Signup`, `MagicLinkVerify`, `OAuthCallback`, `ForgotPassword`, `ResetPassword`, `VerifyEmail`, `ConfirmEmail`, `TwoFactorApprove`, `AcceptInvitation`, `ConnectAuthorize`), courses/learning (6), marketplace (2), bookings (3), `pages/admin/*` (31), `Settings`, `pages/settings/Connections`, `Points`, `Rewards`, `AffiliateDashboard`, `AffiliateProgram`, `Checkout`, `Pricing`, `Help`, legal (4), `Security`, `SecuritySessions`, `PhoneDashboard`, `GigMarketplace`, `GigCreatePage`, `GigDetail`, `ServiceInquiries`, `ServicesManagement`, `Wishlist`, `Tasks`, `Search`, `TranscriptSearch`, `PivotExplorer`, `Dashboard`, `Home`/`Index`, `NotFound` | ~85 | T6 |
 

@@ -1,4 +1,6 @@
 /** Shared, transport-neutral Creation Canvas contract used by web and VSIX. */
+export * from './video';
+
 export const CREATION_OBJECT_KINDS = [
   'workflow', 'project', 'website', 'build', 'dashboard', 'chat', 'agent', 'staff', 'evaluation', 'dataset',
   'table', 'spreadsheet', 'chart', 'map', 'report', 'kpi', 'prototype', 'code', 'browser', 'llm', 'voice', 'video',

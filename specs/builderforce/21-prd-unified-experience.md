@@ -28,6 +28,11 @@ Two corollaries that decide most arguments downstream:
    every navigation.
 2. **A seat is a teammate, not a menu.** PRD 20 already assigns every bounded context an owner.
    That owner is a person-shaped thing in the footer, not a nav item in a rail.
+3. **An authoring runtime is a Canvas mode, not a destination.** Video, audio, image, document,
+   animation, game, comic and CAD editors replace the body of the already-mounted Canvas according
+   to the active object's kind. “Studio” is hired.video source provenance only. In particular,
+   prompt-to-video, screen/camera capture, timeline editing, music/voice/SFX mixing, preview and
+   export are one continuous Canvas workflow over one editable object; none opens a separate area.
 
 ---
 

@@ -11,11 +11,6 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  // Turbopack resolves the linked workspace packages below from the monorepo
-  // root. Next requires output tracing and Turbopack to use the same root;
-  // otherwise the Docker dev server fences out ../studio, ../voice, and the
-  // other mounted packages even though Node can resolve their symlinks.
-  outputFileTracingRoot: path.join(__dirname, '..'),
   // Cloudflare Pages (next-on-pages) does not run Next's default image
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.

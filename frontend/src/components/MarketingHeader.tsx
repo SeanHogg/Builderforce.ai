@@ -5,7 +5,8 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
-import { PRODUCT_SECTIONS, RESOURCE_NAV_LINKS } from '@/lib/content';
+import { RESOURCE_NAV_LINKS } from '@/lib/content';
+import { BURNRATE_FOUNDATIONS, BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCatalog';
 import { isNavItemActive } from '@/lib/nav';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { Icon } from '@/components/ui/Icon';
@@ -50,21 +51,27 @@ const isActive = (pathname: string, href: string) =>
 /** The "Product" mega-menu panel — the product capability map (mirrors the
  *  authenticated Sidebar groupings via PRODUCT_SECTIONS). */
 function ProductMenu({ onNavigate }: { onNavigate?: () => void }) {
+  const t = useTranslations('burnrateMarketing');
   return (
     <div className="mh-mega">
-      {PRODUCT_SECTIONS.map((section) => (
-        <div key={section.id} className="mh-mega-col">
-          <Link href={`/product#${section.id}`} className="mh-mega-head" onClick={onNavigate}>
-            <Icon source={section.icon} size={17} /> {section.title}
+      <div className="mh-mega-col mh-mega-col--domains">
+        <Link href="/features" className="mh-mega-head" onClick={onNavigate}>{t('index.domains')}</Link>
+        {BURNRATE_PRODUCT_DOMAINS.map((domain) => (
+          <Link key={domain.id} href={domain.marketingHref} className="mh-mega-link" onClick={onNavigate}>
+            <span className="mh-mega-link-icon" aria-hidden="true"><Icon source={domain.icon} size={18} /></span>
+            <span><strong>{t(`domains.${domain.id}.title`)}</strong><small>{t(`domains.${domain.id}.tagline`)}</small></span>
           </Link>
-          {section.surfaces.map((s) => (
-            <Link key={s.title} href={s.href} className="mh-mega-link" onClick={onNavigate}>
-              <span className="mh-mega-link-icon" aria-hidden="true"><Icon source={s.icon} size={18} /></span>
-              <span>{s.title}</span>
-            </Link>
-          ))}
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="mh-mega-col">
+        <Link href="/features" className="mh-mega-head" onClick={onNavigate}>{t('index.foundations')}</Link>
+        {BURNRATE_FOUNDATIONS.map((domain) => (
+          <Link key={domain.id} href={domain.marketingHref} className="mh-mega-link" onClick={onNavigate}>
+            <span className="mh-mega-link-icon" aria-hidden="true"><Icon source={domain.icon} size={18} /></span>
+            <span><strong>{t(`domains.${domain.id}.title`)}</strong><small>{t(`domains.${domain.id}.tagline`)}</small></span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -73,6 +80,7 @@ export default function MarketingHeader() {
   const pathname = usePathname() || '';
   const { open, openNav, closeNav } = useMobileNav();
   const t = useTranslations('marketingNav');
+  const tb = useTranslations('burnrateMarketing');
   // Sign In / Get Started are the SAME offer the operator shell's TopBar makes to
   // a signed-out visitor, so the copy lives in `common.*` once rather than twice.
   const tc = useTranslations('common');
@@ -148,9 +156,14 @@ export default function MarketingHeader() {
 
         <div className="mh-drawer-group">
           <div className="mh-drawer-group-label">{t('product')}</div>
-          {PRODUCT_SECTIONS.map((section) => (
-            <Link key={section.id} href={`/product#${section.id}`} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>
-              <Icon source={section.icon} size={17} /> {section.title}
+          {BURNRATE_PRODUCT_DOMAINS.map((domain) => (
+            <Link key={domain.id} href={domain.marketingHref} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>
+              <Icon source={domain.icon} size={17} /> {tb(`domains.${domain.id}.title`)}
+            </Link>
+          ))}
+          {BURNRATE_FOUNDATIONS.map((domain) => (
+            <Link key={domain.id} href={domain.marketingHref} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>
+              <Icon source={domain.icon} size={17} /> {tb(`domains.${domain.id}.title`)}
             </Link>
           ))}
         </div>
