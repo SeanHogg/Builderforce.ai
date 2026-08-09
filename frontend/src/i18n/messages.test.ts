@@ -9,21 +9,30 @@ import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES } from '@/lib/builderforceApi';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 import {
-  PUBLIC_NAV,
+  FOOTER_COLUMNS,
+  LEARN_COLUMNS,
   NAV_GROUPS,
   FOR_HIRE_NAV_GROUPS,
   FREELANCER_NAV_GROUPS,
+  PRODUCT_COLUMNS,
+  PUBLIC_DESTINATIONS,
   SALES_NAV_GROUPS,
-  REFERENCE_DESTINATIONS,
+  STAGES,
   bottomNavFor,
+  destTaglineKey,
+  destTitleKey,
 } from '@/lib/navGroups';
 import { FAMILIES, FAMILY_IDS } from '@/lib/marketplaceFamilies';
-import { FOOTER_COLUMNS, RESOURCE_NAV_LINKS } from '@/lib/content';
+
 import { listWidgets } from '@/lib/widgets/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
 import { DELIVERY_PANELS } from '@/components/insights/deliveryPanels';
 import { DEVEX_PANELS } from '@/components/insights/devexPanels';
 import { FINANCE_PANELS } from '@/components/insights/finance/financePanels';
+
+/** Both mega-menus' columns — every one needs a heading, every row in one needs
+ *  a tagline. */
+const MENU_COLUMNS = [...PRODUCT_COLUMNS, ...LEARN_COLUMNS];
 
 /**
  * Catalog guard for the five message files.
@@ -157,21 +166,27 @@ describe('message catalogs', () => {
       ...FINANCE_PANELS.flatMap((panel) => [`insights.${panel.titleKey}`, `insights.${panel.subtitleKey}`]),
     ];
     const keys = new Set([
-      ...PUBLIC_NAV.map(({ labelKey }) => `marketingNav.${labelKey}`),
-      ...RESOURCE_NAV_LINKS.map(({ marketingLabelKey }) => `marketingNav.${marketingLabelKey}`),
+      // Every public destination's title, and a tagline for the ones a mega-menu
+      // column renders. This is the assertion that would have caught the Learn
+      // menu shipping without one.
+      ...PUBLIC_DESTINATIONS.map((entry) => destTitleKey(entry)),
+      ...PUBLIC_DESTINATIONS.filter((entry) => MENU_COLUMNS.includes(entry.placement as never)).map(destTaglineKey),
+      ...MENU_COLUMNS.map((column) => `marketingNav.column.${column}`),
+      ...PUBLIC_DESTINATIONS.flatMap((entry) =>
+        (entry.sections ?? []).map((section) => `referencePanel.section.${section.labelKey}`)),
+      'marketingNav.megaFoot',
+      'marketingNav.megaFootLearn',
+      // `referencePanel.crumb` is deliberately absent: it takes a `{seat}`
+      // argument, and this list formats with none. The every-message-formats
+      // test below covers it, deriving arguments from the message itself.
       ...navGroups.flatMap((group) => [
         `nav.${group.labelKey}`,
         ...(group.tabs ?? []).map((tab) => `nav.${tab.labelKey}`),
       ]),
       ...bottomNav.map(({ labelKey }) => `nav.${labelKey}`),
-      ...REFERENCE_DESTINATIONS.flatMap(({ copyId }) => [
-        `burnrateMarketing.domains.${copyId}.title`,
-        `burnrateMarketing.domains.${copyId}.tagline`,
-      ]),
-      ...FOOTER_COLUMNS.flatMap((column) => [
-        `footer.${column.titleKey}`,
-        ...column.links.map(({ labelKey }) => `footer.${labelKey}`),
-      ]),
+      ...STAGES.flatMap((stage) => [`nav.stage.${stage}`, `featuresPage.arcQuestion.${stage}`]),
+      ...['domains', 'seats', 'destinations', 'features'].map((stat) => `featuresPage.stat.${stat}`),
+      ...FOOTER_COLUMNS.map((column) => `footer.${column.titleKey}`),
       ...familyKeys,
       ...listWidgets().flatMap(({ titleKey, group }) => [`widgets.title.${titleKey}`, `widgets.group.${group}`]),
       ...panelKeys,

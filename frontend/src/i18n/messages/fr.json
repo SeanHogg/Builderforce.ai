@@ -8201,8 +8201,8 @@
     }
   },
   "marketplace": {
-    "title": "Talents et main-d'œuvre",
-    "blurb": "Recrutez des freelances et des agents IA, installez des personas, des compétences et du contenu, et routez n'importe quel modèle — le tout depuis une seule marketplace.",
+    "title": "Place de marché",
+    "blurb": "Recrutez des personnes et des agents, achetez ce que d’autres ont créé, et trouvez — ou revendiquez — une entreprise.",
     "searchPlaceholder": "Rechercher dans la marketplace...",
     "categoryLabel": "Catégorie",
     "cat": {
@@ -12479,26 +12479,83 @@
     "primaryNav": "Principale",
     "home": "Accueil",
     "product": "Produit",
-    "resources": "Ressources",
     "learn": "Apprendre",
-    "tutorials": "Tutoriels",
-    "talentWorkforce": "Talents / Main-d’œuvre",
-    "agents": "Agents",
-    "models": "Modèles",
-    "pricing": "Tarifs",
-    "about": "À propos",
-    "blog": "Blog",
-    "diagnosticsTools": "Diagnostics et outils",
-    "soc2Audits": "SOC 2 et audits système",
-    "promptLibrary": "Bibliothèque de prompts",
-    "compare": "Comparer",
-    "integrations": "Intégrations",
-    "mediaKit": "Kit média",
     "toggleMenu": "Basculer le menu",
     "switchToLight": "Passer au mode clair",
     "switchToDark": "Passer au mode sombre",
     "openCanvas": "Ouvrir le canevas →",
-    "features": "Fonctionnalités"
+    "column": {
+      "idea": "Idée",
+      "make": "Créer",
+      "run": "Piloter",
+      "read": "Lire",
+      "prove": "Prouver",
+      "buildWith": "Construire avec"
+    },
+    "megaFoot": "Hors connexion, chaque élément ici est une vraie page avec une vraie URL. Connecté, la même route s’ouvre par-dessus votre tableau — votre session continue.",
+    "megaFootLearn": "Lisez où vous voulez. Les pages de preuve — diagnostics, SOC 2, Evermind — s’ouvrent par-dessus votre tableau : répondez à un auditeur sans fermer ce que vous construisiez.",
+    "dest": {
+      "canvas": {
+        "title": "Canevas",
+        "tagline": "Un tableau, du prompt au produit."
+      },
+      "blog": {
+        "title": "Blog",
+        "tagline": "Comment le produit se construit."
+      },
+      "tutorials": {
+        "title": "Tutoriels",
+        "tagline": "Des cours qui se terminent sur un tableau qui marche."
+      },
+      "compare": {
+        "title": "Comparer",
+        "tagline": "Face aux outils que vous utilisez aujourd’hui."
+      },
+      "diagnostics": {
+        "title": "Diagnostics",
+        "tagline": "Un résultat avant de créer un compte."
+      },
+      "soc2": {
+        "title": "SOC 2",
+        "tagline": "Contrôles, preuves et sous-traitants."
+      },
+      "evermind": {
+        "title": "Evermind",
+        "tagline": "Le modèle derrière les agents."
+      },
+      "models": {
+        "title": "Modèles",
+        "tagline": "Ce qui tourne, et ce que ça coûte."
+      },
+      "prompts": {
+        "title": "Prompts et compétences",
+        "tagline": "Réutilisables, et à vous."
+      },
+      "features": {
+        "title": "Fonctionnalités"
+      },
+      "marketplace": {
+        "title": "Place de marché"
+      },
+      "pricing": {
+        "title": "Tarifs"
+      },
+      "about": {
+        "title": "À propos"
+      },
+      "demo": {
+        "title": "Démo en direct"
+      },
+      "sell": {
+        "title": "Vendre Builderforce"
+      },
+      "media": {
+        "title": "Kit média"
+      },
+      "signIn": {
+        "title": "Se connecter"
+      }
+    }
   },
   "tutorials": {
     "seo": {
@@ -12677,24 +12734,6 @@
     "colPlatform": "Plateforme",
     "colGetStarted": "Commencer",
     "colLearn": "Apprendre",
-    "linkProduct": "Produit",
-    "linkCompare": "Comparer",
-    "linkPricing": "Tarifs",
-    "linkAbout": "À propos",
-    "linkMediaKit": "Kit média",
-    "linkTutorials": "Tutoriels",
-    "linkPromptLibrary": "Bibliothèque de prompts",
-    "linkIntegrations": "Intégrations",
-    "linkSellBuilderforce": "Vendre Builderforce",
-    "linkEvermind": "Evermind LLM",
-    "linkWorkforceRegistry": "Registre de main-d’œuvre",
-    "linkAgents": "BuilderForce Agents",
-    "linkDiagnostics": "Diagnostics et outils",
-    "linkSoc2": "SOC 2 et audits système",
-    "linkBlog": "Blog",
-    "linkLiveDemo": "Démo en direct",
-    "linkSignIn": "Se connecter",
-    "linkGetStarted": "Commencer",
     "cookies": "Cookies",
     "subprocessors": "Sous-traitants",
     "accessibility": "Accessibilité"
@@ -16191,5 +16230,16 @@
     "closeTitle": "Prêt à remplacer la pile ?",
     "closeLede": "Une plateforme au lieu de cinq, et un menu au lieu de sept. Commencez sur le canevas ; revendiquez votre entreprise quand vous en aurez une.",
     "closeFine": "Sans carte bancaire · votre canevas est à vous avant l’inscription · évoluez quand vous voulez"
+  },
+  "referencePanel": {
+    "crumb": "{seat} · Référence",
+    "section": {
+      "label": "Sur cette page",
+      "report": "Votre rapport",
+      "criteria": "Contrôles",
+      "how": "Comment ça marche",
+      "audits": "Autres audits",
+      "faq": "Questions"
+    }
   }
 }

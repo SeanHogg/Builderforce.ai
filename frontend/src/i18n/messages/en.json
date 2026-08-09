@@ -8202,8 +8202,8 @@
     }
   },
   "marketplace": {
-    "title": "Talent & Workforce",
-    "blurb": "Hire freelancers and AI agents, install personas, skills and content, and route any model — all from one marketplace.",
+    "title": "Marketplace",
+    "blurb": "Hire people and agents, buy what builders made, and find — or claim — a company.",
     "searchPlaceholder": "Search marketplace...",
     "categoryLabel": "Category",
     "cat": {
@@ -12480,26 +12480,83 @@
     "primaryNav": "Primary",
     "home": "Home",
     "product": "Product",
-    "resources": "Resources",
     "learn": "Learn",
-    "tutorials": "Tutorials",
-    "talentWorkforce": "Talent / Workforce",
-    "agents": "Agents",
-    "models": "Models",
-    "pricing": "Pricing",
-    "about": "About",
-    "blog": "Blog",
-    "diagnosticsTools": "Diagnostics & Tools",
-    "soc2Audits": "SOC 2 & System Audits",
-    "promptLibrary": "Prompt Library",
-    "compare": "Compare",
-    "integrations": "Integrations",
-    "mediaKit": "Media Kit",
     "toggleMenu": "Toggle menu",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
     "openCanvas": "Open the canvas →",
-    "features": "Features"
+    "column": {
+      "idea": "Idea",
+      "make": "Make",
+      "run": "Run",
+      "read": "Read",
+      "prove": "Prove",
+      "buildWith": "Build with"
+    },
+    "megaFoot": "Signed out, every item here is a real page with a real URL. Signed in, the same route opens over your board — your session keeps running.",
+    "megaFootLearn": "Read anywhere. The evidence pages — diagnostics, SOC 2, Evermind — open over your board, so you can answer an auditor without closing what you were building.",
+    "dest": {
+      "canvas": {
+        "title": "Canvas",
+        "tagline": "One board, from prompt to product."
+      },
+      "blog": {
+        "title": "Blog",
+        "tagline": "How the product gets built."
+      },
+      "tutorials": {
+        "title": "Tutorials",
+        "tagline": "Courses that end on a working board."
+      },
+      "compare": {
+        "title": "Compare",
+        "tagline": "Against the tools you use now."
+      },
+      "diagnostics": {
+        "title": "Diagnostics",
+        "tagline": "A result before you sign up."
+      },
+      "soc2": {
+        "title": "SOC 2",
+        "tagline": "Controls, evidence and subprocessors."
+      },
+      "evermind": {
+        "title": "Evermind",
+        "tagline": "The model behind the agents."
+      },
+      "models": {
+        "title": "Models",
+        "tagline": "What runs, and what it costs."
+      },
+      "prompts": {
+        "title": "Prompts & skills",
+        "tagline": "Reusable, and yours."
+      },
+      "features": {
+        "title": "Features"
+      },
+      "marketplace": {
+        "title": "Marketplace"
+      },
+      "pricing": {
+        "title": "Pricing"
+      },
+      "about": {
+        "title": "About"
+      },
+      "demo": {
+        "title": "Live demo"
+      },
+      "sell": {
+        "title": "Sell Builderforce"
+      },
+      "media": {
+        "title": "Media kit"
+      },
+      "signIn": {
+        "title": "Sign in"
+      }
+    }
   },
   "tutorials": {
     "seo": {
@@ -12678,24 +12735,6 @@
     "colPlatform": "Platform",
     "colGetStarted": "Get started",
     "colLearn": "Learn",
-    "linkProduct": "Product",
-    "linkCompare": "Compare",
-    "linkPricing": "Pricing",
-    "linkAbout": "About",
-    "linkMediaKit": "Media Kit",
-    "linkTutorials": "Tutorials",
-    "linkPromptLibrary": "Prompt Library",
-    "linkIntegrations": "Integrations",
-    "linkSellBuilderforce": "Sell Builderforce",
-    "linkEvermind": "Evermind LLM",
-    "linkWorkforceRegistry": "Workforce Registry",
-    "linkAgents": "BuilderForce Agents",
-    "linkDiagnostics": "Diagnostics & Tools",
-    "linkSoc2": "SOC 2 & System Audits",
-    "linkBlog": "Blog",
-    "linkLiveDemo": "Live Demo",
-    "linkSignIn": "Sign In",
-    "linkGetStarted": "Get Started",
     "cookies": "Cookies",
     "subprocessors": "Subprocessors",
     "accessibility": "Accessibility"
@@ -16192,5 +16231,16 @@
     "closeTitle": "Ready to replace the stack?",
     "closeLede": "One platform instead of five, and one menu instead of seven. Start on the canvas; claim your company when you have one.",
     "closeFine": "No credit card · your board is yours before you sign up · upgrade whenever"
+  },
+  "referencePanel": {
+    "crumb": "{seat} · Reference",
+    "section": {
+      "label": "On this page",
+      "report": "Your report",
+      "criteria": "Controls",
+      "how": "How it works",
+      "audits": "Other audits",
+      "faq": "Questions"
+    }
   }
 }

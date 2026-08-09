@@ -8201,8 +8201,8 @@
     }
   },
   "marketplace": {
-    "title": "人才与智能团队",
-    "blurb": "雇用自由职业者和 AI 智能体，安装人设、技能和内容，并路由任意模型 — 一切尽在一个市场。",
+    "title": "市场",
+    "blurb": "雇佣真人与智能体，购买构建者的作品，并找到——或认领——一家公司。",
     "searchPlaceholder": "搜索市场…",
     "categoryLabel": "分类",
     "cat": {
@@ -12479,26 +12479,83 @@
     "primaryNav": "主导航",
     "home": "首页",
     "product": "产品",
-    "resources": "资源",
     "learn": "学习",
-    "tutorials": "教程",
-    "talentWorkforce": "人才 / 智能劳动力",
-    "agents": "智能体",
-    "models": "模型",
-    "pricing": "定价",
-    "about": "关于我们",
-    "blog": "博客",
-    "diagnosticsTools": "诊断与工具",
-    "soc2Audits": "SOC 2 与系统审计",
-    "promptLibrary": "提示词库",
-    "compare": "对比",
-    "integrations": "集成",
-    "mediaKit": "媒体资料包",
     "toggleMenu": "切换菜单",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
     "openCanvas": "打开画布 →",
-    "features": "功能"
+    "column": {
+      "idea": "构思",
+      "make": "构建",
+      "run": "运营",
+      "read": "阅读",
+      "prove": "验证",
+      "buildWith": "搭配构建"
+    },
+    "megaFoot": "未登录时，此处每一项都是拥有真实网址的真实页面；登录后，同一路由会在你的画板之上打开——你的会话不会中断。",
+    "megaFootLearn": "随处可读。诊断、SOC 2 与 Evermind 等佐证页面会在你的画板之上打开，让你无需关闭正在构建的内容即可答复审计方。",
+    "dest": {
+      "canvas": {
+        "title": "画板",
+        "tagline": "一块画板，从提示词到产品。"
+      },
+      "blog": {
+        "title": "博客",
+        "tagline": "产品是如何构建出来的。"
+      },
+      "tutorials": {
+        "title": "教程",
+        "tagline": "以可用画板收尾的课程。"
+      },
+      "compare": {
+        "title": "对比",
+        "tagline": "与你现在使用的工具对比。"
+      },
+      "diagnostics": {
+        "title": "诊断",
+        "tagline": "注册之前先拿到结果。"
+      },
+      "soc2": {
+        "title": "SOC 2",
+        "tagline": "控制项、证据与分包处理方。"
+      },
+      "evermind": {
+        "title": "Evermind",
+        "tagline": "智能体背后的模型。"
+      },
+      "models": {
+        "title": "模型",
+        "tagline": "运行的是什么，成本是多少。"
+      },
+      "prompts": {
+        "title": "提示词与技能",
+        "tagline": "可复用，且归你所有。"
+      },
+      "features": {
+        "title": "功能"
+      },
+      "marketplace": {
+        "title": "市场"
+      },
+      "pricing": {
+        "title": "定价"
+      },
+      "about": {
+        "title": "关于"
+      },
+      "demo": {
+        "title": "在线演示"
+      },
+      "sell": {
+        "title": "销售 Builderforce"
+      },
+      "media": {
+        "title": "媒体资料包"
+      },
+      "signIn": {
+        "title": "登录"
+      }
+    }
   },
   "tutorials": {
     "seo": {
@@ -12677,24 +12734,6 @@
     "colPlatform": "平台",
     "colGetStarted": "开始使用",
     "colLearn": "学习",
-    "linkProduct": "产品",
-    "linkCompare": "对比",
-    "linkPricing": "价格",
-    "linkAbout": "关于我们",
-    "linkMediaKit": "媒体资料包",
-    "linkTutorials": "教程",
-    "linkPromptLibrary": "提示词库",
-    "linkIntegrations": "集成",
-    "linkSellBuilderforce": "销售 Builderforce",
-    "linkEvermind": "Evermind LLM",
-    "linkWorkforceRegistry": "工作力注册表",
-    "linkAgents": "BuilderForce Agents",
-    "linkDiagnostics": "诊断与工具",
-    "linkSoc2": "SOC 2 与系统审计",
-    "linkBlog": "博客",
-    "linkLiveDemo": "实时演示",
-    "linkSignIn": "登录",
-    "linkGetStarted": "开始使用",
     "cookies": "Cookie 设置",
     "subprocessors": "子处理方",
     "accessibility": "无障碍访问"
@@ -16191,5 +16230,16 @@
     "closeTitle": "准备好替换整套工具了吗？",
     "closeLede": "用一个平台取代五个，用一份菜单取代七份。先从画布开始；等你有了公司，再认领它。",
     "closeFine": "无需信用卡 · 注册之前画布就属于你 · 随时升级"
+  },
+  "referencePanel": {
+    "crumb": "{seat} · 参考",
+    "section": {
+      "label": "本页内容",
+      "report": "你的报告",
+      "criteria": "控制项",
+      "how": "运作方式",
+      "audits": "其他审计",
+      "faq": "常见问题"
+    }
   }
 }

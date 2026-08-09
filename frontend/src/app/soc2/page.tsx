@@ -113,8 +113,11 @@ export default async function Soc2Page() {
           </div>
         </section>
 
-        {/* Audit visual */}
-        <section className="s2-section" style={{ paddingTop: 0 }}>
+        {/* Audit visual. The `id`s from here down are the panel's index rail
+            (PRD 21 §11.4.5) — declared on the registry row and asserted by
+            `check-destinations`, so renaming one here fails the build rather
+            than quietly emptying the rail. */}
+        <section id="report" className="s2-section" style={{ paddingTop: 0 }}>
           <div className="s2-wrap">
             <h2 className="s2-section-title">{t('soc2.visualSection.title')}</h2>
             <p className="s2-section-sub">{t('soc2.visualSection.sub')}</p>
@@ -123,7 +126,7 @@ export default async function Soc2Page() {
         </section>
 
         {/* What it checks — CC1–CC9 */}
-        <section className="s2-section">
+        <section id="criteria" className="s2-section">
           <div className="s2-wrap">
             <h2 className="s2-section-title">{t('soc2.criteria.title')}</h2>
             <p className="s2-section-sub">{t('soc2.criteria.sub')}</p>
@@ -139,7 +142,7 @@ export default async function Soc2Page() {
         </section>
 
         {/* How it works */}
-        <section className="s2-section">
+        <section id="how" className="s2-section">
           <div className="s2-wrap">
             <h2 className="s2-section-title">{t('soc2.how.title')}</h2>
             <p className="s2-section-sub">{t('soc2.how.sub')}</p>
@@ -156,7 +159,7 @@ export default async function Soc2Page() {
         </section>
 
         {/* System audits family */}
-        <section className="s2-section">
+        <section id="audits" className="s2-section">
           <div className="s2-wrap">
             <h2 className="s2-section-title">{t('soc2.family.title')}</h2>
             <p className="s2-section-sub">{t('soc2.family.sub')}</p>
@@ -173,7 +176,7 @@ export default async function Soc2Page() {
         </section>
 
         {/* FAQ */}
-        <section className="s2-section">
+        <section id="faq" className="s2-section">
           <div className="s2-wrap">
             <h2 className="s2-section-title">{t('soc2.faqTitle')}</h2>
             <div className="s2-faq" style={{ marginTop: 24 }}>

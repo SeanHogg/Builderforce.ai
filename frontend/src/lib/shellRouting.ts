@@ -4,6 +4,8 @@
  * provider tree; consumed by ConditionalAppShell.
  */
 
+import { PANEL_SURFACES } from './navGroups';
+
 /**
  * Standalone auth-flow screens. They render their own card UI and own their auth
  * handling (sign in, sign up, editor activation), so they must mount for LOGGED-OUT
@@ -26,7 +28,7 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
  * authed page gets correct chrome without being added to a list [1557]. Keep
  * this list current as marketing/public routes are added.
  */
-const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/integrations', '/diagnostics', '/tools', '/evermind', '/soc2', '/media', '/sell-builderforce', '/book-demo', '/demo', '/crm/phone'];
+const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/crm/phone'];
 
 /**
  * Routes an ANONYMOUS visitor gets the OPERATOR shell for, not marketing chrome.
@@ -88,6 +90,10 @@ export function classifyShell(pathname: string): ShellKind {
   if (NO_CHROME_PREFIXES.some((p) => pathname.startsWith(p))) return 'none';
   if (FOOTER_ONLY_PATHS.includes(pathname)) return 'footer';
   if (pathname === '/') return 'public';
+  // A reference surface is public BY DEFINITION — that is the half of §11.4.5
+  // that makes the other half cheap. Reading it off the registry rather than
+  // off a second prefix list is what stops the two from disagreeing.
+  if (isReferenceSurface(pathname)) return 'public';
   if (PUBLIC_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'public';
   return 'app';
 }
@@ -122,25 +128,15 @@ export function rendersAppShell(pathname: string, isAuthenticated: boolean): boo
  *   signed in  → the same route inside `ShellPanel`, over a board that stays
  *                mounted. Esc puts you back with the turn still running.
  *
- * Declared as the registry's `marketingHref` values plus the two standalone
- * reference routes, so adding a domain page cannot forget to add it here.
+ * DERIVED from the registry's `panel: true` rows rather than retyped here. It
+ * was retyped here, and the copy drifted immediately: `/features` and the nine
+ * domain pages were reference surfaces in this file but absent from
+ * `PUBLIC_SHELL_PREFIXES` below, so `classifyShell` called them app routes and a
+ * signed-OUT visitor got the "This is part of Builderforce.ai" teaser instead of
+ * the page. The whole public product map — every domain explainer and the
+ * features index — was unreachable and unindexable. One list cannot disagree
+ * with itself.
  */
-const REFERENCE_SURFACES: string[] = [
-  '/product-management',
-  '/business-intelligence',
-  '/survival-focused-agile',
-  '/sales-revenue',
-  '/customer-engagement',
-  '/investor-intelligence',
-  '/operational-cadence',
-  '/governance-security',
-  '/marketing-growth',
-  '/companies-contacts',
-  '/features',
-  '/integrations',
-  '/soc2',
-];
-
 export function isReferenceSurface(pathname: string): boolean {
-  return REFERENCE_SURFACES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return PANEL_SURFACES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

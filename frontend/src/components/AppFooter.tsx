@@ -7,7 +7,9 @@ import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
 import { openProductUpdates } from '@/lib/productUpdates';
-import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
+import { BRAND, STATS } from '@/lib/content';
+import { destTitleKey, footerColumns } from '@/lib/navGroups';
+import { seatHueVar } from '@/lib/seats';
 
 /**
  * The single canonical site footer.
@@ -26,6 +28,9 @@ import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
 export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | 'full' }) {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
   const t = useTranslations('footer');
+  // Column titles are the footer's own copy; the LINK labels are the
+  // destination's, wherever the registry keeps it. Same rule as the header.
+  const tRoot = useTranslations();
   const [modalType, setModalType] = useState<LegalModalType | null>(null);
 
   // Version + legal strip. Rendered under the copyright credit in the marketing
@@ -89,14 +94,24 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
               {versionStrip}
             </div>
 
+            {/* Four projections of the destination registry, not a fifth list.
+                It WAS a fifth list, and it showed: the storefront was "Workforce
+                Registry" here and "Marketplace" everywhere else, and the column
+                still offered an `/agents` destination that had been folded into
+                it. A footer link now cannot name a place the product does not. */}
             <nav className="global-footer-cols" aria-label={t('navLabel')}>
-              {FOOTER_COLUMNS.map((col) => (
+              {footerColumns().map((col) => (
                 <div key={col.titleKey} className="global-footer-col">
                   <h3>{t(col.titleKey)}</h3>
                   <ul>
                     {col.links.map((l) => (
-                      <li key={l.href}>
-                        <Link href={l.href}>{t(l.labelKey)}</Link>
+                      <li key={l.id}>
+                        <Link
+                          href={l.marketingHref}
+                          style={{ '--seat': `var(${seatHueVar(l.seat)})` } as React.CSSProperties}
+                        >
+                          {tRoot(destTitleKey(l))}
+                        </Link>
                       </li>
                     ))}
                   </ul>

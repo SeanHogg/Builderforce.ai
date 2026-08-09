@@ -568,13 +568,9 @@ export default function MarketplacePageClient() {
     // shared 1100px `.page-inner` cap and runs to 100% of the shell width.
     <div className="page-inner" style={{ maxWidth: '100%' }}>
       <div className="mp-head">
-        <div>
-          <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
-            {tm('title')}
-          </h1>
-          <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', maxWidth: 520, margin: 0 }}>
-            {tm('blurb')}
-          </p>
+        <div className="mp-head__copy">
+          <h1 className="mp-title">{tm('title')}</h1>
+          <p className="mp-blurb">{tm('blurb')}</p>
         </div>
         {/* `publish` was never a category — it is the verb. Its label AND the
             flow it runs are derived from the active family, so the button can
@@ -589,6 +585,36 @@ export default function MarketplacePageClient() {
         >
           {tf(activeFamily.publishKey)}
         </button>
+      </div>
+
+
+      {/* The families are the marketplace's PRIMARY control, so they sit with
+          the title rather than inside the filter bar. What you are shopping for
+          is not a filter on a result set — it decides the vocabulary, the cards,
+          the publish flow and the colour of everything below. The kinds under
+          them are the filter. */}
+      <div className="mp-switch">
+        <div className="mp-families" role="group" aria-label={tf('label')}>
+          {FAMILY_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => selectFamily(id)}
+              className="mp-family"
+              aria-pressed={family === id}
+              style={{ '--seat': `var(${FAMILIES[id].hueVar})` } as React.CSSProperties}
+            >
+              {tf(FAMILIES[id].labelKey)}
+            </button>
+          ))}
+        </div>
+        <div className="mp-kinds" role="group" aria-label={tf('kindLabel')} style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}>
+          {activeFamily.kinds.map((k) => (
+            <button key={k} type="button" className="mp-kind" aria-pressed={kind === k} onClick={() => selectFamily(family, k)}>
+              {tf(`kind.${k}`)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Knowledge listings (SOPs/processes/docs published for sale). Public
@@ -632,30 +658,6 @@ export default function MarketplacePageClient() {
           }}
           aria-label={searchPlaceholder}
         />
-        {/* Four families, and the kinds inside the active one. The old bar mixed
-            what-is-sold with who-sells-it with a verb; this is the vocabulary
-            from `lib/marketplaceFamilies.ts`, and it is the only one. */}
-        <div className="mp-families" role="group" aria-label={tf('label')}>
-          {FAMILY_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => selectFamily(id)}
-              className="mp-family"
-              aria-pressed={family === id}
-              style={{ '--seat': `var(${FAMILIES[id].hueVar})` } as React.CSSProperties}
-            >
-              {tf(FAMILIES[id].labelKey)}
-            </button>
-          ))}
-        </div>
-        <div className="mp-kinds" role="group" aria-label={tf('kindLabel')} style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}>
-          {activeFamily.kinds.map((k) => (
-            <button key={k} type="button" className="mp-kind" aria-pressed={kind === k} onClick={() => selectFamily(family, k)}>
-              {tf(`kind.${k}`)}
-            </button>
-          ))}
-        </div>
         {/* Talent-only sub-filters (discipline + sort) mirror the retired /talent page. */}
         {category === 'talent' && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>

@@ -141,11 +141,11 @@ describe('a reference page is a panel when you are signed in', () => {
 
 describe('the public header has no second Home and no signup wall', () => {
   it('omits a Home row — the logo is home', () => {
-    expect(PUBLIC_NAV.map((l) => l.href)).not.toContain('/');
+    expect(PUBLIC_NAV.map((l) => l.marketingHref)).not.toContain('/');
   });
 
   it('routes the storefront through one entry rather than four', () => {
-    const hrefs = PUBLIC_NAV.map((l) => l.href);
+    const hrefs = PUBLIC_NAV.map((l) => l.marketingHref);
     expect(hrefs).toContain('/marketplace');
     // Agents, models and talent are FAMILIES of the storefront, not destinations.
     expect(hrefs).not.toContain('/agents');

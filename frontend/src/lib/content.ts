@@ -1562,71 +1562,14 @@ export const WORKFLOW_PROOF_DEMOS: readonly WorkflowProofDemo[] = [
  *  that AppFooter resolves to the visible label. Brand names (e.g. "Evermind
  *  LLM", "BuilderForce Agents") still map to a key so the catalog stays the
  *  single source, even where the translation is the brand token itself. */
-export interface FooterLink {
-  href: string;
-  labelKey: string;
-}
-
-export interface FooterColumn {
-  /** i18n key under the `footer` namespace for the column heading. */
-  titleKey: string;
-  links: FooterLink[];
-}
-
-/** A resource destination shared by the marketing-header menu and footer. */
-export interface ResourceNavLink extends FooterLink {
-  /** i18n key under the `marketingNav` namespace. */
-  marketingLabelKey: string;
-}
-
-export const RESOURCE_NAV_LINKS: ResourceNavLink[] = [
-  { href: '/tutorials', marketingLabelKey: 'tutorials', labelKey: 'linkTutorials' },
-  { href: '/blog', marketingLabelKey: 'blog', labelKey: 'linkBlog' },
-  { href: '/tools', marketingLabelKey: 'diagnosticsTools', labelKey: 'linkDiagnostics' },
-  { href: '/soc2', marketingLabelKey: 'soc2Audits', labelKey: 'linkSoc2' },
-  { href: '/prompts', marketingLabelKey: 'promptLibrary', labelKey: 'linkPromptLibrary' },
-  { href: '/compare', marketingLabelKey: 'compare', labelKey: 'linkCompare' },
-  { href: '/integrations', marketingLabelKey: 'integrations', labelKey: 'linkIntegrations' },
-  { href: '/media', marketingLabelKey: 'mediaKit', labelKey: 'linkMediaKit' },
-];
-
-/**
- * Grouped footer navigation, rendered as columns on desktop and collapsed to
- * stacked sections on mobile. `Home` is reached via the footer brand mark, so it
- * is intentionally omitted from the columns. Labels/titles are i18n keys (see
- * the `footer` namespace) resolved in AppFooter — never hardcoded strings.
+/*
+ * The footer's columns and the Learn menu's rows used to live here as
+ * `FOOTER_COLUMNS` / `RESOURCE_NAV_LINKS` — the eighth and ninth arrays in the
+ * repo declaring a navigable destination. They are `PUBLIC_DESTINATIONS` in
+ * `lib/navGroups.ts` now, with the footer as a projection of it, because two
+ * lists is how the storefront came to be called "Workforce Registry" in the
+ * footer and "Marketplace" everywhere else.
  */
-export const FOOTER_COLUMNS: FooterColumn[] = [
-  {
-    titleKey: 'colProduct',
-    links: [
-      { href: '/product', labelKey: 'linkProduct' },
-      { href: '/pricing', labelKey: 'linkPricing' },
-      { href: '/about', labelKey: 'linkAbout' },
-    ],
-  },
-  {
-    titleKey: 'colPlatform',
-    links: [
-      { href: '/evermind', labelKey: 'linkEvermind' },
-      { href: '/marketplace', labelKey: 'linkWorkforceRegistry' },
-      { href: '/agents', labelKey: 'linkAgents' },
-    ],
-  },
-  {
-    titleKey: 'colGetStarted',
-    links: [
-      { href: '/demo', labelKey: 'linkLiveDemo' },
-      { href: '/sell-builderforce', labelKey: 'linkSellBuilderforce' },
-      { href: '/login', labelKey: 'linkSignIn' },
-      { href: '/register', labelKey: 'linkGetStarted' },
-    ],
-  },
-  {
-    titleKey: 'colLearn',
-    links: RESOURCE_NAV_LINKS,
-  },
-];
 
 /* ════════════════════ PROGRAMMATIC SEO — COMPETITOR LEAF PAGES ════════════════════ */
 

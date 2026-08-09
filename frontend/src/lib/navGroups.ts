@@ -107,32 +107,68 @@ export interface NavGroup {
 }
 
 /**
- * A public explainer surface (PRD 21 §11.4.5).
+ * A PUBLIC destination — a place a signed-out visitor can go (PRD 21 §11.4.5).
  *
- * Signed out these are real pages with real URLs and real SEO — unchanged, and
- * that is what makes the change cheap: no redirect map, no slug migration.
- * Signed in, the SAME route mounts inside `ShellPanel` at full width over a
- * board that stays mounted, so someone mid-agent-turn can check whether an HRMS
- * is supported, press Esc, and still have their turn running.
+ * One array for the whole public surface, because the alternative is what was
+ * actually here: `REFERENCE_DESTINATIONS` for the Product menu, `content.ts`'s
+ * `RESOURCE_NAV_LINKS` for the Learn menu and `FOOTER_COLUMNS` for the footer —
+ * three lists, so the storefront was "Talent / Workforce" in the bar, "Workforce
+ * Registry" in the footer and "Marketplace" in the app, and the footer still
+ * advertised an `/agents` destination the product had stopped having.
  *
- * They are declared here rather than in a catalog of their own because that
- * catalog — `burnrateCatalog.ts` — was the second navigation list this registry
- * exists to delete. `copyId` keys the marketing copy under `burnrateMarketing`;
- * `appHref` is where the signed-in CTA hands you when the explainer is done.
+ * Two facts place a row, exactly as they do for an app destination above:
+ *
+ *  - `placement` — which column it renders in. `idea` / `make` / `run` are the
+ *    Product ▾ menu (the same arc as the left panel, so the public menu and the
+ *    signed-in rail teach one vocabulary); `read` / `prove` / `buildWith` are
+ *    Learn ▾; `bar` is a flat top-level link; `account` is footer-only.
+ *  - `seat` — the owner, which tints the row in its seat's hue everywhere.
+ *
+ * `panel` is the §11.4.5 property: signed out the row is an ordinary page with
+ * an ordinary URL and ordinary SEO; signed in the SAME route mounts inside
+ * `ShellPanel` over a board that stays mounted. It is declared per row rather
+ * than assumed, because `/blog` genuinely wants the whole screen and `/soc2`
+ * genuinely does not.
  */
-export interface ReferenceDestination {
+export const PRODUCT_COLUMNS = ['idea', 'make', 'run'] as const;
+export const LEARN_COLUMNS = ['read', 'prove', 'buildWith'] as const;
+export type MenuColumn = (typeof PRODUCT_COLUMNS)[number] | (typeof LEARN_COLUMNS)[number];
+/** `bar` = a flat header link; `account` = footer only (sign in, demo, media). */
+export type Placement = MenuColumn | 'bar' | 'account';
+
+/** A named section INSIDE a reference page, offered as the panel's index rail. */
+export interface ReferenceSection {
+  /** The page's own anchor id. */
   id: string;
-  /** Marketing copy key under `burnrateMarketing.domains.<copyId>`. */
-  copyId: string;
+  /** i18n key under `referencePanel.section`. */
+  labelKey: string;
+}
+
+export interface PublicDestination {
+  id: string;
+  /**
+   * Marketing copy key under `burnrateMarketing.domains.<copyId>`. Absent for a
+   * row whose copy lives under `marketingNav.dest.<id>` — see `destTitleKey`.
+   */
+  copyId?: string;
   seat: SeatOrPlatform;
   icon: string;
   /** The public URL. Unique across the registry; also the panel route. */
   marketingHref: string;
   /** The in-app destination this explainer is about. */
   appHref: string;
-  /** A domain sells to a buyer; a foundation is substrate every domain needs. */
-  kind: 'domain' | 'foundation';
+  /** A domain sells to a buyer; a foundation is substrate every domain needs;
+   *  a link is neither — a page the public menus and footer point at. */
+  kind: 'domain' | 'foundation' | 'link';
+  placement: Placement;
+  /** Signed in, this route opens as a panel over the board instead of replacing it. */
+  panel: boolean;
+  /** The panel's index rail, when the page declares matching anchor ids. */
+  sections?: ReferenceSection[];
 }
+
+/** Kept as an alias: a reference destination is a public one that explains a domain. */
+export type ReferenceDestination = PublicDestination;
 
 export const NAV_GROUPS: NavGroup[] = [
   // ── IDEA ─────────────────────────────────────────────────────────────────
@@ -365,58 +401,177 @@ export const NAV_GROUPS: NavGroup[] = [
  * and it deliberately points at a row above, so a marketing page can never
  * advertise a destination the product does not have.
  */
-export const REFERENCE_DESTINATIONS: ReferenceDestination[] = [
-  { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain' },
-  { id: 'ref.businessIntelligence', copyId: 'businessIntelligence', seat: 'CFO', icon: '📊', marketingHref: '/business-intelligence', appHref: '/seat/finance', kind: 'domain' },
-  { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain' },
-  { id: 'ref.salesRevenue', copyId: 'salesRevenue', seat: 'CRO', icon: '📈', marketingHref: '/sales-revenue', appHref: '/seat/revenue', kind: 'domain' },
-  { id: 'ref.customerEngagement', copyId: 'customerEngagement', seat: 'Support', icon: '💬', marketingHref: '/customer-engagement', appHref: '/seat/support', kind: 'domain' },
-  { id: 'ref.investorIntelligence', copyId: 'investorIntelligence', seat: 'CEO', icon: '💼', marketingHref: '/investor-intelligence', appHref: '/seat/investor', kind: 'domain' },
-  { id: 'ref.operationalCadence', copyId: 'operationalCadence', seat: 'HR', icon: '🎯', marketingHref: '/operational-cadence', appHref: '/seat/people', kind: 'domain' },
-  { id: 'ref.governanceSecurity', copyId: 'governanceSecurity', seat: 'Security', icon: '🛡', marketingHref: '/governance-security', appHref: '/seat/governance', kind: 'domain' },
-  { id: 'ref.marketingGrowth', copyId: 'marketingGrowth', seat: 'CMO', icon: '📣', marketingHref: '/marketing-growth', appHref: '/growth', kind: 'domain' },
-  { id: 'ref.aiCoach', copyId: 'aiCoach', seat: 'Brain', icon: '✨', marketingHref: '/features/ai-coach', appHref: '/create', kind: 'foundation' },
-  { id: 'ref.integrations', copyId: 'integrations', seat: 'CTO', icon: '🔌', marketingHref: '/integrations', appHref: '/settings/integrations', kind: 'foundation' },
-  { id: 'ref.companiesContacts', copyId: 'companiesContacts', seat: 'CMO', icon: '🏢', marketingHref: '/companies-contacts', appHref: '/seat/revenue', kind: 'foundation' },
+export const PUBLIC_DESTINATIONS: PublicDestination[] = [
+  // ── Product ▾ · IDEA ─────────────────────────────────────────────────────
+  // The canvas is the first row of the public menu for the same reason it is the
+  // first row of the rail: it IS the product. `/create/new` is a guest app route
+  // (`GUEST_APP_PATTERNS`), so this link opens a real, editable, local-first
+  // board — which is why it is not a `panel` row. There is nothing to open it
+  // over; it is the thing everything else opens over.
+  { id: 'canvas', seat: 'Brain', icon: '✦', marketingHref: '/create/new', appHref: '/create', kind: 'link', placement: 'idea', panel: false },
+  { id: 'ref.aiCoach', copyId: 'aiCoach', seat: 'Brain', icon: '✨', marketingHref: '/features/ai-coach', appHref: '/create', kind: 'foundation', placement: 'idea', panel: true },
+  // ── Product ▾ · MAKE ─────────────────────────────────────────────────────
+  { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain', placement: 'make', panel: true },
+  { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain', placement: 'make', panel: true },
+  // ── Product ▾ · RUN — one row per business seat ──────────────────────────
+  { id: 'ref.businessIntelligence', copyId: 'businessIntelligence', seat: 'CFO', icon: '📊', marketingHref: '/business-intelligence', appHref: '/seat/finance', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.salesRevenue', copyId: 'salesRevenue', seat: 'CRO', icon: '📈', marketingHref: '/sales-revenue', appHref: '/seat/revenue', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.marketingGrowth', copyId: 'marketingGrowth', seat: 'CMO', icon: '📣', marketingHref: '/marketing-growth', appHref: '/growth', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.operationalCadence', copyId: 'operationalCadence', seat: 'HR', icon: '🎯', marketingHref: '/operational-cadence', appHref: '/seat/people', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.investorIntelligence', copyId: 'investorIntelligence', seat: 'CEO', icon: '💼', marketingHref: '/investor-intelligence', appHref: '/seat/investor', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.governanceSecurity', copyId: 'governanceSecurity', seat: 'Security', icon: '🛡', marketingHref: '/governance-security', appHref: '/seat/governance', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.customerEngagement', copyId: 'customerEngagement', seat: 'Support', icon: '💬', marketingHref: '/customer-engagement', appHref: '/seat/support', kind: 'domain', placement: 'run', panel: true },
+  { id: 'ref.companiesContacts', copyId: 'companiesContacts', seat: 'CMO', icon: '🏢', marketingHref: '/companies-contacts', appHref: '/seat/revenue', kind: 'foundation', placement: 'run', panel: true },
+  // ── Learn ▾ · READ — long-form, and deliberately NOT panels: an article
+  //    wants the whole screen, and nobody reads a tutorial over their own board.
+  { id: 'blog', seat: 'CMO', icon: '📝', marketingHref: '/blog', appHref: '/blog', kind: 'link', placement: 'read', panel: false },
+  { id: 'tutorials', seat: 'Support', icon: '🎓', marketingHref: '/tutorials', appHref: '/tutorials', kind: 'link', placement: 'read', panel: false },
+  { id: 'compare', seat: 'CMO', icon: '⚖️', marketingHref: '/compare', appHref: '/compare', kind: 'link', placement: 'read', panel: false },
+  // ── Learn ▾ · PROVE — evidence surfaces. These ARE panels: "can I show my
+  //    auditor the controls" is a question you ask mid-turn, not instead of one.
+  { id: 'diagnostics', seat: 'Manager', icon: '🩺', marketingHref: '/tools', appHref: '/insights/compliance', kind: 'link', placement: 'prove', panel: true },
+  {
+    id: 'soc2', seat: 'Security', icon: '🛡', marketingHref: '/soc2', appHref: '/seat/governance',
+    kind: 'link', placement: 'prove', panel: true,
+    // The page's own `<section id>`s, offered as the panel's index rail. Declared
+    // beside the destination rather than inside the page so the rail cannot list
+    // a section the page stopped having — `check-destinations` asserts the ids.
+    sections: [
+      { id: 'report', labelKey: 'report' },
+      { id: 'criteria', labelKey: 'criteria' },
+      { id: 'how', labelKey: 'how' },
+      { id: 'audits', labelKey: 'audits' },
+      { id: 'faq', labelKey: 'faq' },
+    ],
+  },
+  { id: 'evermind', seat: 'Brain', icon: '🧠', marketingHref: '/evermind', appHref: '/create', kind: 'link', placement: 'prove', panel: true },
+  // ── Learn ▾ · BUILD WITH ─────────────────────────────────────────────────
+  { id: 'ref.integrations', copyId: 'integrations', seat: 'CTO', icon: '🔌', marketingHref: '/integrations', appHref: '/settings/integrations', kind: 'foundation', placement: 'buildWith', panel: true },
+  // `/models` and `/prompts` are not panels: signed in they are already app
+  // surfaces (Marketplace's asset family and Knowledge's Prompts tab), and a
+  // route cannot be both a panel over the board and a destination in it.
+  { id: 'models', seat: 'CTO', icon: '🧮', marketingHref: '/models', appHref: '/marketplace?family=asset&kind=model', kind: 'link', placement: 'buildWith', panel: false },
+  { id: 'prompts', seat: 'Support', icon: '📚', marketingHref: '/prompts', appHref: '/prompts', kind: 'link', placement: 'buildWith', panel: false },
+  // ── The flat bar ─────────────────────────────────────────────────────────
+  { id: 'features', seat: 'platform', icon: '✨', marketingHref: '/features', appHref: '/create', kind: 'link', placement: 'bar', panel: true },
+  // Talent, agents, models and assets are FAMILIES of the one storefront, not
+  // four destinations — so one entry, and the families filter inside it. It is
+  // "Marketplace" here, in the footer and in the rail: one place, one name.
+  { id: 'marketplace', seat: 'platform', icon: '🛒', marketingHref: '/marketplace', appHref: '/marketplace', kind: 'link', placement: 'bar', panel: false },
+  { id: 'pricing', seat: 'CFO', icon: '💳', marketingHref: '/pricing', appHref: '/pricing', kind: 'link', placement: 'bar', panel: false },
+  { id: 'about', seat: 'CEO', icon: '🏛', marketingHref: '/about', appHref: '/about', kind: 'link', placement: 'bar', panel: false },
+  // ── Footer only ──────────────────────────────────────────────────────────
+  { id: 'demo', seat: 'CRO', icon: '▶', marketingHref: '/demo', appHref: '/create', kind: 'link', placement: 'account', panel: false },
+  { id: 'sell', seat: 'CRO', icon: '🤝', marketingHref: '/sell-builderforce', appHref: '/sales', kind: 'link', placement: 'account', panel: false },
+  { id: 'media', seat: 'CMO', icon: '🗂', marketingHref: '/media', appHref: '/media', kind: 'link', placement: 'account', panel: false },
+  { id: 'signIn', seat: 'platform', icon: '🔑', marketingHref: '/login', appHref: '/create', kind: 'link', placement: 'account', panel: false },
 ];
 
+/**
+ * The explainer subset — the rows `/features` indexes. A `link` row is a public
+ * page but not a story about a business domain, so it belongs in the menus and
+ * the footer and not in the features index.
+ */
+export type ExplainerDestination = PublicDestination & { copyId: string };
+
+export const REFERENCE_DESTINATIONS = PUBLIC_DESTINATIONS.filter(
+  (entry): entry is ExplainerDestination => entry.kind !== 'link',
+);
 export const REFERENCE_DOMAINS = REFERENCE_DESTINATIONS.filter((entry) => entry.kind === 'domain');
 export const REFERENCE_FOUNDATIONS = REFERENCE_DESTINATIONS.filter((entry) => entry.kind === 'foundation');
 
-export function referenceByHref(href: string): ReferenceDestination | undefined {
+/** Public rows that mount as a panel over the board once you are signed in. */
+export const PANEL_SURFACES = PUBLIC_DESTINATIONS.filter((entry) => entry.panel).map((entry) => entry.marketingHref);
+
+export function publicById(id: string): PublicDestination | undefined {
+  return PUBLIC_DESTINATIONS.find((entry) => entry.id === id);
+}
+
+/**
+ * An EXPLAINER by its public href. Deliberately narrower than
+ * `publicDestinationFor`: the domain-page route feeds the result straight into
+ * `burnrateMarketing.domains.<copyId>`, so returning `/blog` here would render a
+ * page of `domains.undefined`.
+ */
+export function referenceByHref(href: string): ExplainerDestination | undefined {
   return REFERENCE_DESTINATIONS.find((entry) => entry.marketingHref === href);
 }
 
-export function referenceBySlug(slug: string): ReferenceDestination | undefined {
+export function referenceBySlug(slug: string): ExplainerDestination | undefined {
   return referenceByHref(`/${slug}`);
 }
+
+/** The row a pathname belongs to, longest public href first (`/features/ai-coach`
+ *  must beat `/features`). */
+export function publicDestinationFor(pathname: string): PublicDestination | undefined {
+  let best: PublicDestination | undefined;
+  for (const entry of PUBLIC_DESTINATIONS) {
+    const href = entry.marketingHref;
+    if (pathname !== href && !pathname.startsWith(`${href}/`)) continue;
+    if (!best || href.length > best.marketingHref.length) best = entry;
+  }
+  return best;
+}
+
+/** The rows of one menu column, in declaration order. */
+export function columnOf(column: Placement): PublicDestination[] {
+  return PUBLIC_DESTINATIONS.filter((entry) => entry.placement === column);
+}
+
+/**
+ * Where a row's title and one-line tagline live.
+ *
+ * Two homes rather than one because the nine domain explainers already own
+ * translated copy under `burnrateMarketing.domains.*` in all five catalogs, and
+ * re-keying it would have been a rename dressed up as a refactor. A row without
+ * a `copyId` keys its own copy under `marketingNav.dest.<id>`.
+ */
+export function destTitleKey(entry: PublicDestination): string {
+  return entry.copyId ? `burnrateMarketing.domains.${entry.copyId}.title` : `marketingNav.dest.${entry.id}.title`;
+}
+
+export function destTaglineKey(entry: PublicDestination): string {
+  return entry.copyId ? `burnrateMarketing.domains.${entry.copyId}.tagline` : `marketingNav.dest.${entry.id}.tagline`;
+}
+
+/**
+ * The site footer, as four projections of the array above (§11.4.7).
+ *
+ * Ids rather than rows so the ORDER a reader sees is editable without a second
+ * declaration of the destination itself. The previous footer was that second
+ * declaration: it called the storefront "Workforce Registry" and still offered
+ * an `/agents` destination that had been folded into it.
+ */
+export interface FooterColumn {
+  /** i18n key under `footer`. */
+  titleKey: string;
+  ids: string[];
+}
+
+export const FOOTER_COLUMNS: FooterColumn[] = [
+  { titleKey: 'colProduct', ids: ['canvas', 'marketplace', 'features', 'pricing', 'about'] },
+  { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'models', 'prompts'] },
+  { titleKey: 'colLearn', ids: ['blog', 'tutorials', 'compare', 'diagnostics', 'soc2', 'media'] },
+  { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },
+];
+
+/** The footer's columns resolved to rows — unknown ids are a build-time failure
+ *  in `check-destinations`, so this can drop them without hiding a typo. */
+export const footerColumns = (): { titleKey: string; links: PublicDestination[] }[] =>
+  FOOTER_COLUMNS.map((column) => ({
+    titleKey: column.titleKey,
+    links: column.ids.map(publicById).filter((entry): entry is PublicDestination => Boolean(entry)),
+  }));
 
 /**
  * The PUBLIC bar — the marketing header's flat links (§11.4.6).
  *
- * Declared here rather than beside the header that renders it, because a
- * destination declared next to its renderer is precisely how this product
- * arrived at seven lists. There is no `Home` row: the logo is home, and a
+ * A projection of `PUBLIC_DESTINATIONS`, not a list: it was a list, living in
+ * the header component as `FLAT_LINKS`, and that is how the storefront ended up
+ * with three names. There is no `Home` row either — the logo is home, and a
  * separate entry was the second way to do the one thing every logo does.
- *
- * `labelKey` resolves under `marketingNav`, not `nav` — the public surface has
- * its own voice for the same places ("Talent / Workforce" for the storefront).
  */
-export interface PublicNavLink {
-  id: string;
-  /** i18n key under `marketingNav`. */
-  labelKey: string;
-  href: string;
-}
-
-export const PUBLIC_NAV: PublicNavLink[] = [
-  { id: 'features', labelKey: 'features', href: '/features' },
-  // Talent, agents, models and assets are FAMILIES of the one storefront, not
-  // four destinations — so one entry, and the families filter inside it.
-  { id: 'marketplace', labelKey: 'talentWorkforce', href: '/marketplace' },
-  { id: 'pricing', labelKey: 'pricing', href: '/pricing' },
-  { id: 'about', labelKey: 'about', href: '/about' },
-];
+export const PUBLIC_NAV = columnOf('bar');
 
 /**
  * The mobile bottom bar — five high-traffic destinations per audience.

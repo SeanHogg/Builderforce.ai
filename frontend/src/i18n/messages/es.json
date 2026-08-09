@@ -8201,8 +8201,8 @@
     }
   },
   "marketplace": {
-    "title": "Talento y plantilla",
-    "blurb": "Contrata freelancers y agentes de IA, instala personas, habilidades y contenido, y enruta cualquier modelo — todo desde un único marketplace.",
+    "title": "Marketplace",
+    "blurb": "Contrata personas y agentes, compra lo que otros han creado y encuentra —o reclama— una empresa.",
     "searchPlaceholder": "Buscar en el marketplace...",
     "categoryLabel": "Categoría",
     "cat": {
@@ -12479,26 +12479,83 @@
     "primaryNav": "Principal",
     "home": "Inicio",
     "product": "Producto",
-    "resources": "Recursos",
     "learn": "Aprender",
-    "tutorials": "Tutoriales",
-    "talentWorkforce": "Talento / Fuerza laboral",
-    "agents": "Agentes",
-    "models": "Modelos",
-    "pricing": "Precios",
-    "about": "Nosotros",
-    "blog": "Blog",
-    "diagnosticsTools": "Diagnósticos y herramientas",
-    "soc2Audits": "SOC 2 y auditorías de sistemas",
-    "promptLibrary": "Biblioteca de prompts",
-    "compare": "Comparar",
-    "integrations": "Integraciones",
-    "mediaKit": "Kit de medios",
     "toggleMenu": "Alternar menú",
     "switchToLight": "Cambiar al modo claro",
     "switchToDark": "Cambiar al modo oscuro",
     "openCanvas": "Abrir el lienzo →",
-    "features": "Funciones"
+    "column": {
+      "idea": "Idea",
+      "make": "Crear",
+      "run": "Operar",
+      "read": "Leer",
+      "prove": "Demostrar",
+      "buildWith": "Construir con"
+    },
+    "megaFoot": "Sin iniciar sesión, cada elemento de aquí es una página real con una URL real. Con la sesión iniciada, la misma ruta se abre sobre tu lienzo y tu sesión sigue viva.",
+    "megaFootLearn": "Lee donde quieras. Las páginas de evidencia —diagnósticos, SOC 2, Evermind— se abren sobre tu lienzo, así respondes a un auditor sin cerrar lo que estabas construyendo.",
+    "dest": {
+      "canvas": {
+        "title": "Lienzo",
+        "tagline": "Un lienzo, del prompt al producto."
+      },
+      "blog": {
+        "title": "Blog",
+        "tagline": "Cómo se construye el producto."
+      },
+      "tutorials": {
+        "title": "Tutoriales",
+        "tagline": "Cursos que terminan en un lienzo funcionando."
+      },
+      "compare": {
+        "title": "Comparar",
+        "tagline": "Frente a las herramientas que usas hoy."
+      },
+      "diagnostics": {
+        "title": "Diagnósticos",
+        "tagline": "Un resultado antes de registrarte."
+      },
+      "soc2": {
+        "title": "SOC 2",
+        "tagline": "Controles, evidencias y subencargados."
+      },
+      "evermind": {
+        "title": "Evermind",
+        "tagline": "El modelo detrás de los agentes."
+      },
+      "models": {
+        "title": "Modelos",
+        "tagline": "Qué se ejecuta y cuánto cuesta."
+      },
+      "prompts": {
+        "title": "Prompts y habilidades",
+        "tagline": "Reutilizables, y tuyos."
+      },
+      "features": {
+        "title": "Funciones"
+      },
+      "marketplace": {
+        "title": "Marketplace"
+      },
+      "pricing": {
+        "title": "Precios"
+      },
+      "about": {
+        "title": "Acerca de"
+      },
+      "demo": {
+        "title": "Demo en vivo"
+      },
+      "sell": {
+        "title": "Vender Builderforce"
+      },
+      "media": {
+        "title": "Kit de prensa"
+      },
+      "signIn": {
+        "title": "Iniciar sesión"
+      }
+    }
   },
   "tutorials": {
     "seo": {
@@ -12677,24 +12734,6 @@
     "colPlatform": "Plataforma",
     "colGetStarted": "Empezar",
     "colLearn": "Aprender",
-    "linkProduct": "Producto",
-    "linkCompare": "Comparar",
-    "linkPricing": "Precios",
-    "linkAbout": "Nosotros",
-    "linkMediaKit": "Kit de prensa",
-    "linkTutorials": "Tutoriales",
-    "linkPromptLibrary": "Biblioteca de prompts",
-    "linkIntegrations": "Integraciones",
-    "linkSellBuilderforce": "Vende Builderforce",
-    "linkEvermind": "Evermind LLM",
-    "linkWorkforceRegistry": "Registro de fuerza laboral",
-    "linkAgents": "BuilderForce Agents",
-    "linkDiagnostics": "Diagnósticos y herramientas",
-    "linkSoc2": "SOC 2 y auditorías de sistema",
-    "linkBlog": "Blog",
-    "linkLiveDemo": "Demo en vivo",
-    "linkSignIn": "Iniciar sesión",
-    "linkGetStarted": "Empezar",
     "cookies": "Cookies",
     "subprocessors": "Subencargados",
     "accessibility": "Accesibilidad"
@@ -16191,5 +16230,16 @@
     "closeTitle": "¿Listo para reemplazar tu stack?",
     "closeLede": "Una plataforma en vez de cinco y un menú en vez de siete. Empieza en el lienzo; reclama tu empresa cuando la tengas.",
     "closeFine": "Sin tarjeta · tu lienzo es tuyo antes de registrarte · mejora cuando quieras"
+  },
+  "referencePanel": {
+    "crumb": "{seat} · Referencia",
+    "section": {
+      "label": "En esta página",
+      "report": "Tu informe",
+      "criteria": "Controles",
+      "how": "Cómo funciona",
+      "audits": "Otras auditorías",
+      "faq": "Preguntas"
+    }
   }
 }

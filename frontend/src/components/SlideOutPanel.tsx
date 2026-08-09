@@ -100,6 +100,15 @@ export interface SlideOutPanelProps {
    * is right for a short confirmation sheet, and wrong for a destination.
    */
   widthStorageKey?: string;
+  /**
+   * A CSS custom-property NAME (e.g. `--seat-security`) to tint this panel with.
+   *
+   * The panel's owner is a fact the panel already has and the reader does not:
+   * a rule along the header in the owning seat's hue is how "this is Security's
+   * page" is said without a sentence. A variable name rather than a colour so a
+   * call site cannot introduce a twelfth hue — `lib/seats.ts` owns the palette.
+   */
+  accentVar?: string;
   /** Which edge the drawer docks to. Default 'right'. Use 'left' when the Brain
    *  (which is right-docked) needs a companion work panel on the opposite side. */
   side?: 'left' | 'right';
@@ -130,6 +139,7 @@ export function SlideOutPanel({
   children,
   width = 'sheet',
   widthStorageKey,
+  accentVar,
   side = 'right',
   zIndex = 9998,
 }: SlideOutPanelProps) {
@@ -204,6 +214,10 @@ export function SlideOutPanel({
               gap: 12,
               padding: '16px 20px',
               borderBottom: '1px solid var(--border-subtle)',
+              // The owning seat's hue as a rule along the top of the header —
+              // the one place a panel can say WHOSE page this is without
+              // spending a line of copy on it.
+              ...(accentVar ? { borderTop: `2px solid var(${accentVar})` } : null),
               flexShrink: 0,
               flexWrap: 'wrap',
             }}
@@ -233,7 +247,7 @@ export function SlideOutPanel({
             {(title != null || crumb != null) && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 {crumb != null && (
-                  <div className="ui-eyebrow" style={{ color: 'var(--text-muted)' }}>{crumb}</div>
+                  <div className="ui-eyebrow" style={{ color: accentVar ? `var(${accentVar})` : 'var(--text-muted)' }}>{crumb}</div>
                 )}
                 {title != null && (
                   <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>

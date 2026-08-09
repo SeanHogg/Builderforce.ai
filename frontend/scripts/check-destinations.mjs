@@ -41,7 +41,15 @@ const REGISTRY = path.join(SRC, 'lib', 'navGroups.ts');
  */
 const ALLOWED = new Map([
   ['src/lib/navGroups.ts', 'THE registry. This is the one place.'],
-  ['src/lib/content.ts', 'Marketing CONTENT (blog, tutorials, resource links) — not app destinations, and not reachable from the rail.'],
+  // `src/lib/content.ts` used to sit here, exempted as "marketing CONTENT, not
+  // app destinations". The exemption was FALSE, and the ratchet stayed green
+  // while `FOOTER_COLUMNS` and `RESOURCE_NAV_LINKS` — the site footer and the
+  // Learn ▾ menu — declared destinations behind it. That is how the storefront
+  // came to be called "Workforce Registry" in the footer and "Marketplace"
+  // everywhere else, and how an `/agents` link outlived the `/agents`
+  // destination. Both lists are registry rows now, and the exemption is gone:
+  // an allow-list entry is only as good as the sentence justifying it, so this
+  // one is left in place as a comment rather than deleted silently.
   ['src/lib/adminGroups.ts', 'Level-2 sub-views of the Platform Admin destination, which the registry references by import rather than restating.'],
   ['src/lib/destinations/registry.ts', 'A DERIVED projection for the ⌘K palette — it flattens the registry, and declares nothing of its own beyond two canvas rows.'],
 ]);
@@ -146,17 +154,49 @@ for (const seat of seatList) {
 }
 
 // ── 5 · Every reference row resolves ───────────────────────────────────────
-const referenceBlock = registrySource.match(/export const REFERENCE_DESTINATIONS[\s\S]*?\n\];/)?.[0] ?? '';
+const referenceBlock = registrySource.match(/export const PUBLIC_DESTINATIONS[\s\S]*?\n\];/)?.[0] ?? '';
+if (!referenceBlock) fail('[registry] PUBLIC_DESTINATIONS could not be located in navGroups.ts.');
 const copy = JSON.parse(fs.readFileSync(path.join(SRC, 'i18n', 'messages', 'en.json'), 'utf8'));
 const domainCopy = copy?.burnrateMarketing?.domains ?? {};
 
 const seenHrefs = new Set();
-for (const row of referenceBlock.matchAll(/copyId:\s*'([^']+)'[\s\S]*?marketingHref:\s*'([^']+)'/g)) {
-  const [, copyId, href] = row;
-  if (seenHrefs.has(href)) fail(`[reference] Two reference rows claim \`${href}\`. A URL has one owner.`);
+for (const href of [...referenceBlock.matchAll(/marketingHref:\s*'([^']+)'/g)].map((m) => m[1])) {
+  if (seenHrefs.has(href)) fail(`[reference] Two public rows claim \`${href}\`. A URL has one owner.`);
   seenHrefs.add(href);
+}
+for (const copyId of [...referenceBlock.matchAll(/copyId:\s*'([^']+)'/g)].map((m) => m[1])) {
   if (!domainCopy[copyId]) {
     fail(`[reference] \`${copyId}\` has no copy under burnrateMarketing.domains in en.json.`);
+  }
+}
+
+// Every footer column id must be a row. A footer that lists an id nobody
+// declares renders a shorter column and says nothing about why.
+const declaredIds = new Set([...referenceBlock.matchAll(/id:\s*'([^']+)'/g)].map((m) => m[1]));
+const footerBlock = registrySource.match(/export const FOOTER_COLUMNS[\s\S]*?\n\];/)?.[0] ?? '';
+for (const column of footerBlock.matchAll(/ids:\s*\[([^\]]*)\]/g)) {
+  for (const [, id] of column[1].matchAll(/'([^']+)'/g)) {
+    if (!declaredIds.has(id)) fail(`[footer] Footer column lists \`${id}\`, which is not a public destination.`);
+  }
+}
+
+// ── 6 · Every declared panel section exists in the page that owns it ───────
+// The panel's index rail is declared on the registry row. If a page renames an
+// anchor, the rail silently scrolls nowhere — so the ids are asserted against
+// the route's own source rather than trusted.
+for (const row of referenceBlock.matchAll(/marketingHref:\s*'([^']+)'[\s\S]*?sections:\s*\[([\s\S]*?)
+\s*\],/g)) {
+  const [, href, body] = row;
+  const pageFile = path.join(SRC, 'app', href.replace(/^\//, ''), 'page.tsx');
+  if (!fs.existsSync(pageFile)) {
+    fail(`[sections] \`${href}\` declares panel sections but ${path.relative(ROOT, pageFile)} does not exist.`);
+    continue;
+  }
+  const pageSource = fs.readFileSync(pageFile, 'utf8');
+  for (const [, id] of body.matchAll(/id:\s*'([^']+)'/g)) {
+    if (!pageSource.includes(`id="${id}"`)) {
+      fail(`[sections] \`${href}\` declares section \`${id}\`, which its page never renders as an anchor.`);
+    }
   }
 }
 

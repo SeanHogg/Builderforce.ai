@@ -28,16 +28,32 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { panelWidth } from '@/lib/workbenchPolicy';
+import { destTitleKey, publicDestinationFor } from '@/lib/navGroups';
+import { seatHueVar } from '@/lib/seats';
 import { ShellIndex, useShellIndex } from './ShellIndex';
+import { ReferenceIndex } from './ReferenceIndex';
 
 export function ShellPanel({ children }: { children: React.ReactNode }) {
   const t = useTranslations('nav');
+  const tRoot = useTranslations();
   const tPanel = useTranslations('shellPanel');
+  const tRef = useTranslations('referencePanel');
   const pathname = usePathname() || '';
   const router = useRouter();
   const { group, items } = useShellIndex();
 
   const close = useCallback(() => router.push('/create'), [router]);
+
+  // A reference page has no nav group — it is an explainer, not a destination —
+  // so without this it opened under the generic panel crumb with no title and no
+  // index, which is the "looks nothing like the mockup" complaint exactly. Its
+  // chrome comes from the registry row instead: the owning seat as the crumb, the
+  // destination's own title, its hue on the panel, and its sections as the index.
+  // `panel: false` rows (the canvas, the blog, the storefront) are public pages
+  // that never open over a board, so they must not claim the panel's chrome even
+  // if a route ever reaches here.
+  const publicRow = publicDestinationFor(pathname);
+  const reference = publicRow?.panel ? publicRow : undefined;
 
   return (
     <SlideOutPanel
@@ -47,14 +63,26 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       // Per destination, not per session: widening Finance must not widen
       // Settings. Falls back to the pathname for a route with no nav group,
       // which is still stable enough to remember.
-      widthStorageKey={group?.id ?? pathname}
-      crumb={tPanel('crumb')}
-      title={group ? t(group.labelKey) : tPanel('title')}
+      widthStorageKey={group?.id ?? reference?.id ?? pathname}
+      accentVar={reference ? seatHueVar(reference.seat) : undefined}
+      crumb={reference ? tRef('crumb', { seat: reference.seat }) : tPanel('crumb')}
+      title={
+        reference ? tRoot(destTitleKey(reference))
+        : group ? t(group.labelKey)
+        : tPanel('title')
+      }
       // An index of one is not a choice, and `DestinationIndex` already returns
       // null for it — so the column is offered only when there is something in it.
-      index={items.length > 1 ? <ShellIndex orientation="vertical" /> : undefined}
+      index={
+        reference?.sections?.length
+          ? <ReferenceIndex sections={reference.sections} />
+          : items.length > 1 ? <ShellIndex orientation="vertical" /> : undefined
+      }
     >
-      <div style={{ padding: 'var(--space-4)' }}>{children}</div>
+      {/* A reference page brings its own full-bleed layout (hero, bands, wraps),
+          so it gets no panel padding — padding it produced a marketing page with
+          a 16px gutter inside a panel, which reads as a mistake in both. */}
+      <div style={reference ? undefined : { padding: 'var(--space-4)' }}>{children}</div>
     </SlideOutPanel>
   );
 }

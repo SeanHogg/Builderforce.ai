@@ -8201,8 +8201,8 @@
     }
   },
   "marketplace": {
-    "title": "Talente & Workforce",
-    "blurb": "Engagiere Freelancer und KI-Agenten, installiere Personas, Skills und Inhalte und route jedes Modell — alles aus einem Marktplatz.",
+    "title": "Marktplatz",
+    "blurb": "Stelle Menschen und Agenten ein, kauf, was Builder gebaut haben, und finde — oder beanspruche — ein Unternehmen.",
     "searchPlaceholder": "Marktplatz durchsuchen...",
     "categoryLabel": "Kategorie",
     "cat": {
@@ -12479,26 +12479,83 @@
     "primaryNav": "Hauptnavigation",
     "home": "Start",
     "product": "Produkt",
-    "resources": "Ressourcen",
     "learn": "Lernen",
-    "tutorials": "Tutorials",
-    "talentWorkforce": "Talente / Workforce",
-    "agents": "Agenten",
-    "models": "Modelle",
-    "pricing": "Preise",
-    "about": "Über uns",
-    "blog": "Blog",
-    "diagnosticsTools": "Diagnosen & Tools",
-    "soc2Audits": "SOC 2 & System-Audits",
-    "promptLibrary": "Prompt-Bibliothek",
-    "compare": "Vergleich",
-    "integrations": "Integrationen",
-    "mediaKit": "Medien-Kit",
     "toggleMenu": "Menü umschalten",
     "switchToLight": "Zum hellen Modus wechseln",
     "switchToDark": "Zum dunklen Modus wechseln",
     "openCanvas": "Canvas öffnen →",
-    "features": "Funktionen"
+    "column": {
+      "idea": "Idee",
+      "make": "Bauen",
+      "run": "Betreiben",
+      "read": "Lesen",
+      "prove": "Nachweisen",
+      "buildWith": "Bauen mit"
+    },
+    "megaFoot": "Abgemeldet ist jeder Eintrag hier eine echte Seite mit echter URL. Angemeldet öffnet dieselbe Route über deinem Board — deine Sitzung läuft weiter.",
+    "megaFootLearn": "Lies überall. Die Nachweisseiten — Diagnosen, SOC 2, Evermind — öffnen sich über deinem Board, damit du einem Prüfer antworten kannst, ohne zu schließen, woran du gebaut hast.",
+    "dest": {
+      "canvas": {
+        "title": "Canvas",
+        "tagline": "Ein Board, vom Prompt zum Produkt."
+      },
+      "blog": {
+        "title": "Blog",
+        "tagline": "Wie das Produkt gebaut wird."
+      },
+      "tutorials": {
+        "title": "Tutorials",
+        "tagline": "Kurse, die auf einem funktionierenden Board enden."
+      },
+      "compare": {
+        "title": "Vergleich",
+        "tagline": "Gegen die Tools, die du heute nutzt."
+      },
+      "diagnostics": {
+        "title": "Diagnosen",
+        "tagline": "Ein Ergebnis, bevor du dich anmeldest."
+      },
+      "soc2": {
+        "title": "SOC 2",
+        "tagline": "Kontrollen, Nachweise und Unterauftragsverarbeiter."
+      },
+      "evermind": {
+        "title": "Evermind",
+        "tagline": "Das Modell hinter den Agenten."
+      },
+      "models": {
+        "title": "Modelle",
+        "tagline": "Was läuft und was es kostet."
+      },
+      "prompts": {
+        "title": "Prompts & Skills",
+        "tagline": "Wiederverwendbar, und deins."
+      },
+      "features": {
+        "title": "Funktionen"
+      },
+      "marketplace": {
+        "title": "Marktplatz"
+      },
+      "pricing": {
+        "title": "Preise"
+      },
+      "about": {
+        "title": "Über uns"
+      },
+      "demo": {
+        "title": "Live-Demo"
+      },
+      "sell": {
+        "title": "Builderforce verkaufen"
+      },
+      "media": {
+        "title": "Medienkit"
+      },
+      "signIn": {
+        "title": "Anmelden"
+      }
+    }
   },
   "tutorials": {
     "seo": {
@@ -12677,24 +12734,6 @@
     "colPlatform": "Plattform",
     "colGetStarted": "Loslegen",
     "colLearn": "Lernen",
-    "linkProduct": "Produkt",
-    "linkCompare": "Vergleichen",
-    "linkPricing": "Preise",
-    "linkAbout": "Über uns",
-    "linkMediaKit": "Medienkit",
-    "linkTutorials": "Tutorials",
-    "linkPromptLibrary": "Prompt-Bibliothek",
-    "linkIntegrations": "Integrationen",
-    "linkSellBuilderforce": "Builderforce verkaufen",
-    "linkEvermind": "Evermind LLM",
-    "linkWorkforceRegistry": "Workforce-Verzeichnis",
-    "linkAgents": "BuilderForce Agents",
-    "linkDiagnostics": "Diagnose & Tools",
-    "linkSoc2": "SOC 2 & Systemaudits",
-    "linkBlog": "Blog",
-    "linkLiveDemo": "Live-Demo",
-    "linkSignIn": "Anmelden",
-    "linkGetStarted": "Loslegen",
     "cookies": "Cookies",
     "subprocessors": "Unterauftragsverarbeiter",
     "accessibility": "Barrierefreiheit"
@@ -16191,5 +16230,16 @@
     "closeTitle": "Bereit, den Stack zu ersetzen?",
     "closeLede": "Eine Plattform statt fünf und ein Menü statt sieben. Fangen Sie auf dem Canvas an; beanspruchen Sie Ihr Unternehmen, wenn Sie eines haben.",
     "closeFine": "Ohne Kreditkarte · Ihr Board gehört Ihnen vor der Anmeldung · jederzeit upgraden"
+  },
+  "referencePanel": {
+    "crumb": "{seat} · Referenz",
+    "section": {
+      "label": "Auf dieser Seite",
+      "report": "Dein Bericht",
+      "criteria": "Kontrollen",
+      "how": "So funktioniert es",
+      "audits": "Weitere Audits",
+      "faq": "Fragen"
+    }
   }
 }

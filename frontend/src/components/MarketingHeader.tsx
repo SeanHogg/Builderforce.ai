@@ -5,8 +5,16 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
-import { RESOURCE_NAV_LINKS } from '@/lib/content';
-import { PUBLIC_NAV, REFERENCE_DOMAINS, REFERENCE_FOUNDATIONS, type ReferenceDestination } from '@/lib/navGroups';
+import {
+  LEARN_COLUMNS,
+  PRODUCT_COLUMNS,
+  PUBLIC_NAV,
+  columnOf,
+  destTaglineKey,
+  destTitleKey,
+  type MenuColumn,
+  type PublicDestination,
+} from '@/lib/navGroups';
 import { seatHueVar } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
 import { useMobileNav } from '@/lib/useMobileNav';
@@ -43,10 +51,11 @@ import { HeaderCartButton } from './HeaderCartButton';
 const isActive = (pathname: string, href: string) =>
   isNavItemActive(pathname, { href, exactMatch: href === '/' });
 
-/** One row of the Product menu — the seat's own hue on the icon, so the menu,
- *  the features card and the roster chip agree about who owns the domain. */
-function ReferenceLink({ entry, onNavigate }: { entry: ReferenceDestination; onNavigate?: () => void }) {
-  const t = useTranslations('burnrateMarketing');
+/** One row of a mega-menu — title, one line of what it is for, and the owning
+ *  seat's own hue on the marker, so the menu, the features card and the roster
+ *  chip agree about who is behind the domain. */
+function MegaLink({ entry, onNavigate }: { entry: PublicDestination; onNavigate?: () => void }) {
+  const t = useTranslations();
   return (
     <Link href={entry.marketingHref} className="mh-mega-link" onClick={onNavigate}>
       <span
@@ -56,32 +65,53 @@ function ReferenceLink({ entry, onNavigate }: { entry: ReferenceDestination; onN
       >
         <Icon source={entry.icon} size={18} />
       </span>
-      <span>
-        <strong>{t(`domains.${entry.copyId}.title`)}</strong>
-        <small>{t(`domains.${entry.copyId}.tagline`)}</small>
+      <span className="mh-mega-link-body">
+        <strong>{t(destTitleKey(entry))}</strong>
+        <small>{t(destTaglineKey(entry))}</small>
       </span>
     </Link>
   );
 }
 
-/** The "Product" mega-menu — the registry's reference rows, grouped the way the
- *  features page groups them (domains a buyer owns, then shared foundations). */
-function ProductMenu({ onNavigate }: { onNavigate?: () => void }) {
-  const t = useTranslations('burnrateMarketing');
+/**
+ * A mega-menu: one column per group, each a projection of `PUBLIC_DESTINATIONS`.
+ *
+ * ONE component for both menus, because "Learn is the same way" — Product ▾ and
+ * Learn ▾ differ only in which columns they read, and building the second one by
+ * hand as a flat list of links is exactly why they stopped matching.
+ *
+ * The column heading carries its stage dot, so the public menu teaches the same
+ * Idea → Make → Run vocabulary the signed-in rail uses. Somebody who reads the
+ * marketing menu and then signs up finds the shape they were shown.
+ */
+function MegaMenu({
+  columns,
+  footNoteKey,
+  onNavigate,
+}: {
+  columns: readonly MenuColumn[];
+  footNoteKey: string;
+  onNavigate?: () => void;
+}) {
+  const t = useTranslations();
+  const tm = useTranslations('marketingNav');
   return (
     <div className="mh-mega">
-      <div className="mh-mega-col mh-mega-col--domains">
-        <Link href="/features" className="mh-mega-head" onClick={onNavigate}>{t('index.domains')}</Link>
-        {REFERENCE_DOMAINS.map((entry) => (
-          <ReferenceLink key={entry.id} entry={entry} onNavigate={onNavigate} />
-        ))}
-      </div>
-      <div className="mh-mega-col">
-        <Link href="/features" className="mh-mega-head" onClick={onNavigate}>{t('index.foundations')}</Link>
-        {REFERENCE_FOUNDATIONS.map((entry) => (
-          <ReferenceLink key={entry.id} entry={entry} onNavigate={onNavigate} />
-        ))}
-      </div>
+      {columns.map((column) => (
+        <div key={column} className="mh-mega-col">
+          <h4 className="mh-mega-head" style={{ '--stage': `var(--stage-${column})` } as React.CSSProperties}>
+            <i aria-hidden="true" />
+            {tm(`column.${column}`)}
+          </h4>
+          {columnOf(column).map((entry) => (
+            <MegaLink key={entry.id} entry={entry} onNavigate={onNavigate} />
+          ))}
+        </div>
+      ))}
+      {/* The promise the whole IA rests on, said once where a reader can check
+          it: these are real URLs signed out and panels over your board signed
+          in. One implementation, two shells. */}
+      <p className="mh-mega-foot">{t(footNoteKey)}</p>
     </div>
   );
 }
@@ -90,7 +120,11 @@ export default function MarketingHeader() {
   const pathname = usePathname() || '';
   const { open, openNav, closeNav } = useMobileNav();
   const t = useTranslations('marketingNav');
-  const tb = useTranslations('burnrateMarketing');
+  // Destination titles resolve by FULL path, because a row's copy lives either
+  // under `burnrateMarketing.domains.*` (the nine translated domain explainers)
+  // or under `marketingNav.dest.*`. `destTitleKey` decides which; the renderer
+  // does not need to know, and cannot get it wrong.
+  const tRoot = useTranslations();
   // Sign In is the SAME offer the operator shell's TopBar makes to a signed-out
   // visitor, so the copy lives in `common.*` once rather than twice. The primary
   // CTA does NOT: it is the canvas offer, and it is this header's own.
@@ -121,7 +155,7 @@ export default function MarketingHeader() {
               <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
             <div className="mh-panel mh-panel-wide">
-              <ProductMenu />
+              <MegaMenu columns={PRODUCT_COLUMNS} footNoteKey="marketingNav.megaFoot" />
             </div>
           </div>
 
@@ -130,16 +164,14 @@ export default function MarketingHeader() {
               {t('learn')}
               <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
-            <div className="mh-panel">
-              {RESOURCE_NAV_LINKS.map((l) => (
-                <Link key={l.href} href={l.href} className="mh-panel-link">{t(l.marketingLabelKey)}</Link>
-              ))}
+            <div className="mh-panel mh-panel-wide">
+              <MegaMenu columns={LEARN_COLUMNS} footNoteKey="marketingNav.megaFootLearn" />
             </div>
           </div>
 
           {PUBLIC_NAV.map((l) => (
-            <Link key={l.id} href={l.href} className={`mh-link${isActive(pathname, l.href) ? ' active' : ''}`}>
-              {t(l.labelKey)}
+            <Link key={l.id} href={l.marketingHref} className={`mh-link${isActive(pathname, l.marketingHref) ? ' active' : ''}`}>
+              {tRoot(destTitleKey(l))}
             </Link>
           ))}
         </nav>
@@ -160,35 +192,34 @@ export default function MarketingHeader() {
         </div>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — the same columns, stacked. A phone gets the whole map
+          too: the drawer used to flatten Product into one undifferentiated list,
+          which is the version of the menu that taught nobody the arc. */}
       <div className={`mh-drawer${open ? ' open' : ''}`}>
-        <div className="mh-drawer-group">
-          <div className="mh-drawer-group-label">{t('product')}</div>
-          {[...REFERENCE_DOMAINS, ...REFERENCE_FOUNDATIONS].map((entry) => (
-            <Link
-              key={entry.id}
-              href={entry.marketingHref}
-              className="mh-drawer-link mh-drawer-sub"
-              onClick={closeNav}
-              style={{ '--seat': `var(${seatHueVar(entry.seat)})` } as React.CSSProperties}
-            >
-              <Icon source={entry.icon} size={17} /> {tb(`domains.${entry.copyId}.title`)}
-            </Link>
-          ))}
-        </div>
-
-        {PUBLIC_NAV.map((l) => (
-          <Link key={l.id} href={l.href} className={`mh-drawer-link${isActive(pathname, l.href) ? ' active' : ''}`} onClick={closeNav}>
-            {t(l.labelKey)}
-          </Link>
+        {[...PRODUCT_COLUMNS, ...LEARN_COLUMNS].map((column) => (
+          <div key={column} className="mh-drawer-group">
+            <div className="mh-drawer-group-label" style={{ '--stage': `var(--stage-${column})` } as React.CSSProperties}>
+              {t(`column.${column}`)}
+            </div>
+            {columnOf(column).map((entry) => (
+              <Link
+                key={entry.id}
+                href={entry.marketingHref}
+                className="mh-drawer-link mh-drawer-sub"
+                onClick={closeNav}
+                style={{ '--seat': `var(${seatHueVar(entry.seat)})` } as React.CSSProperties}
+              >
+                <Icon source={entry.icon} size={17} /> {tRoot(destTitleKey(entry))}
+              </Link>
+            ))}
+          </div>
         ))}
 
-        <div className="mh-drawer-group">
-          <div className="mh-drawer-group-label">{t('learn')}</div>
-          {RESOURCE_NAV_LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>{t(l.marketingLabelKey)}</Link>
-          ))}
-        </div>
+        {PUBLIC_NAV.map((l) => (
+          <Link key={l.id} href={l.marketingHref} className={`mh-drawer-link${isActive(pathname, l.marketingHref) ? ' active' : ''}`} onClick={closeNav}>
+            {tRoot(destTitleKey(l))}
+          </Link>
+        ))}
 
         <div className="mh-drawer-cta">
           <Link href="/login" className="mh-signin" onClick={closeNav}>{tc('signIn')}</Link>
