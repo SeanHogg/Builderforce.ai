@@ -26,6 +26,9 @@ export interface Env {
    *  disable `POST /api/demo/session` and the nightly reseed; any other value (or
    *  unset) leaves it ON. Toggle via `wrangler secret put DEMO_ACCOUNTS_ENABLED`. */
   DEMO_ACCOUNTS_ENABLED?: string;
+  /** Operator-wide emergency halt for every autonomous agent run. The workspace
+   * switch remains tenant-owned; this is the platform incident-response fence. */
+  AGENT_EXECUTION_ENABLED?: string;
   /** Shared secret the deploy workflow sends (header `x-demo-reseed-secret`) to
    *  trigger `POST /api/demo/reseed` after each deploy. Unset = only a superadmin
    *  web token can reseed. Set via `wrangler secret put DEMO_RESEED_SECRET`. */

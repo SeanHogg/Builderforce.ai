@@ -1593,8 +1593,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     type FileChangeBody = { taskId?: number; executionId?: number; path?: string; change?: string; agent?: string };
     const body = await c.req.json<FileChangeBody>().catch((): FileChangeBody => ({}));
     const taskId = Number(body.taskId);
+    const executionId = Number(body.executionId);
     const path = typeof body.path === 'string' ? body.path.trim() : '';
-    if (!Number.isFinite(taskId) || !path) return c.json({ error: 'taskId and path are required' }, 400);
+    if (!Number.isFinite(taskId) || !Number.isFinite(executionId) || !path) {
+      return c.json({ error: 'taskId, executionId, and path are required' }, 400);
+    }
     const change = ['created', 'modified', 'deleted'].includes(body.change ?? '') ? body.change! : 'modified';
     const agent = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : 'agent';
 
@@ -1605,11 +1608,18 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!(await taskInTenant(db, taskId, agentHost.tenantId))) {
       return c.json({ error: 'task not found' }, 404);
     }
+    const [execution] = await db.select({ id: executions.id }).from(executions).where(and(
+      eq(executions.id, executionId),
+      eq(executions.taskId, taskId),
+      eq(executions.tenantId, agentHost.tenantId),
+      eq(executions.agentHostId, agentHostId),
+    )).limit(1);
+    if (!execution) return c.json({ error: 'execution not found' }, 404);
 
     await db.insert(taskFileChanges).values({
       tenantId: agentHost.tenantId,
       taskId,
-      executionId: Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null,
+      executionId,
       path,
       change,
       agent,

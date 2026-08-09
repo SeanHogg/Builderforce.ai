@@ -1376,7 +1376,7 @@ export const taskFileChanges = pgTable('task_file_changes', {
   id:          bigserial('id', { mode: 'number' }).primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-  executionId: integer('execution_id'),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
   path:        text('path').notNull(),
   /** 'created' | 'modified' | 'deleted'. */
   change:      text('change').notNull(),

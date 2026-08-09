@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyGuestBrainstormEntry, classifyShell } from './shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, rendersAppShell } from './shellRouting';
 
 describe('classifyGuestBrainstormEntry', () => {
   it('does not mount the legacy redirect before the browser resolves ?room=', () => {
@@ -72,5 +72,45 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     // and any NEW authed page now gets correct app chrome without being listed.
     expect(classifyShell('/ceremonies')).toBe('app');
     expect(classifyShell('/some-future-feature')).toBe('app');
+  });
+});
+
+/**
+ * "The canvas is the product" (PRD 21 §0) is only true if it is the SAME product
+ * for both visitors. An anonymous board used to render inside `MarketingShell`:
+ * the top-of-funnel nav where the session list, the stage and the team belong. So
+ * a person invited to try the thing they were being sold saw a different thing.
+ */
+describe('rendersAppShell — one shell, signed in or not', () => {
+  it('gives an anonymous canvas the operator shell, not marketing chrome', () => {
+    expect(rendersAppShell('/create/local-abc123', false)).toBe(true);
+    expect(rendersAppShell('/create/local-abc123?share=1'.split('?')[0], false)).toBe(true);
+  });
+
+  it('shows a guest the canvas library that holds their own drafts', () => {
+    // It used to redirect to /login, making the library the ONE place a guest's
+    // own boards were guaranteed not to be visible.
+    expect(rendersAppShell('/create', false)).toBe(true);
+  });
+
+  it('mounts the invitation page for the signed-out recipient it was written for', () => {
+    // It renders its own "sign in with the invited email" branch, so as a plain
+    // app route the teaser mounted in its place and the invite dead-ended.
+    expect(rendersAppShell(`/create/invitations/${'a'.repeat(64)}`, false)).toBe(true);
+  });
+
+  it('still teases every OTHER app route to a signed-out visitor', () => {
+    expect(rendersAppShell('/dashboard', false)).toBe(false);
+    expect(rendersAppShell('/projects/12', false)).toBe(false);
+    // A durable (server-persisted) canvas is somebody's workspace, not a guest's.
+    expect(rendersAppShell('/create/sess_9f2a', false)).toBe(false);
+  });
+
+  it('gives a signed-in visitor the shell on every app route, and never off one', () => {
+    expect(rendersAppShell('/dashboard', true)).toBe(true);
+    expect(rendersAppShell('/create/local-abc123', true)).toBe(true);
+    expect(rendersAppShell('/pricing', true)).toBe(false);
+    expect(rendersAppShell('/login', true)).toBe(false);
+    expect(rendersAppShell('/embed/kanban', true)).toBe(false);
   });
 });

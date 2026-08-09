@@ -15129,7 +15129,9 @@
     "subtitle": "Todo lo que has creado y las formas de empezar algo nuevo.",
     "pendingTitle": "Pendientes de guardar",
     "pendingHint": "Estos lienzos siguen guardados en este navegador. Abre uno para guardarlo en tu espacio de trabajo.",
-    "untitled": "Lienzo sin título"
+    "untitled": "Lienzo sin título",
+    "signedOutSubtitle": "Los tableros que empezaste en este navegador. Inicia sesión para conservarlos y ver todo lo que ha creado tu espacio de trabajo.",
+    "startLocalCanvas": "+ Empezar un lienzo"
   },
   "commandPalette": {
     "trigger": "Buscar",

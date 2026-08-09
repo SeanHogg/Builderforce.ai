@@ -117,6 +117,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       return row ? { active: row.status === 'active' } : null;
     },
     async (tenantId) => {
+      if (env.AGENT_EXECUTION_ENABLED?.trim().toLowerCase() === 'false') return false;
       const [row] = await db.select({ enabled: tenants.agentExecutionEnabled })
         .from(tenants)
         .where(eq(tenants.id, tenantId))

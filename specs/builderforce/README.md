@@ -172,6 +172,12 @@
     — every token in both themes, the type scale, the metric scales, the component contracts and the
     ten rules an implementing agent must follow. **Where any of it appears, and to whom.**
 
+22. **[22 — PRD: Browser Performance, Domain Execution, and Codebase Health](./22-prd-browser-performance-domain-execution-analysis.md)**
+    Defines browser delivery, worker, WebNN/WebGPU/WASM and PWA/storage policy, then consolidates the
+    repository-wide LOC/DDD/clone/complexity audit, current cleanup status, backend-speed workstreams,
+    ratchets and falsifiable acceptance criteria. **Where work executes, who owns it, and how the
+    implementation stays understandable and fast.**
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

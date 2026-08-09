@@ -34,6 +34,7 @@ import { forget, listGovernedMemories, purgeExpiredMemories } from '../../applic
 import {
   TRIAL_MAX_TICKETS,
   getRehearsal,
+  compareRehearsals,
   isRehearsalKind,
   listRehearsals,
   runRehearsal,
@@ -175,6 +176,13 @@ export function createAgentOpsRoutes(db: DbHandle) {
       limit: numQuery(c.req.query('limit')) ?? 50,
     });
     return json({ rehearsals: rehearsalRows });
+  });
+
+  router.get('/rehearsals/compare', async (c) => {
+    const left = c.req.query('left'); const right = c.req.query('right');
+    if (!left || !right || left === right) return json({ error: 'left and right must name two distinct rehearsals' }, 400);
+    const comparison = await compareRehearsals(db, c.get('tenantId'), left, right);
+    return comparison ? json(comparison) : json({ error: 'rehearsal not found' }, 404);
   });
 
   router.get('/rehearsals/:id', async (c) => {

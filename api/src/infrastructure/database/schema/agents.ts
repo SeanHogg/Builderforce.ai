@@ -384,6 +384,23 @@ export const ideAgents = pgTable('ide_agents', {
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 });
 
+/** Immutable snapshot of an executable definition. Generic source identity keeps
+ * Workforce agents and canonical registrations on one versioning contract. */
+export const agentDefinitionVersions = pgTable('agent_definition_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  sourceKind: varchar('source_kind', { length: 32 }).notNull(),
+  sourceRef: varchar('source_ref', { length: 128 }).notNull(),
+  version: integer('version').notNull(),
+  fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+  definition: jsonb('definition').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  sourceVersion: uniqueIndex('agent_definition_versions_tenant_id_source_kind_source_ref_version_key').on(t.tenantId, t.sourceKind, t.sourceRef, t.version),
+  sourceFingerprint: uniqueIndex('agent_definition_versions_tenant_id_source_kind_source_ref_fingerprint_key').on(t.tenantId, t.sourceKind, t.sourceRef, t.fingerprint),
+  bySource: index('idx_agent_definition_versions_source').on(t.tenantId, t.sourceKind, t.sourceRef, t.version),
+}));
+
 
 export const skills = pgTable('skills', {
   id:           serial('id').primaryKey(),
@@ -458,6 +475,7 @@ export const executions = pgTable('executions', {
    *  Null for gateway-default / host runs. Written at dispatch so each run's
    *  logs/telemetry scope to the agent that ran IT, not the ticket's current one. */
   cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
+  agentDefinitionVersionId: uuid('agent_definition_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
   /** 'live' (default) or 'rehearsal' (0372). A rehearsal drives the REAL loop through
    *  a shadow capability provider that suppresses every effect, so it needs a real
    *  execution row for audit/steering/cancel — but it must never count as delivery.
@@ -485,6 +503,73 @@ export const executions = pgTable('executions', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
+
+/** Machine principal minted for exactly one execution. No secret material is stored
+ * here; narrow grants and expiring delegations describe what it may request. */
+export const agentRunPrincipals = pgTable('agent_run_principals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().unique().references(() => executions.id, { onDelete: 'cascade' }),
+  agentDefinitionVersionId: uuid('agent_definition_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
+  issuedBy: varchar('issued_by', { length: 128 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  revokedAt: timestamp('revoked_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ byTenantStatus: index('idx_agent_run_principals_tenant_status').on(t.tenantId, t.status, t.expiresAt) }));
+
+export const agentCapabilityGrants = pgTable('agent_capability_grants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  principalId: uuid('principal_id').notNull().references(() => agentRunPrincipals.id, { onDelete: 'cascade' }),
+  capability: varchar('capability', { length: 128 }).notNull(),
+  resourcePattern: varchar('resource_pattern', { length: 512 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ byPrincipal: index('idx_agent_capability_grants_principal').on(t.tenantId, t.principalId, t.capability) }));
+
+export const agentCredentialDelegations = pgTable('agent_credential_delegations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  principalId: uuid('principal_id').notNull().references(() => agentRunPrincipals.id, { onDelete: 'cascade' }),
+  credentialKind: varchar('credential_kind', { length: 32 }).notNull(),
+  credentialRef: varchar('credential_ref', { length: 128 }).notNull(),
+  scopes: jsonb('scopes').notNull().default(sql`'[]'::jsonb`),
+  expiresAt: timestamp('expires_at').notNull(),
+  revokedAt: timestamp('revoked_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ byPrincipal: index('idx_agent_credential_delegations_principal').on(t.tenantId, t.principalId, t.expiresAt) }));
+
+export const executionLimits = pgTable('execution_limits', {
+  executionId: integer('execution_id').primaryKey().references(() => executions.id, { onDelete: 'cascade' }),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  maxFiles: integer('max_files'),
+  maxRepositories: integer('max_repositories'),
+  maxSpendMillicents: integer('max_spend_millicents'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ byTenant: index('idx_execution_limits_tenant').on(t.tenantId, t.executionId) }));
+
+export const agentContextContributions = pgTable('agent_context_contributions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  sourceKind: varchar('source_kind', { length: 32 }).notNull(),
+  sourceRef: varchar('source_ref', { length: 512 }),
+  trustTier: varchar('trust_tier', { length: 16 }).notNull(),
+  contentHash: varchar('content_hash', { length: 64 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ byExecution: index('idx_agent_context_contributions_execution').on(t.tenantId, t.executionId, t.createdAt) }));
+
+export const agentOutboundInspections = pgTable('agent_outbound_inspections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  seam: varchar('seam', { length: 32 }).notNull(),
+  target: varchar('target', { length: 512 }),
+  verdict: varchar('verdict', { length: 16 }).notNull(),
+  reasons: jsonb('reasons').notNull().default(sql`'[]'::jsonb`),
+  contentHash: varchar('content_hash', { length: 64 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ byExecution: index('idx_agent_outbound_inspections_execution').on(t.tenantId, t.executionId, t.createdAt) }));
 
 /**
  * Transactional execution-lifecycle outbox. Database triggers append to this
@@ -1211,6 +1296,7 @@ export const agentDispatches = pgTable('agent_dispatches', {
   taskId:       integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   agentId:      integer('agent_id').references(() => agents.id, { onDelete: 'set null' }),
   agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
+  agentDefinitionVersionId: uuid('agent_definition_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
   /** Monotonic per-ticket stage counter so a retried lane is a distinct stage. */
   stageSeq:     integer('stage_seq').notNull().default(0),
   role:         varchar('role', { length: 120 }).notNull(),
@@ -1405,12 +1491,15 @@ export const agentInferenceLogs = pgTable('agent_inference_logs', {
 /** Retrieval chunks backing an agent's recalled knowledge (0249). */
 export const agentKnowledgeChunks = pgTable('agent_knowledge_chunks', {
   id:        text('id').primaryKey(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   agentId:   text('agent_id').notNull().references(() => ideAgents.id, { onDelete: 'cascade' }),
   ordinal:   integer('ordinal').notNull(),
   chunkText: text('chunk_text').notNull(),
   source:    text('source'),
+  origin:    varchar('origin', { length: 64 }).notNull().default('ingestion'),
+  expiresAt: timestamp('expires_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => ({ byTenantAgent: index('idx_agent_knowledge_chunks_tenant_agent').on(t.tenantId, t.agentId, t.ordinal) }));
 
 
 // ---------------------------------------------------------------------------
@@ -1475,6 +1564,20 @@ export const coordinationNotes = pgTable('coordination_notes', {
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
+
+/** Append-only observations of lease conflicts, used to identify hot files/repos. */
+export const coordinationContentionEvents = pgTable('coordination_contention_events', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  scopeKey: varchar('scope_key', { length: 255 }).notNull(),
+  taskId: integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+  resourceKey: varchar('resource_key', { length: 512 }).notNull(),
+  claimantExecutionId: integer('claimant_execution_id'),
+  holderExecutionId: integer('holder_execution_id'),
+  claimantLabel: varchar('claimant_label', { length: 255 }).notNull(),
+  holderLabel: varchar('holder_label', { length: 255 }).notNull(),
+  occurredAt: timestamp('occurred_at').notNull().defaultNow(),
+}, (t) => ({ byScope: index('idx_coordination_contention_scope').on(t.tenantId, t.scopeKey, t.occurredAt) }));
 
 
 // ═══ from llm.ts ═══

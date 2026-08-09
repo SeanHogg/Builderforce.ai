@@ -55,6 +55,9 @@ import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrast
 import { QA_CACHE_SOURCE, deleteProjectFact, projectFactsVersion, recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { dispatchEmbeddingVendor } from '../llm/embeddingVendors/registry';
+import { cosineSimilarity } from '../llm/vectorMath';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 const RECALL_DEFAULT = 5;
 const RECALL_MAX = 20;
@@ -63,6 +66,24 @@ const RECALL_L1_TTL_MS = 30_000;
 const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const versionKey = (tenantId: number): string => `mem:ver:${tenantId}`;
+
+async function semanticRank(env: Env, query: string, entries: MemoryEntry[]): Promise<MemoryEntry[]> {
+  if (!query.trim() || entries.length < 2 || (!env.OPENROUTER_API_KEY && !env.VOYAGE_API_KEY)) return entries;
+  try {
+    const embedded = await dispatchEmbeddingVendor({
+      env: { OPENROUTER_API_KEY: env.OPENROUTER_API_KEY, VOYAGE_API_KEY: env.VOYAGE_API_KEY },
+      input: [query, ...entries.map((entry) => `${entry.key}\n${entry.content}`)],
+    });
+    const vectors = [...embedded.data].sort((a, b) => a.index - b.index).map((row) => row.embedding);
+    const queryVector = vectors[0];
+    if (!queryVector || vectors.length !== entries.length + 1) return entries;
+    return entries.map((entry, index) => ({ entry, score: cosineSimilarity(queryVector, vectors[index + 1] ?? []) }))
+      .sort((a, b) => b.score - a.score).map(({ entry }) => entry);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/memory/memoryService.ts', operation: 'semanticRank', level: 'warning' });
+    return entries;
+  }
+}
 
 /**
  * The COMPOSITE cache token for a scope context.
@@ -189,6 +210,7 @@ export async function recall(
       env,
       `mem:recall:${ctx.tenantId}:${token}:${n}:${query}`,
       async () => {
+        const semanticEnabled = Boolean(env.OPENROUTER_API_KEY || env.VOYAGE_API_KEY);
         // The two backings are read CONCURRENTLY — a fan-out of two, not an N+1: the
         // scoped store answers tenant+ticket in ONE query via an IN over the chain.
         const scopedKinds = chain.filter((s) => s.kind !== 'project');
@@ -204,7 +226,7 @@ export async function recall(
                   ...scopedKinds.map((s) => and(eq(agentMemory.scopeKind, s.kind), eq(agentMemory.scopeId, s.id))),
                 );
                 const unexpired = or(isNull(agentMemory.expiresAt), gt(agentMemory.expiresAt, new Date()));
-                const lexical: SQL | undefined = matchers.length > 0 ? or(...matchers) : undefined;
+                const lexical: SQL | undefined = !semanticEnabled && matchers.length > 0 ? or(...matchers) : undefined;
                 return db
                   .select({
                     key: agentMemory.key,
@@ -219,7 +241,7 @@ export async function recall(
                   .limit(n * chain.length);
               })(),
           projectScope
-            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query, limit: n })
+            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query: semanticEnabled ? '' : query, limit: semanticEnabled ? n * 4 : n })
             : Promise.resolve([] as Array<{ key: string; content: string }>),
         ]);
 
@@ -245,7 +267,7 @@ export async function recall(
           );
         }
         const ordered: MemoryEntry[] = chain.flatMap((s) => byScope.get(s.kind) ?? []);
-        return dedupeBySpecificity<MemoryEntry>(ordered).slice(0, n);
+        return (await semanticRank(env, query, dedupeBySpecificity<MemoryEntry>(ordered))).slice(0, n);
       },
       { l1TtlMs: RECALL_L1_TTL_MS },
     );

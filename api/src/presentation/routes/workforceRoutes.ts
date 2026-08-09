@@ -22,6 +22,7 @@ import {
   agentFeedback,
   agentPurchases,
   artifactAssignments,
+  executions,
   ideAgents,
   projectAgents,
 } from '../../infrastructure/database/schema';
@@ -239,35 +240,25 @@ export async function loadAgentPerfRollup(
   db: Db,
   agentId: string,
 ): Promise<AgentPerfRollup> {
-  // Perf telemetry, scoped to runs that ran AS this agent for a currently-active
-  // hirer. Latency is server-side seconds*1000 so it survives JSON without TZ drift.
-  //
-  // `db.execute` (still Drizzle) rather than the query builder: this is four
-  // aggregates with per-aggregate FILTER clauses over a correlated EXISTS — the
-  // builder has no FILTER construct, so expressing it would mean one sql`` fragment
-  // per selected column plus a hand-written subquery, i.e. the same SQL with more
-  // ceremony and more places to drift.
-  const perfResult = await db.execute(sql`
-    SELECT
-      COUNT(*)::int                                                        AS total_runs,
-      COUNT(*) FILTER (WHERE e.status = 'completed')::int                  AS completed_runs,
-      COUNT(*) FILTER (WHERE e.status IN ('failed','cancelled'))::int      AS failed_runs,
-      AVG(EXTRACT(EPOCH FROM (e.completed_at - e.started_at)) * 1000)
-        FILTER (WHERE e.status = 'completed'
-                AND e.started_at IS NOT NULL AND e.completed_at IS NOT NULL) AS avg_latency_ms
-    FROM executions e
-    WHERE e.cloud_agent_ref = ${agentId}
-      AND EXISTS (
-        SELECT 1 FROM agent_purchases p
-        WHERE p.agent_id = ${agentId} AND p.tenant_id = e.tenant_id AND p.unhired_at IS NULL
-      )
-  `);
-  const [perf] = perfResult.rows as Array<{
-    total_runs: number | string | null;
-    completed_runs: number | string | null;
-    failed_runs: number | string | null;
-    avg_latency_ms: number | string | null;
-  }>;
+  // Query-builder read with conditional CASE aggregates. The active-hirer tenant
+  // subquery is itself typed Drizzle, so this rollup no longer needs db.execute or
+  // a hand-written correlated FILTER statement.
+  const activeHirerTenants = db.select({ tenantId: agentPurchases.tenantId })
+    .from(agentPurchases)
+    .where(and(eq(agentPurchases.agentId, agentId), isNull(agentPurchases.unhiredAt)));
+  const [perf] = await db.select({
+    total_runs: sql<number>`COUNT(*)::int`,
+    completed_runs: sql<number>`COALESCE(SUM(CASE WHEN ${executions.status} = 'completed' THEN 1 ELSE 0 END), 0)::int`,
+    failed_runs: sql<number>`COALESCE(SUM(CASE WHEN ${executions.status} IN ('failed', 'cancelled') THEN 1 ELSE 0 END), 0)::int`,
+    avg_latency_ms: sql<number | null>`AVG(CASE
+      WHEN ${executions.status} = 'completed' AND ${executions.startedAt} IS NOT NULL AND ${executions.completedAt} IS NOT NULL
+      THEN EXTRACT(EPOCH FROM (${executions.completedAt} - ${executions.startedAt})) * 1000
+      ELSE NULL
+    END)`,
+  }).from(executions).where(and(
+    eq(executions.cloudAgentRef, agentId),
+    inArray(executions.tenantId, activeHirerTenants),
+  ));
   const [hires] = await db
     .select({ hired_tenants: sql<number>`COUNT(*)::int` })
     .from(agentPurchases)

@@ -49,6 +49,7 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
+import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -1675,6 +1676,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Get a single execution by ID
+  router.get('/executions/:id/coordination', async (c) => {
+    const executionId = Number(c.req.param('id'));
+    if (!Number.isFinite(executionId)) return c.json({ error: 'invalid execution id' }, 400);
+    const tenantId = c.get('tenantId');
+    const [run] = await db.select({ taskId: executions.taskId }).from(executions).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId))).limit(1);
+    if (!run) return c.json({ error: 'execution not found' }, 404);
+    const coordination = await getTicketCoordination(c.env, db, tenantId, run.taskId);
+    return coordination ? c.json(coordination) : c.json({ error: 'ticket not found' }, 404);
+  });
+
   router.get('/executions/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const owned = await loadOwnedExecution(c, runtimeService, id);

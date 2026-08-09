@@ -101,7 +101,7 @@ describe('plan-gated destinations', () => {
     const byId = new Map(listDestinations().map((destination) => [destination.id, destination]));
     // Enforced by tenantHasFeature('psychometricPersona') and
     // requirePlanFeature('advancedInsights') respectively.
-    expect(byId.get('settings.settings.persona')?.feature).toBe('psychometricPersona');
+    expect(byId.get('settings.settings.viewpoint')?.feature).toBe('psychometricPersona');
     expect(byId.get('insights.insights.finance')?.feature).toBe('advancedInsights');
   });
 

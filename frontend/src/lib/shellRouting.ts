@@ -43,6 +43,7 @@ const PUBLIC_SHELL_PREFIXES = ['/legal', '/product', '/blog', '/tutorials', '/ag
  * dead end — the teaser mounted in its place and the invitee never saw it.
  */
 const GUEST_APP_PATTERNS: RegExp[] = [
+  /^\/create$/,
   /^\/create\/local-/,
   /^\/create\/invitations(?:\/|$)/,
 ];

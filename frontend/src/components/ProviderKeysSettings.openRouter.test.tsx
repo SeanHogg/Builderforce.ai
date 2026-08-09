@@ -103,7 +103,12 @@ describe('ProviderKeysSettings — OpenRouter connection health', () => {
 
     fireEvent.click(await screen.findByText('providerKeys.diagnostic.test'));
 
-    expect(await screen.findByText(/No auth credentials found/)).toBeInTheDocument();
+    // The verdict is COMPOSED from the catalog, carrying the machine status — the
+    // server's raw English `error` string is deliberately not rendered, because a
+    // zh/es/fr/de operator would otherwise get an English sentence in the middle of
+    // their diagnostic. This asserted that raw string and so contradicted the rule
+    // `probeVerdict` exists to keep.
+    expect(await screen.findByText(/providerKeys\.diagnostic\.failedFallback/)).toBeInTheDocument();
     // The verdict is announced, not merely coloured.
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
   });

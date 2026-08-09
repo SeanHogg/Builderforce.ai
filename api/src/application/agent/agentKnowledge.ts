@@ -12,12 +12,12 @@
  * (the `./retrieval` subpath is zero-dep + Worker-safe), so this never duplicates
  * the chunker/BM25.
  */
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, or } from 'drizzle-orm';
 import { bm25Search, chunkText, type Bm25Doc } from '@seanhogg/builderforce-memory/retrieval';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentKnowledgeChunks } from '../../infrastructure/database/schema';
+import { agentKnowledgeChunks, ideAgents } from '../../infrastructure/database/schema';
 
 export interface KnowledgeChunk {
   id: string;
@@ -60,7 +60,7 @@ export async function loadAgentChunks(env: Env, db: Db, agentId: string): Promis
       const rows = await db
         .select({ id: agentKnowledgeChunks.id, chunkText: agentKnowledgeChunks.chunkText })
         .from(agentKnowledgeChunks)
-        .where(eq(agentKnowledgeChunks.agentId, agentId))
+        .where(and(eq(agentKnowledgeChunks.agentId, agentId), or(isNull(agentKnowledgeChunks.expiresAt), gt(agentKnowledgeChunks.expiresAt, new Date()))))
         .orderBy(asc(agentKnowledgeChunks.ordinal));
       return rows.map((r) => ({ id: r.id, text: r.chunkText }));
     },
@@ -98,11 +98,14 @@ export async function ingestAgentKnowledge(
   source?: string,
 ): Promise<number> {
   const texts = chunkDocuments(docs);
+  const [agent] = await db.select({ tenantId: ideAgents.tenantId }).from(ideAgents).where(eq(ideAgents.id, agentId)).limit(1);
+  if (!agent) throw new Error('agent not found');
   await db.delete(agentKnowledgeChunks).where(eq(agentKnowledgeChunks.agentId, agentId));
   if (texts.length > 0) {
     await db.insert(agentKnowledgeChunks).values(
       texts.map((text, i) => ({
         id: crypto.randomUUID(),
+        tenantId: agent.tenantId,
         agentId,
         ordinal: i,
         chunkText: text,

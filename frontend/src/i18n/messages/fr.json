@@ -15129,7 +15129,9 @@
     "subtitle": "Tout ce que vous avez créé, et les façons de commencer autre chose.",
     "pendingTitle": "En attente d’enregistrement",
     "pendingHint": "Ces canevas sont encore conservés dans ce navigateur. Ouvrez-en un pour l’enregistrer dans votre espace de travail.",
-    "untitled": "Canevas sans titre"
+    "untitled": "Canevas sans titre",
+    "signedOutSubtitle": "Les tableaux que vous avez commencés dans ce navigateur. Connectez-vous pour les conserver et voir tout ce que votre espace de travail a créé.",
+    "startLocalCanvas": "+ Démarrer un canevas"
   },
   "commandPalette": {
     "trigger": "Rechercher",

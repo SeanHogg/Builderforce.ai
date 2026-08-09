@@ -15130,7 +15130,9 @@
     "subtitle": "Everything you have created, and the ways to start something new.",
     "pendingTitle": "Waiting to be saved",
     "pendingHint": "These canvases are still held in this browser. Open one to save it to your workspace.",
-    "untitled": "Untitled canvas"
+    "untitled": "Untitled canvas",
+    "signedOutSubtitle": "The boards you started in this browser. Sign in to keep them and to see everything your workspace has made.",
+    "startLocalCanvas": "+ Start a canvas"
   },
   "commandPalette": {
     "trigger": "Search",

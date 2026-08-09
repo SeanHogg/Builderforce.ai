@@ -15129,7 +15129,9 @@
     "subtitle": "Alles, was du erstellt hast – und die Wege, etwas Neues zu beginnen.",
     "pendingTitle": "Warten auf Speicherung",
     "pendingHint": "Diese Canvas liegen noch in diesem Browser. Öffne eines, um es in deinem Workspace zu speichern.",
-    "untitled": "Unbenanntes Canvas"
+    "untitled": "Unbenanntes Canvas",
+    "signedOutSubtitle": "Die Boards, die du in diesem Browser begonnen hast. Melde dich an, um sie zu behalten und alles zu sehen, was dein Workspace erstellt hat.",
+    "startLocalCanvas": "+ Canvas starten"
   },
   "commandPalette": {
     "trigger": "Suchen",

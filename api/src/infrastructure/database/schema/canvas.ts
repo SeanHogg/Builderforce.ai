@@ -47,6 +47,7 @@ import {
 import { marketplacePersonas } from './agents';
 import { integrationCredentials } from './platform';
 import {
+  agentDefinitionVersions,
   agentHosts,
   agents,
   executions,
@@ -1331,6 +1332,7 @@ export const rehearsals = pgTable('rehearsals', {
   status:            varchar('status', { length: 16 }).notNull().default('queued'),
   /** ide_agents.id by value (no FK — same convention as tasks.assignedAgentRef). */
   agentRef:          varchar('agent_ref', { length: 64 }),
+  agentDefinitionVersionId: uuid('agent_definition_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
   agentLabel:        varchar('agent_label', { length: 255 }).notNull().default('agent'),
   model:             varchar('model', { length: 120 }),
   taskId:            integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }),

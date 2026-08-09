@@ -1,3 +1,98 @@
+## ✅ RESOLVED 2026-08-09 — The canvas is the product, for everyone
+
+*A signed-out visitor opened a board at `/create/local-…` and got the marketing header — Home,
+Product, Learn, Pricing, Sign In — where the session list, the stage and the team belong. PRD 21 §0
+says the canvas IS the product and everything else is a panel over it; rendering the anonymous board
+inside `MarketingShell` handed that person a different product from the one they were being asked to
+sign up for. Five of the PRD's outstanding register entries closed with it.*
+
+**One predicate decides the chrome, and the same one decides who owns the board.**
+`rendersAppShell(pathname, isAuthenticated)` in `shellRouting.ts` is now consulted by
+`ConditionalAppShell` (which shell to render) and by `shellHostsCanvasStage` (who mounts the stage).
+They used to be two answers to one question, which is why the anonymous route carried its own second
+copy of `<CreationCanvas>` — a board that could be mounted twice or not at all depending on which
+side was right. That fallback is deleted: there is one stage, and it hosts every canvas.
+
+Three routes an anonymous visitor now gets the real shell for, each for its own reason:
+
+- `/create/local-*` — the defect above. A local-first board is a real, editable board.
+- `/create/invitations/*` — that page renders its own *"sign in with the invited email"* branch, so
+  as a plain app route the generic teaser mounted in its place and **an invite link was a dead end
+  for exactly the person it was sent to**. Found while wiring the predicate. Now localized in all
+  five catalogs and on the primitives, rather than the hardcoded English it shipped with.
+- `/create` — the canvas library redirected a guest to `/login`, making the one place a guest's own
+  drafts are *guaranteed* to be visible the one place they could not go.
+
+**The shell parts self-gate rather than being duplicated.** Every difference between the two
+visitors is what is ENABLED, not what exists (§2.6 rule 7):
+
+- `GET /api/roster/team` answers for a caller with no workspace — the always-on seats, `locked` —
+  through a new `optionalAuthMiddleware` that delegates to `authMiddleware` and swallows only the
+  rejection. A second endpoint would have been a second roster, which §4.1 exists to prevent.
+- The sidebar renders locked destinations as an inert `<span>`, not a dimmed `<Link>`: an anchor
+  that merely looks disabled is still followable by keyboard and by middle-click.
+- `signInHref()` replaces fifteen hand-built `/login?next=…` strings that disagreed about whether to
+  encode — an un-encoded `/create/x?share=1` lost everything after the `&` on the round trip.
+- `useTeamRoster` now carries WHO its held roster was read for, so signing in does not leave the
+  guest's locked seats on screen.
+- "New canvas" creates a LOCAL board when there is no workspace. It used to fall back to `/create`,
+  which for a guest was a login redirect — so the one control named after the action could not do it.
+
+**The footer roster is filled.** `TeamRoster` mapped three of ten seats to an agent; CMO, CFO, CRO,
+Recruiter, HR and CEO rendered permanently disabled. Correct for an unprovisioned seat, wrong as the
+default — a footer that is mostly locked reads as a product that mostly does not work. Migration
+**0436** and `provisionBuiltinAgents` seed all six as ordinary cloud agents, with a
+seed ⇄ migration parity test per seat (the lesson of 0376/0379: a persona is DATA, written once per
+tenant, so a drift between the seed and the backfill means a workspace's CFO depends on the week it
+was created). They are listed in `BUILTIN_KIND_ROLE_KEYS` with **empty** role arrays — a claim, not
+an omission: unlisted, a CRO whose title reads *"owns revenue: pipeline, deals"* is one loose keyword
+away from being staffed onto an engineering lane.
+
+**`membershipChanged` is the mutation hook two files asked for in their own comments.**
+`keyResolutionCache.ts` — *"there is no single tenant_members mutation hook"* — and `llmRoutes.ts`
+said the same thing, and the footer roster read the fact a third way: a person who joined appeared
+beside their team up to 120 seconds later. The shared thing is the CONSEQUENCE, not the SQL, so that
+is what was extracted: one call at the end of every membership write, naming every cache the fact
+reaches. `TenantService` (which owns create / add / remove / change-role, including the invite
+auto-accept) and the demo seeder both call it; the admin role-change handler, which had been naming
+each cache itself, now calls it too. The client half rides along: `invalidateTeamRoster` had **no
+callers**, so the footer kept its copy until a full page load.
+
+**Both PRD 21 §7 operator decisions taken and implemented.** Account security survives at
+`/security`; the duplicate `?sub=sessions` sub-view is deleted and redirects, because a removed
+destination that 404s is not a decision. The insight lens is renamed **Persona → Viewpoint** (nav,
+route, all five catalogs), with `/settings/persona` kept as a redirect; "Personality" keeps its name
+as the user's own psychometric profile.
+
+**The off-scale-radius ratchet is closed: 2,086 → 9.** Most of that debt was `borderRadius: 8` — the
+right size typed as a number, so the scale was being followed and never named. Every literal is now
+snapped to its nearest `--radius-*` step; percentages were deliberately left alone (`50%` and
+`9999px` are identical on a square avatar and nothing alike on a wide one, so snapping them is a
+visual change dressed as a scale fix). The nine that remain are live expressions, not literals.
+The colour half went 403 → **341** files by replacing every literal that is EXACTLY a declared
+token's value in one of the two themes, plus `color: #fff` → `var(--text-on-accent)` (the same value
+in both themes, so a zero-visual-change rewrite that finally gives the ink its name).
+
+**One stale test, caught by the full run.** `ProviderKeysSettings.openRouter.test.tsx` asserted that
+a failed provider probe renders the server's raw `error` string ("No auth credentials found").
+`probeVerdict` deliberately composes that line from the catalog instead — *"server responses carry
+machine status codes; compose all operator-facing prose here so every supported locale sees the same
+diagnostic contract"* — so the test was asserting the exact behaviour the code exists to prevent: an
+English sentence in the middle of a zh/es/fr/de operator's diagnostic. It now asserts the composed
+verdict. (Verified pre-existing: it fails identically against the version of the component from
+before this pass touched it.)
+
+**Three bugs in the guard itself, found by running it against the sweep.** It read a JS value's
+QUOTES as part of the value, so `'12px 12px 0 0'` counted two off-scale corners and an on-scale
+`'50%'` counted as a defect. Its value regex stopped at the comma inside `var(--radius-md, 8px)` and
+reported the perfectly correct fallback as the off-scale value `'var(--radius-md`. And it had no
+notion of `border-radius: inherit`, which is not a size at all. It now also exempts, each with a
+reason, the three files whose radii are not this product's UI — `DevicePreview` (a phone's corner is
+44px because the phone's corner is 44px) and the two builders that emit standalone documents opened
+outside this app, where none of these tokens are declared.
+
+---
+
 ## ✅ RESOLVED 2026-08-09 — A dead class is invisible until someone trusts it
 
 *Support ticket: `/dashboard` white-screened with a Turbopack "module factory is not available — it

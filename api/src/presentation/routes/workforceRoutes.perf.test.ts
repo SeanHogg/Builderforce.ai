@@ -10,9 +10,8 @@ type Db = Parameters<typeof loadAgentPerfRollup>[0];
  * minimal Drizzle fake that returns canned rows in call order, so this exercises
  * the reduction logic without a live DB.
  *
- * The rollup mixes both Drizzle access styles, so the fake covers both:
- *   db.execute(sql`…`)                                 -> { rows }   (perf aggregate)
- *   db.select(…).from(t).where(…)[.orderBy(…).limit(n)] -> rows      (hires, feedback)
+ * Every rollup read uses the Drizzle query builder:
+ *   db.select(…).from(t).where(…)[.orderBy(…).limit(n)] -> rows
  * The builder chain is a single self-returning thenable, so it resolves off the
  * same call-ordered queue no matter which terminal method the query ends on.
  */
@@ -25,10 +24,7 @@ function mockDb(responses: unknown[][]): Db {
   chain.orderBy = () => chain;
   chain.limit = () => chain;
   chain.then = (onOk: (v: unknown) => unknown, onErr?: (e: unknown) => unknown) => take().then(onOk, onErr);
-  return {
-    execute: async () => ({ rows: await take() }),
-    select: () => chain,
-  } as unknown as Db;
+  return { select: () => chain } as unknown as Db;
 }
 
 describe('loadAgentPerfRollup', () => {

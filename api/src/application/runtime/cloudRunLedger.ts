@@ -16,14 +16,11 @@
  */
 
 import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
-import { llmUsageLog, tenants } from '../../infrastructure/database/schema';
+import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { utcMonthStart } from '../llm/tokenUsage';
-import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
+import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 
 /** Only cloud-surface usage rows that carry an execution id count as a run. */
 const cloudRunRow = and(eq(llmUsageLog.surface, 'cloud'), isNotNull(llmUsageLog.executionId));
@@ -58,9 +55,7 @@ export async function sumTenantCloudRuns(db: Db, tenantId: number, since: Date):
   return daily.reduce((total, r) => total + r.value, 0);
 }
 
-export type CloudRunCapResult =
-  | { allowed: true }
-  | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };
+export type CloudRunCapResult = MonthlyTenantCapResult;
 
 /**
  * Gate a NEW cloud-agent run against the tenant's monthly allowance. Self-contained
@@ -74,37 +69,11 @@ export type CloudRunCapResult =
  * query error — a metering hiccup must not block a legitimate run.
  */
 export async function enforceCloudRunCap(db: Db, tenantId: number, env?: Env): Promise<CloudRunCapResult> {
-  try {
-    const [tenantRow] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    const effectivePlan = resolveEffectivePlan({
-      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
-      billingStatus: (tenantRow?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: tenantRow?.trialEndsAt ?? null,
-    });
-    const limit = resolveCloudRunsMonthly({
-      effectivePlan,
-      tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
-    });
-    if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
-
-    // A superadmin OPERATOR is unlimited on EVERY meter — same rule, same source of
-    // truth as the token gate. Only consulted once the plan already caps the tenant.
-    if (await resolveSuperadminUnlimited(db, tenantId, undefined, env)) return { allowed: true };
-
-    const used = await sumTenantCloudRuns(db, tenantId, utcMonthStart());
-    if (used >= limit) return { allowed: false, effectivePlan, used, limit };
-    return { allowed: true };
-  } catch {
-    return { allowed: true };
-  }
+  return enforceMonthlyTenantCap({
+    db,
+    tenantId,
+    env,
+    resolveLimit: resolveCloudRunsMonthly,
+    sumUsage: sumTenantCloudRuns,
+  });
 }

@@ -15129,7 +15129,9 @@
     "subtitle": "您创建的全部内容，以及开始新作品的方式。",
     "pendingTitle": "等待保存",
     "pendingHint": "这些画布仍保存在此浏览器中。打开其中一个即可将其保存到您的工作区。",
-    "untitled": "未命名画布"
+    "untitled": "未命名画布",
+    "signedOutSubtitle": "你在此浏览器中创建的画板。登录后即可保存它们，并查看工作区中的全部内容。",
+    "startLocalCanvas": "+ 新建画板"
   },
   "commandPalette": {
     "trigger": "搜索",

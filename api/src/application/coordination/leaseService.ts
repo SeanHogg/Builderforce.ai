@@ -32,7 +32,7 @@ import {
   resourcePathFromKey,
   type LeaseLike,
 } from '../../domain/coordination/resourceKey';
-import { resourceLeases } from '../../infrastructure/database/schema';
+import { coordinationContentionEvents, resourceLeases } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
@@ -115,6 +115,11 @@ export async function acquireLease(
       | (LeaseLike & { holderLabel: string; reason: string | null })
       | null;
     if (blocking) {
+      await db.insert(coordinationContentionEvents).values({
+        tenantId: holder.tenantId, scopeKey: holder.scopeKey, taskId: holder.taskId,
+        resourceKey: key, claimantExecutionId: holder.executionId,
+        holderExecutionId: blocking.executionId, claimantLabel: holder.label, holderLabel: blocking.holderLabel,
+      });
       return {
         ok: true,
         resource: path,
@@ -181,6 +186,12 @@ export async function acquireLease(
     if (inserted.length === 0) {
       // Lost the race between the read and the insert — report the winner.
       const [winner] = (await liveLeasesFor(db, holder.tenantId, [key])) as Array<LeaseLike & { holderLabel: string }>;
+      await db.insert(coordinationContentionEvents).values({
+        tenantId: holder.tenantId, scopeKey: holder.scopeKey, taskId: holder.taskId,
+        resourceKey: key, claimantExecutionId: holder.executionId,
+        holderExecutionId: winner?.executionId ?? null, claimantLabel: holder.label,
+        holderLabel: winner?.holderLabel ?? 'another agent',
+      });
       return {
         ok: true,
         resource: path,
