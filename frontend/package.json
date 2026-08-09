@@ -15,7 +15,7 @@
     "check:api-transport": "node scripts/check-api-transport.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:architecture": "node scripts/check-frontend-architecture.mjs",
-    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:design-scale && npm run check:destinations && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "typecheck:native": "tsgo --noEmit",
     "type-check": "tsgo --noEmit && tsc --noEmit",

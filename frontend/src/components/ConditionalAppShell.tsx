@@ -33,7 +33,7 @@ import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
-import { classifyGuestBrainstormEntry, classifyShell, rendersAppShell } from '@/lib/shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, isReferenceSurface, rendersAppShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
@@ -121,6 +121,15 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // Marketing + public browse.
   if (kind === 'public') {
     if (!isAuthenticated) return <MarketingShell>{children}</MarketingShell>;
+    // §11.4.5's other half. A reference surface is public — that is why it
+    // classified as `public` above and why a signed-out visitor and a crawler
+    // both get the real page — but signed in it opens OVER the board, so it
+    // takes the operator shell and `ShellPanel` renders it as a panel. Without
+    // this it would return here as an ordinary public page and the panel would
+    // never mount, which is the same "it leaves your session" bug in a new
+    // costume. No `OnboardingGate`, for the same reason the tabbed public
+    // routes below skip it: the page stays viewable with or without a workspace.
+    if (isReferenceSurface(pathname)) return <AppShell>{children}</AppShell>;
     // A public route that is ALSO an in-app destination with sub-tabs (e.g.
     // /pricing is the Settings "Billing" tab) must keep the app's section-tab
     // bar for signed-in users — PublicShell drops it, so the in-page tab nav
@@ -174,6 +183,10 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // the page so the disallowed page never mounts (and never fires its tenant-scoped
   // fetches, which 401 for a tenantless account) — FreelancerRouteGuard redirects to
   // /freelancer/profile on the next tick.
+  // Only `kind === 'app'` reaches here, so this guard covers app routes alone —
+  // a reference surface returned above with its page intact. Withholding /soc2
+  // from a gig worker who can read it signed out would be a bug, not a
+  // permission.
   if (isFreelancer && !isFreelancerAllowedPath(pathname)) {
     return <AppShell>{null}</AppShell>;
   }

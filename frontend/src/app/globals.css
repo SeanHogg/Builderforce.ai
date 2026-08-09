@@ -350,6 +350,15 @@
      as on paper and wants dark ink either way. Declared (rather than written
      `#16241c` at the tile) so the pairing has a name and one place to change. */
   --ink-on-light: #16241c;
+  /* The other mirror: a band that is DARK in both themes because it is a
+     deliberate inversion of the page around it — the About page's closing CTA
+     is the only one today. It was written as `var(--surface-inverse, #17171b)`
+     with the literal doing all the work and the name declared nowhere, which is
+     the failure mode this guard exists for: a fallback paints in both themes,
+     so nothing looks broken and nothing is themeable either. Naming it changes
+     no pixel; it gives the pairing one place to change. */
+  --surface-inverse: #17171b;
+  --text-inverse: #fff;
   /* Ink for a label printed ON a categorical fill. The whole `*-bright` family is
      built so a hue is PALE on slate and DEEP on paper, which is one relationship
      and therefore one token — a stacked-bar segment cannot measure its own fill
@@ -533,6 +542,10 @@ html[data-theme='light'] {
   --shadow-color: rgba(60, 48, 36, 0.16);
   --text-on-accent: #fff;
   --ink-on-light: #16241c;
+  /* Same in both themes, and declared in both for the same reason `--ink-on-light`
+     is: the guard asks a name to resolve on paper as well as on slate. */
+  --surface-inverse: #17171b;
+  --text-inverse: #fff;
   --ink-on-categorical: #ffffff;
   --badge-unread: #4f46e5;
   --surface-page: var(--bg-deep);

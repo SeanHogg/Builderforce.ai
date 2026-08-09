@@ -63,7 +63,7 @@ const srcDir = resolve(here, '../src');
 const BASELINE = {
   /** Not a budget any more — see COLOUR_EXEMPT. Every literal outside it fails. */
   literalHexFiles: 0,
-  offScaleRadii: 9,
+  offScaleRadii: 6,
   /**
    * Literal font sizes, i.e. a size typed as a number instead of named as a
    * role. This is the third ratchet and it exists because §2.3 spent this
@@ -125,7 +125,7 @@ const COLOUR_EXEMPT = [
   /^lib\/gamePoster\.ts$/,
   /^lib\/creativeGeometry\.ts$/,
   /^lib\/qrCode\.ts$/,
-  /^components\/ide\/QrCode\.tsx$/,
+  /^components\/builder\/QrCode\.tsx$/,
   // The RFP proposal is one of those documents; these two hold its palette and
   // the iframe it previews in.
   /^components\/rfp\/RfpContent\.tsx$/,
@@ -142,7 +142,7 @@ const COLOUR_EXEMPT = [
   // brand colours, by design — it is an image, not a surface.
   /^components\/blog\/BlogCover\.tsx$/,
   // Physical devices: a phone's bezel and its dead screen are the phone's.
-  /^components\/ide\/DevicePreview\.tsx$/,
+  /^components\/builder\/DevicePreview\.tsx$/,
 
   // ---- Colour the AUTHOR picks, persisted as data -----------------------
   // The value is written into the object and rendered back as-is, and the
@@ -210,7 +210,7 @@ const FONT_SIZE_EXEMPT = [
   /^components\/rfp\/RfpContent\.tsx$/,
   /^app\/projects\/rfp\/\[id\]\/RfpDetailClient\.tsx$/,
   /^components\/blog\/BlogCover\.tsx$/,
-  /^components\/ide\/DevicePreview\.tsx$/,
+  /^components\/builder\/DevicePreview\.tsx$/,
   /^components\/Terminal\.tsx$/,
 ];
 
@@ -224,7 +224,7 @@ const FONT_SIZE_EXEMPT = [
  * these tokens are declared: a `var(--radius-lg)` there resolves to nothing.
  */
 const RADIUS_EXEMPT = [
-  /^components\/ide\/DevicePreview\.tsx$/,
+  /^components\/builder\/DevicePreview\.tsx$/,
   /^lib\/creationDeliverables\.ts$/,
   /^lib\/courseLms\.ts$/,
   // Generated PROJECT source. The mobile scaffold is React Native, where
@@ -253,10 +253,21 @@ function collect(dir, out = []) {
  * `'50%'` as a defect. Strip them, so the guard measures what was written.
  */
 function radiusParts(value) {
-  const trimmed = value.trim();
+  const trimmed = value.trim()
+    // `!important` is not a radius. Counting it made
+    // `border-radius: var(--radius-sm) !important` — a value squarely ON the
+    // scale — read as a violation, which is worse than a miss: a guard that
+    // reports compliant code teaches people to stop reading it.
+    .replace(/\s*!important\s*$/, '');
   const quoted = /^(['"])([\s\S]*)\1$/.exec(trimmed);
   return (quoted ? quoted[2] : trimmed)
+    // A conditional between two tokens is two tokens. `cond ? 'var(--radius-lg)'
+    // : 'var(--radius-xl)'` was scored four times over for the ternary's
+    // punctuation while both of its arms were correct.
     .replace(/var\([^)]*\)/g, 'var()')
+    .replace(/^[^?]*\?\s*/, '')
+    .replace(/\s*:\s*/g, ' ')
+    .replace(/['"]/g, '')
     .split(/[\s/]+/)
     .filter(Boolean);
 }

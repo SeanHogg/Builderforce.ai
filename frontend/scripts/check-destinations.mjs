@@ -10,14 +10,17 @@
  * and the CFO ended up existing four times under four names, one of which
  * navigated out of the product into a marketing page.
  *
- * Five checks, all cheap enough to run in `npm test`:
+ * Six checks, all cheap enough to run in `npm test`:
  *
  *   1. ONE DECLARATION — no second array of {href, labelKey} objects.
  *   2. NO DUPLICATE LABELS — two rows resolving to one name is the bug returning.
  *   3. NO MARKETING HREF IN THE APP RAIL — a destination never sends a signed-in
  *      person to an explainer page.
  *   4. EVERY SEAT HAS A HUE, and no two seats share one.
- *   5. EVERY REFERENCE ROW RESOLVES — unique slug, and copy that exists.
+ *   5. EVERY PUBLIC ROW RESOLVES — unique URL, copy that exists, and a footer
+ *      column that lists only ids the registry declares.
+ *   6. EVERY DECLARED PANEL SECTION EXISTS — the index rail cannot advertise an
+ *      anchor its page stopped rendering.
  *
  * Deliberately NOT ratcheted: the number of destinations. PRD 18/19 add
  * hundreds of leaves and a count would fight them. What is ratcheted is the
@@ -106,8 +109,13 @@ for (const key of labelKeys) {
 // ── 3 · No marketing href in the app rail ──────────────────────────────────
 // The exact bug this whole PRD exists to undo: the authenticated rail rendering
 // nine rows that navigated OUT of the product into marketing pages.
+// Only the EXPLAINER rows. `/marketplace` is both a public page and an app
+// destination — one place with one name — and flagging that would be flagging
+// the unification itself. What must never happen is a rail row pointing at a
+// `panel: true` row, i.e. at a page that exists to describe the product rather
+// than to be it.
 const marketingHrefs = new Set(
-  [...registrySource.matchAll(/marketingHref:\s*'([^']+)'/g)].map((m) => m[1]),
+  [...registrySource.matchAll(/marketingHref:\s*'([^']+)',[\s\S]{0,300}?panel:\s*true/g)].map((m) => m[1]),
 );
 const groupHrefs = [...(groupBlock?.[0] ?? '').matchAll(/href:\s*'([^']+)'/g)].map((m) => m[1]);
 for (const href of groupHrefs) {
@@ -172,7 +180,7 @@ for (const copyId of [...referenceBlock.matchAll(/copyId:\s*'([^']+)'/g)].map((m
 
 // Every footer column id must be a row. A footer that lists an id nobody
 // declares renders a shorter column and says nothing about why.
-const declaredIds = new Set([...referenceBlock.matchAll(/id:\s*'([^']+)'/g)].map((m) => m[1]));
+const declaredIds = new Set([...referenceBlock.matchAll(/\bid:\s*'([^']+)'/g)].map((m) => m[1]));
 const footerBlock = registrySource.match(/export const FOOTER_COLUMNS[\s\S]*?\n\];/)?.[0] ?? '';
 for (const column of footerBlock.matchAll(/ids:\s*\[([^\]]*)\]/g)) {
   for (const [, id] of column[1].matchAll(/'([^']+)'/g)) {
@@ -184,8 +192,7 @@ for (const column of footerBlock.matchAll(/ids:\s*\[([^\]]*)\]/g)) {
 // The panel's index rail is declared on the registry row. If a page renames an
 // anchor, the rail silently scrolls nowhere — so the ids are asserted against
 // the route's own source rather than trusted.
-for (const row of referenceBlock.matchAll(/marketingHref:\s*'([^']+)'[\s\S]*?sections:\s*\[([\s\S]*?)
-\s*\],/g)) {
+for (const row of referenceBlock.matchAll(/marketingHref:\s*'([^']+)',[\s\S]{0,400}?sections:\s*\[([\s\S]*?)\n\s*\],/g)) {
   const [, href, body] = row;
   const pageFile = path.join(SRC, 'app', href.replace(/^\//, ''), 'page.tsx');
   if (!fs.existsSync(pageFile)) {
@@ -193,7 +200,7 @@ for (const row of referenceBlock.matchAll(/marketingHref:\s*'([^']+)'[\s\S]*?sec
     continue;
   }
   const pageSource = fs.readFileSync(pageFile, 'utf8');
-  for (const [, id] of body.matchAll(/id:\s*'([^']+)'/g)) {
+  for (const [, id] of body.matchAll(/\bid:\s*'([^']+)'/g)) {
     if (!pageSource.includes(`id="${id}"`)) {
       fail(`[sections] \`${href}\` declares section \`${id}\`, which its page never renders as an anchor.`);
     }
@@ -208,6 +215,6 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `✅ check-destinations OK — ${labelKeys.length} destinations and ${seenHrefs.size} reference pages ` +
+  `✅ check-destinations OK — ${labelKeys.length} app destinations and ${seenHrefs.size} public pages ` +
   `in one registry; ${seatList.length} seats, ${hueByVar.size} distinct hues.`,
 );

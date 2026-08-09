@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FOOTER_COLUMNS,
+  LEARN_COLUMNS,
   NAV_GROUPS,
+  PANEL_SURFACES,
+  PRODUCT_COLUMNS,
+  PUBLIC_DESTINATIONS,
   PUBLIC_NAV,
   REFERENCE_DESTINATIONS,
   REFERENCE_DOMAINS,
@@ -8,13 +13,19 @@ import {
   RUNG,
   STAGES,
   bottomNavFor,
+  columnOf,
+  destTitleKey,
   earnedRung,
+  footerColumns,
   groupsForStage,
+  publicById,
+  publicDestinationFor,
+  referenceByHref,
   referenceBySlug,
 } from './navGroups';
 import { FAMILIES, FAMILY_IDS, resolveFamily } from './marketplaceFamilies';
 import { SEATS, isSeat, seatHueVar } from './seats';
-import { isReferenceSurface } from './shellRouting';
+import { classifyShell, isReferenceSurface, rendersAppShell } from './shellRouting';
 import { classifyRoute, panelWidth } from './workbenchPolicy';
 
 /**
@@ -136,6 +147,77 @@ describe('a reference page is a panel when you are signed in', () => {
   it('opens them at full width, since they were written as full-bleed pages', () => {
     expect(panelWidth('/soc2')).toBe('full');
     expect(panelWidth('/settings')).toBe('sheet');
+  });
+});
+
+describe('a public page is public — the regression that made the product map invisible', () => {
+  // `/features` and the nine domain explainers were reference surfaces in
+  // `shellRouting` but absent from `PUBLIC_SHELL_PREFIXES`, so `classifyShell`
+  // called them app routes: a signed-out visitor got "This is part of
+  // Builderforce.ai" instead of the page, and every marketing surface the
+  // Product menu points at was unreachable and unindexable.
+  const PUBLIC_PAGES = ['/features', '/product-management', '/business-intelligence', '/soc2', '/integrations', '/survival-focused-agile'];
+
+  it.each(PUBLIC_PAGES)('renders %s to a signed-out visitor', (href) => {
+    expect(classifyShell(href)).toBe('public');
+    expect(rendersAppShell(href, false)).toBe(false);
+  });
+
+  it.each(PUBLIC_PAGES)('opens %s over the board once signed in', (href) => {
+    expect(rendersAppShell(href, true)).toBe(true);
+    expect(classifyRoute(href)).toBe('workbench');
+  });
+
+  it('never lists a panel surface that no public row declares', () => {
+    for (const href of PANEL_SURFACES) {
+      expect(referenceByHref(href) ?? publicDestinationFor(href), `${href} is a panel with no row`).toBeTruthy();
+    }
+  });
+
+  it('keeps the canvas out of the panel set — it is what panels open over', () => {
+    expect(PANEL_SURFACES).not.toContain('/create/new');
+    expect(isReferenceSurface('/create/new')).toBe(false);
+  });
+});
+
+describe('the public menus and the footer are projections, not lists', () => {
+  it('fills every Product and Learn column', () => {
+    for (const column of [...PRODUCT_COLUMNS, ...LEARN_COLUMNS]) {
+      expect(columnOf(column).length, `the ${column} column is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  it('groups the Product menu by the same arc the left panel uses', () => {
+    // Somebody who reads the marketing menu and then signs up should find the
+    // shape they were shown, not a second vocabulary.
+    expect(PRODUCT_COLUMNS.every((column) => STAGES.includes(column as never))).toBe(true);
+  });
+
+  it('resolves every footer id to a real destination', () => {
+    for (const column of footerColumns()) {
+      expect(column.links.length, `${column.titleKey} resolved to nothing`).toBeGreaterThan(0);
+    }
+    const ids = FOOTER_COLUMNS.flatMap((column) => column.ids);
+    expect(ids.every((id) => publicById(id))).toBe(true);
+  });
+
+  it('no longer offers an /agents destination anywhere public', () => {
+    // An agent is a marketplace listing. The footer kept the door open for a
+    // release after the destination was folded into the storefront.
+    expect(PUBLIC_DESTINATIONS.map((entry) => entry.marketingHref)).not.toContain('/agents');
+  });
+
+  it('gives the storefront ONE name across the bar, the footer and the rail', () => {
+    const storefront = publicById('marketplace');
+    expect(storefront?.marketingHref).toBe('/marketplace');
+    expect(FOOTER_COLUMNS.flatMap((column) => column.ids)).toContain('marketplace');
+    // Same row, so the label cannot be "Workforce Registry" in one place.
+    expect(destTitleKey(storefront!)).toBe('marketingNav.dest.marketplace.title');
+  });
+
+  it('gives every menu row a unique public URL', () => {
+    const hrefs = PUBLIC_DESTINATIONS.map((entry) => entry.marketingHref);
+    expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 });
 
