@@ -110,9 +110,10 @@ export function TeamBar() {
 
   const alwaysOn = members.filter((m) => m.alwaysOn);
   const team = members.filter((m) => !m.alwaysOn);
-  // Inviting needs a workspace. Rather than hide the control (which would make
-  // the guest footer a different footer), it becomes the offer that leads to
-  // one — the same row, the same place, an honest label.
+  // Creation Canvas owns sharing in its session bar, including account-free
+  // guest links. Repeating an account-backed workforce invite in this footer is
+  // both a duplicate action and, for local canvases, a contradiction.
+  const canvasOwnsInvites = pathname.startsWith('/create/');
   const invite = hasTenant
     ? { href: '/workforce', label: t('invite') }
     : { href: signInHref(pathname), label: t('inviteSignedOut') };
@@ -132,9 +133,9 @@ export function TeamBar() {
         <div className={styles.chips}>
           {team.map((member) => <TeammateChip key={member.id} member={member} />)}
         </div>
-        <ButtonLink href={invite.href} variant="ghost" size="sm" className={styles.invite}>
+        {!canvasOwnsInvites && <ButtonLink href={invite.href} variant="ghost" size="sm" className={styles.invite}>
           {invite.label}
-        </ButtonLink>
+        </ButtonLink>}
       </div>
     </div>
   );

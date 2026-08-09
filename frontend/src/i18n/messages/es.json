@@ -6101,6 +6101,13 @@
     "ctaTitle": "¿Qué vas a crear?",
     "ctaDesc": "Empieza con una instrucción y conviértela en trabajo conectado, revisable y listo para entregar junto a tu equipo y agentes de IA. Sin tarjeta de crédito.",
     "ctaSeeLiveAgents": "Explorar el lienzo",
+    "homepageFaq": [
+      { "question": "¿Necesito una cuenta para empezar?", "answer": "No. El primer lienzo es privado y permanece en tu navegador; nada sale del dispositivo hasta que inicias sesión. Al hacerlo, el borrador que ya empezaste se incorpora a tu espacio de trabajo en lugar de descartarse." },
+      { "question": "¿Qué son exactamente los agentes de IA?", "answer": "Son especialistas que desempeñan un rol en tu equipo: CFO, CMO, CTO y otros. Aparecen en la parte inferior de cada lienzo junto a las personas invitadas. Lleva uno al tablero y leerá el trabajo, asumirá la tarea y producirá un cambio que podrás revisar." },
+      { "question": "¿Puedo usar mi propio modelo?", "answer": "Sí. Conecta tu propia cuenta de proveedor y el trabajo se ejecutará en ella. Si un espacio no tiene conexión, el enrutamiento de la plataforma elige un modelo y el coste se carga al medidor del espacio de trabajo." },
+      { "question": "¿En qué se diferencia de una herramienta de chat con IA?", "answer": "Una herramienta de chat produce texto que después tienes que trasladar. Builderforce produce objetos conectados—una página activa, un flujo en ejecución o un conjunto de datos vinculado—que se referencian entre sí y conservan un historial revisable desde la primera idea hasta producción." },
+      { "question": "¿Qué ocurre con el trabajo que un agente realiza por su cuenta?", "answer": "Cada cambio tiene un autor y un diff. Todo lo que afecte a producción, envíe algo en tu nombre o supere un límite de gasto espera la aprobación de una persona designada en el tablero." }
+    ],
     "faq": [
       {
         "question": "¿Qué es Evermind?",

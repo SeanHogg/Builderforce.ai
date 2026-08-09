@@ -3,6 +3,16 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import {
+  CardText,
+  CardTitle,
+  HomeButton,
+  HomeCard,
+  HomeGrid,
+  HomeSection,
+  HomeSectionHeader,
+  homePatternStyles,
+} from '@/components/home/HomePatterns';
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { STATS, PRODUCT_SECTIONS, PRODUCT_CAPABILITY_PROOF, PRODUCT_CAPABILITY_OPERATIONS, INTEGRATION_CAPABILITY_PROOF, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
@@ -20,6 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 type ProductSection = { id: string; title: string; blurb: string; surfaces: { title: string; desc: string }[] };
+type DiscoveryFeature = { title: string; longDesc: string };
 type WorkflowProofCopy = { title: string; audience: string; outcome: string; steps: string[]; evidence: string };
 type IntegrationProofCopy = { auth: string; limitation: string };
 
@@ -142,6 +153,41 @@ export default async function ProductPage() {
             ))}
           </div>
           <p className="pp-proof-note">{t('product.proofNote')}</p>
+
+          <HomeSection id="what-you-can-build" tone="soft">
+            <HomeSectionHeader
+              eyebrow={t('home.beat.breadth')}
+              title={t('home.featuresHeading')}
+              lead={t('home.featuresLead')}
+            />
+            <HomeGrid columns={3}>
+              {(t.raw('features') as DiscoveryFeature[]).map((feature) => (
+                <HomeCard key={feature.title}>
+                  <CardTitle>{feature.title}</CardTitle>
+                  <CardText>{feature.longDesc}</CardText>
+                </HomeCard>
+              ))}
+            </HomeGrid>
+          </HomeSection>
+
+          <HomeSection id="why-builderforce" tone="grid">
+            <HomeSectionHeader
+              centered
+              eyebrow={t('home.beat.compare')}
+              title={t('compare.teaser.title')}
+              lead={t('compare.teaser.blurb')}
+            />
+            <HomeGrid columns={3}>
+              {(t.raw('compare.teaser.highlightFeatures') as string[]).map((feature) => (
+                <HomeCard key={feature}>
+                  <CardText>{feature}</CardText>
+                </HomeCard>
+              ))}
+            </HomeGrid>
+            <div className={`${homePatternStyles.actions} ${homePatternStyles.actionsCenter}`}>
+              <HomeButton href="/compare" primary arrow>{t('compare.teaser.ctaLabel')}</HomeButton>
+            </div>
+          </HomeSection>
 
           <div className="pp-sections">
             {sections.map((section, si) => (

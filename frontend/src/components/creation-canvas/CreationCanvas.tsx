@@ -88,6 +88,8 @@ import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagno
 import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { SectionTour, type SectionTourStep } from '@/components/onboarding/SectionTour';
+import { useSectionTour } from '@/components/onboarding/useSectionTour';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
@@ -138,6 +140,33 @@ const CanvasGamePanel = dynamic(
 );
 
 const DND_MIME = 'application/x-builderforce-creation-object';
+const COURSE_AUTHORING_CONTRACT = '{ version, language, audience, description, estimatedMinutes, passingScore, completedLessonIds: [], modules: [{ id, title, description, lessons: [{ id, title, objective, content, activity, durationMinutes }], assessment: { question, choices, answer, explanation } }] }';
+const COURSE_AUTHORING_SCHEMA = {
+  type: 'object',
+  required: ['version', 'language', 'audience', 'description', 'estimatedMinutes', 'passingScore', 'completedLessonIds', 'modules'],
+  properties: {
+    version: { type: 'string' }, language: { type: 'string' }, audience: { type: 'string' }, description: { type: 'string' },
+    estimatedMinutes: { type: 'number' }, passingScore: { type: 'number' }, completedLessonIds: { type: 'array', items: { type: 'string' } },
+    modules: {
+      type: 'array', minItems: 1, items: {
+        type: 'object', required: ['id', 'title', 'description', 'lessons', 'assessment'],
+        properties: {
+          id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' },
+          lessons: {
+            type: 'array', minItems: 1, items: {
+              type: 'object', required: ['id', 'title', 'objective', 'content', 'activity', 'durationMinutes'],
+              properties: { id: { type: 'string' }, title: { type: 'string' }, objective: { type: 'string' }, content: { type: 'string' }, activity: { type: 'string' }, durationMinutes: { type: 'number' } },
+            },
+          },
+          assessment: {
+            type: 'object', required: ['question', 'choices', 'answer', 'explanation'],
+            properties: { question: { type: 'string' }, choices: { type: 'array', items: { type: 'string' } }, answer: { type: 'number' }, explanation: { type: 'string' } },
+          },
+        },
+      },
+    },
+  },
+} as const;
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
 const PALETTE_OPEN_STORAGE_KEY = 'builderforce:create:palette-open';
 const INSPECTOR_WIDTH_STORAGE_KEY = 'builderforce:create:inspector-width';
@@ -602,7 +631,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const { options: canvasModelOptions, canChooseModel } = useChatModelOptions();
-  const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');
 
   /**
@@ -871,13 +899,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     window.requestAnimationFrame(() => paletteSearchRef.current?.focus());
   }, []);
 
-  const tourStorageKey = `builderforce:create-tour-complete:${currentUserId || (persistence === 'local' ? 'guest' : 'pending')}`;
-
   useEffect(() => {
-    if (persistence === 'server' && !currentUserId) return;
-    if (localStorage.getItem(tourStorageKey) !== '1') setTourStep(1);
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
-  }, [currentUserId, persistence, tourStorageKey]);
+  }, []);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -3019,13 +3043,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }, {
     name: 'canvas_add_object',
-    description: 'Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.',
+    description: `Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.`,
     parameters: {
       type: 'object', required: ['kind'], additionalProperties: false,
       properties: {
         kind: { type: 'string', enum: CREATION_OBJECT_REGISTRY.map((definition) => definition.kind) },
         title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' },
-        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected.', additionalProperties: true },
+        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected. For courses, course must match the declared nested schema; do not probe for it.', properties: { course: COURSE_AUTHORING_SCHEMA }, additionalProperties: true },
         x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
       },
     },
@@ -3051,7 +3075,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // the product having built the wrong subject rather than as a missing
       // argument. Refuse it and say what to send instead.
       if (args.kind === 'course' && !(authored.course as { modules?: unknown } | undefined)?.modules) {
-        return { error: 'A generated course must include the authored curriculum in fields.course as { modules: [{ id, title, description, lessons: [{ id, title, objective, content, activity, durationMinutes }], assessment: { question, choices, answer, explanation } }] }. Without it the object would show the sample "Build an LLM" curriculum under your title.' };
+        return { error: `A generated course must include the authored curriculum in fields.course as ${COURSE_AUTHORING_CONTRACT}. Without it the object would show the sample "Build an LLM" curriculum under your title.` };
       }
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);

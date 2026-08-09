@@ -6101,6 +6101,13 @@
     "ctaTitle": "Was werden Sie erschaffen?",
     "ctaDesc": "Beginnen Sie mit einem Prompt und verwandeln Sie ihn gemeinsam mit Ihrem Team und KI-Agenten in verbundene, prüfbare und lieferbare Arbeit. Keine Kreditkarte erforderlich.",
     "ctaSeeLiveAgents": "Canvas entdecken",
+    "homepageFaq": [
+      { "question": "Brauche ich ein Konto, um loszulegen?", "answer": "Nein. Der erste Canvas ist privat und bleibt in Ihrem Browser; nichts verlässt das Gerät, bis Sie sich anmelden. Danach wird der bereits begonnene Entwurf in Ihren Arbeitsbereich übernommen, statt verworfen zu werden." },
+      { "question": "Was genau sind die KI-Agenten?", "answer": "Es sind Spezialisten mit einer Rolle in Ihrem Team—CFO, CMO, CTO und weitere. Sie befinden sich am unteren Rand jedes Canvas neben den eingeladenen Personen. Ziehen Sie einen auf das Board: Er liest die Arbeit, übernimmt den Auftrag und erstellt eine Änderung, die Sie prüfen können." },
+      { "question": "Kann ich mein eigenes Modell verwenden?", "answer": "Ja. Verbinden Sie Ihr eigenes Anbieterkonto, und Ihre Arbeit wird darüber ausgeführt. Hat ein Arbeitsbereich keine Verbindung, wählt das Plattform-Routing ein Modell und die Kosten werden dem Arbeitsbereich zugeordnet." },
+      { "question": "Wie unterscheidet sich das von einem KI-Chattool?", "answer": "Ein Chattool erzeugt Text, den Sie anschließend an einen anderen Ort übertragen müssen. Builderforce erzeugt verbundene Objekte—eine Live-Seite, einen laufenden Workflow oder einen gebundenen Datensatz—die aufeinander verweisen und von der ersten Idee bis zur Produktion eine prüfbare Historie behalten." },
+      { "question": "Was geschieht mit Arbeit, die ein Agent selbstständig erledigt?", "answer": "Jede Änderung hat einen Autor und einen Diff. Alles, was die Produktion berührt, in Ihrem Namen versendet wird oder ein Ausgabenlimit überschreitet, wartet auf die Freigabe einer benannten Person auf dem Board." }
+    ],
     "faq": [
       {
         "question": "Was ist Evermind?",

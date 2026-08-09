@@ -16,17 +16,9 @@ import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
 import { LatestBlogSection } from '@/components/marketing/LatestBlogSection';
 import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignupSection';
 import {
-  HomeScrollerControls,
-  HomeScrollerItem,
-  HomeScrollerRail,
-  useHomeScroller,
-} from '@/components/home/HomeScroller';
-import {
-  CardText,
   CardTitle,
   HomeButton,
   HomeCard,
-  HomeGrid,
   HomeSection,
   HomeSectionHeader,
   homePatternStyles as styles,
@@ -58,20 +50,19 @@ const PRICING_HREFS: Record<PricingTeaser['id'], string> = {
  * the reader no sense of moving through anything.
  *
  * The order below is a narrative: start on the canvas → name the problem and
- * resolve it into a workflow → see what it is → watch it work → see the evidence → see the breadth → see why not
- * the alternatives → price → objections → act. Section eyebrows now name the BEAT they carry.
+ * resolve it into a workflow → see what it is → watch it work → see the evidence
+ * → price → objections → act. Product discovery and comparison now live on the
+ * dedicated product page, where visitors are asking for that depth.
  * Numbering survives in exactly one place, "How it works", because those three
  * steps genuinely are a sequence.
  *
- * Treatment varies with the job: an argument is a grid, a catalogue is a rail
- * ({@link HomeScrollerRail}), evidence is a stat band. Secondary material
- * (writing, newsletter) sits BELOW the primary call to action rather than
- * between the reader and it.
+ * Treatment varies with the job: evidence is a stat band, pricing is a plan
+ * comparison, and objections are a disclosure list. Secondary material sits
+ * below the primary call to action rather than between the reader and it.
  */
 export default function LandingPage() {
   const t = useTranslations();
   const [publicPlanPrices, setPublicPlanPrices] = useState<{ pro: number } | null>(null);
-  const capabilityScroller = useHomeScroller();
 
   useEffect(() => {
     let active = true;
@@ -116,43 +107,7 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* 7 · BREADTH — a catalogue, so a rail rather than a wall of nine dense
-            paragraphs in four columns. */}
-        <HomeSection id="features" tone="soft">
-          <HomeSectionHeader
-            eyebrow={t('home.beat.breadth')}
-            title={t('home.featuresHeading')}
-            lead={t('home.featuresLead')}
-            aside={<HomeScrollerControls scroller={capabilityScroller} />}
-          />
-          <HomeScrollerRail scroller={capabilityScroller} label={t('home.featuresHeading')}>
-            {(t.raw('features') as { title: string; longDesc: string }[]).map((feature) => (
-              <HomeScrollerItem key={feature.title}>
-                <HomeCard>
-                  <CardTitle>{feature.title}</CardTitle>
-                  <CardText>{feature.longDesc}</CardText>
-                </HomeCard>
-              </HomeScrollerItem>
-            ))}
-          </HomeScrollerRail>
-        </HomeSection>
-
-        {/* 8 · WHY NOT THE ALTERNATIVES */}
-        <HomeSection tone="grid">
-          <HomeSectionHeader centered eyebrow={t('home.beat.compare')} title={t('compare.teaser.title')} lead={t('compare.teaser.blurb')} />
-          <HomeGrid columns={3}>
-            {(t.raw('compare.teaser.highlightFeatures') as string[]).map((feature) => (
-              <HomeCard key={feature}>
-                <CardText>{feature}</CardText>
-              </HomeCard>
-            ))}
-          </HomeGrid>
-          <div className={`${styles.actions} ${styles.actionsCenter}`}>
-            <HomeButton href="/compare" primary arrow>{t('compare.teaser.ctaLabel')}</HomeButton>
-          </div>
-        </HomeSection>
-
-        {/* 9 · WHAT IT COSTS */}
+        {/* 7 · WHAT IT COSTS */}
         <HomeSection id="pricing">
           <HomeSectionHeader eyebrow={t('home.pricingHeading')} title={t('home.pricingTitle')} />
           <div className={styles.pricingPlans}>
@@ -178,13 +133,13 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 10 · OBJECTIONS — answered immediately before the ask, which is where
+        {/* 8 · OBJECTIONS — answered immediately before the ask, which is where
             they actually surface. */}
-        <HomeSection narrow tone="soft">
-          <HomeSectionHeader centered eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
+        <HomeSection>
+          <HomeSectionHeader eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
           <div className={styles.faq}>
-            {(t.raw('home.faq') as FaqItem[]).map((faq) => (
-              <details className={styles.faqItem} key={faq.question}>
+            {(t.raw('home.homepageFaq') as FaqItem[]).map((faq, index) => (
+              <details className={styles.faqItem} key={faq.question} open={index === 0}>
                 <summary>{faq.question}</summary>
                 <p>{faq.answer}</p>
               </details>
@@ -192,7 +147,7 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 11 · THE ASK */}
+        {/* 9 · THE ASK */}
         <CreationCtaSection />
 
         {/* Secondary. Below the ask on purpose — these used to sit between the

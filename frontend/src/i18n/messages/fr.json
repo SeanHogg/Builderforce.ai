@@ -6101,6 +6101,13 @@
     "ctaTitle": "Qu’allez-vous créer ?",
     "ctaDesc": "Commencez par une demande et transformez-la avec votre équipe et des agents IA en un travail connecté, révisable et prêt à livrer. Sans carte bancaire.",
     "ctaSeeLiveAgents": "Explorer le canevas",
+    "homepageFaq": [
+      { "question": "Ai-je besoin d’un compte pour commencer ?", "answer": "Non. Le premier canevas est privé et reste dans votre navigateur ; rien ne quitte l’appareil avant votre connexion. À ce moment-là, le brouillon déjà commencé est rattaché à votre espace de travail au lieu d’être supprimé." },
+      { "question": "Que sont exactement les agents IA ?", "answer": "Ce sont des spécialistes qui occupent un rôle dans votre équipe : CFO, CMO, CTO et autres. Ils apparaissent au bas de chaque canevas à côté des personnes invitées. Ajoutez-en un au tableau : il lit le travail, prend en charge la mission et produit une modification que vous pouvez examiner." },
+      { "question": "Puis-je utiliser mon propre modèle ?", "answer": "Oui. Connectez votre propre compte fournisseur et votre travail s’y exécutera. Si un espace n’a aucune connexion, le routage de la plateforme choisit un modèle et le coût est imputé au compteur de l’espace de travail." },
+      { "question": "En quoi est-ce différent d’un outil de chat IA ?", "answer": "Un outil de chat produit du texte qu’il faut ensuite déplacer. Builderforce produit des objets connectés—une page en ligne, un workflow actif ou un jeu de données lié—qui se référencent entre eux et conservent un historique vérifiable de la première idée jusqu’à la production." },
+      { "question": "Qu’advient-il du travail qu’un agent réalise seul ?", "answer": "Chaque modification possède un auteur et un diff. Toute action qui touche la production, envoie quelque chose en votre nom ou dépasse une limite de dépenses attend l’approbation d’une personne désignée sur le tableau." }
+    ],
     "faq": [
       {
         "question": "Qu'est-ce qu'Evermind ?",

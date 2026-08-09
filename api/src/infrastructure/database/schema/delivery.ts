@@ -1846,11 +1846,54 @@ export const releaseNotes = pgTable('release_notes', {
   body:        text('body'),
   /** 'new' | 'improvement' | 'fix' — drives the badge in the panel + email. */
   category:    varchar('category', { length: 20 }).notNull().default('improvement'),
+  /**
+   * Where this update sits in its lifecycle — 'in_development' | 'private_beta' |
+   * 'public_beta' | 'live' | 'sunset'. A STAGE is not a category: category says
+   * what kind of change it is, stage says how far along it is and therefore
+   * whether it can be joined or is about to be withdrawn. (0448)
+   */
+  stage:       varchar('stage', { length: 24 }).notNull().default('live'),
+  /** Users may enrol themselves. Only meaningful on a beta stage — a private beta
+   *  left opt-in false is invitation-only and never offered in the banner. */
+  betaOptIn:   boolean('beta_opt_in').notNull().default(false),
+  /** The agreement a user accepts when joining. NULL → the generic platform beta
+   *  terms are shown instead, so an operator never ships a consent-free join. */
+  betaTerms:   text('beta_terms'),
+  /** "Scheduled for release" on a beta; "upcoming sunset" date on a sunset. One
+   *  column because it is one fact — the date this stage ends. */
+  stageEndsAt: timestamp('stage_ends_at'),
   publishedAt: timestamp('published_at'),
   emailedAt:   timestamp('emailed_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
+
+
+/**
+ * A user's standing with ONE beta — joined, left, or "not now" (dismissed the
+ * banner). One row per (release note, user): the enrolment IS the fact, and its
+ * `status` is the current state of it, so a leave/rejoin updates in place rather
+ * than growing a history nobody reads.
+ *
+ * `agreedAt` + `agreedTermsHash` are the consent record: WHEN they agreed and to
+ * WHICH text, hashed so editing the terms afterwards is detectable rather than
+ * silently rewriting what someone signed. A dismissal carries neither — declining
+ * is not consent. (0448)
+ */
+export const releaseNoteBetaEnrollments = pgTable('release_note_beta_enrollments', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  releaseNoteId:   uuid('release_note_id').notNull().references(() => releaseNotes.id, { onDelete: 'cascade' }),
+  userId:          varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** 'joined' | 'left' | 'dismissed'. */
+  status:          varchar('status', { length: 16 }).notNull().default('joined'),
+  agreedAt:        timestamp('agreed_at'),
+  agreedTermsHash: varchar('agreed_terms_hash', { length: 64 }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  noteUserUnique: uniqueIndex('uq_release_note_beta_enrollment').on(table.releaseNoteId, table.userId),
+  userIdx:        index('idx_release_note_beta_enrollment_user').on(table.userId),
+}));
 
 
 export const apiErrorLog = pgTable('api_error_log', {

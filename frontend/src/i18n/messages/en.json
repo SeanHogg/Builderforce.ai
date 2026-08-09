@@ -6102,6 +6102,13 @@
     "ctaTitle": "What will you create?",
     "ctaDesc": "Start with a prompt and turn it into connected, reviewable, deliverable work with your team and AI agents. No credit card required.",
     "ctaSeeLiveAgents": "Explore the Canvas",
+    "homepageFaq": [
+      { "question": "Do I need an account to start?", "answer": "No. The first canvas is private and local to your browser—nothing leaves the device until you sign in. When you do, the draft you already started is claimed into your workspace rather than discarded." },
+      { "question": "What exactly are the AI agents?", "answer": "Specialists that hold a role on your team—a CFO, a CMO, a CTO, and others. They sit along the bottom of every canvas beside the people you invited. Bring one onto the board and it reads the work, takes the assignment, and produces a change you can review." },
+      { "question": "Can I use my own model?", "answer": "Yes. Connect your own provider account and your work runs on it. When a workspace has no connection, the platform’s routing picks a model and the cost lands against your workspace meter." },
+      { "question": "How is this different from an AI chat tool?", "answer": "A chat tool produces text you then have to move somewhere. Builderforce produces connected objects—a live page, a running workflow, or a bound dataset—that reference each other and carry a reviewable history from the first idea to production." },
+      { "question": "What happens to work an agent does on its own?", "answer": "Every change has an author and a diff. Anything that touches production, sends on your behalf, or exceeds a spending limit waits for a named human approver on the board." }
+    ],
     "faq": [
       {
         "question": "What is Evermind?",
