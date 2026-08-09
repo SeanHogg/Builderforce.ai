@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -20,7 +20,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
-import type { Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
@@ -120,7 +120,8 @@ import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { signInHref } from '@/lib/auth';
 
 const Canvas3DView = dynamic(
-  () => import('@/components/canvas/Canvas3DView').then((module) => module.Canvas3DView),
+  () => import('@/components/canvas/Canvas3DView')
+    .then((module) => module.Canvas3DView as ComponentType<Canvas3DViewProps<CreationFlowNode>>),
   { ssr: false },
 );
 const VoiceConfigPanel = dynamic(

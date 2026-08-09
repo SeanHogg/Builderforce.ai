@@ -173,7 +173,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 33 |
+| 14 | 40 |
 | 15 | 36 |
 
 ---

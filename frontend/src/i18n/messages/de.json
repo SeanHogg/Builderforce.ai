@@ -15249,5 +15249,16 @@
     "workspaceUnavailable": "Der eingeladene Workspace ist für dieses Konto nicht verfügbar.",
     "signInLink": "Mit der eingeladenen E-Mail-Adresse anmelden",
     "useAnotherAccount": "Anderes Konto verwenden"
+  },
+  "routeMarketing": {
+    "subtitle": "Erstellen Sie einen kostenlosen Workspace, um {surface} zu nutzen, oder melden Sie sich an, um Ihre Arbeit fortzusetzen.",
+    "startFree": "Kostenlos loslegen",
+    "signIn": "Anmelden",
+    "exploreCanvas": "Canvas erkunden",
+    "howItWorks": "So funktioniert {surface}",
+    "seeHowItWorks": "So funktioniert es",
+    "whatYouGet": "Das bietet Ihnen Builderforce.ai",
+    "faqHeading": "Häufig gestellte Fragen",
+    "relatedReading": "Weiterführende Artikel"
   }
 }

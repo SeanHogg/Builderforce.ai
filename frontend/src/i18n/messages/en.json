@@ -15250,5 +15250,16 @@
     "workspaceUnavailable": "The invited workspace is not available to this account.",
     "signInLink": "Sign in with the invited email",
     "useAnotherAccount": "Use another account"
+  },
+  "routeMarketing": {
+    "subtitle": "Create a free workspace to use {surface}, or sign in to continue existing work.",
+    "startFree": "Start creating free",
+    "signIn": "Sign in",
+    "exploreCanvas": "Explore the canvas",
+    "howItWorks": "How {surface} works",
+    "seeHowItWorks": "See how it works",
+    "whatYouGet": "What you get with Builderforce.ai",
+    "faqHeading": "Frequently asked questions",
+    "relatedReading": "Related reading"
   }
 }

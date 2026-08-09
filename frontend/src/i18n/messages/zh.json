@@ -15249,5 +15249,16 @@
     "workspaceUnavailable": "此账号无法访问被邀请的工作区。",
     "signInLink": "使用收到邀请的邮箱登录",
     "useAnotherAccount": "使用其他账号"
+  },
+  "routeMarketing": {
+    "subtitle": "创建免费工作区即可使用{surface}，或登录以继续已有的工作。",
+    "startFree": "免费开始创建",
+    "signIn": "登录",
+    "exploreCanvas": "探索画布",
+    "howItWorks": "{surface}的工作方式",
+    "seeHowItWorks": "了解运作方式",
+    "whatYouGet": "Builderforce.ai 为你提供什么",
+    "faqHeading": "常见问题",
+    "relatedReading": "相关阅读"
   }
 }

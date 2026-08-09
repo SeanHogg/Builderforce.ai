@@ -124,16 +124,27 @@ describe('CreationCanvas', () => {
     expect(board().style.getPropertyValue('--brain-dock-left')).toBe('0px');
   });
 
-  it('opens the 3D view from the canvas rail, then hands the board back', () => {
+  /**
+   * The scene arrives ASYNCHRONOUSLY. `Canvas3DView` is a `next/dynamic` import
+   * with `ssr: false`, so the click flips the mode synchronously and the module
+   * lands a microtask later — a `getByTestId` on the next line asks before the
+   * chunk exists. `findBy*` is the query that waits, and it is also the honest
+   * one: this is what a real user's first entry into 3D does.
+   */
+  const enterThreeD = async () => {
+    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
+    return screen.findByTestId('canvas-3d-view');
+  };
+
+  it('opens the 3D view from the canvas rail, then hands the board back', async () => {
     render(<CreationCanvas sessionId="three-d-controls-test" persistence="local" />);
 
     // The rail and the phone-sized action stack both offer the mode.
     const [toggle] = screen.getAllByRole('button', { name: 'Toggle 3D view' });
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
 
-    fireEvent.click(toggle!);
+    const scene = await enterThreeD();
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    const scene = screen.getByTestId('canvas-3d-view');
     expect(scene).toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
     // down in 3D.
@@ -169,11 +180,10 @@ describe('CreationCanvas', () => {
     expect(screen.getByRole('button', { name: 'Toggle mini map' })).toBeInTheDocument();
   });
 
-  it('selects the same object in 3D that the flat board would', () => {
+  it('selects the same object in 3D that the flat board would', async () => {
     render(<CreationCanvas sessionId="three-d-selection-test" persistence="local" />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
-    const cards = screen.getByTestId('canvas-3d-view').querySelectorAll('[aria-pressed]');
+    const cards = (await enterThreeD()).querySelectorAll('[aria-pressed]');
     expect(cards.length).toBeGreaterThan(0);
 
     fireEvent.click(cards[0]!);
@@ -183,10 +193,9 @@ describe('CreationCanvas', () => {
   /** The x of `translate3d(x, y, z)`, which is where the space has put a card. */
   const cardX = (card: HTMLElement) => Number(/translate3d\((-?[\d.]+)px/.exec(card.style.transform)?.[1]);
 
-  it('moves an object across the space and leaves it where it was dropped', () => {
+  it('moves an object across the space and leaves it where it was dropped', async () => {
     render(<CreationCanvas sessionId="three-d-move-test" persistence="local" />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
-    const card = screen.getByTestId('canvas-3d-view').querySelector<HTMLElement>('[data-movable="true"]')!;
+    const card = (await enterThreeD()).querySelector<HTMLElement>('[data-movable="true"]')!;
     const before = cardX(card);
 
     fireEvent.pointerDown(card, { clientX: 40, clientY: 40, button: 0 });
@@ -200,10 +209,9 @@ describe('CreationCanvas', () => {
     expect(cardX(card)).toBe(dropped);
   });
 
-  it('lifts an object off its layer with shift, and settles it back on request', () => {
+  it('lifts an object off its layer with shift, and settles it back on request', async () => {
     render(<CreationCanvas sessionId="three-d-depth-test" persistence="local" />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
-    const card = screen.getByTestId('canvas-3d-view').querySelector<HTMLElement>('[data-movable="true"]')!;
+    const card = (await enterThreeD()).querySelector<HTMLElement>('[data-movable="true"]')!;
     // Nothing is floating yet, so the rail does not offer to tidy anything up.
     expect(screen.queryAllByRole('button', { name: 'Settle objects back onto their layers' })).toHaveLength(0);
 
@@ -217,10 +225,9 @@ describe('CreationCanvas', () => {
     expect(screen.queryAllByRole('button', { name: 'Settle objects back onto their layers' })).toHaveLength(0);
   });
 
-  it('puts the layer guides away without moving a single object', () => {
+  it('puts the layer guides away without moving a single object', async () => {
     render(<CreationCanvas sessionId="three-d-guides-test" persistence="local" />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
-    const scene = screen.getByTestId('canvas-3d-view');
+    const scene = await enterThreeD();
     const card = scene.querySelector<HTMLElement>('[data-movable="true"]')!;
     const placed = cardX(card);
     expect(scene.textContent).toContain('Layer 1');

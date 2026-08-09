@@ -15249,5 +15249,16 @@
     "workspaceUnavailable": "El espacio de trabajo invitado no está disponible para esta cuenta.",
     "signInLink": "Inicia sesión con el correo invitado",
     "useAnotherAccount": "Usar otra cuenta"
+  },
+  "routeMarketing": {
+    "subtitle": "Crea un espacio de trabajo gratuito para usar {surface}, o inicia sesión para continuar con tu trabajo.",
+    "startFree": "Empieza a crear gratis",
+    "signIn": "Iniciar sesión",
+    "exploreCanvas": "Explorar el lienzo",
+    "howItWorks": "Cómo funciona {surface}",
+    "seeHowItWorks": "Mira cómo funciona",
+    "whatYouGet": "Lo que obtienes con Builderforce.ai",
+    "faqHeading": "Preguntas frecuentes",
+    "relatedReading": "Lecturas relacionadas"
   }
 }

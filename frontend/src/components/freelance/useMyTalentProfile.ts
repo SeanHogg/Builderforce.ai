@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getMyFreelancerProfile, updateMyFreelancerProfile, type FreelancerProfile,
+  getMyFreelancerProfileCached, invalidateMyFreelancerProfile,
+  updateMyFreelancerProfile, type FreelancerProfile,
 } from '@/lib/freelancerApi';
-import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /**
  * Read-through cache for the signed-in user's own for-hire profile.
@@ -14,15 +14,12 @@ import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/ht
  * change. The in-flight promise is shared and only invalidated on write, so a
  * wizard pass costs ONE GET.
  */
-const CACHE_KEY = 'talent-profile:mine';
-
 export function loadMyTalentProfile(force = false): Promise<FreelancerProfile> {
-  if (force) invalidateClientCache(CACHE_KEY);
-  return getOrSetClientCached(CACHE_KEY, () => getMyFreelancerProfile());
+  return getMyFreelancerProfileCached(force);
 }
 
 export function invalidateMyTalentProfile(): void {
-  invalidateClientCache(CACHE_KEY);
+  invalidateMyFreelancerProfile();
 }
 
 export interface MyTalentProfileState {

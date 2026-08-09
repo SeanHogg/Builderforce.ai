@@ -311,17 +311,18 @@ export class WebGPUTrainer {
         if (this.stopped) return;
         let loss = 0;
         if (gpuAdapter) {
+          const adapter = gpuAdapter;
           let total = 0, count = 0, pending = 0;
-          const flush = async () => { if (pending) { await gpuAdapter.step(pending, params.learningRate); pending = 0; } };
+          const flush = async () => { if (pending) { await adapter.step(pending, params.learningRate); pending = 0; } };
           for (const sequence of sequences) {
             if (this.stopped) break;
-            const merged = await gpuAdapter.forward();
+            const merged = await adapter.forward();
             const saved = model.emb;
             try {
               model.emb = merged;
               model.zeroGrad();
               total += model.lossAndBackward(sequence);
-              gpuAdapter.accumulate(Float32Array.from(model.gradients()[0]!.data));
+              adapter.accumulate(Float32Array.from(model.gradients()[0]!.data));
             } finally { model.emb = saved; }
             count += 1; pending += 1;
             if (pending >= Math.max(1, params.gradientAccumulationSteps)) await flush();

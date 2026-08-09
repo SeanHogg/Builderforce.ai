@@ -48,6 +48,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/tools/tech-debt-estimator`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/tools/build-buy-agent`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/agents`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+    // /agents sub-pages — each is a real, crawlable marketing surface in
+    // PUBLIC_SHELL_PREFIXES (shellRouting.ts), so they belong here alongside
+    // their parent rather than being reachable only by in-page link.
+    { url: `${BASE}/agents/showcase`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+    { url: `${BASE}/agents/skills`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+    { url: `${BASE}/agents/integrations`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/agents/workflow-builder`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/agents/shoutouts`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${BASE}/agents/acknowledgements`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${BASE}/agents/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    // Trust surface. /soc2 and the seven /legal pages are the pages a buyer's
+    // security reviewer looks for by name; they were indexable but unlisted.
+    { url: `${BASE}/soc2`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}/legal/compliance`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/legal/privacy-rights`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/cookies`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${BASE}/legal/subprocessors`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/dpa`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/ai-transparency`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/accessibility`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    // Demand-capture surfaces.
+    { url: `${BASE}/book-demo`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}/demo`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/login`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     // Feature routes — render a rich marketing page (RouteMarketing) to logged-out

@@ -115,6 +115,31 @@
   --control-sm: 32px;
   --control-md: 36px;
   --control-lg: 44px;
+
+  /* ── The type scale (PRD 21 §2.3) ────────────────────────────────────────
+     Eight roles, declared once. Sizes do NOT flip per theme, so unlike colour
+     these live only here.
+
+     Why they exist at all: for a long time §2.3 was a table in a document with
+     nothing behind it — no token, and only one of the eight roles (Eyebrow) as
+     a class. There was nothing to import, so every author typed a number, and
+     the public pages ended up carrying 89 distinct font-size literals over
+     1,185 uses and 129 distinct clamp() ramps. Radius had five values, a token
+     family and a ratchet, and came in at nine off-scale corners. The difference
+     was never discipline; it was that one scale existed in code and the other
+     did not.
+
+     Use the `.ui-text-*` classes below rather than these tokens directly — a
+     role is a size AND a weight AND tracking AND a line height, and picking the
+     size alone is how a "page title" ends up at three different weights. */
+  --font-size-hero: clamp(2.6rem, 7.4vw, 5.1rem);
+  --font-size-page-title: clamp(1.85rem, 4.4vw, 2.9rem);
+  --font-size-section: clamp(1.25rem, 2.6vw, 1.62rem);
+  --font-size-card-title: 1rem;
+  --font-size-body: 0.95rem;
+  --font-size-small: 0.82rem;
+  --font-size-eyebrow: 0.68rem;
+  --font-size-field-label: 0.62rem;
   --content-readable: 1100px;
   --content-narrow: 720px;
   /* The three panel widths (PRD 21 §2.4 / §3.4) — sheet, wide, full, and no
@@ -885,15 +910,20 @@ html[data-theme='light'] .nebula {
   box-shadow: 0 12px 40px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
 }
 
-/* ── Utility: section title ── */
+/* ── Utility: section title ──
+   Reconciled onto the §2.3 Section role (was clamp(1.4rem, 3vw, 1.8rem)/600,
+   which disagreed with the spec it was implementing). Layout — the flex row and
+   the bottom margin — is this class's own; the type comes from the role. */
 .section-title {
   font-family: var(--font-display);
-  font-size: clamp(1.4rem, 3vw, 1.8rem);
-  font-weight: 600;
-  margin-bottom: 28px;
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  letter-spacing: -.022em;
+  line-height: 1.15;
+  margin-bottom: var(--space-6);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   color: var(--text-primary);
 }
 
@@ -1826,15 +1856,83 @@ html[data-theme='light'] .nebula {
   container-name: panel;
 }
 
+/* ── The eight type roles (PRD 21 §2.3) ──────────────────────────────────────
+   A role carries size, weight, tracking and line height together, because those
+   four are what make a heading READ as a heading. Splitting them is how the tree
+   ended up with a "page title" at 1.5rem/700 in one place and clamp(1.5rem,
+   2.5vw, 2rem)/700/-.025em in another, against a spec that said neither.
+
+   Colour is deliberately NOT set here except where the role implies it (eyebrow
+   and field label are always muted). A section heading inside an accent panel
+   still needs to inherit its ink. */
+.ui-text-hero {
+  font-family: var(--font-display);
+  font-size: var(--font-size-hero);
+  font-weight: 800;
+  letter-spacing: -.045em;
+  line-height: .95;
+}
+.ui-text-page-title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  letter-spacing: -.033em;
+  line-height: 1.02;
+}
+.ui-text-section {
+  font-family: var(--font-display);
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  letter-spacing: -.022em;
+  line-height: 1.15;
+}
+.ui-text-card-title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  font-weight: 650;
+  letter-spacing: -.006em;
+  line-height: 1.3;
+}
+.ui-text-body {
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 1.6;
+}
+.ui-text-small {
+  font-family: var(--font-body);
+  font-size: var(--font-size-small);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
 /* Eyebrow — mono, small, tracked (§2.3). One declaration, so a panel crumb and a
    footer group label cannot drift into two different eyebrows. */
-.ui-eyebrow {
+.ui-eyebrow,
+.ui-text-eyebrow {
   font-family: var(--font-mono);
-  font-size: .68rem;
+  font-size: var(--font-size-eyebrow);
   font-weight: 600;
   letter-spacing: .15em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+/* Field label — the eyebrow's smaller sibling, tighter tracking (§2.3). */
+.ui-text-field-label {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Numeric columns. §2.3: "pair with font-variant-numeric: tabular-nums" — this
+   is that pairing, so a count in a table does not jitter as it updates. */
+.ui-text-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1873,18 +1971,25 @@ html[data-theme='light'] .nebula {
   }
 }
 
-/* Page title / sub (Settings, Security, Admin, etc.) */
+/* Page title / sub (Settings, Security, Admin, etc.)
+   Reconciled onto the §2.3 Page-title role — this was a flat 1.5rem, the
+   THIRD distinct "page title" in the tree alongside .ui-page-header__title and
+   the spec's own value. All three are now one. */
 .page-title {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: var(--font-size-page-title);
   font-weight: 700;
-  margin: 0 0 8px;
+  letter-spacing: -.033em;
+  line-height: 1.02;
+  margin: 0 0 var(--space-2);
   color: var(--text-strong);
 }
 
 .page-sub {
-  font-size: 0.875rem;
+  font-size: var(--font-size-body);
+  line-height: 1.6;
   color: var(--text-muted);
-  margin: 0 0 24px;
+  margin: 0 0 var(--space-6);
 }
 
 /* ============================================================
@@ -2062,17 +2167,23 @@ select.input option {
   justify-content: space-between;
   gap: 10px;
 }
+/* Reconciled onto the §2.3 Card-title role (was 15px/700). */
 .card-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  font-weight: 650;
+  letter-spacing: -.006em;
   color: var(--text-primary);
   line-height: 1.3;
 }
 
 .ui-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-6); margin-bottom: var(--space-6); }
 .ui-page-header__copy { min-width: 0; }
-.ui-page-header__eyebrow { margin-bottom: var(--space-2); color: var(--accent); font: 650 11px/1.3 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
-.ui-page-header__title { margin: 0; color: var(--text-strong); font: 700 clamp(1.5rem, 2.5vw, 2rem)/1.15 var(--font-display); letter-spacing: -.025em; }
+/* Both reconciled onto their §2.3 roles. The eyebrow keeps `--accent` ink
+   (a page header's eyebrow is a brand mark, not metadata) but takes the role's
+   size and tracking; the title was the second of three competing page titles. */
+.ui-page-header__eyebrow { margin-bottom: var(--space-2); color: var(--accent); font: 600 var(--font-size-eyebrow)/1.3 var(--font-mono); letter-spacing: .15em; text-transform: uppercase; }
+.ui-page-header__title { margin: 0; color: var(--text-strong); font: 700 var(--font-size-page-title)/1.02 var(--font-display); letter-spacing: -.033em; }
 .ui-page-header__description { max-width: 720px; margin: var(--space-2) 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
 .ui-page-header__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex-shrink: 0; }
 
@@ -3906,3 +4017,50 @@ select.input option {
    whole split and the panel floats over it. On a narrow screen the panel is
    full-bleed by its own `max-width: 100%`, so the board is simply behind it;
    it is still mounted, which is what the person is actually keeping. */
+
+/* ============================================================
+   PRD 21 §2.6 rule 6 — reduced motion, enforced globally
+   ============================================================
+   The rule always read "respect `prefers-reduced-motion`. Every transition and
+   animation." It was enforced by review, and review does not scale: on the
+   public surface 61 files animated and 23 declared the query, so 41 shipped
+   motion to people who had asked the OS not to send them any.
+
+   A per-file sweep would have closed those 41 and left the 42nd to the next
+   author. This closes the CLASS instead: a near-instant floor over every
+   animation and transition in the app, so a new hover lift is compliant the
+   moment it is written.
+
+   Why 0.01ms rather than `none`: a zeroed duration still FIRES `transitionend`
+   and `animationend`. Several surfaces (the panel scrim, the chunk-error
+   recovery, the carousel) advance their state on those events and would hang
+   forever if the events never arrived. This is the WCAG-recommended form.
+
+   `transform` is neutralised separately because a translate/scale hover is the
+   motion itself, not merely its timing — with only the duration collapsed it
+   would still jump to the moved position. Border, shadow and colour hover
+   states are untouched, so every affordance still reads.
+
+   Deliberately NOT `!important`-free: an inline `style={{ transition }}` or a
+   CSS-module rule would otherwise out-specify this, and there are ~2,600 inline
+   style sites on the public surface alone. The whole point is that it wins.
+
+   Opt out for a genuinely load-bearing animation (a progress indicator that
+   conveys state, a canvas simulation) with `.motion-essential` — and only for
+   motion that carries information the user would otherwise lose. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.motion-essential):not(.motion-essential *),
+  *:not(.motion-essential):not(.motion-essential *)::before,
+  *:not(.motion-essential):not(.motion-essential *)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* A moved element must not merely arrive instantly — it must not move. */
+  *:not(.motion-essential):not(.motion-essential *):hover,
+  *:not(.motion-essential):not(.motion-essential *):focus-visible {
+    transform: none !important;
+  }
+}
