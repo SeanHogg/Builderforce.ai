@@ -93,7 +93,7 @@ export function BarChart({
         );
       })}
       {hidden > 0 && (
-        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', paddingLeft: labelWidth + 10 }}>
+        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', paddingLeft: labelWidth + 10 }}>
           +{hidden} more
         </span>
       )}

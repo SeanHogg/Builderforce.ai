@@ -318,7 +318,7 @@ function MenuRow({ icon, label, hint, active, onClick }: {
     <>
       <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
-      {hint != null && <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
+      {hint != null && <span style={{ fontSize: 'var(--font-size-field-label)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
       {active && <span aria-hidden style={{ color: 'var(--coral-bright)', width: 12 }}>✓</span>}
     </>
   );
@@ -623,9 +623,9 @@ export function ChatInput({
         status={pendingAttachments.length > 0 && onRemoveAttachment ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {pendingAttachments.map((a) => (
-              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 12, color: 'var(--text-primary)' }}>
+              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
                 📎 {a.name}
-                <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 0 }} aria-label={t('removeAttachment')}>×</button>
+                <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', padding: 0 }} aria-label={t('removeAttachment')}>×</button>
               </span>
             ))}
           </div>
@@ -659,7 +659,7 @@ export function ChatInput({
               style={{ display: 'none' }}
             />
             {/* `+` becomes a Claude-style menu: Upload, Add context, Browse the web. */}
-            <ComposerMenu title={t('add')} disabled={disabled} trigger={<span style={{ fontSize: '1.25rem', fontWeight: 300, lineHeight: 1 }}>+</span>}>
+            <ComposerMenu title={t('add')} disabled={disabled} trigger={<span style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 300, lineHeight: 1 }}>+</span>}>
               {(close) => (
                 <>
                   <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />
@@ -715,7 +715,7 @@ export function ChatInput({
               height: 'var(--chat-ctl-size, 32px)',
               padding: '0 10px',
               borderRadius: 'var(--radius-full)',
-              fontSize: 12,
+              fontSize: 'var(--font-size-small)',
               cursor: disabled ? 'not-allowed' : 'pointer',
               border: `1px solid ${autoMode ? 'var(--coral-bright)' : 'var(--chat-input-border)'}`,
               background: autoMode ? 'var(--surface-coral-soft, rgba(244,114,110,0.12))' : 'transparent',

@@ -33,7 +33,7 @@ export function BuiltinKindBadge({ kind }: { kind?: string | null }) {
       title={label}
       style={{
         display: 'inline-block',
-        fontSize: 10,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         letterSpacing: 0.4,
         textTransform: 'uppercase',

@@ -174,7 +174,7 @@ export function ProfileIdentityCard({
           )}
         </div>
         {notice && (
-          <p role="status" style={{ margin: 'var(--space-2) 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{notice}</p>
+          <p role="status" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{notice}</p>
         )}
       </div>
     </div>

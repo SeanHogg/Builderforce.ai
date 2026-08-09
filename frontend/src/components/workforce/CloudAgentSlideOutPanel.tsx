@@ -62,9 +62,9 @@ function formatLatency(ms: number): string {
 function PerfStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="text-gray-100" style={{ padding: '12px 14px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
-      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -238,18 +238,18 @@ export function CloudAgentSlideOutPanel({
             </svg>
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-strong)' }}>{agent.name}</div>
+            <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-strong)' }}>{agent.name}</div>
             {agent.title && agent.title !== agent.name && (
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{agent.title}</div>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 2 }}>{agent.title}</div>
             )}
             {/* Assigned workspace role(s) — surfaces the roster pin right in the header. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('roleLabel')}</span>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>{t('roleLabel')}</span>
               {assignedRoles.length === 0 ? (
-                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>{t('roleNone')}</span>
+                <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', fontStyle: 'italic' }}>{t('roleNone')}</span>
               ) : (
                 assignedRoles.map((r) => (
-                  <span key={r.assignmentId} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>
+                  <span key={r.assignmentId} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>
                     {r.icon && <span aria-hidden>{r.icon}</span>}{r.name}
                   </span>
                 ))
@@ -258,7 +258,7 @@ export function CloudAgentSlideOutPanel({
           </div>
           {agent.published
             ? <span className="badge-green">{t('statusPublished')}</span>
-            : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
+            : <span style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
           {canDeleteAgent(agent) && (
             <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>{tc('delete')}</button>
           )}
@@ -267,7 +267,7 @@ export function CloudAgentSlideOutPanel({
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 2, padding: '0 20px', borderBottom: '1px solid var(--border-subtle)', overflowX: 'auto', flexShrink: 0 }}>
           {TABS.map(({ id, label }) => (
-            <button key={id} type="button" onClick={() => setActiveTab(id)} style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: activeTab === id ? 'var(--coral-bright)' : 'var(--text-secondary)', background: 'none', border: 'none', borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap', marginBottom: -1 }}>
+            <button key={id} type="button" onClick={() => setActiveTab(id)} style={{ padding: '12px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, color: activeTab === id ? 'var(--coral-bright)' : 'var(--text-secondary)', background: 'none', border: 'none', borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap', marginBottom: -1 }}>
               {label}
             </button>
           ))}
@@ -275,7 +275,7 @@ export function CloudAgentSlideOutPanel({
 
         {/* Body */}
         <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-          {error && <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
+          {error && <div style={{ marginBottom: 12, fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{error}</div>}
 
           {activeTab === 'details' && (
             <>
@@ -310,12 +310,12 @@ export function CloudAgentSlideOutPanel({
 
           {activeTab === 'capabilities' && (
             bridgeError ? (
-              <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{bridgeError}</div>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)', padding: 16 }}>{bridgeError}</div>
             ) : bridgeId == null ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>{t('loadingCapabilities')}</div>
+              <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', padding: 16 }}>{t('loadingCapabilities')}</div>
             ) : (
               <>
-                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 14 }}>
+                <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 0, marginBottom: 14 }}>
                   {t('capabilitiesHint')}
                 </p>
                 <CapabilitiesContent
@@ -330,7 +330,7 @@ export function CloudAgentSlideOutPanel({
 
           {activeTab === 'pricing' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+              <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: 0 }}>
                 {t.rich('pricingIntro', { name: agent.name, strong: (chunks) => <strong>{chunks}</strong> })}
               </p>
               <div>
@@ -363,12 +363,12 @@ export function CloudAgentSlideOutPanel({
 
           {activeTab === 'performance' && owner && (
             perfError ? (
-              <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{perfError}</div>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)', padding: 16 }}>{perfError}</div>
             ) : perf == null ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>{t('loadingPerformance')}</div>
+              <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', padding: 16 }}>{t('loadingPerformance')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
+                <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: 0 }}>
                   {t.rich('performanceIntro', { name: agent.name, count: perf.hiredTenants, strong: (chunks) => <strong>{chunks}</strong> })}
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
@@ -379,15 +379,15 @@ export function CloudAgentSlideOutPanel({
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>{t('buyerFeedback')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>{t('buyerFeedback')}</div>
                   {perf.feedback.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('noFeedback')}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{t('noFeedback')}</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {perf.feedback.map((f, i) => (
                         <div key={i} className="text-gray-100" style={{ padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
-                          <div style={{ fontSize: 12, color: 'var(--coral-bright)', fontWeight: 600 }}>{'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</div>
-                          {f.comment && <div style={{ fontSize: 13, marginTop: 4 }}>{f.comment}</div>}
+                          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', fontWeight: 600 }}>{'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</div>
+                          {f.comment && <div style={{ fontSize: 'var(--font-size-small)', marginTop: 4 }}>{f.comment}</div>}
                         </div>
                       ))}
                     </div>

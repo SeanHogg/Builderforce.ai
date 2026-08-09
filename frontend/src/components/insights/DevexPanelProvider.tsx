@@ -59,7 +59,7 @@ export function DevexPanelProvider({ children }: { children: ReactNode }) {
       >
         {def && (
           <div style={{ padding: 20 }}>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 18px' }}>{t(def.descKey)}</p>
+            <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', margin: '0 0 18px' }}>{t(def.descKey)}</p>
             <RoleGate capability={def.capability} variant="block">
               {def.render()}
             </RoleGate>

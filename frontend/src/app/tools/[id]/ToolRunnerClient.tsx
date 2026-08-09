@@ -116,21 +116,21 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
   return (
     <div className={embedded ? 'nodrag nowheel' : undefined} style={embedded ? undefined : wrap}>
       {!embedded && <header style={{ marginBottom: 20 }}>
-        <Link href="/tools" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>← {t('allTools')}</Link>
+        <Link href="/tools" style={{ fontSize: 'var(--font-size-small)', color: 'var(--accent)', textDecoration: 'none' }}>← {t('allTools')}</Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 4px' }}>
-          <span style={{ fontSize: 26 }}>{def.icon}</span>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-strong)', margin: 0 }}>{def.name}</h1>
+          <span style={{ fontSize: 'var(--font-size-section)' }}>{def.icon}</span>
+          <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 800, color: 'var(--text-strong)', margin: 0 }}>{def.name}</h1>
         </div>
-        <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: '4px 0' }}>
+        <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: '4px 0' }}>
           {t('freeNoLogin')}
         </p>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 680 }}>{def.about}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', maxWidth: 680 }}>{def.about}</p>
         {projectId != null && (
-          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', margin: '6px 0 0' }}>{t('scoringProject')}</p>
+          <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--accent)', margin: '6px 0 0' }}>{t('scoringProject')}</p>
         )}
       </header>}
 
-      {embedded && <p style={{ fontSize: 13, color: 'var(--canvas-ink-soft)', margin: '0 0 14px' }}>{def.about}</p>}
+      {embedded && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--canvas-ink-soft)', margin: '0 0 14px' }}>{def.about}</p>}
 
       {/* Returning visitor — replay their prior result + a targeted sign-up CTA. */}
       {!embedded && <ReturningVisitorBanner toolId={toolId} />}
@@ -144,7 +144,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
               type="button"
               onClick={() => setMode(m)}
               style={{
-                flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
+                flex: 1, padding: '8px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer', border: 'none',
                 background: mode === m ? 'var(--accent)' : 'transparent', color: mode === m ? 'var(--text-on-accent)' : 'var(--text-strong)',
               }}
             >
@@ -163,7 +163,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
         <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {def.inputs.map((f) => (
             <div key={f.id}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
                 {f.label}{f.unit ? ` (${f.unit})` : ''}
               </label>
               {f.type === 'select' && f.options ? (
@@ -178,7 +178,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                   onChange={(e) => setVal(f.id, e.target.value === '' ? 0 : Number(e.target.value))}
                 />
               )}
-              {f.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{f.help}</div>}
+              {f.help && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', marginTop: 4 }}>{f.help}</div>}
             </div>
           ))}
         </div>
@@ -186,8 +186,8 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {def.questions.map((q) => (
             <section key={q.id} style={card}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--coral-bright)', marginBottom: 4 }}>{q.dimension}</div>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{q.text}</h2>
+              <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--coral-bright)', marginBottom: 4 }}>{q.dimension}</div>
+              <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{q.text}</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {q.options.map((o) => {
                   const active = input[q.id] === o.level;
@@ -197,7 +197,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                       aria-pressed={active}
                       style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
-                        padding: '12px 14px', fontSize: 13, lineHeight: 1.45, borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                        padding: '12px 14px', fontSize: 'var(--font-size-small)', lineHeight: 1.45, borderRadius: 'var(--radius-lg)', cursor: 'pointer',
                         border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                         background: active ? 'var(--accent)' : 'var(--bg-elevated)',
                         color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
@@ -221,13 +221,13 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ ...card, padding: '12px 16px' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 8 }}>{t('scaleHint')}</div>
+            <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', marginBottom: 8 }}>{t('scaleHint')}</div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               {def.scale.map((sc) => (
-                <div key={sc.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+                <div key={sc.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22,
-                    borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 11, background: 'var(--bg-elevated)',
+                    borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 'var(--font-size-eyebrow)', background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)', color: 'var(--text-strong)',
                   }}>{sc.value}</span>
                   {sc.label}
@@ -237,12 +237,12 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
           </div>
           {def.sections.map((s) => (
             <section key={s.key} style={card}>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{s.name}</h2>
-              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>{s.description}</p>
+              <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{s.name}</h2>
+              <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: '0 0 12px' }}>{s.description}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {s.questions.map((q) => (
                   <div key={q.id}>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 6 }}>{q.text}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', marginBottom: 6 }}>{q.text}</div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {def.scale.map((sc) => {
                         const active = input[q.id] === sc.value;
@@ -250,7 +250,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                           <button
                             key={sc.value} type="button" onClick={() => setVal(q.id, sc.value)} title={`${sc.value} — ${sc.label}`}
                             style={{
-                              padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                              padding: '6px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                               border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                               background: active ? 'var(--accent)' : 'var(--bg-elevated)', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                             }}
@@ -270,7 +270,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
 
       {/* Run */}
       <div style={{ ...card, marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>
           {def.kind !== 'calculator' && !canRun && answeredAny ? t('answerAll') : ''}
         </div>
         <button type="button" disabled={!canRun || computing} onClick={run} style={{ ...btnPrimary, opacity: !canRun || computing ? 0.6 : 1, cursor: !canRun || computing ? 'not-allowed' : 'pointer' }}>
@@ -283,16 +283,16 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
       {/* Result + execute gate */}
       {result && (
         <div style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 14px' }}>{t('yourResult')}</h2>
+          <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 14px' }}>{t('yourResult')}</h2>
           <ToolResultView result={result} />
 
           <div style={{ ...card, marginTop: 18, background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             {hasWorkspace ? (
               <>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>{t('saveTitle')}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('saveDesc')}</div>
-                  {saveState !== 'idle' && <div style={{ fontSize: 12, marginTop: 6, color: saveState === 'error' ? 'var(--error-text)' : 'var(--success)' }}>{saveMsg}</div>}
+                  <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)' }}>{t('saveTitle')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('saveDesc')}</div>
+                  {saveState !== 'idle' && <div style={{ fontSize: 'var(--font-size-small)', marginTop: 6, color: saveState === 'error' ? 'var(--error-text)' : 'var(--success)' }}>{saveMsg}</div>}
                 </div>
                 <button type="button" onClick={save} disabled={saveState === 'saving'} style={btnSubtle}>
                   {saveState === 'saving' ? t('saving') : saveState === 'saved' ? t('savedShort') : t('saveResult')}
@@ -301,14 +301,14 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
             ) : (
               <>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>{t('ctaTitle')}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('ctaDesc')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)' }}>{t('ctaTitle')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('ctaDesc')}</div>
                 </div>
                 <Link href={`/register?next=/tools/${toolId}`} style={btnPrimary}>{t('createAccount')} →</Link>
               </>
             )}
           </div>
-          {isAuthed && !hasWorkspace && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>{t('needWorkspace')}</p>}
+          {isAuthed && !hasWorkspace && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 10 }}>{t('needWorkspace')}</p>}
         </div>
       )}
       </>

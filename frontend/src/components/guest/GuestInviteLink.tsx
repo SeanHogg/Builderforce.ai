@@ -58,19 +58,19 @@ export function GuestInviteLink({
         .gil-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
         .gil-url {
           flex: 1 1 180px; min-width: 0; box-sizing: border-box;
-          padding: 7px 9px; font-size: 12px; font-family: inherit;
+          padding: 7px 9px; font-size: var(--font-size-small); font-family: inherit;
           border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
           background: var(--bg-base); color: var(--text-primary);
           text-overflow: ellipsis;
         }
         .gil-copy {
-          flex: 0 0 auto; padding: 7px 12px; font-size: 12px; font-weight: 600;
+          flex: 0 0 auto; padding: 7px 12px; font-size: var(--font-size-small); font-weight: 600;
           border-radius: var(--radius-md); border: 1px solid var(--accent);
           background: var(--accent); color: var(--text-on-accent); cursor: pointer; min-height: 32px;
         }
         .gil-copy:disabled { opacity: 0.55; cursor: default; }
-        .gil-error { margin: 0; font-size: 11px; color: var(--danger); }
-        .gil-compact .gil-url { font-size: 11px; padding: 5px 8px; }
+        .gil-error { margin: 0; font-size: var(--font-size-eyebrow); color: var(--danger); }
+        .gil-compact .gil-url { font-size: var(--font-size-eyebrow); padding: 5px 8px; }
         @media (max-width: 420px) {
           .gil-row { flex-direction: column; align-items: stretch; }
           .gil-copy { width: 100%; }

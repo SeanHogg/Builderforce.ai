@@ -144,11 +144,11 @@ export function CardOnFile() {
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
           {t('cardOnFileTitle')}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 'var(--font-size-small)' }}>
           {state.brand && state.last4 ? (
             <span style={{ color: 'var(--text-primary)' }}>
               <span style={{ textTransform: 'capitalize' }}>{state.brand}</span> ···· {state.last4}
@@ -159,12 +159,12 @@ export function CardOnFile() {
           <span style={{ color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
         </div>
 
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
           {state.status === 'pending' ? t('cardPendingHint') : t('cardOnFileHint')}
         </p>
 
         {(startError !== null || removeError !== null) && (
-          <div role="alert" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
+          <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--danger)', marginTop: 6 }}>
             {removeError || startError || t('cardValidationFailed')}
           </div>
         )}

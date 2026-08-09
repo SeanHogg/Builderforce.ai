@@ -129,18 +129,18 @@ export default function PermissionDebuggerPanel() {
           <tbody>
             {(panelTab === 'role' ? roleGrouped : displayed).map((g) => (
               <tr key={g.id ?? g.permission}>
-                <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>{g.permission}</td>
+                <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--font-size-eyebrow)' }}>{g.permission}</td>
                 <td>
-                  <span style={{ color: statusColor(g.status), fontWeight: 600, fontSize: 11 }}>
+                  <span style={{ color: statusColor(g.status), fontWeight: 600, fontSize: 'var(--font-size-eyebrow)' }}>
                     {statusLabel(g.status)}
                   </span>
                 </td>
-                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.grantedVia ?? '—'}</td>
+                <td style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{g.grantedVia ?? '—'}</td>
                 {panelTab === 'role' && (
-                  <td style={{ fontSize: 11 }}>{(g as PermissionRegistration & { count?: number }).count ?? 1}</td>
+                  <td style={{ fontSize: 'var(--font-size-eyebrow)' }}>{(g as PermissionRegistration & { count?: number }).count ?? 1}</td>
                 )}
                 {panelTab !== 'role' && (
-                  <td style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{g.apiEndpoint ?? '—'}</td>
+                  <td style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{g.apiEndpoint ?? '—'}</td>
                 )}
               </tr>
             ))}

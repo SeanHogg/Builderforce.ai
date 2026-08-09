@@ -62,7 +62,7 @@ function Badge({ record }: { record: ModelRecord }) {
   return (
     <span
       style={{
-        fontSize: 10,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         padding: '2px 8px',
         borderRadius: 'var(--radius-full)',
@@ -86,7 +86,7 @@ function RoutableChip({ record }: { record: ModelRecord }) {
     <span
       title={t('routableChip.title')}
       style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-full)',
+        fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-full)',
         background: 'rgba(34,197,94,0.12)', color: 'var(--success-text)',
         border: '1px solid rgba(34,197,94,0.35)', whiteSpace: 'nowrap',
       }}
@@ -101,13 +101,13 @@ function PriceTag({ record }: { record: ModelRecord }) {
   const free = record.pricing.prompt <= 0 && record.pricing.completion <= 0;
   if (free) {
     return (
-      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,197,94,0.3)' }}>
+      <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,197,94,0.3)' }}>
         {t('price.free')}
       </span>
     );
   }
   return (
-    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
       <strong style={{ color: 'var(--text-primary)' }}>{formatPricePerMillion(record.pricing.prompt)}</strong> {t('price.in')} ·{' '}
       <strong style={{ color: 'var(--text-primary)' }}>{formatPricePerMillion(record.pricing.completion)}</strong> {t('price.out')} / 1M
     </span>
@@ -126,28 +126,28 @@ function ModelDetail({ record }: { record: ModelRecord }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Badge record={record} />
         <RoutableChip record={record} />
-        <code style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{record.id}</code>
+        <code style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{record.id}</code>
       </div>
 
       {record.description && (
-        <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-secondary)', margin: 0 }}>{record.description}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', lineHeight: 1.65, color: 'var(--text-secondary)', margin: 0 }}>{record.description}</p>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         {fieldSpecs.map((f) => (
           <div key={f.label} style={{ background: 'var(--bg-elevated)', padding: '12px 14px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{f.label}</div>
-            <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{f.render(record)}</div>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{f.label}</div>
+            <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', fontWeight: 600 }}>{f.render(record)}</div>
           </div>
         ))}
       </div>
 
       {record.supportedParameters && record.supportedParameters.length > 0 && (
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('detail.supportedParameters')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('detail.supportedParameters')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {record.supportedParameters.map((p) => (
-              <span key={p} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}>
+              <span key={p} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}>
                 {p}
               </span>
             ))}
@@ -157,7 +157,7 @@ function ModelDetail({ record }: { record: ModelRecord }) {
 
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!record.isBuilderforce && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('detail.routedBlurb')}</p>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('detail.routedBlurb')}</p>
         )}
         <Link
           href={record.isBuilderforce ? (record.ctaHref ?? '/register') : '/pricing?upgrade=pro'}
@@ -255,22 +255,22 @@ function CompareTray({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <strong style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)' }}>
+        <strong style={{ flex: 1, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
           {t('compare.title')} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({selected.length}/{MAX_COMPARE})</span>
         </strong>
-        <button type="button" onClick={onClear} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }}>
+        <button type="button" onClick={onClear} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)' }}>
           {t('compare.clear')}
         </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, maxHeight: 220, overflow: 'auto' }}>
         {selected.map((m) => (
           <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
             <button
               type="button"
               onClick={() => onRemove(m.id)}
               aria-label={t('compare.removeAria', { name: m.name })}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: 2 }}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-card-title)', lineHeight: 1, padding: 2 }}
             >
               ×
             </button>
@@ -278,7 +278,7 @@ function CompareTray({
         ))}
       </div>
       <div style={{ padding: 10, borderTop: '1px solid var(--border-subtle)' }}>
-        <label style={{ display: 'grid', gap: 6, marginBottom: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+        <label style={{ display: 'grid', gap: 6, marginBottom: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
           {t('compare.promptLabel')}
           <textarea
             value={prompt}
@@ -339,11 +339,11 @@ function ModelCard({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{record.name}</span>
+            <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{record.name}</span>
             <Badge record={record} />
             <RoutableChip record={record} />
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{record.provider}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>{record.provider}</div>
         </div>
         <label
           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: checkboxDisabled ? 'not-allowed' : 'pointer', flexShrink: 0 }}
@@ -360,11 +360,11 @@ function ModelCard({
         </label>
       </div>
 
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {record.description || t('card.noDescription')}
       </p>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
         <span title={t('field.contextWindow')}>🧠 {formatContext(record)}</span>
         <PriceTag record={record} />
       </div>
@@ -491,7 +491,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
             onClick={() => setTierFilter(f.id)}
             aria-pressed={tierFilter === f.id}
             className={tierFilter === f.id ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
+            style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
           >
             {f.label}
           </button>
@@ -502,7 +502,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           aria-pressed={routableOnly}
           title={t('filter.routableOnlyTitle')}
           className={routableOnly ? 'btn btn-primary' : 'btn btn-secondary'}
-          style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
         >
           ✓ {t('filter.routableOnly')}
         </button>
@@ -511,7 +511,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           onChange={(e) => setMaxInputPrice(e.target.value as PriceLimit)}
           aria-label={t('filter.maxInput')}
           title={t('filter.priceHelp')}
-          style={{ minWidth: 170, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
+          style={{ minWidth: 170, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
         >
           {PRICE_LIMITS.map((limit) => (
             <option key={limit} value={limit}>
@@ -526,7 +526,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           onChange={(e) => setMaxOutputPrice(e.target.value as PriceLimit)}
           aria-label={t('filter.maxOutput')}
           title={t('filter.priceHelp')}
-          style={{ minWidth: 178, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 13 }}
+          style={{ minWidth: 178, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
         >
           {PRICE_LIMITS.map((limit) => (
             <option key={limit} value={limit}>
@@ -543,7 +543,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
       ) : (
         <>
           {error && (
-            <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
               {error}
             </div>
           )}
@@ -631,7 +631,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
                   >
                     ←
                   </button>
-                  <span aria-live="polite" style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  <span aria-live="polite" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                     {t('pagination.pageOf', { page: currentPage, pages: totalPages })}
                   </span>
                   <button

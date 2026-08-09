@@ -57,9 +57,9 @@ export function VoiceOutput({
           background: 'rgba(234,179,8,0.1)', border: '1px solid var(--yellow-bright)',
           color: 'var(--warning-text)', borderRadius: 'var(--radius-lg)', padding: '20px 24px',
         }}>
-          <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>⚠</div>
+          <div style={{ fontSize: 'var(--font-size-section)', marginBottom: 8 }}>⚠</div>
           <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('synthUnavailable')}</p>
-          <p style={{ fontSize: '0.9rem', opacity: 0.9 }}>{unavailable}</p>
+          <p style={{ fontSize: 'var(--font-size-body)', opacity: 0.9 }}>{unavailable}</p>
         </div>
       </div>
     );
@@ -68,7 +68,7 @@ export function VoiceOutput({
   if (busy) {
     return (
       <div style={wrap}>
-        <div style={{ fontSize: '2.5rem', marginBottom: 14, animation: 'pulse 1.5s ease-in-out infinite' }}>🎙</div>
+        <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 14, animation: 'pulse 1.5s ease-in-out infinite' }}>🎙</div>
         <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{t('generatingSpeech')}</p>
       </div>
     );
@@ -77,11 +77,11 @@ export function VoiceOutput({
   if (!result || !audioUrl) {
     return (
       <div style={wrap}>
-        <div style={{ fontSize: '2.5rem', marginBottom: 14, opacity: 0.7 }}>🔊</div>
+        <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 14, opacity: 0.7 }}>🔊</div>
         <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
           {t('pressRun')}
         </p>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: 6, textAlign: 'center', maxWidth: 360 }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', marginTop: 6, textAlign: 'center', maxWidth: 360 }}>
           {t('emptyHint')}
         </p>
       </div>
@@ -92,12 +92,12 @@ export function VoiceOutput({
     <div style={{ ...wrap, justifyContent: 'flex-start' }}>
       <div style={{ width: '100%', maxWidth: 680 }}>
         <audio ref={audioRef} src={audioUrl} controls autoPlay onTimeUpdate={onTimeUpdate} style={{ width: '100%' }} />
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '8px 0 16px' }}>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '8px 0 16px' }}>
           {t('durationSeconds', { seconds: Math.round(result.durationMs / 100) / 10 })} ·{' '}
           {result.engineId === 'clone-client' ? t('sourceOnDevice') : t('sourceServer')}
           {result.cloned ? '' : ` · ${t('fallbackVoice')}`}
         </div>
-        <p style={{ lineHeight: 2, fontSize: '1.05rem' }}>
+        <p style={{ lineHeight: 2, fontSize: 'var(--font-size-card-title)' }}>
           {result.wordTimestamps.length > 0
             ? result.wordTimestamps.map((w, i) => (
                 <span key={i} style={{

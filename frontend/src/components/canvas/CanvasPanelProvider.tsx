@@ -89,7 +89,7 @@ export function CanvasPanelProvider({ children }: { children: ReactNode }) {
                 background: 'var(--accent)',
                 color: 'var(--text-on-accent)',
                 fontWeight: 600,
-                fontSize: 13,
+                fontSize: 'var(--font-size-small)',
                 cursor: saving ? 'default' : 'pointer',
                 opacity: saving ? 0.6 : 1,
               }}

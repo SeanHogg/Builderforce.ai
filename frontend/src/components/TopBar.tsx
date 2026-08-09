@@ -61,7 +61,7 @@ function CartButton() {
               borderRadius: 'var(--radius-md)',
               background: 'var(--indigo-bright)',
               color: 'var(--text-on-accent)',
-              fontSize: 10,
+              fontSize: 'var(--font-size-field-label)',
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',

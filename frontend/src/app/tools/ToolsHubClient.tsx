@@ -43,11 +43,11 @@ export default function ToolsHubClient() {
   return (
     <div style={wrap}>
       <header style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: 0 }}>
+        <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: 0 }}>
           {t('hubEyebrow')}
         </p>
-        <h1 style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-strong)', margin: '8px 0' }}>{t('hubTitle')}</h1>
-        <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 680 }}>{t('hubIntro')}</p>
+        <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 800, color: 'var(--text-strong)', margin: '8px 0' }}>{t('hubTitle')}</h1>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', maxWidth: 680 }}>{t('hubIntro')}</p>
       </header>
 
       {/* Returning visitor — recap their diagnostics + a targeted sign-up CTA. */}
@@ -56,10 +56,10 @@ export default function ToolsHubClient() {
       {/* Workspace rating — project diagnostics rolled up to the tenant. */}
       {rollup && rollup.projects.length > 0 && (
         <section style={{ marginBottom: 24 }}>
-          <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 4px' }}>
+          <h2 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 4px' }}>
             {t('rollupTitle')}
           </h2>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 12px' }}>{t('rollupDesc')}</p>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '0 0 12px' }}>{t('rollupDesc')}</p>
           <ToolResultView result={rollup.result} />
         </section>
       )}
@@ -67,11 +67,11 @@ export default function ToolsHubClient() {
       {/* Featured: the full maturity diagnostic */}
       <Link href="/tools/agentic-maturity" style={{ ...cardLink, marginBottom: 24, background: 'var(--bg-elevated)', borderColor: 'var(--accent)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 22 }}>📈</span>
-          <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-strong)' }}>{t('featuredTitle')}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{t('open')} →</span>
+          <span style={{ fontSize: 'var(--font-size-section)' }}>📈</span>
+          <span style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)' }}>{t('featuredTitle')}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--accent)' }}>{t('open')} →</span>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{t('featuredDesc')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0 }}>{t('featuredDesc')}</p>
       </Link>
 
       {error && <div style={{ color: 'var(--error-text)', marginBottom: 16 }}>{error}</div>}
@@ -80,21 +80,21 @@ export default function ToolsHubClient() {
       ) : (
         CATEGORY_ORDER.filter((c) => gridTools.some((tool) => tool.category === c)).map((cat) => (
           <section key={cat} style={{ marginBottom: 24 }}>
-            <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 12px' }}>
+            <h2 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 12px' }}>
               {categoryLabel(cat)}
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
               {gridTools.filter((tool) => tool.category === cat).map((tool) => (
                 <Link key={tool.id} href={`/tools/${tool.id}`} style={cardLink}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 20 }}>{tool.icon}</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{tool.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>
+                    <span style={{ fontSize: 'var(--font-size-card-title)' }}>{tool.icon}</span>
+                    <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>{tool.name}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>
                       {t(`kind.${tool.kind}`)}
                     </span>
                   </div>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, flex: 1 }}>{tool.tagline}</p>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>{t('runFree')} →</span>
+                  <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0, flex: 1 }}>{tool.tagline}</p>
+                  <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--accent)' }}>{t('runFree')} →</span>
                 </Link>
               ))}
             </div>
@@ -102,7 +102,7 @@ export default function ToolsHubClient() {
         ))
       )}
 
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>{t('hubFootnote')}</p>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 8 }}>{t('hubFootnote')}</p>
     </div>
   );
 }

@@ -117,22 +117,22 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="min(560px, 96vw)">
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('subtitle')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('subtitle')}</p>
 
         {!hasBuild ? (
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px' }}>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px' }}>
             {t('noBuildNodes')}
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{t('stepsReady', { count: stepCount })}</span>
+              <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('stepsReady', { count: stepCount })}</span>
               <button
                 type="button"
                 onClick={() => void run()}
                 disabled={running || stepCount === 0}
                 style={{
-                  padding: '8px 16px', fontSize: 13, fontWeight: 700,
+                  padding: '8px 16px', fontSize: 'var(--font-size-small)', fontWeight: 700,
                   background: running ? 'var(--bg-elevated)' : 'var(--coral-bright)',
                   color: running ? 'var(--text-muted)' : 'var(--text-on-accent)',
                   border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
@@ -146,7 +146,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
             {/* Execution timeline */}
             {rows.length > 0 && (
               <div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
                   {t('timelineTitle')}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -154,19 +154,19 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                     const tone = TONE[r.status] ?? TONE.skip;
                     return (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '7px 10px' }}>
-                        <span aria-hidden style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 'var(--radius-sm)', background: tone.bg, color: tone.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                        <span aria-hidden style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 'var(--radius-sm)', background: tone.bg, color: tone.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700 }}>
                           {tone.icon}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                              <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', fontSize: 10.5, marginRight: 6 }}>{r.layer}</span>
+                            <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--font-size-eyebrow)', marginRight: 6 }}>{r.layer}</span>
                               {r.label}
                             </span>
-                            <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('durationMs', { ms: r.ms })}</span>
+                            <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('durationMs', { ms: r.ms })}</span>
                           </div>
-                          {r.detail && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, wordBreak: 'break-word' }}>{r.detail}</div>}
-                          {r.error && <div style={{ fontSize: 11.5, color: 'var(--error-text)', marginTop: 2, wordBreak: 'break-word' }}>{r.error}</div>}
+                          {r.detail && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', marginTop: 2, wordBreak: 'break-word' }}>{r.detail}</div>}
+                          {r.error && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--error-text)', marginTop: 2, wordBreak: 'break-word' }}>{r.error}</div>}
                         </div>
                       </div>
                     );
@@ -180,7 +180,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
               <div
                 role="status"
                 style={{
-                  fontSize: 12.5, borderRadius: 'var(--radius-lg)', padding: '10px 12px',
+                  fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-lg)', padding: '10px 12px',
                   background: result.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
                   border: `1px solid ${result.ok ? 'var(--success, var(--success))' : 'var(--error)'}`,
                   color: 'var(--text-primary)',
@@ -200,14 +200,14 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
             {/* Artifact + seed / download */}
             {result && (
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   {t('artifactTitle')}
                 </div>
                 {artifactB64 ? (
                   <>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>📦 {t('artifactReady')}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>📦 {t('artifactReady')}</div>
                     {seededVersion != null && (
-                      <div style={{ fontSize: 12.5, color: 'var(--success, var(--success))' }}>✓ {t('seeded', { version: seededVersion })}</div>
+                      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--success, var(--success))' }}>✓ {t('seeded', { version: seededVersion })}</div>
                     )}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button
@@ -216,7 +216,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                         disabled={!canSeed || seeding}
                         title={projectId == null ? t('seedNeedsProject') : undefined}
                         style={{
-                          padding: '7px 14px', fontSize: 12.5, fontWeight: 600,
+                          padding: '7px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600,
                           background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
                           cursor: !canSeed || seeding ? 'not-allowed' : 'pointer', opacity: !canSeed || seeding ? 0.55 : 1,
                         }}
@@ -226,15 +226,15 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                       <button
                         type="button"
                         onClick={download}
-                        style={{ padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+                        style={{ padding: '7px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                       >
                         ⬇ {t('download')}
                       </button>
                     </div>
-                    {projectId == null && <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{t('seedNeedsProject')}</div>}
+                    {projectId == null && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('seedNeedsProject')}</div>}
                   </>
                 ) : (
-                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('artifactNone')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('artifactNone')}</div>
                 )}
               </div>
             )}
@@ -242,7 +242,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
         )}
 
         {error && (
-          <div role="alert" style={{ fontSize: 12.5, color: 'var(--error-text)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
+          <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
             ⚠ {error}
           </div>
         )}
@@ -293,13 +293,13 @@ function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
   return (
     <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('metricsTitle')}</span>
-        {converged && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success, var(--success))' }}>✓ {t('mConverged')}</span>}
+        <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('metricsTitle')}</span>
+        {converged && <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--success, var(--success))' }}>✓ {t('mConverged')}</span>}
       </div>
 
       {spark && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 3 }}>
             <span>{t('mLossCurve')}</span>
             {finalLoss != null && <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{t('mFinalLoss', { loss: finalLoss.toFixed(3) })}</span>}
           </div>
@@ -314,8 +314,8 @@ function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 8 }}>
           {tiles.map((tile) => (
             <div key={tile.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '7px 10px' }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{tile.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{tile.value}</div>
+              <div style={{ fontSize: 'var(--font-size-field-label)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{tile.label}</div>
+              <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, marginTop: 2, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{tile.value}</div>
             </div>
           ))}
         </div>

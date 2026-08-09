@@ -200,7 +200,7 @@ function Toast({
         padding: '12px 14px',
         color: 'var(--text-primary, var(--text-primary))',
         fontFamily: 'var(--font-body, system-ui, sans-serif)',
-        fontSize: 14,
+        fontSize: 'var(--font-size-small)',
         boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
         animation: 'toast-slide-in 200ms ease-out',
       }}
@@ -223,7 +223,7 @@ function Toast({
         <span
           style={{
             color: 'var(--text-muted, var(--text-muted))',
-            fontSize: 12,
+            fontSize: 'var(--font-size-small)',
             marginLeft: 'auto',
             flexShrink: 0,
           }}
@@ -289,7 +289,7 @@ function Toast({
       <div
         style={{
           marginTop: 2,
-          fontSize: 12,
+          fontSize: 'var(--font-size-small)',
           color: 'var(--text-muted, var(--text-muted))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -308,7 +308,7 @@ function Toast({
             background: 'var(--bg-deep, var(--bg-deep))',
             border: '1px solid var(--border, rgba(136,146,176,0.15))',
             borderRadius: 'var(--radius-md, 8px)',
-            fontSize: 12,
+            fontSize: 'var(--font-size-small)',
             fontFamily: 'var(--font-mono, monospace)',
             overflowX: 'auto',
             maxHeight: 192,

@@ -67,7 +67,7 @@ export function PlanBadge() {
         minWidth: 0,
         maxWidth: '100%',
         padding: '1px 7px',
-        fontSize: 9,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: '0.05em',

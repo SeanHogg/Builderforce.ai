@@ -454,7 +454,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   );
 
   if (loading) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
+    return <div style={{ padding: 24, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
   }
 
   const q = paletteSearch.trim().toLowerCase();
@@ -472,7 +472,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ ...fieldStyle, fontWeight: 700, fontSize: 14, minWidth: 220, flex: 1 }}
+          style={{ ...fieldStyle, fontWeight: 700, fontSize: 'var(--font-size-small)', minWidth: 220, flex: 1 }}
           placeholder={t('workflowNamePlaceholder')}
         />
         <Select
@@ -529,7 +529,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
           <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}>🧠 {t('builderBuild')}</button>
         )}
         <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ {t('builderRun')}</button>
-        {status && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{status}</span>}
+        {status && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{status}</span>}
       </div>
 
       <EvermindBuildPanel
@@ -547,9 +547,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             value={paletteSearch}
             onChange={(e) => setPaletteSearch(e.target.value)}
             placeholder={t('searchIntegrations')}
-            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 12 }}
+            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 'var(--font-size-small)' }}
           />
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
+          <div style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
 
           {/* Core node kinds */}
           {NODE_GROUPS.map((group) => {
@@ -599,7 +599,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             );
           })}
           {filteredIntegrations.length === 0 && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
           )}
         </div>
 
@@ -647,7 +647,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
           </Canvas3DControlsProvider>
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center' }}>
                 {t('canvasHintLine1')}<br />{t('canvasHintLine2')}
               </div>
             </div>

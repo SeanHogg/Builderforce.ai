@@ -82,14 +82,14 @@ export default function IntegrationGrid({
         .cc-int-h2 {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+          font-size: var(--font-size-section);
           margin: 0 0 8px;
           color: var(--text-primary);
         }
         .cc-int-desc {
           color: var(--text-secondary);
           margin: 0 0 24px;
-          font-size: 0.95rem;
+          font-size: var(--font-size-body);
         }
         .cc-int-grid {
           display: grid;
@@ -126,12 +126,12 @@ export default function IntegrationGrid({
         .cc-int-name {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: 1rem;
+          font-size: var(--font-size-card-title);
           margin: 4px 0 0;
         }
         .cc-int-card-desc {
           color: var(--text-secondary);
-          font-size: 0.85rem;
+          font-size: var(--font-size-small);
           line-height: 1.5;
           margin: 0;
         }

@@ -44,7 +44,7 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
           <div>
             <p style={eyebrow}>{t('welcomeBack')}</p>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t('welcomeBackTool')}</p>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t('welcomeBackTool')}</p>
           </div>
           <Link href={`/register?next=/tools/${toolId}`} style={cta}>{t('saveMyResult')} →</Link>
         </div>
@@ -59,7 +59,7 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <p style={eyebrow}>{t('welcomeBack')}</p>
-          <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', margin: '4px 0 2px' }}>
+          <p style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '4px 0 2px' }}>
             {t('welcomeBackHub', { count: session.runs.length })}
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
@@ -68,7 +68,7 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
                 key={r.toolId}
                 href={`/tools/${r.toolId}`}
                 style={{
-                  fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 'var(--radius-full)', textDecoration: 'none',
+                  fontSize: 'var(--font-size-small)', fontWeight: 600, padding: '5px 10px', borderRadius: 'var(--radius-full)', textDecoration: 'none',
                   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--accent)',
                 }}
               >

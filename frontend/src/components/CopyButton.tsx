@@ -51,7 +51,7 @@ export function CopyButton({
       title={ariaLabel ?? text}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        fontSize: 12, fontWeight: 600,
+        fontSize: 'var(--font-size-small)', fontWeight: 600,
         // 32px min keeps the target tappable on a phone without bloating a dense header.
         padding: compact ? '6px 10px' : '7px 12px', minHeight: 32,
         borderRadius: 'var(--radius-md)',

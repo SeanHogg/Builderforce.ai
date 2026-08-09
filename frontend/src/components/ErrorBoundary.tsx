@@ -72,7 +72,7 @@ export class ErrorBoundary extends React.Component<
         <div style={{ maxWidth: 560, width: '100%' }}>
           <h1
             style={{
-              fontSize: 24,
+              fontSize: 'var(--font-size-section)',
               fontWeight: 700,
               color: 'var(--error, var(--error))',
               fontFamily: 'var(--font-display, system-ui, sans-serif)',
@@ -83,7 +83,7 @@ export class ErrorBoundary extends React.Component<
           </h1>
           <p
             style={{
-              fontSize: 16,
+              fontSize: 'var(--font-size-card-title)',
               color: 'var(--text-secondary, var(--text-secondary))',
               marginBottom: 24,
             }}
@@ -105,7 +105,7 @@ export class ErrorBoundary extends React.Component<
                 style={{
                   padding: '10px 14px',
                   cursor: 'pointer',
-                  fontSize: 14,
+                  fontSize: 'var(--font-size-small)',
                   color: 'var(--text-muted, var(--text-muted))',
                 }}
               >
@@ -114,7 +114,7 @@ export class ErrorBoundary extends React.Component<
               <pre
                 style={{
                   padding: '10px 14px',
-                  fontSize: 12,
+                  fontSize: 'var(--font-size-small)',
                   fontFamily: 'var(--font-mono, monospace)',
                   overflowX: 'auto',
                   whiteSpace: 'pre-wrap',

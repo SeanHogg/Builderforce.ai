@@ -395,9 +395,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? await db
           .update(ideAgents)
           .set({ hireCount: sql`${ideAgents.hireCount} + 1`, updatedAt: sql`NOW()` })
-          .where(eq(ideAgents.id, id))
+          .where(and(eq(ideAgents.id, id), eq(ideAgents.tenantId, Number(agent.tenant_id))))
           .returning(agentRowColumns)
-      : await db.select(agentRowColumns).from(ideAgents).where(eq(ideAgents.id, id));
+      : await db.select(agentRowColumns).from(ideAgents).where(and(
+          eq(ideAgents.id, id),
+          eq(ideAgents.tenantId, Number(agent.tenant_id)),
+        ));
     await invalidateHireCaches(c.env as Env, tenantId, { publicListing: changed.length > 0 });
     return c.json(mapAgentRow(row));
   });
@@ -616,7 +619,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
           eq(artifactAssignments.scope, 'agent'),
           inArray(artifactAssignments.scopeId, bridgeIds),
         ));
-      await db.delete(projectAgents).where(inArray(projectAgents.id, bridgeIds));
+      await db.delete(projectAgents).where(and(
+        eq(projectAgents.tenantId, tenantId),
+        inArray(projectAgents.id, bridgeIds),
+      ));
     }
     await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });

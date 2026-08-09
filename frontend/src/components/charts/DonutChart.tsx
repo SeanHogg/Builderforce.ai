@@ -100,8 +100,8 @@ export function DonutChart({
               alignItems: 'center', justifyContent: 'center', textAlign: 'center', pointerEvents: 'none',
             }}
           >
-            {centerLabel && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{centerLabel}</span>}
-            {centerValue && <span style={{ fontSize: '1.3rem', fontWeight: 700, lineHeight: 1.1 }}>{centerValue}</span>}
+            {centerLabel && <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontWeight: 600 }}>{centerLabel}</span>}
+            {centerValue && <span style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, lineHeight: 1.1 }}>{centerValue}</span>}
           </div>
         )}
       </div>
@@ -111,7 +111,7 @@ export function DonutChart({
           {segments.map((s) => {
             const frac = total > 0 ? s.value / total : 0;
             return (
-              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem' }}>
+              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-small)' }}>
                 <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
                 <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
                 <span style={{ fontWeight: 700 }}>{formatValue(s.value)}</span>

@@ -44,7 +44,7 @@
   min-height: 40px;
   margin: -8px 0 28px;
   color: var(--text-secondary);
-  font-size: 0.84rem;
+  font-size: var(--font-size-small);
   font-weight: 600;
   text-decoration: none;
   transition: color 150ms ease, transform 150ms ease;
@@ -58,7 +58,7 @@
 .eyebrow {
   margin: 0 0 12px;
   color: var(--cyan-bright);
-  font-size: 0.72rem;
+  font-size: var(--font-size-eyebrow);
   font-weight: 700;
   letter-spacing: 0.14em;
   line-height: 1.4;
@@ -70,7 +70,7 @@
   margin: 0;
   color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: clamp(2rem, 5vw, 3.35rem);
+  font-size: var(--font-size-page-title);
   font-weight: 750;
   letter-spacing: -0.045em;
   line-height: 1.08;
@@ -83,7 +83,7 @@
   gap: 9px;
   margin: 18px 0 0;
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--font-size-small);
 }
 
 .updated time { color: var(--text-primary); }
@@ -98,7 +98,7 @@
 
 .content {
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: var(--font-size-card-title);
   line-height: 1.78;
 }
 
@@ -111,7 +111,7 @@
   margin: 2.2em 0 0.65em;
   color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: clamp(1.25rem, 2.5vw, 1.55rem);
+  font-size: var(--font-size-section);
   letter-spacing: -0.025em;
   line-height: 1.3;
 }
@@ -119,7 +119,7 @@
 .content h3 {
   margin: 1.8em 0 0.55em;
   color: var(--text-primary);
-  font-size: 1.05rem;
+  font-size: var(--font-size-card-title);
 }
 
 .content a,
@@ -149,7 +149,7 @@
 .localNav > p {
   margin: 0 0 10px;
   color: var(--text-muted);
-  font-size: 0.67rem;
+  font-size: var(--font-size-eyebrow);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -166,7 +166,7 @@
   padding: 7px 10px;
   color: var(--text-secondary);
   border-radius: var(--radius-md);
-  font-size: 0.75rem;
+  font-size: var(--font-size-small);
   font-weight: 600;
   line-height: 1.25;
   text-decoration: none;
@@ -215,13 +215,13 @@
   color: var(--cyan-bright);
   background: var(--surface-cyan-soft);
   border-radius: 50%;
-  font-size: 0.8rem;
+  font-size: var(--font-size-small);
   font-weight: 800;
 }
 
 .callout div { display: grid; gap: 3px; }
-.callout strong { color: var(--text-primary); font-size: 0.85rem; }
-.callout p { margin: 0; font-size: 0.82rem; line-height: 1.6; }
+.callout strong { color: var(--text-primary); font-size: var(--font-size-small); }
+.callout p { margin: 0; font-size: var(--font-size-small); line-height: 1.6; }
 
 .checklist {
   display: grid;
@@ -236,7 +236,7 @@
   margin: 0 !important;
   padding-left: 20px;
   color: var(--text-secondary);
-  font-size: 0.84rem;
+  font-size: var(--font-size-small);
   line-height: 1.55;
 }
 
@@ -265,16 +265,16 @@
 }
 
 .contact div { display: grid; gap: 3px; }
-.contact strong { color: var(--text-primary); font-size: 0.9rem; }
-.contact span { color: var(--text-secondary); font-size: 0.8rem; line-height: 1.55; }
-.contact a { align-self: center; font-size: 0.82rem; white-space: nowrap; }
+.contact strong { color: var(--text-primary); font-size: var(--font-size-body); }
+.contact span { color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.55; }
+.contact a { align-self: center; font-size: var(--font-size-small); white-space: nowrap; }
 .contact p {
   grid-column: 1 / -1;
   margin: 8px 0 0;
   padding-top: 14px;
   color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
-  font-size: 0.72rem;
+  font-size: var(--font-size-eyebrow);
   line-height: 1.5;
 }
 
@@ -282,7 +282,7 @@
   .page { padding: 28px 18px 72px; }
   .header { margin-bottom: 28px; }
   .backLink { margin-bottom: 20px; }
-  .content { font-size: 0.94rem; line-height: 1.72; }
+  .content { font-size: var(--font-size-body); line-height: 1.72; }
   .contact { grid-template-columns: 1fr; padding: 20px; }
   .contact a { white-space: normal; }
   .contact p { grid-column: 1; }

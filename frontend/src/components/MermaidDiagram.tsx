@@ -71,7 +71,7 @@ export function MermaidDiagram({ code }: { code: string }) {
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)',
           overflowX: 'auto',
-          fontSize: '0.78rem',
+          fontSize: 'var(--font-size-small)',
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
           color: 'var(--text-primary)',
           whiteSpace: 'pre',
@@ -89,7 +89,7 @@ export function MermaidDiagram({ code }: { code: string }) {
       style={{ margin: '12px 0', textAlign: 'center', overflowX: 'auto' }}
       dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
     >
-      {svg ? undefined : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('renderingDiagram')}</span>}
+      {svg ? undefined : <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('renderingDiagram')}</span>}
     </div>
   );
 }

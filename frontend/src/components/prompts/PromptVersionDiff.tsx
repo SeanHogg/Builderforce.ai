@@ -94,7 +94,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
             </div>
 
             {/* Diff summary */}
-            <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
+            <div style={{ display: 'flex', gap: 14, fontSize: 'var(--font-size-small)' }}>
               <span style={{ color: 'var(--success)', fontWeight: 700 }}>+{stat.added} {t('added')}</span>
               <span style={{ color: 'var(--danger)', fontWeight: 700 }}>−{stat.removed} {t('removed')}</span>
               <span style={{ color: 'var(--text-muted)' }}>{t('unchanged', { n: stat.unchanged })}</span>
@@ -107,10 +107,10 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
 
             {/* Version notes list */}
             <div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('allVersions')}</div>
+              <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('allVersions')}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[...versions].reverse().map((v) => (
-                  <div key={v.version} style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--text-muted)' }}>
+                  <div key={v.version} style={{ display: 'flex', gap: 10, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)', minWidth: 44 }}>{t('versionN', { n: v.version })}</span>
                     <span style={{ whiteSpace: 'nowrap' }}>{new Date(v.createdAt).toLocaleDateString()}</span>
                     {v.notes && <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.notes}</span>}

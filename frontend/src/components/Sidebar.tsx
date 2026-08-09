@@ -54,10 +54,10 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
   const label = t(group.labelKey);
   const body = (
     <>
-      <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{group.icon}</span>
+      <span style={{ fontSize: 'var(--font-size-card-title)', flexShrink: 0 }}>{group.icon}</span>
       <span className="nav-item-label">{label}</span>
       {locked && <span className="nav-item__lock" aria-hidden="true">🔒</span>}
-      {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 'var(--radius-full)', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 9, fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
+      {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 'var(--radius-full)', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-field-label)', fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
     </>
   );
 

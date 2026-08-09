@@ -157,32 +157,32 @@ export function MessagesPanel({ open, onClose, side, context }: {
       onClose={onClose}
       title={selected ? (
         <button type="button" onClick={() => { setSelected(null); setConversation(null); setMessages([]); }}
-          style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}>
+          style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 700, fontSize: 'var(--font-size-card-title)', display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}>
           <span aria-hidden>‹</span>{conversation ? counterpartName(conversation) : t('title')}
         </button>
       ) : t('title')}
       width="min(520px, 96vw)"
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {error && <div style={{ color: 'var(--danger)', fontSize: 12, padding: '8px 16px' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', padding: '8px 16px' }}>{error}</div>}
 
         {/* Conversation list */}
         {!selected && (
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {items.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 24, textAlign: 'center' }}>{t('empty')}</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', padding: 24, textAlign: 'center' }}>{t('empty')}</div>
             ) : items.map((c) => (
               <button key={c.id} type="button" onClick={() => void openThread(c.id)}
                 style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: c.unread > 0 ? 'var(--bg-elevated)' : 'transparent', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartName(c)}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtTime(c.lastMessageAt)}</span>
+                  <span style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartName(c)}</span>
+                  <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtTime(c.lastMessageAt)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.title ? `${c.title} · ` : ''}{c.lastMessagePreview ?? t('noMessages')}
                   </span>
-                  {c.unread > 0 && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 'var(--radius-full)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{c.unread}</span>}
+                  {c.unread > 0 && <span style={{ flexShrink: 0, fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '1px 7px', borderRadius: 'var(--radius-full)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{c.unread}</span>}
                 </div>
               </button>
             ))}
@@ -194,9 +194,9 @@ export function MessagesPanel({ open, onClose, side, context }: {
           <>
             <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
               {loading && messages.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('loading')}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('loading')}</div>
               ) : messages.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', marginTop: 24 }}>{t('startThread')}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', textAlign: 'center', marginTop: 24 }}>{t('startThread')}</div>
               ) : messages.map((m) => {
                 const mine = isMine(m);
                 return (
@@ -205,12 +205,12 @@ export function MessagesPanel({ open, onClose, side, context }: {
                       {m.body && <div>{m.body}</div>}
                       {m.hasAttachment && (
                         <button type="button" onClick={() => void openAttachment(m)}
-                          style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? 'var(--text-on-accent)' : 'var(--coral-bright)', border: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', cursor: 'pointer' }}>
+                          style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? 'var(--text-on-accent)' : 'var(--coral-bright)', border: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', cursor: 'pointer' }}>
                           📎 {m.attachmentName ?? t('attachment')}
                         </button>
                       )}
                     </div>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{m.senderName ? `${m.senderName} · ` : ''}{fmtTime(m.createdAt)}</span>
+                    <span style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)' }}>{m.senderName ? `${m.senderName} · ` : ''}{fmtTime(m.createdAt)}</span>
                   </div>
                 );
               })}
@@ -219,13 +219,13 @@ export function MessagesPanel({ open, onClose, side, context }: {
             {/* Composer */}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 12, flexShrink: 0 }}>
               {file && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                   📎 {file.name}
-                  <button type="button" onClick={() => setFile(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 12 }}>{t('remove')}</button>
+                  <button type="button" onClick={() => setFile(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 'var(--font-size-small)' }}>{t('remove')}</button>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                <label style={{ flexShrink: 0, cursor: 'pointer', fontSize: 20, color: 'var(--text-muted)', padding: '6px 4px' }} title={t('attach')}>
+                <label style={{ flexShrink: 0, cursor: 'pointer', fontSize: 'var(--font-size-card-title)', color: 'var(--text-muted)', padding: '6px 4px' }} title={t('attach')}>
                   📎
                   <input type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                 </label>
@@ -235,10 +235,10 @@ export function MessagesPanel({ open, onClose, side, context }: {
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
                   placeholder={t('placeholder')}
                   rows={2}
-                  style={{ flex: 1, resize: 'none', padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit' }}
+                  style={{ flex: 1, resize: 'none', padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontFamily: 'inherit' }}
                 />
                 <button type="button" onClick={() => void send()} disabled={sending || (!draft.trim() && !file)}
-                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: sending ? 'wait' : 'pointer', opacity: (!draft.trim() && !file) ? 0.5 : 1 }}>
+                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 'var(--font-size-small)', cursor: sending ? 'wait' : 'pointer', opacity: (!draft.trim() && !file) ? 0.5 : 1 }}>
                   {sending ? t('sending') : t('send')}
                 </button>
               </div>

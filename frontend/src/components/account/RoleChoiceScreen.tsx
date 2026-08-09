@@ -68,7 +68,7 @@ export default function RoleChoiceScreen({
           <span
             style={{
               display: 'inline-block', marginBottom: 12,
-              fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+              fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
               border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
               fontFamily: 'var(--font-display)',
@@ -76,10 +76,10 @@ export default function RoleChoiceScreen({
           >
             {t('eyebrow')}
           </span>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.4rem, 3vw, 1.75rem)', fontWeight: 700, margin: '0 0 8px' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, margin: '0 0 8px' }}>
             {t('title')}
           </h1>
-          <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
             {t('subtitle')}
           </p>
         </div>
@@ -102,15 +102,15 @@ export default function RoleChoiceScreen({
             }}
           >
             <MarketingVisual variant={selected} />
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: '0 0 6px' }}>
               {marketing.heading}
             </h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 14px' }}>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 14px' }}>
               {marketing.intro}
             </p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {marketing.bullets.slice(0, 4).map((b) => (
-                <li key={b.title} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <li key={b.title} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <span style={{ flexShrink: 0 }} aria-hidden>{b.icon}</span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>
@@ -128,7 +128,7 @@ export default function RoleChoiceScreen({
               color: 'var(--error-text)',
               borderRadius: 'var(--radius-lg)',
               padding: '10px 14px',
-              fontSize: '0.875rem',
+              fontSize: 'var(--font-size-small)',
             }}
           >
             {error}
@@ -149,7 +149,7 @@ export default function RoleChoiceScreen({
               borderRadius: 'var(--radius-lg)',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
-              fontSize: '0.95rem',
+              fontSize: 'var(--font-size-body)',
               cursor: submitting ? 'wait' : 'pointer',
               opacity: submitting || !ageAttested ? 0.6 : 1,
               boxShadow: '0 6px 20px var(--shadow-coral-mid)',

@@ -49,13 +49,13 @@ function TierRow({ metric }: { metric: ToolMetric }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metric.label}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', whiteSpace: 'nowrap' }}>{metric.value}</span>
+        <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metric.label}</span>
+        <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', whiteSpace: 'nowrap' }}>{metric.value}</span>
       </div>
       <div style={{ height: 8, borderRadius: 'var(--radius-sm)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
         <div style={{ width: `${(tier / 5) * 100}%`, height: '100%', borderRadius: 'var(--radius-sm)', background: tierColor(tier), transition: 'width .3s' }} />
       </div>
-      {metric.hint && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{metric.hint}</span>}
+      {metric.hint && <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>{metric.hint}</span>}
     </div>
   );
 }
@@ -84,12 +84,12 @@ export function ToolResultView({ result }: { result: ToolResult }) {
           />
         ) : (
           <div style={{ minWidth: 120 }}>
-            <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.1, color: 'var(--accent)' }}>{result.headline}</div>
+            <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 800, lineHeight: 1.1, color: 'var(--accent)' }}>{result.headline}</div>
           </div>
         )}
         <div style={{ flex: 1, minWidth: 220 }}>
-          {score != null && <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-strong)' }}>{result.headline}</div>}
-          {result.summary && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{result.summary}</div>}
+          {score != null && <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)' }}>{result.headline}</div>}
+          {result.summary && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 4 }}>{result.summary}</div>}
           {band != null && (
             <div style={{ marginTop: 12 }}>
               <LevelLadder tier={band} />
@@ -101,8 +101,8 @@ export function ToolResultView({ result }: { result: ToolResult }) {
       {/* ── Profile: radar of tiered dimensions (≥3), else tier bars ───────── */}
       {tiered.length > 0 && (
         <div style={card}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{t('profileTitle')}</h3>
-          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 14px' }}>{t('profileSubtitle')}</p>
+          <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{t('profileTitle')}</h3>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: '0 0 14px' }}>{t('profileSubtitle')}</p>
           {tiered.length >= 3 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18, alignItems: 'center' }}>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -128,13 +128,13 @@ export function ToolResultView({ result }: { result: ToolResult }) {
       {/* ── Calculator / non-tiered metrics: KPI stat tiles ───────────────── */}
       {plain.length > 0 && (
         <div style={card}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{t('breakdown')}</h3>
+          <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{t('breakdown')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             {plain.map((m) => (
               <div key={m.label} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', background: 'var(--bg-elevated)' }}>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{m.label}</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-strong)' }}>{m.value}</div>
-                {m.hint && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{m.hint}</div>}
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{m.label}</div>
+                <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)' }}>{m.value}</div>
+                {m.hint && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', marginTop: 2 }}>{m.hint}</div>}
               </div>
             ))}
           </div>
@@ -144,18 +144,18 @@ export function ToolResultView({ result }: { result: ToolResult }) {
       {/* ── Prioritized improvement plan ──────────────────────────────────── */}
       {result.recommendations.length > 0 && (
         <div style={card}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 4px' }}>{t('planTitle')}</h3>
-          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>{t('planSubtitle')}</p>
+          <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 4px' }}>{t('planTitle')}</h3>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: '0 0 12px' }}>{t('planSubtitle')}</p>
           <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {result.recommendations.map((r, i) => (
               <li key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', background: 'var(--bg-elevated)' }}>
                 <span style={{
                   flexShrink: 0, width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: 'var(--text-on-accent)',
-                  fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 'var(--font-size-small)', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>{i + 1}</span>
                 <div>
-                  <strong style={{ fontSize: 13, color: 'var(--text-strong)' }}>{r.title}</strong>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{r.detail}</div>
+                  <strong style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{r.title}</strong>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 2 }}>{r.detail}</div>
                 </div>
               </li>
             ))}

@@ -103,8 +103,8 @@ export default function PromptsPage() {
   return (
     <div className="page-inner">
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>{t('title')}</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 600, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>{t('title')}</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)', maxWidth: 600, margin: '0 auto' }}>
           {t('subtitle')}{isAuthed ? t('subtitleAuthed') : t('subtitleGuest')}
         </p>
         {isAuthed && (
@@ -171,15 +171,15 @@ export default function PromptsPage() {
           {prompts.map((p) => (
             <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontWeight: 700, fontSize: 15 }}>{p.title}</span>
+                <span style={{ fontWeight: 700, fontSize: 'var(--font-size-body)' }}>{p.title}</span>
                 {p.isFeatured && <span title={t('featured')}>⭐</span>}
               </div>
-              {p.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
+              {p.description && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                 {p.category && <span className="badge badge-gray">{p.category}</span>}
                 {p.tags.slice(0, 3).map((tag) => <span key={tag} className="badge badge-gray">#{tag}</span>)}
               </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', gap: 14, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                 <span>▶ {t('usesCount', { n: p.usageCount })}</span>
                 <span>★ {p.starCount}</span>
                 {p.authorName && <span>{t('byAuthor', { name: p.authorName })}</span>}
@@ -246,7 +246,7 @@ export default function PromptsPage() {
       )}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', padding: '10px 18px', borderRadius: 'var(--radius-full)', fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,0.3)', zIndex: 100 }}>
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', padding: '10px 18px', borderRadius: 'var(--radius-full)', fontSize: 'var(--font-size-small)', boxShadow: '0 6px 24px rgba(0,0,0,0.3)', zIndex: 100 }}>
           {toast}
         </div>
       )}
@@ -298,10 +298,10 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 90, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(560px, 100%)', height: '100%', background: 'var(--bg-base)', borderLeft: '1px solid var(--border-subtle)', padding: 24, overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{prompt.title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+          <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: 0 }}>{prompt.title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 'var(--font-size-section)', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
         </div>
-        {prompt.description && <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{prompt.description}</p>}
+        {prompt.description && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{prompt.description}</p>}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 16px' }}>
           {prompt.category && <span className="badge badge-gray">{prompt.category}</span>}
           {prompt.tags.map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
@@ -319,13 +319,13 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
           )}
         </div>
 
-        {analyzeError && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{analyzeError}</div>}
+        {analyzeError && <div style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', marginBottom: 12 }}>{analyzeError}</div>}
 
         {analysis && (
           <div style={{ ...card, marginBottom: 16, borderColor: 'var(--coral-bright)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('suggestionTitle')}</div>
-            {analysis.rationale && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px' }}>{analysis.rationale}</p>}
-            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 280, overflowY: 'auto', margin: 0 }}>{analysis.suggestion}</pre>
+            <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('suggestionTitle')}</div>
+            {analysis.rationale && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 10px' }}>{analysis.rationale}</p>}
+            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--font-size-small)', fontFamily: 'ui-monospace, monospace', maxHeight: 280, overflowY: 'auto', margin: 0 }}>{analysis.suggestion}</pre>
             <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
               <button type="button" className="btn btn-primary btn-sm" onClick={saveSuggestion} disabled={saved}>
                 {saved ? t('savedVersion') : t('saveAsVersion')}
@@ -338,15 +338,15 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
 
         {showHistory && id && <PromptVersionDiff promptId={id} open={showHistory} onClose={() => setShowHistory(false)} />}
 
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{t('promptVersionLabel', { v: prompt.currentVersion })}</div>
-        <pre style={{ ...card, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 360, overflowY: 'auto' }}>{prompt.body}</pre>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 6 }}>{t('promptVersionLabel', { v: prompt.currentVersion })}</div>
+        <pre style={{ ...card, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--font-size-small)', fontFamily: 'ui-monospace, monospace', maxHeight: 360, overflowY: 'auto' }}>{prompt.body}</pre>
 
         {prompt.variables.length > 0 && (
           <>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '16px 0 6px' }}>{t('variablesLabel')}</div>
+            <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '16px 0 6px' }}>{t('variablesLabel')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {prompt.variables.map((v) => (
-                <div key={v.name} style={{ ...card, padding: 10, fontSize: 13 }}>
+                <div key={v.name} style={{ ...card, padding: 10, fontSize: 'var(--font-size-small)' }}>
                   <code style={{ fontWeight: 700 }}>{`{{${v.name}}}`}</code>
                   {v.description && <span style={{ color: 'var(--text-muted)' }}> — {v.description}</span>}
                 </div>
@@ -355,7 +355,7 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
           </>
         )}
 
-        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 16 }}>
           <span>▶ {t('usesCount', { n: prompt.usageCount })}</span>
           <span>★ {prompt.starCount}</span>
           {prompt.authorName && <span>{t('byAuthor', { name: prompt.authorName })}</span>}
@@ -402,7 +402,7 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
 
   return (
     <div style={{ ...card, marginBottom: 20 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>{t('createTitle')}</h2>
+      <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 600, margin: '0 0 12px' }}>{t('createTitle')}</h2>
       <div style={{ display: 'grid', gap: 10 }}>
         <input className="input" placeholder={t('phTitle')} value={title} onChange={(e) => setTitle(e.target.value)} />
         <input className="input" placeholder={t('phDescription')} value={description} onChange={(e) => setDescription(e.target.value)} />

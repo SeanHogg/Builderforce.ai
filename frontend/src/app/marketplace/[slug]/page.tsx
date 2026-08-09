@@ -42,18 +42,18 @@ export default async function MarketplaceSkillPage({
       <style>{`
         .mps { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
         .mps-main { max-width: 820px; margin: 0 auto; padding: 44px 24px 24px; width: 100%; }
-        .mps-eyebrow { font-family: var(--font-display); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 12px; }
-        .mps-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-size: clamp(1.9rem, 5vw, 2.8rem); color: var(--text-primary); margin: 0 0 12px; }
-        .mps-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 18px; }
-        .mps-desc { font-size: clamp(0.98rem, 2vw, 1.1rem); color: var(--text-primary); line-height: 1.7; margin: 0 0 18px; }
+        .mps-eyebrow { font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 12px; }
+        .mps-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-size: var(--font-size-page-title); color: var(--text-primary); margin: 0 0 12px; }
+        .mps-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; color: var(--text-secondary); font-size: var(--font-size-small); margin: 0 0 18px; }
+        .mps-desc { font-size: var(--font-size-lede); color: var(--text-primary); line-height: 1.7; margin: 0 0 18px; }
         .mps-tags { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 22px; }
-        .mps-tag { font-size: 0.74rem; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 12px; }
+        .mps-tag { font-size: var(--font-size-eyebrow); font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 12px; }
         .mps-cta-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 28px; }
-        .mps-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
+        .mps-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: var(--font-size-body); text-decoration: none; }
         .mps-btn-primary { background: linear-gradient(135deg, var(--coral-bright), var(--error)); color: var(--text-on-accent); }
         .mps-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
-        .mps-readme { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 22px 24px; color: var(--text-primary); line-height: 1.7; white-space: pre-wrap; font-size: 0.92rem; }
-        .mps-h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--text-primary); margin: 0 0 12px; }
+        .mps-readme { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 22px 24px; color: var(--text-primary); line-height: 1.7; white-space: pre-wrap; font-size: var(--font-size-body); }
+        .mps-h2 { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-card-title); color: var(--text-primary); margin: 0 0 12px; }
       `}</style>
 
       <main className="mps">

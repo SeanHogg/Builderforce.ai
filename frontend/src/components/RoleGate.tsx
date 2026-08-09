@@ -78,7 +78,7 @@ export function RoleGate({ capability, children, variant = 'inline', silent = fa
       style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'not-allowed', opacity: 0.55, ...style }}
     >
       <span style={{ pointerEvents: 'none', display: 'inline-flex', alignItems: 'center' }}>{children}</span>
-      {!silent && <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>🔒</span>}
+      {!silent && <span aria-hidden style={{ fontSize: 'var(--font-size-field-label)', lineHeight: 1 }}>🔒</span>}
     </span>
   );
 }

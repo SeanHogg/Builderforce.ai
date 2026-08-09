@@ -71,15 +71,15 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
       )}
       <div style={{ padding: '8px 11px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontSize: 15 }}>{meta?.icon ?? '◻'}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 'var(--font-size-body)' }}>{meta?.icon ?? '◻'}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
             {d.label || meta?.label || d.kind}
           </span>
         </div>
         <div
           style={{
             marginTop: 3,
-            fontSize: 10,
+            fontSize: 'var(--font-size-field-label)',
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: '0.04em',
@@ -89,7 +89,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
           {meta?.group ?? d.kind}
         </div>
         {summary && (
-          <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
+          <div style={{ marginTop: 4, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
             {summary}
           </div>
         )}

@@ -115,12 +115,12 @@ export function ArticleCardStyles() {
         flex-wrap: wrap;
       }
       .blog-card-date {
-        font-size: 0.78rem;
+        font-size: var(--font-size-small);
         color: var(--text-muted);
         font-family: var(--font-display);
       }
       .blog-card-tag {
-        font-size: 0.7rem;
+        font-size: var(--font-size-eyebrow);
         font-weight: 600;
         padding: 2px 8px;
         border-radius: var(--radius-full);
@@ -132,26 +132,26 @@ export function ArticleCardStyles() {
       }
       .blog-card-title {
         font-family: var(--font-display);
-        font-size: 1.1rem;
+        font-size: var(--font-size-card-title);
         font-weight: 700;
         color: var(--text-primary);
         line-height: 1.3;
       }
       .blog-card-desc {
-        font-size: 0.88rem;
+        font-size: var(--font-size-small);
         color: var(--text-secondary);
         line-height: 1.65;
         flex: 1;
       }
       .blog-card-author {
-        font-size: 0.78rem;
+        font-size: var(--font-size-small);
         color: var(--text-muted);
       }
       .blog-card-cta {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        font-size: 0.85rem;
+        font-size: var(--font-size-small);
         font-weight: 600;
         color: var(--coral-bright);
         font-family: var(--font-display);

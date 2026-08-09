@@ -517,10 +517,10 @@ export default function MarketplacePageClient() {
     // shared 1100px `.page-inner` cap and runs to 100% of the shell width.
     <div className="page-inner" style={{ maxWidth: '100%' }}>
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
+        <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
           {tm('title')}
         </h1>
-        <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 520, margin: '0 auto' }}>
+        <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', maxWidth: 520, margin: '0 auto' }}>
           {tm('blurb')}
         </p>
       </div>
@@ -562,12 +562,12 @@ export default function MarketplacePageClient() {
             border: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
             color: 'var(--text)',
-            fontSize: 13,
+            fontSize: 'var(--font-size-small)',
           }}
           aria-label={searchPlaceholder}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: isMobile ? 1 : 0, flexWrap: 'wrap', width: isMobile ? '100%' : undefined, minWidth: 0 }} role="group" aria-label={tm('categoryLabel')}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
+          <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
             {categories.map((c) => (
               <button
@@ -581,7 +581,7 @@ export default function MarketplacePageClient() {
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border)',
                   fontWeight: 500,
-                  fontSize: 13,
+                  fontSize: 'var(--font-size-small)',
                   cursor: 'pointer',
                 }}
               >
@@ -626,9 +626,9 @@ export default function MarketplacePageClient() {
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           {!isAuthenticated ? (
             <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 32, textAlign: 'center' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{tm('publish.becomePublisher')}</div>
-              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
+              <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 12 }}>🚀</div>
+              <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', marginBottom: 8 }}>{tm('publish.becomePublisher')}</div>
+              <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
                 {tm('publish.publisherBlurb')}
               </p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -640,83 +640,83 @@ export default function MarketplacePageClient() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{tm('publish.publishingAs')} <strong>{user?.name ?? user?.email}</strong></div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.email}</div>
+                  <div style={{ fontWeight: 600, fontSize: 'var(--font-size-small)' }}>{tm('publish.publishingAs')} <strong>{user?.name ?? user?.email}</strong></div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{user?.email}</div>
                 </div>
               </div>
               <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24 }}>
-                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>{tm('publish.heading')}</div>
+                <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', marginBottom: 16 }}>{tm('publish.heading')}</div>
                 {publishSuccess && (
-                  <div style={{ marginBottom: 12, padding: '10px 14px', fontSize: 13, color: 'var(--success, var(--success))', background: 'rgba(34,197,94,0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  <div style={{ marginBottom: 12, padding: '10px 14px', fontSize: 'var(--font-size-small)', color: 'var(--success, var(--success))', background: 'rgba(34,197,94,0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(34,197,94,0.2)' }}>
                     {tm('publish.success')}
                   </div>
                 )}
                 <form onSubmit={handlePublishSkill} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.name')} *</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.name')} *</label>
                       <input required type="text" placeholder={tm('publish.namePlaceholder')} value={skillForm.name}
                         onChange={(e) => setSkillForm((f) => ({ ...f, name: e.target.value, slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.slug')} * {tm('publish.slugHint')}</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.slug')} * {tm('publish.slugHint')}</label>
                       <input required type="text" placeholder={tm('publish.slugPlaceholder')} value={skillForm.slug}
                         onChange={(e) => setSkillForm((f) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }} />
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.description')}</label>
+                    <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.description')}</label>
                     <textarea rows={3} placeholder={tm('publish.descriptionPlaceholder')} value={skillForm.description}
                       onChange={(e) => setSkillForm((f) => ({ ...f, description: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.category')}</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.category')}</label>
                       <input type="text" placeholder={tm('publish.categoryPlaceholder')} value={skillForm.category}
                         onChange={(e) => setSkillForm((f) => ({ ...f, category: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.version')}</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.version')}</label>
                       <input type="text" value={skillForm.version}
                         onChange={(e) => setSkillForm((f) => ({ ...f, version: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.repoUrl')}</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.repoUrl')}</label>
                       <input type="url" placeholder={tm('publish.repoPlaceholder')} value={skillForm.repoUrl}
                         onChange={(e) => setSkillForm((f) => ({ ...f, repoUrl: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.price')}</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.price')}</label>
                       <input type="number" min="0" step="0.01" placeholder={tm('publish.pricePlaceholder')} value={skillForm.price}
                         onChange={(e) => setSkillForm((f) => ({ ...f, price: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.pricingModel')}</label>
+                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.pricingModel')}</label>
                       <Select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
                         <option value="flat_fee">{tm('publish.flatFee')}</option>
                         <option value="consumption">{tm('publish.consumption')}</option>
                       </Select>
                     </div>
                     {skillForm.pricingModel === 'consumption' && (
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.priceUnit')}</label>
+                        <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.priceUnit')}</label>
                         <input type="text" placeholder={tm('publish.priceUnitPlaceholder')} value={skillForm.priceUnit}
                           onChange={(e) => setSkillForm((f) => ({ ...f, priceUnit: e.target.value }))}
-                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                       </div>
                     )}
                   </div>
-                  {publishError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{publishError}</div>}
+                  {publishError && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{publishError}</div>}
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button type="submit" disabled={publishing || !skillForm.name.trim() || !skillForm.slug.trim()} className="btn btn-primary">
                       {publishing ? tm('publish.submitting') : tm('publish.submit')}
@@ -744,8 +744,8 @@ export default function MarketplacePageClient() {
                       {talentInitials(f.displayName)}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
+                      <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
+                      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
                         <RatingStars rating={f.rating} count={f.ratingCount} />
                         <TrustBadge badge={f.badge ?? null} jss={f.jss} size="sm" showJss={false} />
@@ -755,15 +755,15 @@ export default function MarketplacePageClient() {
                   {f.skills.length > 0 && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {f.skills.slice(0, 4).map((s) => (
-                        <span key={s} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
+                        <span key={s} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
                       ))}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--coral-bright)' }}>
+                    <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--coral-bright)' }}>
                       {f.hourlyRateCents != null ? `${f.currency} ${(f.hourlyRateCents / 100).toFixed(0)}${tt('perHour')}` : ''}
                     </span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tt('viewProfile')} →</span>
+                    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tt('viewProfile')} →</span>
                   </div>
                 </Link>
               ))}
@@ -772,7 +772,7 @@ export default function MarketplacePageClient() {
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}>
                 <button type="button" disabled={talentPage <= 1} onClick={() => setTalentPage((p) => p - 1)}
                   style={{ ...filterControlStyle, cursor: talentPage <= 1 ? 'default' : 'pointer', opacity: talentPage <= 1 ? 0.5 : 1 }}>←</button>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tt('filter.pageOf', { page: talentPage, pages: talentPages })}</span>
+                <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tt('filter.pageOf', { page: talentPage, pages: talentPages })}</span>
                 <button type="button" disabled={talentPage >= talentPages} onClick={() => setTalentPage((p) => p + 1)}
                   style={{ ...filterControlStyle, cursor: talentPage >= talentPages ? 'default' : 'pointer', opacity: talentPage >= talentPages ? 0.5 : 1 }}>→</button>
               </div>
@@ -903,7 +903,7 @@ export default function MarketplacePageClient() {
                     <td style={tdStyle}>
                       <span style={{ marginRight: 6 }}>{typeIcon}</span>
                       <strong style={{ color: 'var(--text-strong)' }}>{item.name}</strong>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>v{item.version}</div>
+                      <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>v{item.version}</div>
                     </td>
                     <td style={{ ...tdStyle, textTransform: 'capitalize' }}>{item.type}</td>
                     <td style={tdMutedStyle}>{item.author}</td>
@@ -920,7 +920,7 @@ export default function MarketplacePageClient() {
                           border: 'none',
                           cursor: 'pointer',
                           padding: 0,
-                          fontSize: 12,
+                          fontSize: 'var(--font-size-small)',
                           color: stat.liked ? 'var(--error)' : 'var(--muted)',
                         }}
                         title={stat.liked ? tm('action.unlike') : tm('action.like')}
@@ -996,15 +996,15 @@ export default function MarketplacePageClient() {
                 )}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 24 }}>{typeIcon}</span>
+                    <span style={{ fontSize: 'var(--font-size-section)' }}>{typeIcon}</span>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{item.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{tm('by')} {item.author} · v{item.version}</div>
+                      <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>{item.name}</div>
+                      <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>{tm('by')} {item.author} · v{item.version}</div>
                     </div>
                   </div>
                   <span
                     style={{
-                      fontSize: 10,
+                      fontSize: 'var(--font-size-field-label)',
                       fontWeight: 700,
                       padding: '2px 8px',
                       borderRadius: 'var(--radius-full)',
@@ -1017,7 +1017,7 @@ export default function MarketplacePageClient() {
                   </span>
                 </div>
 
-                <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{item.description}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{item.description}</div>
 
                 {item.tags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -1025,7 +1025,7 @@ export default function MarketplacePageClient() {
                       <span
                         key={t}
                         style={{
-                          fontSize: 10,
+                          fontSize: 'var(--font-size-field-label)',
                           padding: '2px 6px',
                           borderRadius: 'var(--radius-full)',
                           background: 'var(--surface-2)',
@@ -1042,9 +1042,9 @@ export default function MarketplacePageClient() {
                 {/* Price badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {(item.price ?? 0) === 0 ? (
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,197,94,0.3)' }}>{tm('free')}</span>
+                    <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,197,94,0.3)' }}>{tm('free')}</span>
                   ) : (
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                       ${(item.price ?? 0).toFixed(2)}{item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? tm('defaultPriceUnit')}` : ''}
                     </span>
                   )}
@@ -1061,7 +1061,7 @@ export default function MarketplacePageClient() {
                     paddingTop: 10,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>
                     <button
                       type="button"
                       style={{
@@ -1069,7 +1069,7 @@ export default function MarketplacePageClient() {
                         border: 'none',
                         cursor: 'pointer',
                         padding: 0,
-                        fontSize: 11,
+                        fontSize: 'var(--font-size-eyebrow)',
                         color: stat.liked ? 'var(--error)' : 'var(--muted)',
                       }}
                       title={stat.liked ? tm('action.unlike') : tm('action.like')}

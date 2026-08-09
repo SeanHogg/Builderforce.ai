@@ -33,7 +33,7 @@ export function SkillTags({
         <span
           key={s}
           style={{
-            fontSize: 10,
+            fontSize: 'var(--font-size-field-label)',
             padding: '2px 6px',
             borderRadius: 'var(--radius-full)',
             background: 'var(--surface-2)',

@@ -44,19 +44,19 @@ export default async function IntegrationPage({
       <style>{`
         .intg { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
         .intg-hero { text-align: center; padding: 44px 24px 28px; max-width: 820px; margin: 0 auto; width: 100%; }
-        .intg-eyebrow { font-family: var(--font-display); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px; }
-        .intg-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-size: clamp(1.9rem, 5vw, 2.8rem); color: var(--text-primary); margin: 0 0 14px; }
-        .intg-tagline { font-size: clamp(1rem, 2vw, 1.16rem); color: var(--text-primary); font-weight: 600; margin: 0 0 12px; }
-        .intg-sub { font-size: clamp(0.95rem, 2vw, 1.05rem); color: var(--text-secondary); line-height: 1.7; margin: 0; }
+        .intg-eyebrow { font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px; }
+        .intg-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-size: var(--font-size-page-title); color: var(--text-primary); margin: 0 0 14px; }
+        .intg-tagline { font-size: var(--font-size-lede); color: var(--text-primary); font-weight: 600; margin: 0 0 12px; }
+        .intg-sub { font-size: var(--font-size-lede); color: var(--text-secondary); line-height: 1.7; margin: 0; }
         .intg-cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
-        .intg-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
+        .intg-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: var(--font-size-body); text-decoration: none; }
         .intg-btn-primary { background: linear-gradient(135deg, var(--coral-bright), var(--error)); color: var(--text-on-accent); }
         .intg-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .intg-section { max-width: 820px; margin: 0 auto; padding: 20px 24px; width: 100%; }
-        .intg-cat-chip { display: inline-block; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 12px; }
-        .intg-h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; color: var(--text-primary); margin: 22px 0 12px; }
+        .intg-cat-chip { display: inline-block; font-size: var(--font-size-eyebrow); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 12px; }
+        .intg-h2 { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-card-title); color: var(--text-primary); margin: 22px 0 12px; }
         .intg-uses { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-        .intg-use { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px 18px; color: var(--text-primary); font-size: 0.92rem; line-height: 1.5; }
+        .intg-use { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px 18px; color: var(--text-primary); font-size: var(--font-size-body); line-height: 1.5; }
         .intg-use::before { content: '\\2713'; color: var(--coral-bright); font-weight: 700; margin-right: 8px; }
       `}</style>
 

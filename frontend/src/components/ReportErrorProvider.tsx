@@ -82,7 +82,7 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
       {children}
       <SlideOutPanel open={open} onClose={close} title={t('title')} width="min(460px, 96vw)">
         <form onSubmit={submit} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t('intro')}</p>
+          <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t('intro')}</p>
 
           <label style={labelStyle}>
             {t('projectLabel')}
@@ -130,21 +130,21 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
           </label>
 
           {projects.length === 0 && (
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{t('noProjects')}</p>
+            <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('noProjects')}</p>
           )}
           {error && (
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--error-text, var(--error))' }}>{error}</p>
+            <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--error-text, var(--error))' }}>{error}</p>
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-            <button type="button" onClick={close} disabled={submitting} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14 }}>
+            <button type="button" onClick={close} disabled={submitting} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 'var(--font-size-small)' }}>
               {t('cancel')}
             </button>
             <button
               type="submit"
               disabled={!canSubmit}
               style={{
-                padding: '8px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 600, fontSize: 14,
+                padding: '8px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 600, fontSize: 'var(--font-size-small)',
                 cursor: canSubmit ? 'pointer' : 'not-allowed', opacity: canSubmit ? 1 : 0.6,
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)',
               }}

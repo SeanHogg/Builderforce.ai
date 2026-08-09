@@ -111,7 +111,7 @@ export function FeedbackTab() {
           cursor: pointer;
           background: var(--bg-elevated);
           color: var(--text-secondary);
-          font-size: 12px;
+          font-size: var(--font-size-small);
           font-weight: 600;
           letter-spacing: 0.04em;
           box-shadow: -2px 0 12px rgba(0, 0, 0, 0.18);
@@ -127,7 +127,7 @@ export function FeedbackTab() {
           outline-offset: 2px;
         }
         @media (max-width: 640px) {
-          .feedback-edge-tab { padding: 12px 6px; font-size: 11px; }
+          .feedback-edge-tab { padding: 12px 6px; font-size: var(--font-size-eyebrow); }
         }
       `}</style>
 
@@ -135,14 +135,14 @@ export function FeedbackTab() {
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {done ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{t('form.successTitle')}</div>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>{t('form.successBody')}</p>
+              <div style={{ fontWeight: 700, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>{t('form.successTitle')}</div>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('form.successBody')}</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={reset}
                   style={{
-                    padding: '9px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    padding: '9px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                     background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none',
                   }}
                 >
@@ -152,7 +152,7 @@ export function FeedbackTab() {
                   type="button"
                   onClick={close}
                   style={{
-                    padding: '9px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    padding: '9px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                     background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)',
                   }}
                 >
@@ -162,9 +162,9 @@ export function FeedbackTab() {
             </div>
           ) : (
             <>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>{t('form.intro')}</p>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('form.intro')}</p>
               {projectName && (
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                   {t('form.destination', { project: projectName })}
                 </p>
               )}
@@ -199,16 +199,16 @@ export function FeedbackTab() {
                 />
               </label>
 
-              {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
+              {error && <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--danger)' }}>{error}</div>}
 
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('form.gateNote')}</div>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('form.gateNote')}</div>
 
               <button
                 type="button"
                 onClick={submit}
                 disabled={sending}
                 style={{
-                  padding: '11px 16px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-md)',
+                  padding: '11px 16px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)',
                   background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none',
                   cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1,
                 }}

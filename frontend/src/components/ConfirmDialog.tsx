@@ -85,9 +85,9 @@ export function ConfirmDialog({
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
+          <h2 style={{ margin: '0 0 8px', fontSize: 'var(--font-size-card-title)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
         )}
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'var(--text-primary)' }}>{message}</p>
+        <p style={{ margin: 0, fontSize: 'var(--font-size-small)', lineHeight: 1.5, color: 'var(--text-primary)' }}>{message}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
           <button
             type="button"

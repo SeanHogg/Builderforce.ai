@@ -54,7 +54,7 @@ export function CapabilitiesContent({
             onClick={() => setActiveSection(s.id)}
             style={{
               padding: '6px 14px',
-              fontSize: 12,
+              fontSize: 'var(--font-size-small)',
               fontWeight: activeSection === s.id ? 700 : 500,
               color: activeSection === s.id ? 'var(--coral-bright)' : 'var(--text-muted)',
               background: activeSection === s.id ? 'rgba(255,107,53,0.08)' : 'transparent',
@@ -84,7 +84,7 @@ export function CapabilitiesContent({
         ) : projectId != null ? (
           <GovernanceContent projectId={projectId} />
         ) : (
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
             Governance rules are defined at the project level. Select or associate a project to manage governance.
           </div>
         )

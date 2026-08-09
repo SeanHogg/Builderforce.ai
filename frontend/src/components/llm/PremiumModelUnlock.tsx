@@ -36,10 +36,10 @@ export function PremiumModelUnlock() {
 
   return (
     <div style={wrapStyle}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+      <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
         {t('premiumUnlockTitle')}
       </div>
-      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
         {needsCard ? t('premiumUnlockCardBody') : t('premiumUnlockUpgradeBody')}
       </p>
 

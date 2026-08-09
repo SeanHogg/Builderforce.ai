@@ -91,7 +91,7 @@ export default async function SkillDetailPage({
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: 0.85rem;
+          font-size: var(--font-size-small);
           color: var(--text-muted);
           margin-bottom: 24px;
         }
@@ -109,17 +109,17 @@ export default async function SkillDetailPage({
         .cc-skill-detail-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.8rem, 4vw, 2.6rem);
+          font-size: var(--font-size-page-title);
           margin: 0;
           color: var(--text-primary);
         }
         .cc-skill-detail-author {
           color: var(--text-muted);
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
           margin: 6px 0 0;
         }
         .cc-skill-detail-cat {
-          font-size: 0.78rem;
+          font-size: var(--font-size-small);
           padding: 4px 10px;
           background: rgba(77,158,255,0.12);
           color: var(--coral-bright);
@@ -129,7 +129,7 @@ export default async function SkillDetailPage({
         }
         .cc-skill-detail-desc {
           color: var(--text-secondary);
-          font-size: 1.05rem;
+          font-size: var(--font-size-card-title);
           line-height: 1.7;
           margin: 24px 0 16px;
         }
@@ -140,14 +140,14 @@ export default async function SkillDetailPage({
           margin-bottom: 16px;
         }
         .cc-skill-detail-tag {
-          font-size: 0.8rem;
+          font-size: var(--font-size-small);
           color: var(--text-muted);
         }
         .cc-skill-detail-stats {
           display: flex;
           gap: 18px;
           color: var(--text-muted);
-          font-size: 0.88rem;
+          font-size: var(--font-size-small);
           padding-bottom: 28px;
           border-bottom: 1px solid var(--border-subtle);
         }
@@ -157,7 +157,7 @@ export default async function SkillDetailPage({
         .cc-skill-detail-install h2 {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: 1.25rem;
+          font-size: var(--font-size-card-title);
           color: var(--text-primary);
           margin: 0 0 10px;
         }
@@ -175,7 +175,7 @@ export default async function SkillDetailPage({
         }
         .cc-skill-detail-install code {
           font-family: var(--font-mono);
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
           color: var(--cyan-bright);
         }
         .cc-skill-detail-cta {
@@ -192,7 +192,7 @@ export default async function SkillDetailPage({
           background: var(--surface-interactive, rgba(136,146,176,0.08));
           border: 1px solid var(--border-subtle);
           font-weight: 600;
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
         }
         .cc-btn.primary {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));

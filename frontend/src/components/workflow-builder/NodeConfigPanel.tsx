@@ -87,14 +87,14 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 18 }}>{integ ? integrationIcon(integ) : meta?.icon}</span>
+        <span style={{ fontSize: 'var(--font-size-card-title)' }}>{integ ? integrationIcon(integ) : meta?.icon}</span>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? meta?.label}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{integ?.description ?? meta?.blurb}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? meta?.label}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{integ?.description ?? meta?.blurb}</div>
         </div>
       </div>
 
-      <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+      <label style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
         Label
         <input
           style={inputStyle}
@@ -105,7 +105,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
 
       {/* Integration operation picker, driven by the registry. */}
       {integ && integ.operations.length > 0 && (
-        <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        <label style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
           Operation
           <Select style={inputStyle} value={String(config.operation ?? integ.operations[0]?.id ?? '')} onChange={(e) => setConfig('operation', e.target.value)}>
             {integ.operations.map((op) => (
@@ -132,7 +132,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         .filter((f) => !(integ && f.key === 'operation'))
         .filter((f) => isFieldVisible(f, config))
         .map((f) => (
-        <label key={f.key} style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        <label key={f.key} style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
           {f.label}
           {renderField(f)}
         </label>
@@ -146,28 +146,28 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
             border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)',
           }}
         >
-          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
             Activation
           </div>
           {triggerInfo.webhookUrl && (
-            <label style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            <label style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)' }}>
               Webhook URL{triggerInfo.hasSecret ? ' (sign with X-Signature)' : ''}
               <input readOnly style={inputStyle} value={triggerInfo.webhookUrl} onFocus={(e) => e.currentTarget.select()} />
             </label>
           )}
           {triggerInfo.emailAddress && (
-            <label style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            <label style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)' }}>
               Inbound email address
               <input readOnly style={inputStyle} value={triggerInfo.emailAddress} onFocus={(e) => e.currentTarget.select()} />
             </label>
           )}
           {triggerInfo.nextRunAt && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
               Next run: {new Date(triggerInfo.nextRunAt).toLocaleString()}
             </div>
           )}
           {triggerInfo.lastStatus && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
               Last: {triggerInfo.lastStatus}
               {triggerInfo.lastRunAt ? ` · ${new Date(triggerInfo.lastRunAt).toLocaleString()}` : ''}
             </div>
@@ -181,7 +181,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         style={{
           marginTop: 'auto',
           padding: '7px 12px',
-          fontSize: 12,
+          fontSize: 'var(--font-size-small)',
           fontWeight: 600,
           background: 'transparent',
           color: 'var(--danger)',

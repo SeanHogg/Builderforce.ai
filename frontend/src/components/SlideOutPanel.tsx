@@ -191,7 +191,7 @@ export function SlideOutPanel({
                   <div className="ui-eyebrow" style={{ color: 'var(--text-muted)' }}>{crumb}</div>
                 )}
                 {title != null && (
-                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{title}</div>
+                  <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>
                 )}
               </div>
             )}
@@ -214,7 +214,7 @@ export function SlideOutPanel({
                 onClick={() => onTabChange?.(t.id)}
                 style={{
                   padding: '10px 16px',
-                  fontSize: '0.875rem',
+                  fontSize: 'var(--font-size-small)',
                   border: 'none',
                   background: 'none',
                   cursor: 'pointer',

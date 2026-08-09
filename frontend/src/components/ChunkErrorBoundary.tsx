@@ -76,7 +76,7 @@ function ChunkErrorFallback({
           alignItems: 'center',
           justifyContent: 'center',
           color: 'var(--text-muted)',
-          fontSize: 13,
+          fontSize: 'var(--font-size-small)',
           padding: 16,
           textAlign: 'center',
         }}
@@ -119,14 +119,14 @@ function ChunkErrorFallback({
         fontFamily: 'var(--font-display, system-ui, sans-serif)',
       }}
     >
-      <div style={{ fontSize: '2.5rem', animation: recovering ? 'pulse 1.5s ease-in-out infinite' : undefined }}>
+      <div style={{ fontSize: 'var(--font-size-page-title)', animation: recovering ? 'pulse 1.5s ease-in-out infinite' : undefined }}>
         {recovering ? '⚡' : '⚠️'}
       </div>
       {recovering ? (
         <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{t('recovering')}</p>
       ) : (
         <>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0 }}>{t('title')}</h2>
+          <h2 style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, margin: 0 }}>{t('title')}</h2>
           <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: 420 }}>{t('body')}</p>
           <button
             type="button"
@@ -141,7 +141,7 @@ function ChunkErrorFallback({
               fontFamily: 'var(--font-display, system-ui, sans-serif)',
               fontWeight: 600,
               cursor: 'pointer',
-              fontSize: '0.9rem',
+              fontSize: 'var(--font-size-body)',
             }}
           >
             {t('reload')}

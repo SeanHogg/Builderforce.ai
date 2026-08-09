@@ -106,7 +106,7 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
         onClick={copy}
         aria-label={t('copy')}
         style={{
-          position: 'absolute', top: 8, right: 8, fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-md)',
+          position: 'absolute', top: 8, right: 8, fontSize: 'var(--font-size-small)', padding: '4px 10px', borderRadius: 'var(--radius-md)',
           background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', cursor: 'pointer',
         }}
       >
@@ -115,7 +115,7 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
       <pre style={{
         margin: 0, padding: '16px 18px', borderRadius: 'var(--radius-lg)', overflowX: 'auto',
         background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
-        fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)',
+        fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 'var(--font-size-small)', lineHeight: 1.6, color: 'var(--text-primary)',
       }}>
         <code aria-label={label}>{code}</code>
       </pre>
@@ -135,7 +135,7 @@ export default function ModelApiSamples({
 
   return (
     <div>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: 14 }}>{t('intro')}</p>
+      <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{t('intro')}</p>
 
       {/* Language tabs */}
       <div role="tablist" aria-label={t('langTablist')} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
@@ -146,7 +146,7 @@ export default function ModelApiSamples({
             aria-selected={lang === l}
             onClick={() => setLang(l)}
             style={{
-              fontSize: 13, padding: '6px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600,
+              fontSize: 'var(--font-size-small)', padding: '6px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600,
               border: '1px solid var(--border-subtle)',
               background: lang === l ? 'var(--coral-bright)' : 'transparent',
               color: lang === l ? 'var(--text-on-accent)' : 'var(--text-secondary)',
@@ -158,17 +158,17 @@ export default function ModelApiSamples({
       </div>
 
       {/* Pattern 1 — OpenAI standard */}
-      <h4 style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', margin: '16px 0 0', color: 'var(--text-primary)' }}>
+      <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-card-title)', margin: '16px 0 0', color: 'var(--text-primary)' }}>
         {t('openaiTitle')}
       </h4>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>{t('openaiDesc')}</p>
+      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', margin: '4px 0 0' }}>{t('openaiDesc')}</p>
       <CodeBlock code={openAiSample(lang, modelRef)} label={t('openaiTitle')} />
 
       {/* Pattern 2 — dedicated workforce endpoint */}
-      <h4 style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', margin: '20px 0 0', color: 'var(--text-primary)' }}>
+      <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-card-title)', margin: '20px 0 0', color: 'var(--text-primary)' }}>
         {t('workforceTitle')}
       </h4>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>{t('workforceDesc')}</p>
+      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', margin: '4px 0 0' }}>{t('workforceDesc')}</p>
       <CodeBlock code={workforceSample(lang, agentId)} label={t('workforceTitle')} />
     </div>
   );

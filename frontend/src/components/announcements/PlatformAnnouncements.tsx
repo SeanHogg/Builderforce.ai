@@ -114,14 +114,14 @@ export function PlatformAnnouncements() {
         .bf-announcement-body { flex: 1; min-width: 0; }
         .bf-announcement-message {
           margin: 0;
-          font-size: 13px;
+          font-size: var(--font-size-small);
           line-height: 1.45;
           overflow-wrap: anywhere;
         }
         .bf-announcement-cta {
           display: inline-block;
           margin-top: 6px;
-          font-size: 13px;
+          font-size: var(--font-size-small);
           font-weight: 600;
           color: inherit;
           text-decoration: underline;
@@ -135,7 +135,7 @@ export function PlatformAnnouncements() {
           background: transparent;
           color: inherit;
           opacity: 0.7;
-          font-size: 18px;
+          font-size: var(--font-size-card-title);
           line-height: 1;
           cursor: pointer;
         }

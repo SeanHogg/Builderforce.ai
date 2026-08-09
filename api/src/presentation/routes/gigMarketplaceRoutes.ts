@@ -19,7 +19,7 @@
  * (`buildDatabase(c.env)`) — no raw neon client lives here.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNotNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -147,7 +147,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
         status: 'open',
         closedAt: null,
         updatedAt: new Date(),
-      }).where(eq(jobPostings.id, prior.id)).returning();
+      }).where(and(eq(jobPostings.id, prior.id), eq(jobPostings.tenantId, tenantId))).returning();
       await db.update(tasks).set({ hireable: true, jobPostingId: prior.id }).where(eq(tasks.id, ticketId));
       await Promise.all([
         invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
@@ -179,7 +179,10 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
       invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
       invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
     ]);
-    const [row] = await db.select().from(jobPostings).where(eq(jobPostings.id, id));
+    const [row] = await db.select().from(jobPostings).where(and(
+      eq(jobPostings.id, id),
+      eq(jobPostings.tenantId, tenantId),
+    ));
     return c.json({ jobId: id, posting: row ? mapPosting(row) : null }, 201);
   });
 
@@ -349,7 +352,10 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const [eng] = await db
       .select({ createdByUserId: freelancerEngagements.createdByUserId })
       .from(freelancerEngagements)
-      .where(eq(freelancerEngagements.id, grant.engagementId));
+      .where(and(
+        eq(freelancerEngagements.id, grant.engagementId),
+        eq(freelancerEngagements.tenantId, grant.tenantId),
+      ));
     if (eng?.createdByUserId) {
       await notify(db, c.env, {
         userId: eng.createdByUserId, tenantId: grant.tenantId, kind: 'review',
@@ -454,7 +460,10 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     const [eng] = await db
       .select({ createdByUserId: freelancerEngagements.createdByUserId })
       .from(freelancerEngagements)
-      .where(eq(freelancerEngagements.id, engagementId));
+      .where(and(
+        eq(freelancerEngagements.id, engagementId),
+        eq(freelancerEngagements.tenantId, grant.tenantId),
+      ));
     const [me] = await db.select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
     if (eng?.createdByUserId) {
       await notify(db, c.env, {
@@ -478,8 +487,12 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
         ? and(
             eq(deliverableProposals.authorUserId, userId),
             eq(deliverableProposals.engagementId, engagementId),
+            isNotNull(deliverableProposals.tenantId),
           )
-        : eq(deliverableProposals.authorUserId, userId))
+        : and(
+            eq(deliverableProposals.authorUserId, userId),
+            isNotNull(deliverableProposals.tenantId),
+          ))
       .orderBy(desc(deliverableProposals.createdAt))
       .limit(200);
     return c.json(rows.map(mapDeliverable));
@@ -567,7 +580,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     await db
       .update(deliverableProposals)
       .set({ lastEvalOverall: overall100, updatedAt: sql`NOW()` })
-      .where(eq(deliverableProposals.id, id));
+      .where(and(eq(deliverableProposals.id, id), eq(deliverableProposals.tenantId, tenantId)));
     return c.json({ ...scores, overall100 });
   });
 

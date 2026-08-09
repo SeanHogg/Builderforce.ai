@@ -327,7 +327,7 @@ export function MeetCarousel() {
         .meet-carousel-kicker { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:0 64px 14px; color:var(--text-muted); font:600 .68rem/1 var(--font-display); letter-spacing:.16em; text-transform:uppercase; }
         .meet-carousel-kicker > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .meet-carousel-status { display:flex; align-items:center; gap:12px; flex:none; }
-        .meet-carousel-status button { display:grid; width:26px; height:26px; place-items:center; padding:0; border:1px solid var(--border-subtle); border-radius:50%; background:var(--surface-card); color:var(--text-secondary); font-size:.58rem; cursor:pointer; transition:color .2s,border-color .2s; }
+        .meet-carousel-status button { display:grid; width:26px; height:26px; place-items:center; padding:0; border:1px solid var(--border-subtle); border-radius:50%; background:var(--surface-card); color:var(--text-secondary); font-size:var(--font-size-field-label); cursor:pointer; transition:color .2s,border-color .2s; }
         .meet-carousel-status button:hover { color:var(--text-primary); border-color:var(--border-accent); }
         .meet-carousel-frame { position:relative; padding:0 64px; }
 
@@ -342,12 +342,12 @@ export function MeetCarousel() {
         .meet-slide.is-active { opacity:1; visibility:visible; transform:none; pointer-events:auto; transition:opacity .42s ease, transform .42s cubic-bezier(.22,.78,.25,1), visibility 0s 0s; }
         .meet-slide:not(.is-active) { pointer-events:none; }
         .meet-slide .section-title { margin:0; }
-        .meet-slide-lead { margin:0; color:var(--text-secondary); font-size:.92rem; line-height:1.65; }
+        .meet-slide-lead { margin:0; color:var(--text-secondary); font-size:var(--font-size-body); line-height:1.65; }
 
         .meet-eyebrow { display:block; margin-bottom:10px; color:var(--coral-bright); font:600 .68rem/1 var(--font-display); letter-spacing:.16em; text-transform:uppercase; }
         .meet-eyebrow.is-cyan { color:var(--cyan-bright); }
 
-        .meet-carousel-arrow { position:absolute; z-index:3; top:50%; width:46px; height:46px; display:grid; place-items:center; transform:translateY(-50%); border:1px solid var(--border-subtle); border-radius:50%; background:var(--surface-card); color:var(--text-secondary); font-size:1.15rem; cursor:pointer; backdrop-filter:blur(12px); transition:color .2s,border-color .2s,box-shadow .2s; }
+        .meet-carousel-arrow { position:absolute; z-index:3; top:50%; width:46px; height:46px; display:grid; place-items:center; transform:translateY(-50%); border:1px solid var(--border-subtle); border-radius:50%; background:var(--surface-card); color:var(--text-secondary); font-size:var(--font-size-card-title); cursor:pointer; backdrop-filter:blur(12px); transition:color .2s,border-color .2s,box-shadow .2s; }
         .meet-carousel-arrow:hover { color:var(--text-primary); border-color:var(--border-accent); box-shadow:0 10px 26px var(--shadow-coral-soft); }
         .meet-carousel-arrow.is-prev { left:6px; }
         .meet-carousel-arrow.is-next { right:6px; }
@@ -366,7 +366,7 @@ export function MeetCarousel() {
         .meet-create-feature { display:grid; grid-template-columns:34px 1fr; gap:14px; padding:18px 0; border-top:1px solid var(--border-subtle); }
         .meet-create-feature:first-child { border-top:0; padding-top:0; }
         .meet-create-feature > span { color:var(--coral-bright); font:600 .66rem/1.5 var(--font-display); letter-spacing:.08em; }
-        .meet-create-feature p { margin:0; font-size:.8rem; line-height:1.6; }
+        .meet-create-feature p { margin:0; font-size:var(--font-size-small); line-height:1.6; }
         .meet-create-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
         .meet-create-board { display:flex; flex-direction:column; gap:12px; padding:16px; border:1px solid var(--border-subtle); border-radius:var(--radius-xl); background-color:var(--bg-surface); background-image:radial-gradient(var(--border-subtle) 1px, transparent 1px); background-size:20px 20px; box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
         .meet-create-toolbar { display:flex; align-items:center; gap:6px; padding-bottom:11px; border-bottom:1px solid var(--border-subtle); color:var(--text-muted); font:600 .64rem/1 var(--font-display); letter-spacing:.04em; }
@@ -375,7 +375,7 @@ export function MeetCarousel() {
         .meet-create-objects { display:grid; gap:9px; }
         .meet-create-object { display:grid; grid-template-columns:auto 1fr; gap:2px 9px; padding:11px 13px; border:1px solid var(--border-subtle); border-radius:var(--radius-lg); background:var(--bg-elevated); box-shadow:0 8px 20px var(--shadow-coral-soft); }
         .meet-create-object strong { color:var(--text-primary); font:650 .82rem/1.3 var(--font-display); }
-        .meet-create-object small { grid-column:2; color:var(--text-muted); font-size:.72rem; line-height:1.45; }
+        .meet-create-object small { grid-column:2; color:var(--text-muted); font-size:var(--font-size-eyebrow); line-height:1.45; }
         .meet-object-index { grid-row:span 2; color:var(--coral-bright); font:600 .64rem/1.4 var(--font-display); letter-spacing:.08em; }
         .meet-create-flow { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding-top:22px; border-top:1px solid var(--border-subtle); color:var(--text-secondary); font:600 .74rem/1 var(--font-display); letter-spacing:.04em; }
         .meet-create-flow > span { display:inline-flex; align-items:center; gap:10px; }
@@ -421,12 +421,12 @@ export function MeetCarousel() {
         .meet-evermind-core-copy span { max-width:76px; color:var(--text-muted); font:500 .55rem/1.25 var(--font-display); }
         .meet-evermind-write { display:grid; grid-template-columns:auto minmax(110px,1fr) auto 14px auto; gap:12px; align-items:center; padding:13px 16px; border-top:1px solid var(--border-subtle); background:color-mix(in srgb,var(--cyan-bright) 5%,transparent); }
         .meet-evermind-write-status { display:flex; align-items:center; gap:8px; color:var(--cyan-bright); font:650 .57rem/1 var(--font-display); letter-spacing:.08em; white-space:nowrap; }
-        .meet-evermind-write code { overflow:hidden; color:var(--text-muted); font-size:.65rem; text-overflow:ellipsis; white-space:nowrap; }
+        .meet-evermind-write code { overflow:hidden; color:var(--text-muted); font-size:var(--font-size-eyebrow); text-overflow:ellipsis; white-space:nowrap; }
         .meet-evermind-write > b { color:var(--cyan-bright); font-weight:500; }
         .meet-evermind-old,.meet-evermind-new { display:grid; gap:3px; color:var(--text-secondary); font:600 .65rem/1 var(--font-display); }
         .meet-evermind-old { text-decoration:line-through; opacity:.55; }
         .meet-evermind-new { color:var(--text-primary); }
-        .meet-evermind-old small,.meet-evermind-new small { color:var(--text-muted); font-size:.49rem; letter-spacing:.1em; text-decoration:none; text-transform:uppercase; }
+        .meet-evermind-old small,.meet-evermind-new small { color:var(--text-muted); font-size:var(--font-size-field-label); letter-spacing:.1em; text-decoration:none; text-transform:uppercase; }
         @keyframes evermind-flow { to { stroke-dashoffset:-120; } }
         @keyframes evermind-spin { to { transform:rotate(360deg); } }
         @keyframes evermind-live { 50% { opacity:.45; box-shadow:0 0 0 7px transparent,0 0 8px var(--cyan-bright); } }
@@ -434,7 +434,7 @@ export function MeetCarousel() {
         .meet-aside-label { display:block; margin-bottom:10px; color:var(--text-muted); font:600 .64rem/1 var(--font-display); letter-spacing:.14em; text-transform:uppercase; }
         .meet-edge { padding:14px 0; border-bottom:1px solid var(--border-subtle); }
         .meet-edge strong { display:block; margin-bottom:4px; color:var(--text-primary); font:650 .82rem/1.3 var(--font-display); }
-        .meet-edge span { color:var(--text-secondary); font-size:.75rem; line-height:1.45; }
+        .meet-edge span { color:var(--text-secondary); font-size:var(--font-size-small); line-height:1.45; }
         .meet-text-link { display:flex; justify-content:space-between; margin-top:20px; padding-top:14px; border-top:1px solid var(--coral-bright); color:var(--text-primary); font:650 .82rem/1 var(--font-display); text-decoration:none; }
         .meet-text-link:hover { color:var(--coral-bright); }
 
@@ -447,12 +447,12 @@ export function MeetCarousel() {
         .meet-role-view { padding:22px 24px; background:color-mix(in srgb,var(--bg-surface) 55%,transparent); border:1px solid var(--border-subtle); border-radius:var(--radius-sm) var(--radius-xl) var(--radius-xl) var(--radius-xl); }
         .meet-role-heading { display:grid; grid-template-columns:.8fr 1.2fr; gap:24px; margin-bottom:16px; }
         .meet-role-heading h3 { margin:0; color:var(--text-primary); font:650 1rem/1.25 var(--font-display); }
-        .meet-role-heading p { margin:0; font-size:.74rem; line-height:1.5; }
+        .meet-role-heading p { margin:0; font-size:var(--font-size-eyebrow); line-height:1.5; }
         .meet-role-list { border-top:1px solid var(--border-subtle); }
         .meet-role { display:grid; grid-template-columns:28px minmax(110px,.55fr) 1.45fr; gap:10px; align-items:baseline; padding:10px 0; border-bottom:1px solid var(--border-subtle); }
         .meet-role:last-child { border-bottom:0; }
         .meet-role strong { color:var(--text-primary); font:600 .76rem/1.3 var(--font-display); }
-        .meet-role p { margin:0; font-size:.7rem; line-height:1.45; }
+        .meet-role p { margin:0; font-size:var(--font-size-eyebrow); line-height:1.45; }
 
         /* ── Tabs ── */
         .meet-carousel-nav { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin:18px 64px 0; }
@@ -484,16 +484,16 @@ export function MeetCarousel() {
         /* ── Phone ── */
         @media (max-width:700px) {
           .meet-carousel { padding:0 14px 74px; scroll-margin-top:72px; }
-          .meet-carousel-kicker { margin-bottom:10px; font-size:.62rem; letter-spacing:.12em; }
+          .meet-carousel-kicker { margin-bottom:10px; font-size:var(--font-size-field-label); letter-spacing:.12em; }
           .meet-carousel-viewport { border-radius:var(--radius-xl); }
           .meet-panel { gap:20px; padding:28px 18px 74px; border-radius:var(--radius-xl); }
           .meet-panel::before { left:18px; width:64px; }
-          .meet-slide .section-title { font-size:1.28rem; line-height:1.25; }
-          .meet-slide-lead { font-size:.86rem; }
+          .meet-slide .section-title { font-size:var(--font-size-section); line-height:1.25; }
+          .meet-slide-lead { font-size:var(--font-size-small); }
           .meet-create-actions { margin-top:18px; }
           .meet-create-actions a { flex:1 1 100%; }
           .meet-create-board { padding:13px; }
-          .meet-create-flow { gap:6px 8px; font-size:.68rem; }
+          .meet-create-flow { gap:6px 8px; font-size:var(--font-size-eyebrow); }
           .meet-evermind-map { height:auto; display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:18px; }
           .meet-evermind-connections { display:none; }
           .meet-evermind-core { position:relative; left:auto; top:auto; order:-1; grid-column:1/-1; width:126px; height:126px; margin:2px auto 8px; transform:none; }
@@ -505,7 +505,7 @@ export function MeetCarousel() {
           .meet-role-heading,.meet-role { grid-template-columns:1fr; gap:4px; }
           .meet-role > span { display:none; }
           .meet-role-view { padding:18px 16px; }
-          .meet-carousel-arrow { bottom:14px; width:40px; height:40px; font-size:1rem; }
+          .meet-carousel-arrow { bottom:14px; width:40px; height:40px; font-size:var(--font-size-card-title); }
           .meet-carousel-arrow.is-prev { left:14px; }
           .meet-carousel-arrow.is-next { right:14px; }
           /* Labels cannot survive three-up at this width, so the tabs become dots
