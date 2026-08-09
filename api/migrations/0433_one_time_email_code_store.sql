@@ -35,6 +35,16 @@ CREATE TABLE IF NOT EXISTS email_otp_challenges (
   expires_at TIMESTAMP NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Migration 0432 originally introduced the marketing-only shape first. On an
+-- upgrade, CREATE TABLE IF NOT EXISTS preserves that table rather than adding
+-- identity's user reference, so converge the shared store before indexing or
+-- copying signup challenges. Fresh databases take the same idempotent path.
+ALTER TABLE email_otp_challenges
+  ADD COLUMN IF NOT EXISTS user_ref VARCHAR(64);
+ALTER TABLE email_otp_challenges
+  ALTER COLUMN purpose SET DEFAULT 'signup_verification';
+
 CREATE INDEX IF NOT EXISTS idx_email_otp_challenges_user ON email_otp_challenges (user_ref, consumed_at, created_at);
 CREATE INDEX IF NOT EXISTS idx_email_otp_challenges_email ON email_otp_challenges (email, purpose, expires_at);
 
