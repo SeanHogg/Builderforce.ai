@@ -464,7 +464,7 @@ export default function UsagePanel() {
                   fontFamily: 'var(--font-mono, monospace)',
                   fontSize: 12,
                   padding: 12,
-                  background: 'var(--bg-surface, #0b0b0b)',
+                  background: 'var(--bg-surface)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border)',
                   borderRadius: 'var(--radius-sm)',
@@ -531,9 +531,9 @@ export default function UsagePanel() {
                   const running = !!vendorHealthRunning[v.vendor];
                   const probeErr = vendorHealthError[v.vendor];
                   const statusColor: Record<string, string> = {
-                    ok: 'var(--success-text, #16a34a)',
-                    degraded: 'var(--warning-text, #d97706)',
-                    down: 'var(--error-text, #dc2626)',
+                    ok: 'var(--success-text)',
+                    degraded: 'var(--warning-text)',
+                    down: 'var(--error-text)',
                     unconfigured: 'var(--text-muted)',
                   };
                   return (
@@ -624,7 +624,7 @@ export default function UsagePanel() {
                       const prevVendor = i > 0 ? byModelSorted[i - 1].vendor : null;
                       const isVendorBreak = m.vendor !== prevVendor;
                       return (
-                        <tr key={m.model} style={isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : undefined}>
+                        <tr key={m.model} style={isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle)' } : undefined}>
                           <td style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-muted)' }}>{isVendorBreak ? m.vendor : ''}</td>
                           <td>{m.model}</td>
                           <td style={{ textAlign: 'right' }}>{fmtNum(m.requests)}</td>
@@ -685,8 +685,8 @@ export default function UsagePanel() {
                         <tr
                           key={`${f.model}-${f.errorCode}-${i}`}
                           style={{
-                            ...(f.errorCode === 429 ? { background: 'var(--error-bg, #fee2e2)' } : {}),
-                            ...(isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : {}),
+                            ...(f.errorCode === 429 ? { background: 'var(--error-bg)' } : {}),
+                            ...(isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle)' } : {}),
                           }}
                           title={f.errorCode === 429 ? t('usage.rateLimitTooltip') : undefined}
                         >

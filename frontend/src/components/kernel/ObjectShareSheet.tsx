@@ -86,7 +86,7 @@ export function ObjectShareSheet({
             // A native <option> does not inherit the control's background in
             // every browser, so both the select AND its options carry an opaque
             // pair — otherwise the list reads as white-on-white in one theme.
-            background: 'var(--surface, #101624)',
+            background: 'var(--surface)',
             color: 'var(--text-primary, var(--text-primary))',
             border: '1px solid var(--border-subtle, rgba(136,146,176,0.25))',
           }}
@@ -95,7 +95,7 @@ export function ObjectShareSheet({
             <option
               key={s}
               value={s}
-              style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary, var(--text-primary))' }}
+              style={{ background: 'var(--surface)', color: 'var(--text-primary, var(--text-primary))' }}
             >
               {t(`scope.${s}`)}
             </option>
@@ -106,7 +106,7 @@ export function ObjectShareSheet({
           onClick={() => void create()}
           disabled={busy}
           className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: 'var(--text-on-accent, #fff)' }}
+          style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
         >
           {busy ? t('creating') : t('create')}
         </button>

@@ -166,13 +166,13 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
                 <button type="button" style={btnSubtle} disabled={syncing === conn.id} onClick={() => syncNow(conn.id)}>
                   {syncing === conn.id ? t('syncing') : t('syncNow')}
                 </button>
-                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>{tc('delete')}</button>
+                <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(conn.id)}>{tc('delete')}</button>
               </div>
               {syncMsg[conn.id]?.error && (
                 <div
                   role="alert"
                   style={{
-                    fontSize: 12, color: 'var(--error-text, #dc2626)',
+                    fontSize: 12, color: 'var(--error-text)',
                     background: 'var(--error-bg, rgba(220,38,38,0.08))',
                     border: '1px solid var(--error-border, rgba(220,38,38,0.3))',
                     borderRadius: 'var(--radius-sm)', padding: '6px 10px',
@@ -186,7 +186,7 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>

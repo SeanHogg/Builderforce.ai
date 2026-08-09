@@ -32,9 +32,9 @@ import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 const TIER_ORDER: HealthTier[] = ['healthy', 'watch', 'at_risk', 'critical'];
 const TIER_HEX: Record<HealthTier, string> = {
   healthy: 'var(--success)',
-  watch: '#eab308',
+  watch: 'var(--yellow-bright)',
   at_risk: 'var(--warning)',
-  critical: '#ef4444',
+  critical: 'var(--error)',
 };
 
 /** Index into TIER_ORDER for a dimension's tier (null → no data → all dimmed). */

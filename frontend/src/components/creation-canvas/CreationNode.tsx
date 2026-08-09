@@ -465,7 +465,7 @@ function WebsiteBody({ data }: { data: CreationNodeData }) {
   const headline = typeof data.websiteHeadline === 'string' ? data.websiteHeadline : t('websiteHeadline');
   const description = typeof data.websiteBody === 'string' ? data.websiteBody : t('websiteBody');
   const cta = typeof data.websiteCta === 'string' ? data.websiteCta : t('websiteCta');
-  const accent = typeof data.websiteAccent === 'string' ? data.websiteAccent : '#3978f6';
+  const accent = typeof data.websiteAccent === 'string' ? data.websiteAccent : 'var(--coral-bright)';
   const viewport = data.viewport === 'mobile' || data.viewport === 'tablet' ? data.viewport : 'desktop';
   return (
     <div className={styles.websitePreview} data-viewport={viewport}>
@@ -515,7 +515,7 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
   const dateRange = optionLabel(data.dateRange, { '30d': t('last30Days'), '7d': t('last7Days'), qtd: t('quarterToDate') }, t('last30Days'));
   const authoredKpis = Array.isArray(data.kpis) ? data.kpis.slice(0, 6) : [];
   const kpis = authoredKpis.length ? authoredKpis : data.kind === 'dashboard' ? [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }] : [];
-  const palette = ['#3978f6', '#25b7a3', '#7657df', '#f4a126', '#e85d75', '#46a4d9', '#9b6ad6', '#68b36b'];
+  const palette = ['var(--coral-bright)', '#25b7a3', '#7657df', '#f4a126', '#e85d75', '#46a4d9', '#9b6ad6', '#68b36b'];
   const positiveValues = values.map((value) => Number.isFinite(value) ? Math.max(0, value) : 0);
   const total = positiveValues.reduce((sum, value) => sum + value, 0);
   let cursor = 0;
@@ -1461,7 +1461,7 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
     ? data.points.filter((point): point is { x: number; y: number } => !!point && typeof point === 'object' && typeof (point as { x?: unknown }).x === 'number' && typeof (point as { y?: unknown }).y === 'number')
     : [];
   const path = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
-  const stroke = String(data.stroke || '#5b5ce2');
+  const stroke = String(data.stroke || 'var(--indigo-bright)');
   const strokeWidth = Number(data.strokeWidth) || 3;
   return <div className={styles.drawingBody}>
     <div className={styles.widgetContext}><span><small>{t('stroke')}</small><b><i className={styles.strokeSwatch} style={{ background: stroke }} />{t('strokePx', { width: strokeWidth })}</b></span></div>

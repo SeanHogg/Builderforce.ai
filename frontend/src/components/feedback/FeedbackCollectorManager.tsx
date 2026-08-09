@@ -80,7 +80,7 @@ export function FeedbackCollectorManager() {
       <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('setup.intro')}</div>
 
       {created && <CreatedKeyPanel created={created} onDismiss={() => setCreated(null)} />}
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('setup.loading')}</div>
@@ -164,7 +164,7 @@ function CollectorPanel({ collector, createdKey, projName, onChanged, setError }
             <button type="button" style={btnSubtle} disabled={saving} onClick={() => patch({ enabled: !collector.enabled })}>
               {collector.enabled ? t('setup.pause') : t('setup.resume')}
             </button>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={remove}>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={remove}>
               {t('setup.delete')}
             </button>
           </RoleGate>

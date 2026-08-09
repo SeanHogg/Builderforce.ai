@@ -90,11 +90,11 @@ export default function MarketingDeck() {
         .mdk-title {
           font-family: var(--font-display); font-weight: 800; letter-spacing: -0.045em;
           font-size: clamp(2.5rem, 6.2vw, 5rem); line-height: .98;
-          color: var(--text-primary, #14181f); margin: 0 0 22px; max-width: 920px;
+          color: var(--text-primary); margin: 0 0 22px; max-width: 920px;
         }
         .mdk-tagline {
           font-size: clamp(1.05rem, 2vw, 1.28rem); line-height: 1.65;
-          color: var(--text-secondary, #4a5568); margin: 0; max-width: 720px;
+          color: var(--text-secondary); margin: 0; max-width: 720px;
         }
         .mdk-steps {
           list-style: none; margin: 34px 0 0; padding: 0; max-width: 760px;
@@ -105,7 +105,7 @@ export default function MarketingDeck() {
           background: var(--bg-surface, var(--surface, rgba(0,0,0,0.02)));
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.08));
           border-radius: var(--radius-lg); padding: 14px 16px;
-          color: var(--text-primary, #14181f); font-size: clamp(0.95rem, 1.8vw, 1.05rem);
+          color: var(--text-primary); font-size: clamp(0.95rem, 1.8vw, 1.05rem);
         }
         .mdk-step-num {
           flex: 0 0 auto; width: 26px; height: 26px; border-radius: var(--radius-full);
@@ -130,7 +130,7 @@ export default function MarketingDeck() {
         }
         .mdk-btn-primary { color: var(--text-on-accent); background: var(--accent); box-shadow: 0 10px 28px var(--shadow-coral-mid, rgba(59,130,246,.24)); }
         .mdk-btn-ghost {
-          color: var(--text-primary, #14181f); background: var(--surface, transparent);
+          color: var(--text-primary); background: var(--surface, transparent);
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.14));
         }
         .mdk-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -146,7 +146,7 @@ export default function MarketingDeck() {
         }
         .mdk-dot[aria-current="true"] { width: 28px; opacity: 1; background: var(--accent); }
         .mdk-progress { font-family: var(--font-display); font-weight: 600; font-size: 0.85rem;
-          color: var(--text-muted, #6b7280); min-width: 54px; }
+          color: var(--text-muted); min-width: 54px; }
         .mdk-nav { display: flex; gap: 10px; }
         @media (max-width: 560px) {
           .mdk { padding-top: 30px; }

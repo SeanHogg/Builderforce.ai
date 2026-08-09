@@ -76,7 +76,7 @@ const primaryButton: React.CSSProperties = {
   fontWeight: 600,
   borderRadius: 'var(--radius-md)',
   border: '1px solid transparent',
-  background: 'var(--accent, #4f7cff)',
+  background: 'var(--accent)',
   color: 'var(--text-on-accent)',
   cursor: 'pointer',
 };
@@ -290,7 +290,7 @@ export default function PolicyPacksPanel() {
       </div>
 
       {error && (
-        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--coral-bright, #f4726e)' }}>
+        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--coral-bright)' }}>
           {t('error', { message: error })}
         </div>
       )}
@@ -624,8 +624,8 @@ export default function PolicyPacksPanel() {
                       disabled={saving}
                       style={{
                         ...subtleButton,
-                        color: 'var(--coral-bright, #f4726e)',
-                        borderColor: 'var(--coral-bright, #f4726e)',
+                        color: 'var(--coral-bright)',
+                        borderColor: 'var(--coral-bright)',
                       }}
                     >
                       {t('deletePack')}

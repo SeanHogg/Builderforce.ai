@@ -12821,7 +12821,20 @@
       "reportTitle": "Ce que l’agent aurait fait",
       "frozenAt": "Dépôt lu à",
       "suppressedTitle": "Effets supprimés",
-      "noSteps": "L’agent n’a produit aucun effet : il n’a ni écrit de code ni rien enregistré."
+      "noSteps": "L’agent n’a produit aucun effet : il n’a ni écrit de code ni rien enregistré.",
+      "compareSelected": "Comparer la sélection ({count}/2)",
+      "compareHint": "Sélectionnez deux répétitions pour comparer leurs effets.",
+      "selectCompare": "Sélectionner",
+      "selected": "Sélectionné",
+      "comparisonTitle": "Comparaison des répétitions",
+      "sameTicket": "Même ticket",
+      "differentTicket": "Tickets différents",
+      "sameRef": "Même référence du dépôt",
+      "differentRef": "Références différentes ou indisponibles",
+      "operation": "Opération",
+      "baseline": "Référence",
+      "candidate": "Candidat",
+      "delta": "Évolution"
     }
   },
   "quickStart": {

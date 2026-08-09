@@ -9,12 +9,12 @@
 .railToggle[aria-pressed='true'] {
   /* Deepened rather than the raw accent: the accent token is lighter in dark
      mode, where a white glyph on it falls under the 3:1 contrast floor. */
-  background: color-mix(in srgb, var(--accent, #3978f6) 88%, #000) !important;
-  color: #fff !important;
+  background: color-mix(in srgb, var(--accent) 88%, #000) !important;
+  color: var(--text-on-accent) !important;
 }
 
 .railToggle[aria-pressed='true']:hover {
-  background: color-mix(in srgb, var(--accent, #3978f6) 74%, #000) !important;
+  background: color-mix(in srgb, var(--accent) 74%, #000) !important;
 }
 
 /*
@@ -53,7 +53,7 @@
      for any surface that mounts the rail outside a canvas shell. */
   color: var(--canvas-ink, var(--text-primary, currentColor));
   background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, white)) 92%, transparent);
-  border: 1px solid var(--canvas-line, var(--border-subtle, #d8e1ed));
+  border: 1px solid var(--canvas-line, var(--border-subtle));
   border-radius: var(--radius-sm);
   box-shadow: 0 2px 8px var(--canvas-shadow, rgba(0, 0, 0, .2));
   font-size: 17px;

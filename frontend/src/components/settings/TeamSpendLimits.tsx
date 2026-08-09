@@ -48,7 +48,7 @@ const inputStyle: React.CSSProperties = {
 const optionStyle: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)' };
 const primaryBtn: React.CSSProperties = {
   padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none',
 };
 
 function fmtUsd(mc: number): string {
@@ -57,9 +57,9 @@ function fmtUsd(mc: number): string {
 
 /** A colour for the spend bar that escalates with utilisation (theme tokens). */
 function barColor(pct: number): string {
-  if (pct >= 100) return 'var(--coral-bright, #ef4444)';
+  if (pct >= 100) return 'var(--coral-bright)';
   if (pct >= 80) return 'var(--amber-bright, var(--warning))';
-  return 'var(--accent, #2563eb)';
+  return 'var(--accent)';
 }
 
 function SeatRow({
@@ -223,7 +223,7 @@ function TeamSpendInner() {
       {loading ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : error ? (
-        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--coral-bright, #ef4444)' }}>{t('error', { message: error })}</div>
+        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--coral-bright)' }}>{t('error', { message: error })}</div>
       ) : overview && !overview.seatControlsEnabled ? (
         <div style={{ ...cardStyle }}>
           <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 6 }}>{t('spendTeamsOnlyTitle')}</div>

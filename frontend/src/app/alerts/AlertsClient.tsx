@@ -36,7 +36,7 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const ghostBtnStyle: React.CSSProperties = {

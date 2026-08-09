@@ -175,7 +175,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
       style={{
         fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem',
         background: mode === m ? 'var(--coral-bright, var(--coral-bright))' : 'var(--bg-elevated)',
-        color: mode === m ? '#fff' : 'var(--text-secondary)',
+        color: mode === m ? 'var(--text-on-accent)' : 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 12px',
         cursor: mode === m ? 'default' : 'pointer',
       }}
@@ -282,7 +282,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           style={{
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem',
             background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, var(--coral-bright))',
-            color: running ? 'var(--text-muted)' : '#fff',
+            color: running ? 'var(--text-muted)' : 'var(--text-on-accent)',
             border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
             cursor: runDisabled ? 'default' : 'pointer', opacity: runDisabled ? 0.6 : 1,
           }}
@@ -298,7 +298,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
         <div
           role="alert"
           style={{
-            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: 'var(--error-text)',
+            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error)', color: 'var(--error-text)',
             borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >

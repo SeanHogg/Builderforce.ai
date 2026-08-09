@@ -35,9 +35,9 @@ const th: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontS
 const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 13, whiteSpace: 'nowrap' };
 const thL: React.CSSProperties = { ...th, textAlign: 'left' };
 const tdL: React.CSSProperties = { ...td, textAlign: 'left' };
-const DANGER = 'var(--danger, #e5484d)';
-const WARN = 'var(--warning, #f5a623)';
-const OK = 'var(--success, #16a34a)';
+const DANGER = 'var(--danger)';
+const WARN = 'var(--warning)';
+const OK = 'var(--success)';
 
 function PanelHeader({ title, sub }: { title: string; sub?: string }) {
   return (
@@ -262,7 +262,7 @@ function LaborCostPanel({ days }: { days: number }) {
 }
 
 // ── EMP-16 — performer tiers + coaching ──────────────────────────────────────
-const TIER_COLOR: Record<PerformerTier, string> = { high: OK, solid: 'var(--accent, #6366f1)', watch: DANGER };
+const TIER_COLOR: Record<PerformerTier, string> = { high: OK, solid: 'var(--accent)', watch: DANGER };
 
 function CoachingNotes({ member }: { member: PerformerRow }) {
   const t = useTranslations('widgets');
@@ -306,7 +306,7 @@ function CoachingNotes({ member }: { member: PerformerRow }) {
           placeholder={t('emp.notePlaceholder')}
           style={{ flex: 1, padding: '6px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
         />
-        <button onClick={save} disabled={busy || !draft.trim()} style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', opacity: busy || !draft.trim() ? 0.6 : 1 }}>
+        <button onClick={save} disabled={busy || !draft.trim()} style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'var(--accent)', color: 'var(--text-on-accent)', opacity: busy || !draft.trim() ? 0.6 : 1 }}>
           {t('emp.saveNote')}
         </button>
       </div>
@@ -452,7 +452,7 @@ export function EmpMetricsView() {
           {[7, 30, 90].map((d) => (
             <button key={d} onClick={() => setDays(d)} style={{
               padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)',
-              background: days === d ? 'var(--accent, #6366f1)' : 'var(--bg-base)', color: days === d ? '#fff' : 'var(--text-secondary)',
+              background: days === d ? 'var(--accent)' : 'var(--bg-base)', color: days === d ? 'var(--text-on-accent)' : 'var(--text-secondary)',
             }}>{d}d</button>
           ))}
           <button onClick={doExport} disabled={exporting} style={{

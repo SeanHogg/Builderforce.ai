@@ -122,7 +122,7 @@ export function LensSnapshotsPanel() {
         </Select>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginBottom: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>

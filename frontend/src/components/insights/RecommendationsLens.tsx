@@ -15,9 +15,9 @@ import { DaysWindowSelect } from './LensShell';
  */
 
 const SEVERITY_COLOR: Record<RecSeverity, string> = {
-  critical: '#dc2626',
-  warning: '#d97706',
-  info: '#2563eb',
+  critical: 'var(--error)',
+  warning: 'var(--warning)',
+  info: 'var(--info)',
 };
 
 export function RecommendationsLens() {

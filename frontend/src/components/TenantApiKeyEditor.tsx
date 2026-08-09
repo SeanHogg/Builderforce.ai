@@ -87,7 +87,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
       />
 
       {error && (
-        <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginTop: 8 }}>{error}</div>
+        <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 8 }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>

@@ -70,9 +70,9 @@ export function GuestRoomJoinCard({
         .grj-form { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; margin-top: 6px; text-align: left; }
         .grj-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
         .grj-input { width: 100%; box-sizing: border-box; padding: 9px 11px; font-size: 14px; font-family: inherit; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); color: var(--text-primary); }
-        .grj-join { padding: 10px 20px; font-size: 14px; font-weight: 600; border: none; border-radius: var(--radius-lg); background: var(--accent, #3b82f6); color: var(--text-on-accent); cursor: pointer; min-height: 40px; }
+        .grj-join { padding: 10px 20px; font-size: 14px; font-weight: 600; border: none; border-radius: var(--radius-lg); background: var(--accent); color: var(--text-on-accent); cursor: pointer; min-height: 40px; }
         .grj-join:disabled { opacity: 0.55; cursor: default; }
-        .grj-error { margin: 0; font-size: 13px; color: var(--danger, #dc2626); }
+        .grj-error { margin: 0; font-size: 13px; color: var(--danger); }
       `}</style>
     </div>
   );

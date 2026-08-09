@@ -110,7 +110,7 @@ const styles = `
   }
   .bdf-input:focus { outline: 2px solid var(--accent, var(--coral-bright)); outline-offset: 1px; border-color: transparent; }
   .bdf-select { color: var(--text-primary, var(--text-primary)); }
-  .bdf-select option { background: var(--surface, #12151c); color: var(--text-primary, var(--text-primary)); }
+  .bdf-select option { background: var(--surface); color: var(--text-primary, var(--text-primary)); }
   .bdf-textarea { resize: vertical; }
   .bdf-error { margin: 0; color: var(--red-bright); font-size: 13px; }
   .bdf-submit {
@@ -124,5 +124,5 @@ const styles = `
     background: var(--surface-cyan-soft, rgba(0,229,204,0.14)); color: var(--cyan-bright, var(--cyan-bright)); font-size: 24px; font-weight: 800;
   }
   .bdf-success-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--text-primary, var(--text-primary)); }
-  .bdf-success-body { margin: 0; color: var(--text-secondary, #aab3c5); font-size: 14px; }
+  .bdf-success-body { margin: 0; color: var(--text-secondary); font-size: 14px; }
 `;

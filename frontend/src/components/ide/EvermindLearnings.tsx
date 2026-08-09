@@ -197,7 +197,7 @@ function LearningRow({
   const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text || faulted);
   const pct = entry.score != null ? Math.round(entry.score * 100) : null;
   return (
-    <div style={{ ...rowStyle, ...(primary ? { borderColor: 'var(--coral-bright, #ff6b5e)' } : null) }}>
+    <div style={{ ...rowStyle, ...(primary ? { borderColor: 'var(--coral-bright)' } : null) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {primary && <span style={primaryBadgeStyle}>{primaryBadge}</span>}
         <span style={tagStyle(entry.kind === 'delta')}>{kindLabel}</span>
@@ -205,14 +205,14 @@ function LearningRow({
         <span style={metaText}>v{entry.version}</span>
         <span style={metaText}>×{entry.weight}</span>
         {scoreLabel ? (
-          <span style={{ ...metaText, marginLeft: 'auto', fontWeight: 700, color: 'var(--coral-bright, #ff6b5e)' }}>{scoreLabel}</span>
+          <span style={{ ...metaText, marginLeft: 'auto', fontWeight: 700, color: 'var(--coral-bright)' }}>{scoreLabel}</span>
         ) : (
           <span style={{ ...metaText, marginLeft: 'auto' }}>{when}</span>
         )}
       </div>
       {pct != null && (
         <div style={{ height: 4, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--coral-bright, #ff6b5e)' }} />
+          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--coral-bright)' }} />
         </div>
       )}
       {entry.prompt && <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{entry.prompt}</div>}
@@ -363,20 +363,20 @@ const methodChip: React.CSSProperties = {
 };
 const primaryBadgeStyle: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-  padding: '1px 6px', borderRadius: 'var(--radius-sm)', color: 'var(--text-on-accent)', background: 'var(--coral-bright, #ff6b5e)',
+  padding: '1px 6px', borderRadius: 'var(--radius-sm)', color: 'var(--text-on-accent)', background: 'var(--coral-bright)',
 };
 /** The "not distilled" badge — a warning, so it must read in BOTH themes: the amber
  *  tokens carry their own fallbacks rather than assuming a dark surface. */
 const faultBadgeStyle: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
   padding: '1px 6px', borderRadius: 'var(--radius-sm)',
-  color: 'var(--warning-text, #92400e)',
-  background: 'var(--warning-bg, #fef3c7)',
+  color: 'var(--warning-text)',
+  background: 'var(--warning-bg)',
   border: '1px solid var(--warning-border, var(--warning))',
 };
 const detailLinkStyle: React.CSSProperties = {
   alignSelf: 'flex-start', padding: 0, fontSize: '0.7rem', fontWeight: 600, border: 'none',
-  background: 'transparent', color: 'var(--coral-bright, #ff6b5e)', cursor: 'pointer',
+  background: 'transparent', color: 'var(--coral-bright)', cursor: 'pointer',
 };
 const tuneLinkStyle: React.CSSProperties = {
   alignSelf: 'flex-start', fontSize: '0.76rem', fontWeight: 600, textDecoration: 'none',
@@ -394,6 +394,6 @@ function tagStyle(isDelta: boolean): React.CSSProperties {
   return {
     fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
     padding: '1px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
-    color: isDelta ? 'var(--text-muted)' : 'var(--coral-bright, #ff6b5e)', background: 'var(--bg-surface)',
+    color: isDelta ? 'var(--text-muted)' : 'var(--coral-bright)', background: 'var(--bg-surface)',
   };
 }

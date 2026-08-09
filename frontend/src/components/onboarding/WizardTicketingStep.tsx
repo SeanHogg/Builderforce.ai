@@ -76,7 +76,7 @@ export function WizardTicketingStep({ projectId }: { projectId: number }) {
           })}
         </div>
       )}
-      {error && <p style={{ color: 'var(--error-text, #e74c3c)', fontSize: 13, marginTop: 10 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error-text)', fontSize: 13, marginTop: 10 }}>{error}</p>}
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 14 }}>{t('finishLater')}</p>
     </div>
   );

@@ -43,9 +43,9 @@ export interface ProjectHealth {
 
 const TIER_COLOR: Record<HealthTier, string> = {
   healthy: 'var(--success)',
-  watch: '#eab308',
+  watch: 'var(--yellow-bright)',
   at_risk: 'var(--warning)',
-  critical: '#ef4444',
+  critical: 'var(--error)',
 };
 
 const NO_SCORE_COLOR = 'var(--border-subtle)';

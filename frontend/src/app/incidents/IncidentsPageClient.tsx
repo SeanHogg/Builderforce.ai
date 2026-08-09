@@ -134,7 +134,7 @@ function Loader({ t }: { t: T }) {
   return <div style={{ ...card, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 }
 function ErrorCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{msg}</div>;
+  return <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{msg}</div>;
 }
 function EmptyCard({ msg }: { msg: string }) {
   return <div style={{ ...card, color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>{msg}</div>;
@@ -499,13 +499,13 @@ function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; canManag
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
-                    <div style={{ width: `${a.percentComplete}%`, height: '100%', background: complete ? 'var(--success, #16a34a)' : 'var(--coral-bright, #f97316)' }} />
+                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep)', overflow: 'hidden' }}>
+                    <div style={{ width: `${a.percentComplete}%`, height: '100%', background: complete ? 'var(--success)' : 'var(--coral-bright)' }} />
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{t('implicated.signed', { done: a.completedCount, total: a.requiredCount })}</span>
                 </div>
                 {a.gaps.length > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--danger-text, #991b1b)' }}>{t('implicated.gaps', { count: a.gaps.length })}: {a.gaps.map((g) => g.roleName).join(', ')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--danger-text)' }}>{t('implicated.gaps', { count: a.gaps.length })}: {a.gaps.map((g) => g.roleName).join(', ')}</div>
                 )}
               </div>
             );

@@ -46,8 +46,8 @@ const buttonDanger: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   background: 'none',
-  color: 'var(--coral-bright, #f4726e)',
-  border: '1px solid var(--coral-bright, #f4726e)',
+  color: 'var(--coral-bright)',
+  border: '1px solid var(--coral-bright)',
   borderRadius: 'var(--radius-sm)',
   cursor: 'pointer',
 };

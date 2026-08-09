@@ -130,7 +130,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
       {loading || provisioning || !board ? (
         <div style={sectionPad}>
           {shownError ? (
-            <span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span>
+            <span style={{ fontSize: 13, color: 'var(--danger)' }}>{shownError}</span>
           ) : (
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               {provisioning || !board ? t('settingUp') : t('loading')}
@@ -138,7 +138,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
           )}
         </div>
       ) : shownError ? (
-        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span></div>
+        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger)' }}>{shownError}</span></div>
       ) : tab === 'lanes' ? (
         <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={reload} />
       ) : tab === 'teams' ? (
@@ -236,7 +236,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
               <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> {t('terminal')}
             </label>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
           </div>
           <LaneActionRow lane={lane} lanes={lanes} workflows={workflows} patchLane={patchLane} />
           <AgentList board={board} lane={lane} agents={agentsByLane[lane.id] ?? []} reload={reload} />
@@ -379,7 +379,7 @@ function LaneRequirementsRow({ board, lane, patchLane }: {
                   <label style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center', color: 'var(--text-secondary)' }}>
                     <input type="checkbox" checked={r.isRequired} onChange={() => toggleRequired(r)} /> {t('required')}
                   </label>
-                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', padding: '2px 8px' }} onClick={() => remove(r.id)}>{t('delete')}</button>
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger)', padding: '2px 8px' }} onClick={() => remove(r.id)}>{t('delete')}</button>
                 </div>
               ))}
             </div>
@@ -457,7 +457,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
             {a.model ? ` · ${a.model}` : ` · ${t('defaultLlm')}`}
           </span>
           <span style={{ flex: 1 }} />
-          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>{t('remove')}</button>
+          <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(a.id)}>{t('remove')}</button>
         </div>
       ))}
       {adding ? (
@@ -542,7 +542,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
       </div>
 
       {error && (
-        <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', marginBottom: 10 }}>{error}</div>
+        <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 10 }}>{error}</div>
       )}
 
       {loading ? (
@@ -562,7 +562,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
                     )}
                   </div>
                   <span style={{ flex: 1 }} />
-                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(tm.id, projectId))}>
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(tm.id, projectId))}>
                     {t('remove')}
                   </button>
                 </div>
@@ -696,7 +696,7 @@ function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: n
             </button>
           </RoleGate>
         </div>
-        {templateError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger, #dc2626)' }}>{templateError}</div>}
+        {templateError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger)' }}>{templateError}</div>}
       </div>
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
         {t('boardNameLabel')}

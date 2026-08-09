@@ -24,8 +24,8 @@ const WORKSPACE = 'workspace';
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', cursor: 'pointer',
-  background: active ? 'var(--accent, #2563eb)' : 'transparent',
-  color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.85rem',
+  background: active ? 'var(--accent)' : 'transparent',
+  color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.85rem',
 });
 const selectStyle: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',

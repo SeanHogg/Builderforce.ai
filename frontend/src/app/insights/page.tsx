@@ -46,7 +46,7 @@ const btnStyle: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
 };
-const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: '1px solid transparent' };
+const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: '1px solid transparent' };
 
 /** 'me' = the personal pinned view; a number = a saved tenant-shared dashboard id. */
 type View = 'me' | number;
@@ -150,7 +150,7 @@ export default function InsightsHomePage() {
   if (!isAuthenticated || !hasTenant) return null;
 
   const tabStyle = (on: boolean): React.CSSProperties => ({
-    ...btnStyle, background: on ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)', color: on ? '#fff' : 'var(--text-primary)',
+    ...btnStyle, background: on ? 'var(--coral-bright)' : 'var(--bg-elevated)', color: on ? 'var(--text-on-accent)' : 'var(--text-primary)',
     border: `1px solid ${on ? 'transparent' : 'var(--border-subtle)'}`,
   });
 
@@ -159,7 +159,7 @@ export default function InsightsHomePage() {
       id: 'insights-dashboard-controls', title: t('home.title'), subtitle: t('home.subtitle'), icon: '📌',
       position: { x: 36, y: 36 }, width: 1300, height: 180,
       content: <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {error && <div style={{ color: 'var(--danger, #d33)', fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}>📌 {t('home.myDashboard')}</button>
           {dashboards.map((d) => <button key={d.id} type="button" style={tabStyle(view === d.id)} onClick={() => setView(d.id)}>{d.name}</button>)}
@@ -222,7 +222,7 @@ export default function InsightsHomePage() {
         <Select style={inputStyle} value={pickMetric} onChange={(e) => setPickMetric(e.target.value)}>{metrics.map((m) => <option key={m.key} value={m.key}>{m.label} ({m.unit || 'count'})</option>)}</Select>
         <Select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)}>{VIZ_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}</Select>
         <button style={btnStyle} onClick={() => void addMetricWidget()}>{td('widget.add')}</button>
-        <button style={{ ...btnStyle, marginLeft: 'auto', color: 'var(--danger, #d33)' }} onClick={() => void deleteDashboard(active.id)}>{td('delete.button')}</button>
+        <button style={{ ...btnStyle, marginLeft: 'auto', color: 'var(--danger)' }} onClick={() => void deleteDashboard(active.id)}>{td('delete.button')}</button>
       </div></RoleGate>,
     });
     data?.widgets.forEach((w, index) => {

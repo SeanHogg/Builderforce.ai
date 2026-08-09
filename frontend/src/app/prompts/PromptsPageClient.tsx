@@ -164,7 +164,7 @@ export default function PromptsPage() {
       )}
 
       {loading && <div style={card}>{t('loading')}</div>}
-      {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && !error && viewMode === 'card' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
@@ -319,10 +319,10 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
           )}
         </div>
 
-        {analyzeError && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 13, marginBottom: 12 }}>{analyzeError}</div>}
+        {analyzeError && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{analyzeError}</div>}
 
         {analysis && (
-          <div style={{ ...card, marginBottom: 16, borderColor: 'var(--coral-bright, #f4726e)' }}>
+          <div style={{ ...card, marginBottom: 16, borderColor: 'var(--coral-bright)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('suggestionTitle')}</div>
             {analysis.rationale && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px' }}>{analysis.rationale}</p>}
             <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 280, overflowY: 'auto', margin: 0 }}>{analysis.suggestion}</pre>

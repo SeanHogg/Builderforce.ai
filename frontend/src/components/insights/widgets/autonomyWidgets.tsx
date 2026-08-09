@@ -146,7 +146,7 @@ export function AutonomyCoverage({ data }: { data: AutonomySummary }) {
       style={{
         display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
         fontSize: '0.78rem', lineHeight: 1.5, padding: '8px 12px', borderRadius: 'var(--radius-md)',
-        border: `1px solid ${warn ? 'var(--warning, #d97706)' : 'var(--border-subtle)'}`,
+        border: `1px solid ${warn ? 'var(--warning)' : 'var(--border-subtle)'}`,
         background: warn ? 'var(--warning-bg, rgba(245,158,11,0.16))' : 'var(--bg-elevated)',
         color: warn ? 'var(--warning-text, var(--text-primary))' : 'var(--text-secondary)',
       }}

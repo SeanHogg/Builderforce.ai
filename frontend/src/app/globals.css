@@ -203,6 +203,22 @@
   --emerald-bright: #34d399;
   --amber-bright: #fbbf24;
   --red-bright: #ff6b6b;
+  /* The second half of the categorical family. A ten-series chart needs ten
+     distinct hues, and the five above ran out at series six — which is why the
+     shared `CHART_PALETTE` still carried five raw literals that rendered the
+     same on paper as on slate. These complete the wheel: teal, pink, purple,
+     sky, yellow, orange. Purple sits between violet and pink deliberately —
+     adjacent series are never adjacent hues in the palette's ORDER. */
+  --teal-bright: #14b8a6;
+  --pink-bright: #ec4899;
+  --purple-bright: #8b5cf6;
+  --sky-bright: #38bdf8;
+  --yellow-bright: #eab308;
+  --orange-bright: #f97316;
+  /* The step ABOVE `--error`. Severity is an ordinal scale, not four unrelated
+     signals: a fatal is not "very error", it is its own rung, and a swatch that
+     cannot be told apart from the rung below it is not carrying information. */
+  --error-strong: #fb7185;
 
   /* Ambient shadow colour, for the shadows composed at a call site (drawer, palette)
      rather than taken whole from --shadow-*. Flips warm on light like the scale. */
@@ -214,6 +230,12 @@
   --surface: var(--bg-elevated);
   --surface-2: var(--surface-interactive);
   --text-on-accent: #fff;
+  /* The mirror of --text-on-accent, for the handful of surfaces that are light in
+     BOTH themes because their fill is computed rather than themed — a DevEx score
+     chip is an HSL ramp at 68–88% lightness, so it is a pale tile on slate as much
+     as on paper and wants dark ink either way. Declared (rather than written
+     `#16241c` at the tile) so the pairing has a name and one place to change. */
+  --ink-on-light: #16241c;
   /* Unread-message badge (distinct indigo, so it reads apart from the coral/amber
      run-state dots). Matches the NotificationBell badge for a consistent "unread"
      hue across the app. Same value in dark; legible on white text in both. */
@@ -353,16 +375,24 @@ html[data-theme='light'] {
   --info-border: rgba(29, 78, 216, 0.32);
   --success-border: rgba(21, 128, 61, 0.35);
 
-  /* Categorical hues on paper: same five identities, darkened to carry on warm
+  /* Categorical hues on paper: same eleven identities, darkened to carry on warm
      stock (each ≥4.5:1 on white) instead of glowing as they do on near-black. */
   --violet-bright: #6d28d9;
   --indigo-bright: #4338ca;
   --emerald-bright: #047857;
   --amber-bright: #b45309;
   --red-bright: #b91c1c;
+  --teal-bright: #0f766e;
+  --pink-bright: #be185d;
+  --purple-bright: #7e22ce;
+  --sky-bright: #0369a1;
+  --yellow-bright: #a16207;
+  --orange-bright: #c2410c;
+  --error-strong: #7f1d1d;
 
   --shadow-color: rgba(60, 48, 36, 0.16);
   --text-on-accent: #fff;
+  --ink-on-light: #16241c;
   --badge-unread: #4f46e5;
   --surface-page: var(--bg-deep);
   --surface-panel: var(--bg-surface);
@@ -1552,18 +1582,18 @@ html[data-theme='light'] .nebula {
 }
 
 .nav-item-highlight {
-  color: var(--warning, #f59e0b);
+  color: var(--warning);
 }
 
 .nav-item-highlight:hover {
-  color: var(--warning, #f59e0b);
-  background: color-mix(in srgb, var(--warning, #f59e0b) 15%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
 }
 
 .nav-item-highlight.active {
-  color: var(--warning, #f59e0b);
-  background: color-mix(in srgb, var(--warning, #f59e0b) 20%, transparent);
-  border-color: color-mix(in srgb, var(--warning, #f59e0b) 40%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
 .nav.collapsed {
@@ -2057,9 +2087,9 @@ select.input option {
 }
 
 .alert-error {
-  background: var(--error-bg, #fef2f2);
-  color: var(--error-text, #991b1b);
-  border: 1px solid var(--error-border, #fecaca);
+  background: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
 }
 
 /* Admin data tables (same shell style) */
@@ -2127,12 +2157,12 @@ select.input option {
 }
 
 .admin-page .health-card.health-ok {
-  border-color: var(--success, #10b981);
+  border-color: var(--success);
   background: var(--success-bg, rgba(16, 185, 129, 0.08));
 }
 
 .admin-page .health-card.health-degraded {
-  border-color: var(--error, #ef4444);
+  border-color: var(--error);
   background: var(--error-bg, rgba(239, 68, 68, 0.08));
 }
 
@@ -2169,8 +2199,8 @@ select.input option {
 }
 
 .admin-page .badge-success {
-  background: var(--success-bg, #d1fae5);
-  color: var(--success-text, #065f46);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .admin-page .admin-select {
@@ -2599,7 +2629,7 @@ select.input option {
   transition: color var(--duration-fast) ease;
 }
 .mbn-item:hover { color: var(--text); }
-.mbn-item.active { color: var(--accent, #4d9eff); }
+.mbn-item.active { color: var(--accent); }
 .mbn-icon { font-size: 1.25rem; line-height: 1; }
 .mbn-label { font-size: 10px; line-height: 1; }
 
@@ -2994,13 +3024,13 @@ select.input option {
   z-index: 9998;
   width: 420px;
   max-width: 95vw;
-  background: var(--surface, #18181b);
+  background: var(--surface);
   border-left: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   display: flex;
   flex-direction: column;
   box-shadow: -4px 0 24px var(--shadow-color, rgba(0, 0, 0, 0.5));
   font-size: 12px;
-  color: var(--text-primary, #e4e4e7);
+  color: var(--text-primary);
 }
 
 .perm-debugger-header {
@@ -3026,7 +3056,7 @@ select.input option {
   gap: 4px 12px;
   padding: 8px 14px;
   font-size: 11px;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
   flex-shrink: 0;
 }
@@ -3044,7 +3074,7 @@ select.input option {
   padding: 7px 4px;
   background: none;
   border: none;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
   transition: background 0.1s;
@@ -3052,8 +3082,8 @@ select.input option {
 
 .perm-debugger-tab:hover { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.05)); }
 .perm-debugger-tab--active {
-  color: var(--text-primary, #e4e4e7);
-  border-bottom: 2px solid var(--accent, #6366f1);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
   font-weight: 600;
 }
 
@@ -3078,11 +3108,11 @@ select.input option {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
   position: sticky;
   top: 0;
-  background: var(--surface, #18181b);
+  background: var(--surface);
 }
 
 .perm-debugger-table td {
@@ -3100,7 +3130,7 @@ select.input option {
   border: 1px solid var(--border, rgba(255, 255, 255, 0.2));
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-primary, #e4e4e7);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -3109,7 +3139,7 @@ select.input option {
 
 .perm-debugger-count-badge {
   margin-left: 4px;
-  background: var(--error, #ef4444);
+  background: var(--error);
   color: #fff;
   border-radius: var(--radius-md);
   padding: 0 5px;
@@ -3615,7 +3645,7 @@ select.input option {
    reads at document scale, not chat scale. All colours come from theme tokens so
    it works in both light and dark; sizes use rem so it stays fluid on mobile. */
 .markdown-body {
-  color: var(--text-primary, #e5e7eb);
+  color: var(--text-primary);
   font-size: 0.95rem;
   line-height: 1.7;
   overflow-wrap: break-word;
@@ -3629,7 +3659,7 @@ select.input option {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  color: var(--text-primary, #f3f4f6);
+  color: var(--text-primary);
   font-family: var(--font-display, inherit);
   font-weight: 700;
   line-height: 1.3;
@@ -3639,15 +3669,15 @@ select.input option {
 .markdown-body h2 {
   font-size: 1.35rem;
   padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--border, #333);
+  border-bottom: 1px solid var(--border);
 }
 .markdown-body h3 { font-size: 1.15rem; }
 .markdown-body h4 { font-size: 1rem; }
 .markdown-body h5,
-.markdown-body h6 { font-size: 0.9rem; color: var(--text-muted, #9ca3af); }
+.markdown-body h6 { font-size: 0.9rem; color: var(--text-muted); }
 .markdown-body p { margin: 0.9em 0; }
 .markdown-body a {
-  color: var(--coral-bright, #ff6b5e);
+  color: var(--coral-bright);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -3660,8 +3690,8 @@ select.input option {
 .markdown-body blockquote {
   margin: 1.1em 0;
   padding: 0.4em 1em;
-  border-left: 3px solid var(--border, #444);
-  color: var(--text-muted, #9ca3af);
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
   background: var(--surface, rgba(127, 127, 127, 0.06));
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
@@ -3671,15 +3701,15 @@ select.input option {
   padding: 0.15em 0.4em;
   border-radius: var(--radius-sm);
   background: var(--surface, rgba(127, 127, 127, 0.12));
-  border: 1px solid var(--border-subtle, var(--border, #333));
+  border: 1px solid var(--border-subtle, var(--border));
 }
 .markdown-body pre {
   margin: 1.1em 0;
   padding: 1em;
   overflow-x: auto;
   border-radius: var(--radius-lg);
-  background: var(--surface, #111827);
-  border: 1px solid var(--border, #333);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 .markdown-body pre code {
   padding: 0;
@@ -3691,7 +3721,7 @@ select.input option {
 .markdown-body hr {
   margin: 2em 0;
   border: none;
-  border-top: 1px solid var(--border, #333);
+  border-top: 1px solid var(--border);
 }
 .markdown-body img { max-width: 100%; height: auto; border-radius: var(--radius-lg); }
 .markdown-body table {
@@ -3704,7 +3734,7 @@ select.input option {
 .markdown-body th,
 .markdown-body td {
   padding: 0.5em 0.8em;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--border);
   text-align: left;
 }
 .markdown-body th { background: var(--surface, rgba(127, 127, 127, 0.08)); font-weight: 600; }

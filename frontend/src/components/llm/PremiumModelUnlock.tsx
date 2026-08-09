@@ -54,12 +54,12 @@ export function PremiumModelUnlock() {
             {busy ? t('premiumValidating') : pending ? t('premiumPending') : t('premiumValidateCard')}
           </button>
           {pending && <span style={hintStyle}>{t('premiumPendingHint')}</span>}
-          {failed && <span style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>{t('premiumFailedHint')}</span>}
+          {failed && <span style={{ ...hintStyle, color: 'var(--danger)' }}>{t('premiumFailedHint')}</span>}
         </div>
       ) : null}
 
       {error !== null && (
-        <div role="alert" style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>
+        <div role="alert" style={{ ...hintStyle, color: 'var(--danger)' }}>
           {error || t('premiumUnlockFailed')}
         </div>
       )}

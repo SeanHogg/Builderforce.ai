@@ -697,7 +697,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
         </div>
       )}
       {rerunError && (
-        <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginBottom: 12 }}>{rerunError}</div>
+        <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>{rerunError}</div>
       )}
 
       {/* Selected execution */}
@@ -720,7 +720,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
             <EvermindRunChip models={evermindModels} projectId={task.projectId} />
             {isRunning && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: stream.connected ? 'var(--success, #16a34a)' : 'var(--text-muted)' }} />
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: stream.connected ? 'var(--success)' : 'var(--text-muted)' }} />
                 {stream.connected ? t('live') : t('polling')}
               </span>
             )}
@@ -748,8 +748,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   title={t('revertHint')}
                   style={{
                     fontSize: 11, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--danger, #dc2626)', background: 'var(--bg-base)',
-                    color: 'var(--danger, #dc2626)',
+                    border: '1px solid var(--danger)', background: 'var(--bg-base)',
+                    color: 'var(--danger)',
                     cursor: revertingId != null ? 'default' : 'pointer',
                     opacity: revertingId != null ? 0.6 : 1,
                   }}
@@ -761,7 +761,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           </div>
 
           {revertError && (
-            <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginBottom: 12, lineHeight: 1.5 }}>{revertError}</div>
+            <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12, lineHeight: 1.5 }}>{revertError}</div>
           )}
           {revertNotice && (
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>{revertNotice}</div>
@@ -769,8 +769,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {errorMessage && (
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--danger, #dc2626)', marginBottom: 4 }}>{t('error')}</div>
-              <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>{errorMessage}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--danger)', marginBottom: 4 }}>{t('error')}</div>
+              <div style={{ fontSize: 13, color: 'var(--danger)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>{errorMessage}</div>
             </div>
           )}
 
@@ -837,7 +837,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   type="button"
                   onClick={send}
                   disabled={!draft.trim() || sending || selectedId == null}
-                  style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : '#fff', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
+                  style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : 'var(--text-on-accent)', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
                   title={isRunning ? t('steerTitle') : t('startRunTitle')}
                 >
                   {sending ? (isRunning ? t('sendingLabel') : t('startingLabel')) : isRunning ? t('send') : t('startRun')}

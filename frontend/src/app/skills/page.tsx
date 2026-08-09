@@ -333,7 +333,7 @@ export default function SkillsPage() {
                       </div>
                       {s.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{s.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                         <span>⬇️ {stat.installs}</span>
                         {s.author && <span>{t('byAuthor', { author: s.author })}</span>}
                       </div>
@@ -374,7 +374,7 @@ export default function SkillsPage() {
                           {s.author && <div style={{ fontSize: 11, marginTop: 2 }}>{t('byAuthor', { author: s.author })}</div>}
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                           <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>

@@ -74,7 +74,7 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
         }}
       >
         {[
-          { label: 'Input tokens', value: formatNum(totalInput), color: 'var(--coral-bright, #f4726e)' },
+          { label: 'Input tokens', value: formatNum(totalInput), color: 'var(--coral-bright)' },
           { label: 'Output tokens', value: formatNum(totalOutput), color: 'var(--cyan-bright, var(--cyan-bright))' },
           { label: 'Context tokens', value: formatNum(totalContext), color: 'var(--text-secondary)' },
           { label: 'Compactions', value: String(totalCompactions), color: 'var(--text-muted)' },
@@ -110,7 +110,7 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
                 {[
-                  { label: 'Input', value: formatNum(snap.inputTokens), color: 'var(--coral-bright, #f4726e)' },
+                  { label: 'Input', value: formatNum(snap.inputTokens), color: 'var(--coral-bright)' },
                   { label: 'Output', value: formatNum(snap.outputTokens), color: 'var(--cyan-bright, var(--cyan-bright))' },
                   { label: 'Context', value: formatNum(snap.contextTokens), color: 'var(--text-secondary)' },
                 ].map(({ label, value, color }) => (

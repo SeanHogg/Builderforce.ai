@@ -142,7 +142,7 @@ export function CanvasBoard({ value, onChange, readOnly = false, height = 600 }:
               {t(`add_${type}`)}
             </button>
           ))}
-          <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)', marginLeft: 'auto' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
             {t('blockCount', { count: model.blocks.length })}
           </span>
         </div>
@@ -159,13 +159,13 @@ export function CanvasBoard({ value, onChange, readOnly = false, height = 600 }:
           height,
           overflow: 'auto',
           borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border, #333)',
+          border: '1px solid var(--border)',
           background:
-            'var(--surface-2, #131313) radial-gradient(var(--border, #2a2a2a) 1px, transparent 1px) 0 0 / 22px 22px',
+            'var(--surface-2) radial-gradient(var(--border) 1px, transparent 1px) 0 0 / 22px 22px',
         }}
       >
         {model.blocks.length === 0 && (
-          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted, #9ca3af)', fontSize: 14 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
             {readOnly ? t('emptyReadOnly') : t('emptyHint')}
           </div>
         )}
@@ -216,8 +216,8 @@ function BlockView({
     width: block.w,
     height: block.h,
     borderRadius: 'var(--radius-lg)',
-    border: selected ? '2px solid var(--accent, #2563eb)' : '1px solid var(--border, #333)',
-    background: block.type === 'sticky' ? (block as { color: string }).color : 'var(--surface, #1d1d1d)',
+    border: selected ? '2px solid var(--accent)' : '1px solid var(--border)',
+    background: block.type === 'sticky' ? (block as { color: string }).color : 'var(--surface)',
     color: block.type === 'sticky' ? '#1a1a1a' : 'inherit',
     boxShadow: selected ? '0 6px 24px rgba(0,0,0,0.35)' : '0 1px 4px rgba(0,0,0,0.2)',
     display: 'flex',
@@ -329,7 +329,7 @@ function BlockBody({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={block.url} alt={block.alt || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', margin: 'auto' }} />
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noImage')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noImage')}</div>
       ) : (
         <input value={block.url} placeholder={t('imageUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value })} style={inlineInput} />
       );
@@ -349,7 +349,7 @@ function BlockBody({
           />
         )
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noVideo')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noVideo')}</div>
       ) : (
         <input value={block.url} placeholder={t('videoUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value.trim() })} style={inlineInput} />
       );
@@ -360,7 +360,7 @@ function BlockBody({
           📎 {block.name || block.url}
         </a>
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noFile')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noFile')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: 'auto 0' }}>
           <input value={block.name ?? ''} placeholder={t('fileNamePlaceholder')} onChange={(e) => onUpdate({ name: e.target.value })} style={inlineInput} />
@@ -374,7 +374,7 @@ function BlockBody({
           📄 {block.title || t('openEmbeddedDoc')}
         </Link>
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noEmbed')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noEmbed')}</div>
       ) : (
         <input value={block.documentId} placeholder={t('embedIdPlaceholder')} onChange={(e) => onUpdate({ documentId: e.target.value.trim() })} style={inlineInput} />
       );
@@ -470,8 +470,8 @@ function WidgetBody({
 const toolBtn: React.CSSProperties = {
   padding: '5px 10px',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border, #333)',
-  background: 'var(--surface, #1a1a1a)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface)',
   color: 'inherit',
   cursor: 'pointer',
   fontSize: 12,
@@ -480,8 +480,8 @@ const toolBtn: React.CSSProperties = {
 const miniBtn: React.CSSProperties = {
   padding: '3px 8px',
   borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border, #444)',
-  background: 'var(--surface-2, #222)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'inherit',
   cursor: 'pointer',
   fontSize: 12,
@@ -499,8 +499,8 @@ const inlineInput: React.CSSProperties = {
   margin: 'auto 0',
   padding: '6px 8px',
   borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border, #333)',
-  background: 'var(--surface-2, #111)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'inherit',
   fontSize: 12,
 };

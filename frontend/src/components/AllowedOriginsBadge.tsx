@@ -30,7 +30,7 @@ export function AllowedOriginsBadge({ allowedOrigins }: { allowedOrigins: string
     return (
       <span
         title="Any origin can use this key — high-risk; rotate to a specific allowlist if you can"
-        style={{ ...badgeBase, background: 'rgba(244,114,94,0.15)', color: 'var(--coral-bright, #f4726e)' }}
+        style={{ ...badgeBase, background: 'rgba(244,114,94,0.15)', color: 'var(--coral-bright)' }}
       >
         ANY ORIGIN ★
       </span>

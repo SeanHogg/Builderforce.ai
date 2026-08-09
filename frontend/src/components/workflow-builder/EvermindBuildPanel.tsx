@@ -38,7 +38,7 @@ interface Props {
 type StatusTone = { fg: string; bg: string; icon: string };
 const TONE: Record<string, StatusTone> = {
   pass: { fg: 'var(--success, var(--success))', bg: 'rgba(34,197,94,0.12)', icon: '✓' },
-  fail: { fg: 'var(--error, #ef4444)', bg: 'rgba(239,68,68,0.12)', icon: '✕' },
+  fail: { fg: 'var(--error)', bg: 'rgba(239,68,68,0.12)', icon: '✕' },
   skip: { fg: 'var(--text-muted)', bg: 'var(--bg-elevated)', icon: '–' },
 };
 
@@ -133,8 +133,8 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                 disabled={running || stepCount === 0}
                 style={{
                   padding: '8px 16px', fontSize: 13, fontWeight: 700,
-                  background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, #f4726e)',
-                  color: running ? 'var(--text-muted)' : '#fff',
+                  background: running ? 'var(--bg-elevated)' : 'var(--coral-bright)',
+                  color: running ? 'var(--text-muted)' : 'var(--text-on-accent)',
                   border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
                   cursor: running || stepCount === 0 ? 'default' : 'pointer', opacity: running || stepCount === 0 ? 0.7 : 1,
                 }}
@@ -166,7 +166,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                             <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('durationMs', { ms: r.ms })}</span>
                           </div>
                           {r.detail && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, wordBreak: 'break-word' }}>{r.detail}</div>}
-                          {r.error && <div style={{ fontSize: 11.5, color: 'var(--error-text, #fca5a5)', marginTop: 2, wordBreak: 'break-word' }}>{r.error}</div>}
+                          {r.error && <div style={{ fontSize: 11.5, color: 'var(--error-text)', marginTop: 2, wordBreak: 'break-word' }}>{r.error}</div>}
                         </div>
                       </div>
                     );
@@ -182,7 +182,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                 style={{
                   fontSize: 12.5, borderRadius: 'var(--radius-lg)', padding: '10px 12px',
                   background: result.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                  border: `1px solid ${result.ok ? 'var(--success, var(--success))' : 'var(--error, #ef4444)'}`,
+                  border: `1px solid ${result.ok ? 'var(--success, var(--success))' : 'var(--error)'}`,
                   color: 'var(--text-primary)',
                 }}
               >
@@ -217,7 +217,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                         title={projectId == null ? t('seedNeedsProject') : undefined}
                         style={{
                           padding: '7px 14px', fontSize: 12.5, fontWeight: 600,
-                          background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
+                          background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
                           cursor: !canSeed || seeding ? 'not-allowed' : 'pointer', opacity: !canSeed || seeding ? 0.55 : 1,
                         }}
                       >
@@ -242,7 +242,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
         )}
 
         {error && (
-          <div role="alert" style={{ fontSize: 12.5, color: 'var(--error-text, #fca5a5)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border, #ef4444)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
+          <div role="alert" style={{ fontSize: 12.5, color: 'var(--error-text)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
             ⚠ {error}
           </div>
         )}
@@ -304,8 +304,8 @@ function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
             {finalLoss != null && <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{t('mFinalLoss', { loss: finalLoss.toFixed(3) })}</span>}
           </div>
           <svg viewBox={`0 0 ${spark.w} ${spark.h}`} preserveAspectRatio="none" role="img" aria-label={t('mLossAria', { count: curve.length })} style={{ width: '100%', height: 44, display: 'block' }}>
-            <polyline points={spark.points} fill="none" stroke="var(--coral-bright, #f4726e)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-            {lastDot && <circle cx={lastDot.x} cy={lastDot.y} r={2.4} fill="var(--coral-bright, #f4726e)" />}
+            <polyline points={spark.points} fill="none" stroke="var(--coral-bright)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            {lastDot && <circle cx={lastDot.x} cy={lastDot.y} r={2.4} fill="var(--coral-bright)" />}
           </svg>
         </div>
       )}

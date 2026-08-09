@@ -46,7 +46,7 @@ const PAGE_SIZE = 25;
  *  The full row is the detail form, which is one click away. */
 const PREVIEW_COLUMNS = 5;
 
-const surface = { background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' };
+const surface = { background: 'var(--surface)', border: '1px solid var(--border-subtle)' };
 
 function cellText(value: unknown): string {
   if (value === null || value === undefined) return '—';
@@ -83,7 +83,7 @@ function FieldInput({
   if (field.options && field.options.length > 0) {
     return (
       <select {...shared} aria-label={label}>
-        <option value="" style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary)' }}>
+        <option value="" style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}>
           —
         </option>
         {field.options.map((opt) => (
@@ -93,7 +93,7 @@ function FieldInput({
           <option
             key={opt}
             value={opt}
-            style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary)' }}
+            style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}
           >
             {opt}
           </option>
@@ -105,9 +105,9 @@ function FieldInput({
   if (field.type === 'boolean') {
     return (
       <select {...shared} aria-label={label}>
-        <option value="" style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary)' }}>—</option>
-        <option value="true" style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary)' }}>true</option>
-        <option value="false" style={{ background: 'var(--surface, #101624)', color: 'var(--text-primary)' }}>false</option>
+        <option value="" style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}>—</option>
+        <option value="true" style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}>true</option>
+        <option value="false" style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}>false</option>
       </select>
     );
   }
@@ -273,7 +273,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
               className="rounded-full px-2.5 py-1 text-xs min-w-0"
               style={{
                 background: selected ? 'var(--accent)' : 'var(--surface-2, rgba(255,255,255,0.06))',
-                color: selected ? 'var(--text-on-accent, #fff)' : 'var(--text-secondary)',
+                color: selected ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                 border: '1px solid var(--border-subtle)',
               }}
             >
@@ -309,7 +309,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
               type="button"
               onClick={startCreate}
               className="rounded px-3 py-1.5 text-sm"
-              style={{ background: 'var(--accent)', color: 'var(--text-on-accent, #fff)', border: 'none' }}
+              style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none' }}
             >
               {t('new')}
             </button>
@@ -370,7 +370,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
               type="submit"
               disabled={busy}
               className="rounded px-3 py-1.5 text-sm"
-              style={{ background: 'var(--accent)', color: 'var(--text-on-accent, #fff)', border: 'none' }}
+              style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none' }}
             >
               {busy ? t('saving') : t('save')}
             </button>

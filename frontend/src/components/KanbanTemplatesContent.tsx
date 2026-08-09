@@ -33,8 +33,8 @@ const chip = (bg: string, fg: string): React.CSSProperties => ({
 });
 const btn = (primary = false): React.CSSProperties => ({
   fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
-  background: primary ? 'var(--accent, #2563eb)' : 'var(--surface-2)',
-  color: primary ? '#fff' : 'var(--text-primary)', border: primary ? 'none' : '1px solid var(--border)',
+  background: primary ? 'var(--accent)' : 'var(--surface-2)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-primary)', border: primary ? 'none' : '1px solid var(--border)',
 });
 const input: React.CSSProperties = {
   padding: '6px 8px', borderRadius: 'var(--radius-sm)', fontSize: 13, background: 'var(--surface-2)',
@@ -116,7 +116,7 @@ export function KanbanTemplatesContent() {
         ))}
       </div>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger-text, #dc2626)' }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger-text)' }}>{error}</div>}
 
       {editing ? (
         <TemplateEditor
@@ -133,7 +133,7 @@ export function KanbanTemplatesContent() {
                 <div style={{ fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' }}>
                   {tpl.name}
                   {tpl.builtin && <span style={chip('var(--surface-2)', 'var(--text-secondary)')}>{t('builtin')}</span>}
-                  {tpl.published && <span style={chip('var(--success-bg, #dcfce7)', 'var(--success-text, #166534)')}>{t('published')}</span>}
+                  {tpl.published && <span style={chip('var(--success-bg)', 'var(--success-text)')}>{t('published')}</span>}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {t('laneRoleCount', { lanes: tpl.laneCount, roles: tpl.roleCount })}
@@ -261,7 +261,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
         <input style={{ ...input, flex: '1 1 200px', fontWeight: 600 }} value={name} onChange={(e) => setName(e.target.value)} />
         <button type="button" style={btn(true)} disabled={saving} onClick={save}>{saving ? t('saving') : t('save')}</button>
       </div>
-      {err && <div style={{ fontSize: 12, color: 'var(--danger-text, #dc2626)', marginBottom: 8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: 'var(--danger-text)', marginBottom: 8 }}>{err}</div>}
 
       <div style={{ display: 'grid', gap: 10 }}>
         {lanes.map((lane, li) => (

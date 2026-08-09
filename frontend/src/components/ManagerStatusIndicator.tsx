@@ -50,7 +50,7 @@ export function ManagerStatusIndicator() {
         textDecoration: 'none',
         fontSize: '0.78rem',
         fontWeight: 600,
-        color: active ? 'var(--accent, #2563eb)' : 'var(--text-muted)',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
         border: '1px solid var(--border-subtle)',
         background: active ? 'var(--accent-subtle, rgba(37, 99, 235, 0.10))' : 'transparent',
         whiteSpace: 'nowrap',

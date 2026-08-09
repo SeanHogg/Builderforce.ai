@@ -93,7 +93,7 @@ export function IdeAgentPanel({ projectId }: { projectId: number }) {
         {selected && (
           <RunAgentControl task={selected} agentHosts={hosts} onRan={loadTasks} />
         )}
-        {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</div>}
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>

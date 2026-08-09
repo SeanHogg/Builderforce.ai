@@ -39,7 +39,7 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
         href="/pricing?upgrade=pro"
         style={{
           marginTop: 4, padding: '8px 16px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
-          background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.84rem',
+          background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.84rem',
         }}
       >
         {t('upgrade.cta')}

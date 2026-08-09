@@ -255,7 +255,7 @@ export function AgentHostSlideOutPanel({
                 padding: '4px 8px',
                 borderRadius: 'var(--radius-sm)',
                 background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))',
-                color: 'var(--coral-bright, #f4726e)',
+                color: 'var(--coral-bright)',
               }}
             >
               {t('default')}
@@ -309,7 +309,7 @@ export function AgentHostSlideOutPanel({
               fontSize: 12,
               fontWeight: 600,
               background: 'var(--danger-bg, rgba(239,68,68,0.12))',
-              color: 'var(--danger, #ef4444)',
+              color: 'var(--danger)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-md)',
               cursor: deleting ? 'wait' : 'pointer',

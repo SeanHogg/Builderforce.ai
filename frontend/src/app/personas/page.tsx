@@ -270,11 +270,11 @@ export default function PersonasPage() {
 
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
-      builtin: { label: t('sourceBuiltin'), color: 'var(--accent,#6366f1)' },
+      builtin: { label: t('sourceBuiltin'), color: 'var(--accent)' },
       agenthub: { label: t('sourceAgenthub'), color: 'var(--success-text)' },
       'project-local': { label: t('sourceProject'), color: 'var(--warning-text)' },
-      'user-global': { label: t('sourceUser'), color: '#06b6d4' },
-      'agentlink-assigned': { label: t('sourceAssigned'), color: '#ec4899' },
+      'user-global': { label: t('sourceUser'), color: 'var(--cyan-bright)' },
+      'agentlink-assigned': { label: t('sourceAssigned'), color: 'var(--pink-bright)' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
     return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
@@ -425,7 +425,7 @@ export default function PersonasPage() {
                 const installed = installedSlugs.has(p.name);
                 const isOpen = expanded === p.name;
                 return (
-                  <div key={p.name} className="card" style={{ overflow: 'hidden', borderColor: isOpen ? 'var(--accent,#6366f1)' : undefined }}>
+                  <div key={p.name} className="card" style={{ overflow: 'hidden', borderColor: isOpen ? 'var(--accent)' : undefined }}>
                     {p.image && <div style={{ width: '100%', height: 100, background: `url('${p.image}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
                     <div style={{ padding: p.image ? 12 : 0 }} onClick={() => setExpanded(isOpen ? null : p.name)}>
                       <div className="card-header">

@@ -35,8 +35,8 @@ export function UnreadBadge({ count, size = 18 }: { count?: number | null; size?
         fontSize: 11,
         fontWeight: 700,
         lineHeight: 1,
-        color: 'var(--text-on-accent, #ffffff)',
-        background: 'var(--badge-unread, #6366f1)',
+        color: 'var(--text-on-accent)',
+        background: 'var(--badge-unread)',
         flexShrink: 0,
       }}
     >

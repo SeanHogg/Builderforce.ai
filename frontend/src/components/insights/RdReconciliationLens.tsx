@@ -12,9 +12,9 @@ const usd = (v: number | null | undefined): string =>
   v == null ? '—' : `$${Math.round(v).toLocaleString()}`;
 
 const FLAG_COLOR: Record<ReconFlag, { bg: string; fg: string }> = {
-  aligned: { bg: 'rgba(16,185,129,0.16)', fg: '#059669' },
-  derived_higher: { bg: 'rgba(245,158,11,0.16)', fg: '#b45309' },
-  reported_higher: { bg: 'rgba(245,158,11,0.16)', fg: '#b45309' },
+  aligned: { bg: 'rgba(16,185,129,0.16)', fg: 'var(--emerald-bright)' },
+  derived_higher: { bg: 'rgba(245,158,11,0.16)', fg: 'var(--warning)' },
+  reported_higher: { bg: 'rgba(245,158,11,0.16)', fg: 'var(--warning)' },
   no_reported: { bg: 'rgba(148,163,184,0.16)', fg: 'var(--text-muted)' },
 };
 

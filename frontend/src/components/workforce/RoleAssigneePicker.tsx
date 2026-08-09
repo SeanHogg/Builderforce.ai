@@ -116,7 +116,7 @@ export function RoleAssigneePicker({
   const seg: React.CSSProperties = {
     flex: 1, padding: '5px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-secondary)',
   };
-  const segActive: React.CSSProperties = { ...seg, background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)' };
+  const segActive: React.CSSProperties = { ...seg, background: 'var(--accent)', color: 'var(--text-on-accent)' };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
@@ -149,7 +149,7 @@ export function RoleAssigneePicker({
           type="button"
           disabled={!selected || busy}
           onClick={() => selected && onAssign({ assigneeKind: kind, assigneeRef: selected.ref, assigneeName: selected.name })}
-          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: selected ? 'pointer' : 'not-allowed', background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', opacity: selected && !busy ? 1 : 0.5 }}
+          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: selected ? 'pointer' : 'not-allowed', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: selected && !busy ? 1 : 0.5 }}
         >
           {busy ? t('assignSaving') : t('assignConfirm')}
         </button>

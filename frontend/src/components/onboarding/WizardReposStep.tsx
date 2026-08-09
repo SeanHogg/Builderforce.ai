@@ -105,7 +105,7 @@ export function WizardReposStep({ projectId }: { projectId: number }) {
           cursor: busy || !owner.trim() || !repo.trim() ? 'not-allowed' : 'pointer', opacity: busy || !owner.trim() || !repo.trim() ? 0.6 : 1,
         }}>{busy ? t('adding') : t('add')}</button>
       </form>
-      {error && <p style={{ color: 'var(--error-text, #e74c3c)', fontSize: 13, marginTop: 10 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error-text)', fontSize: 13, marginTop: 10 }}>{error}</p>}
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 14 }}>{t('privateHint')}</p>
     </div>
   );

@@ -103,7 +103,7 @@ export function ConfiguredQuickstartPopover({
     cursor: 'pointer',
     border: 'none',
     background: os === value ? 'var(--accent)' : 'transparent',
-    color: os === value ? '#fff' : 'var(--text-strong)',
+    color: os === value ? 'var(--text-on-accent)' : 'var(--text-strong)',
   });
 
   return (
@@ -138,7 +138,7 @@ export function ConfiguredQuickstartPopover({
       <div
         style={{
           display: 'flex', alignItems: 'flex-start', gap: 8,
-          background: 'var(--bg-deep, #0d0f14)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-deep)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           padding: '10px 12px',
         }}
       >
@@ -151,7 +151,7 @@ export function ConfiguredQuickstartPopover({
           style={{
             flexShrink: 0, padding: '4px 10px', fontSize: 12, fontWeight: 600,
             background: copied ? 'var(--surface-coral-soft)' : 'var(--accent)',
-            color: copied ? 'var(--accent)' : '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+            color: copied ? 'var(--accent)' : 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
           }}
         >
           {copied ? t('copiedExclaim') : tc('copy')}

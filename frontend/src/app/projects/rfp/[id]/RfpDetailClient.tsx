@@ -24,9 +24,9 @@ const h2: React.CSSProperties = { fontSize: 15, fontWeight: 800, color: 'var(--t
 const muted: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 13 };
 
 // Chart series palette — saturated fills readable on both themes (white text on top).
-const PHASE_COLORS = ['#6366f1', '#0ea5e9', '#14b8a6', 'var(--warning)', '#ec4899', '#84cc16'];
+const PHASE_COLORS = ['var(--indigo-bright)', 'var(--sky-bright)', 'var(--teal-bright)', 'var(--warning)', 'var(--pink-bright)', '#84cc16'];
 const COST_COLORS: Record<string, string> = {
-  build: '#6366f1', agentic: '#0ea5e9', marketing: '#14b8a6', contingency: 'var(--warning)', margin: 'var(--success)',
+  build: 'var(--indigo-bright)', agentic: 'var(--sky-bright)', marketing: 'var(--teal-bright)', contingency: 'var(--warning)', margin: 'var(--success)',
 };
 
 const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
@@ -80,7 +80,7 @@ export default function RfpDetailClient() {
       </button>
 
       {loading && <div style={card}>{t('loading')}</div>}
-      {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && request && (
         <>
@@ -111,7 +111,7 @@ export default function RfpDetailClient() {
                     fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
                     padding: '3px 9px', borderRadius: 'var(--radius-full)',
                     background: latest.scanRefreshed ? 'rgba(34,197,94,0.15)' : 'rgba(139,92,246,0.15)',
-                    color: latest.scanRefreshed ? '#16a34a' : '#7c3aed',
+                    color: latest.scanRefreshed ? 'var(--success)' : 'var(--violet-bright)',
                     border: `1px solid ${latest.scanRefreshed ? 'rgba(34,197,94,0.3)' : 'rgba(139,92,246,0.3)'}`,
                   }}>
                     {latest.scanRefreshed ? t('scanRefreshed') : t('scanCurrent')}
@@ -152,7 +152,7 @@ export default function RfpDetailClient() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {body.portfolioMatches.map((m) => (
                       <div key={m.projectId} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--accent, #0ea5e9)', minWidth: 44 }}>{Math.round(m.score * 100)}%</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent)', minWidth: 44 }}>{Math.round(m.score * 100)}%</span>
                         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</span>
                         <span style={muted}>— {m.rationale}</span>
                       </div>
@@ -230,7 +230,7 @@ function CostSection({ cost, t }: { cost: RfpCostModel; t: T }) {
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ minWidth: 160, fontSize: 13, color: 'var(--text-secondary)' }}>{li.label}</span>
             <div style={{ flex: 1, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', height: 18, overflow: 'hidden', minWidth: 60 }}>
-              <div style={{ width: `${Math.max((li.amountUsd / max) * 100, 1)}%`, background: COST_COLORS[li.category] ?? 'var(--accent, #0ea5e9)', height: '100%' }} />
+              <div style={{ width: `${Math.max((li.amountUsd / max) * 100, 1)}%`, background: COST_COLORS[li.category] ?? 'var(--accent)', height: '100%' }} />
             </div>
             <span style={{ minWidth: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--text-primary)' }}>{usd(li.amountUsd)}</span>
           </div>
@@ -281,7 +281,7 @@ function GanttSection({ phases, timeline, t }: { phases: RfpPhase[]; timeline: R
 }
 
 function RisksSection({ body, t }: { body: RfpResponseBody; t: T }) {
-  const sevColor: Record<string, string> = { high: '#ef4444', medium: 'var(--warning)', low: 'var(--success)' };
+  const sevColor: Record<string, string> = { high: 'var(--error)', medium: 'var(--warning)', low: 'var(--success)' };
   return (
     <div style={card}>
       <h2 style={h2}>{t('sec.risks')}</h2>

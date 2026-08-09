@@ -150,8 +150,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         */}
         <script dangerouslySetInnerHTML={{ __html: EMBED_ERROR_REPORTER }} />
 
-        {/* Fontshare loaded via CSS @import in globals.css — no <link> needed here */}
-        {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed */}
+        {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed.
+            Body/display text uses the system stack in globals.css (--font-sans), so no font origin
+            beyond 'self' is loaded and the CSP font-src/style-src stay at 'self'. */}
         {/* JSON-LD Structured Data (SEO) — homepage schema injected at layout
             level; per-page schemas are injected in individual page components */}
       </head>

@@ -70,8 +70,8 @@ const field: React.CSSProperties = {
 /** Native <option> needs its own opaque colours or it is unreadable on some
  *  platforms where the popup does not inherit the control's theme. */
 const option: React.CSSProperties = {
-  background: 'var(--bg-elevated, #ffffff)',
-  color: 'var(--text-primary, #14161a)',
+  background: 'var(--bg-elevated)',
+  color: 'var(--text-primary)',
 };
 
 const button: React.CSSProperties = {
@@ -261,7 +261,7 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
       {/* The one warning worth interrupting for: this endpoint is about to be
           callable by anyone who learns the URL. */}
       {verify === 'none' && (
-        <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', lineHeight: 1.5 }}>
+        <div style={{ fontSize: 13, color: 'var(--warning)', lineHeight: 1.5 }}>
           {t('verifyNoneWarning')}
         </div>
       )}
@@ -284,7 +284,7 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
           {t('corsHelp')}
         </div>
         {parseOrigins(corsText).includes('*') && (
-          <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', marginTop: 6, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: 'var(--warning)', marginTop: 6, lineHeight: 1.5 }}>
             {t('corsWildcardWarning')}
           </div>
         )}
@@ -331,7 +331,7 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
       </div>
 
       {error && (
-        <div style={{ fontSize: 13, color: 'var(--danger, #b3261e)', lineHeight: 1.5 }}>{error}</div>
+        <div style={{ fontSize: 13, color: 'var(--danger)', lineHeight: 1.5 }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

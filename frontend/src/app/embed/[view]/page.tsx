@@ -88,7 +88,7 @@ export default function EmbedViewPage() {
         padding: 16,
         font: '14px system-ui, -apple-system, sans-serif',
         background: frame.theme === 'dark' ? '#0b1220' : '#ffffff',
-        color: frame.theme === 'dark' ? '#e2e8f0' : '#0f172a',
+        color: frame.theme === 'dark' ? 'var(--border-subtle)' : '#0f172a',
         boxSizing: 'border-box',
       }}
     >
@@ -97,7 +97,7 @@ export default function EmbedViewPage() {
   );
 
   const notice = (msg: string, tone: 'muted' | 'error' = 'muted') => (
-    <div style={{ color: tone === 'error' ? '#dc2626' : '#64748b', padding: 8 }} role={tone === 'error' ? 'alert' : undefined}>
+    <div style={{ color: tone === 'error' ? 'var(--error)' : 'var(--text-secondary)', padding: 8 }} role={tone === 'error' ? 'alert' : undefined}>
       {msg}
     </div>
   );
@@ -135,7 +135,7 @@ export default function EmbedViewPage() {
     return wrap(
       <div>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{meta.label}</div>
-        <div style={{ color: '#64748b', marginTop: 6 }}>
+        <div style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
           This surface is coming soon — the embed transport, auth, and gating are wired; the {meta.label} UI lands with its API.
         </div>
       </div>,

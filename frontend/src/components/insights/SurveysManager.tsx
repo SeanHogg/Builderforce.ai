@@ -134,7 +134,7 @@ function TemplateAuthor({ onCreated }: { onCreated: () => void }) {
           </button>
         </div>
 
-        {err && <span style={{ color: 'var(--danger, #dc2626)', fontSize: '0.82rem' }}>{err}</span>}
+        {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
         <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('author.create')}</button>
       </div>
     </PmCard>
@@ -234,7 +234,7 @@ function CampaignLauncher({ templates, onLaunched }: { templates: DevexTemplate[
             {t('launch.anonymous')}
           </label>
         </div>
-        {err && <span style={{ color: 'var(--danger, #dc2626)', fontSize: '0.82rem' }}>{err}</span>}
+        {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
         <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('launch.create')}</button>
       </div>
     </PmCard>
@@ -375,7 +375,7 @@ function RespondForm({
           )}
         </div>
       ))}
-      {err && <span style={{ color: 'var(--danger, #dc2626)', fontSize: '0.82rem' }}>{err}</span>}
+      {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('respond.submit')}</button>
         <button style={{ ...btnStyle, background: 'transparent' }} onClick={onDone}>{t('respond.cancel')}</button>

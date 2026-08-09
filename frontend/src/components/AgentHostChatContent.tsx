@@ -28,7 +28,7 @@ const STATUS_COLORS: Record<string, string> = {
   connected: 'var(--cyan-bright, var(--cyan-bright))',
   connecting: 'var(--text-muted)',
   offline: 'var(--text-muted)',
-  error: 'var(--coral-bright, #f4726e)',
+  error: 'var(--coral-bright)',
 };
 
 export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostChatContentProps) {
@@ -282,7 +282,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
             fontWeight: 600,
             borderRadius: 'var(--radius-md)',
             border: 'none',
-            background: 'var(--coral-bright, #f4726e)',
+            background: 'var(--coral-bright)',
             color: 'var(--text-on-accent)',
             cursor: !input.trim() || connStatus !== 'connected' || sending ? 'not-allowed' : 'pointer',
             opacity: !input.trim() || connStatus !== 'connected' || sending ? 0.5 : 1,

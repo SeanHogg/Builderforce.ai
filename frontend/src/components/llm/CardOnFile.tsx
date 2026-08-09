@@ -125,10 +125,10 @@ export function CardOnFile() {
   // Validated reads as success, pending as in-progress, failed as a problem — all
   // from theme tokens so both light and dark themes stay legible.
   const statusColor = state.status === 'validated'
-    ? 'var(--success, #16a34a)'
+    ? 'var(--success)'
     : state.status === 'pending'
       ? 'var(--text-muted)'
-      : 'var(--danger, #dc2626)';
+      : 'var(--danger)';
 
   return (
     <div
@@ -164,7 +164,7 @@ export function CardOnFile() {
         </p>
 
         {(startError !== null || removeError !== null) && (
-          <div role="alert" style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 6 }}>
+          <div role="alert" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
             {removeError || startError || t('cardValidationFailed')}
           </div>
         )}
@@ -188,7 +188,7 @@ export function CardOnFile() {
             disabled={busy}
             style={{
               ...actionButton,
-              color: 'var(--danger, #dc2626)',
+              color: 'var(--danger)',
               cursor: busy ? 'wait' : 'pointer',
               opacity: busy ? 0.6 : 1,
             }}

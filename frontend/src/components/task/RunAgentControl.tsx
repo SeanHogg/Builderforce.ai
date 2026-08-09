@@ -174,7 +174,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           </button>
         </RoleGate>
       </div>
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 6 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
       {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
           <span style={{ color: 'var(--warning, var(--warning))', fontWeight: 600 }}>⚠ {t('noWritableRepo')} </span>

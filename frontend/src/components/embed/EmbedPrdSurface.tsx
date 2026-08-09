@@ -34,10 +34,10 @@ export function EmbedPrdSurface() {
     };
   }, []);
 
-  if (loading) return <div style={{ color: '#64748b' }}>Loading projects…</div>;
+  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>Loading projects…</div>;
   if (error) return <div role="alert" style={{ color: 'var(--error-text)' }}>{error}</div>;
   if (projects.length === 0) {
-    return <div style={{ color: '#64748b' }}>No projects yet — create one in BuilderForce to manage its PRDs &amp; specs.</div>;
+    return <div style={{ color: 'var(--text-secondary)' }}>No projects yet — create one in BuilderForce to manage its PRDs &amp; specs.</div>;
   }
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
@@ -45,15 +45,15 @@ export function EmbedPrdSurface() {
   return (
     <div>
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label htmlFor="embed-prd-project" style={{ fontSize: 12, color: 'var(--text-secondary, #64748b)' }}>Project</label>
+        <label htmlFor="embed-prd-project" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Project</label>
         <Select
           id="embed-prd-project"
           value={selectedId ?? ''}
           onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
           style={{
             fontSize: 13, padding: '4px 8px', borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border-subtle, #e2e8f0)',
-            background: 'var(--bg-base, #fff)', color: 'var(--text-primary, #0f172a)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-base)', color: 'var(--text-primary)',
           }}
         >
           <option value="">Select a project…</option>
@@ -65,7 +65,7 @@ export function EmbedPrdSurface() {
       {selected ? (
         <PRDsContent projectId={selected.id} projectName={selected.name} />
       ) : (
-        <div style={{ color: '#64748b' }}>Select a project to view its PRDs &amp; specs.</div>
+        <div style={{ color: 'var(--text-secondary)' }}>Select a project to view its PRDs &amp; specs.</div>
       )}
     </div>
   );

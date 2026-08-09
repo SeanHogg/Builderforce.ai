@@ -50,7 +50,7 @@ export function ApprovalResolveControl({ approval, onResolved, compact = false }
   };
 
   const errorNode = error ? (
-    <span style={{ fontSize: 12, color: 'var(--danger, #dc2626)' }}>{error}</span>
+    <span style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</span>
   ) : null;
 
   if (isAnswerable(approval.kind)) {

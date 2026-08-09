@@ -75,7 +75,7 @@ export function OnboardingProgressPill() {
             </div>
             {/* Progress track — theme-aware, adapts to both modes. */}
             <div style={{ height: 8, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--coral-bright), var(--coral-dark, #d94f4a))', borderRadius: 'var(--radius-full)' }} />
+              <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--coral-bright), var(--coral-dark))', borderRadius: 'var(--radius-full)' }} />
             </div>
           </div>
 
@@ -101,7 +101,7 @@ export function OnboardingProgressPill() {
                       fontSize: 12, fontWeight: 700,
                       background: done ? 'var(--success)' : 'transparent',
                       border: done ? 'none' : '1px solid var(--border-subtle)',
-                      color: done ? '#fff' : 'var(--text-muted)',
+                      color: done ? 'var(--text-on-accent)' : 'var(--text-muted)',
                     }}
                   >
                     {done ? '✓' : ''}
@@ -122,7 +122,7 @@ export function OnboardingProgressPill() {
             onClick={() => { setOpen(false); router.push('/dashboard'); }}
             style={{
               alignSelf: 'stretch', padding: '10px 16px', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-              border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark, #d94f4a))',
+              border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14,
             }}
           >

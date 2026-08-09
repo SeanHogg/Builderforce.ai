@@ -51,21 +51,21 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }
   }, [storageProjectId, t]);
 
   return (
-    <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep, #0f1420)', color: 'var(--text-primary, #f4f6fb)' }}>
+    <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
       {error ? (
         <div role="alert" style={{ display: 'grid', gap: 12, justifyItems: 'center', alignContent: 'center', flex: 1, padding: 24, textAlign: 'center' }}>
           <span aria-hidden style={{ fontSize: '2rem' }}>⚠️</span>
-          <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary, #aab3c5)' }}>{error}</p>
+          <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{error}</p>
           <button
             type="button"
             onClick={onClose}
-            style={{ padding: '8px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle, #2a3346)', background: 'var(--bg-elevated, #1a2233)', color: 'var(--text-primary, #f4f6fb)', cursor: 'pointer' }}
+            style={{ padding: '8px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer' }}
           >
             {t('close')}
           </button>
         </div>
       ) : !project ? (
-        <div style={{ display: 'grid', gap: 12, justifyItems: 'center', alignContent: 'center', flex: 1, padding: 24, color: 'var(--text-secondary, #aab3c5)' }}>
+        <div style={{ display: 'grid', gap: 12, justifyItems: 'center', alignContent: 'center', flex: 1, padding: 24, color: 'var(--text-secondary)' }}>
           <span aria-hidden style={{ fontSize: '2rem' }}>⚡</span>
           <p style={{ margin: 0, fontSize: '0.9rem' }}>{t('loading')}</p>
         </div>

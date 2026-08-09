@@ -47,8 +47,8 @@ const page: React.CSSProperties = {
 };
 
 const card: React.CSSProperties = {
-  background: 'var(--surface, #ffffff)',
-  border: '1px solid var(--border, #e5e7eb)',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
   borderRadius: 'var(--radius-lg)',
   padding: 'clamp(12px, 3vw, 20px)',
 };
@@ -58,8 +58,8 @@ const input: React.CSSProperties = {
   minWidth: 0,
   padding: '8px 10px',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border, #e5e7eb)',
-  background: 'var(--surface-2, #f9fafb)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
 };
@@ -69,15 +69,15 @@ const input: React.CSSProperties = {
  *  opaque pair or the list is unreadable in dark mode. */
 const selectStyle: React.CSSProperties = { ...input, appearance: 'auto' };
 const optionStyle: React.CSSProperties = {
-  background: 'var(--surface, #ffffff)',
+  background: 'var(--surface)',
   color: 'var(--text-primary, var(--bg-elevated))',
 };
 
 const button: React.CSSProperties = {
   padding: '8px 14px',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border, #e5e7eb)',
-  background: 'var(--surface-2, #f9fafb)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
   cursor: 'pointer',
@@ -86,15 +86,15 @@ const button: React.CSSProperties = {
 
 const primary: React.CSSProperties = {
   ...button,
-  background: 'var(--accent, #2563eb)',
-  borderColor: 'var(--accent, #2563eb)',
-  color: 'var(--text-on-accent, #ffffff)',
+  background: 'var(--accent)',
+  borderColor: 'var(--accent)',
+  color: 'var(--text-on-accent)',
 };
 
-const muted: React.CSSProperties = { fontSize: 13, color: 'var(--text-muted, #6b7280)' };
+const muted: React.CSSProperties = { fontSize: 13, color: 'var(--text-muted)' };
 const listItem: React.CSSProperties = {
   padding: '8px 0',
-  borderTop: '1px solid var(--border, #e5e7eb)',
+  borderTop: '1px solid var(--border)',
 };
 const listReset: React.CSSProperties = { listStyle: 'none', padding: 0, margin: '10px 0 0' };
 const spread: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' };
@@ -284,8 +284,8 @@ export function GrowthClient() {
       <h1 style={{ fontSize: 'clamp(1.4rem, 4vw, 1.9rem)', margin: 0 }}>{t('title')}</h1>
       <p style={{ ...muted, marginTop: 6 }}>{t('description')}</p>
 
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text, #166534)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text, #991b1b)' }}>{error}</p>}
+      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{notice}</p>}
+      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{error}</p>}
 
       <div style={{
         display: 'grid', gap: 16, marginTop: 20,
@@ -306,8 +306,8 @@ export function GrowthClient() {
                     <span style={{
                       ...muted,
                       color: mailbox.status === 'connected'
-                        ? 'var(--success-text, #166534)'
-                        : 'var(--danger-text, #991b1b)',
+                        ? 'var(--success-text)'
+                        : 'var(--danger-text)',
                     }}>
                       {t(`mailboxes.status.${mailbox.status === 'connected' ? 'connected' : 'reconnect'}`)}
                     </span>
@@ -400,8 +400,8 @@ export function GrowthClient() {
                     <span style={{
                       ...muted,
                       color: sender.status === 'verified'
-                        ? 'var(--success-text, #166534)'
-                        : 'var(--warning-text, #92400e)',
+                        ? 'var(--success-text)'
+                        : 'var(--warning-text)',
                     }}>
                       {t(`senders.status.${sender.status === 'verified' ? 'verified' : 'pending'}`)}
                     </span>
@@ -411,8 +411,8 @@ export function GrowthClient() {
                       <code style={{
                         display: 'block', overflowX: 'auto', whiteSpace: 'nowrap', marginTop: 6,
                         padding: '6px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12,
-                        background: 'var(--surface-2, #f3f4f6)',
-                        border: '1px solid var(--border, #e5e7eb)',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border)',
                       }}>
                         {`TXT  ${sender.recordName}  →  ${sender.verifyToken}`}
                       </code>
@@ -451,8 +451,8 @@ export function GrowthClient() {
               {assets.map((asset) => (
                 <li key={asset.id} style={{
                   display: 'grid', gap: 4, justifyItems: 'center', width: '6.5rem',
-                  padding: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border, #e5e7eb)',
-                  background: 'var(--surface-2, #f9fafb)',
+                  padding: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
                 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- an asset
                       URL is an absolute, session-less R2-backed URL on an origin
@@ -637,7 +637,7 @@ export function GrowthClient() {
             </select>
           </label>
 
-          <fieldset style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 'var(--radius-md)', padding: 12 }}>
+          <fieldset style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 12 }}>
             <legend style={{ ...muted, padding: '0 4px' }}>{t('composer.transport')}</legend>
             {(['platform', 'mailbox', 'sendgrid'] as const).map((transport) => (
               <label key={transport} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 6 }}>

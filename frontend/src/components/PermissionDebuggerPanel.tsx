@@ -68,8 +68,8 @@ export default function PermissionDebuggerPanel() {
    *  contrast where var(--success) is theme-tuned). */
   function statusColor(status: string) {
     if (status === 'granted') return 'var(--success, var(--success))';
-    if (status === 'soft-gate') return 'var(--warning, #eab308)';
-    return 'var(--error, #ef4444)';
+    if (status === 'soft-gate') return 'var(--warning)';
+    return 'var(--error)';
   }
 
   /** A gate's status is a fixed enum from the permission registry (`granted` /
@@ -93,8 +93,8 @@ export default function PermissionDebuggerPanel() {
       <div className="perm-debugger-summary">
         <span>{t('role')} <strong>{activeRole}</strong></span>
         <span>{t('activeCount', { granted: granted.length, total: gates.length })}</span>
-        {denied.length > 0 && <span style={{ color: 'var(--error, #ef4444)' }}>{t('deniedCount', { count: denied.length })}</span>}
-        {soft.length > 0 && <span style={{ color: 'var(--warning, #eab308)' }}>{t('softGatedCount', { count: soft.length })}</span>}
+        {denied.length > 0 && <span style={{ color: 'var(--error)' }}>{t('deniedCount', { count: denied.length })}</span>}
+        {soft.length > 0 && <span style={{ color: 'var(--warning)' }}>{t('softGatedCount', { count: soft.length })}</span>}
       </div>
 
       {/* Tabs */}

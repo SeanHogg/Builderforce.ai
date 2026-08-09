@@ -77,9 +77,9 @@ export function ConnectToggleButton({
         cursor: disabled || busy ? 'default' : 'pointer',
         opacity: disabled || busy ? 0.55 : 1,
         // Connect leads (filled accent); disconnect is available but never the invitation.
-        background: connected ? 'var(--bg-elevated)' : 'var(--coral-bright, #f4726e)',
-        color: connected ? 'var(--danger, #dc2626)' : '#fff',
-        border: `1px solid ${connected ? 'var(--border-subtle)' : 'var(--coral-bright, #f4726e)'}`,
+        background: connected ? 'var(--bg-elevated)' : 'var(--coral-bright)',
+        color: connected ? 'var(--danger)' : 'var(--text-on-accent)',
+        border: `1px solid ${connected ? 'var(--border-subtle)' : 'var(--coral-bright)'}`,
       }}
     >
       {busy ? t('working') : connected ? t('disconnect') : t('connect')}

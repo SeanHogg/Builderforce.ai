@@ -89,7 +89,7 @@ export default function OutcomeMetricsPanel() {
           return <article key={key} style={{ padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }}>
             <div className="text-muted" style={{ fontSize: 11 }}>{metric.label}</div>
             <strong style={{ display: 'block', margin: '7px 0 5px', fontSize: 25, color: 'var(--text-strong)' }}>{formatMetric(metric.current, metric.unit)}</strong>
-            <small style={{ color: change.positive == null ? 'var(--text-muted)' : change.positive ? 'var(--success,#16856f)' : 'var(--danger,#b14f45)' }}>{change.label}</small>
+            <small style={{ color: change.positive == null ? 'var(--text-muted)' : change.positive ? 'var(--success)' : 'var(--danger)' }}>{change.label}</small>
           </article>;
         })}
       </section>
@@ -102,7 +102,7 @@ export default function OutcomeMetricsPanel() {
       </section>
 
       <section aria-label="All outcome metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 8, marginBottom: 18 }}>
-        {data.metrics.map((metric) => { const change = comparison(metric); return <article key={metric.key} style={{ display: 'grid', gap: 5, padding: '11px 13px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ fontSize: 12 }}>{metric.label}</span><strong>{formatMetric(metric.current, metric.unit)}</strong></div><small className="text-muted">Prior: {formatMetric(metric.baseline, metric.unit)} · <span style={{ color: change.positive == null ? undefined : change.positive ? 'var(--success,#16856f)' : 'var(--danger,#b14f45)' }}>{change.label}</span></small></article>; })}
+        {data.metrics.map((metric) => { const change = comparison(metric); return <article key={metric.key} style={{ display: 'grid', gap: 5, padding: '11px 13px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ fontSize: 12 }}>{metric.label}</span><strong>{formatMetric(metric.current, metric.unit)}</strong></div><small className="text-muted">Prior: {formatMetric(metric.baseline, metric.unit)} · <span style={{ color: change.positive == null ? undefined : change.positive ? 'var(--success)' : 'var(--danger)' }}>{change.label}</span></small></article>; })}
       </section>
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(330px,1fr))', gap: 14, marginBottom: 18 }}>

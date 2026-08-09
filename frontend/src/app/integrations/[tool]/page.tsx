@@ -50,7 +50,7 @@ export default async function IntegrationPage({
         .intg-sub { font-size: clamp(0.95rem, 2vw, 1.05rem); color: var(--text-secondary); line-height: 1.7; margin: 0; }
         .intg-cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
         .intg-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
-        .intg-btn-primary { background: linear-gradient(135deg, var(--coral-bright), #e23b2e); color: var(--text-on-accent); }
+        .intg-btn-primary { background: linear-gradient(135deg, var(--coral-bright), var(--error)); color: var(--text-on-accent); }
         .intg-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .intg-section { max-width: 820px; margin: 0 auto; padding: 20px 24px; width: 100%; }
         .intg-cat-chip { display: inline-block; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 12px; }

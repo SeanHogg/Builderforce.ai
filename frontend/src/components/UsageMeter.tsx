@@ -46,7 +46,7 @@ function formatAmount(unit: MeterSnapshot['unit'], n: number): string {
 
 /** Bar colour escalates as the allowance fills — neutral → amber → red. */
 function barColor(percent: number): string {
-  if (percent >= 100) return 'var(--danger, #ef4444)';
+  if (percent >= 100) return 'var(--danger)';
   if (percent >= 80) return 'var(--warning, var(--warning))';
   return 'var(--coral-bright, var(--coral-bright))';
 }

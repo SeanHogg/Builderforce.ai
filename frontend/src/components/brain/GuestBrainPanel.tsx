@@ -405,7 +405,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         .gb-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
         .gb-brand { font-weight: 600; font-size: 15px; }
         .gb-header-right { display: flex; align-items: center; gap: 12px; }
-        .gb-signup-link { font-size: 13px; font-weight: 600; color: var(--accent, #3b82f6); text-decoration: none; }
+        .gb-signup-link { font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; }
         .gb-close { background: transparent; border: none; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
         .gb-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         /* Wide enough for the capability tiles to sit two-or-more across; the
@@ -418,7 +418,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         .gb-msg-user { justify-content: flex-end; }
         .gb-msg-assistant { justify-content: flex-start; }
         .gb-bubble { max-width: 88%; padding: 10px 13px; border-radius: var(--radius-lg); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
-        .gb-bubble-user { background: var(--accent, #3b82f6); color: var(--text-on-accent); border-bottom-right-radius: 4px; }
+        .gb-bubble-user { background: var(--accent); color: var(--text-on-accent); border-bottom-right-radius: 4px; }
         .gb-bubble-assistant { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-bottom-left-radius: 4px; }
         /* Who said it — only meaningful in a shared room, where more than one
            person writes into the same transcript. */
@@ -426,14 +426,14 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         /* On an assistant bubble the caption names whose turn this reply answers,
            so it reads as context rather than as the speaker. */
         .gb-author-muted { color: var(--text-muted); font-weight: 600; }
-        .gb-error { font-size: 13px; color: var(--danger, #dc2626); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; }
+        .gb-error { font-size: 13px; color: var(--danger); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; }
         .gb-composer { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 10px 12px; background: var(--bg-elevated); }
         .gb-textarea { width: 100%; resize: none; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); color: var(--text-primary); padding: 9px 11px; font-size: 14px; font-family: inherit; box-sizing: border-box; }
         .gb-textarea:disabled { opacity: 0.6; }
         .gb-composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
         .gb-composer-actions { display: flex; align-items: center; gap: 8px; }
         .gb-remaining { font-size: 12px; color: var(--text-muted); }
-        .gb-send { padding: 8px 18px; font-size: 14px; font-weight: 600; border: none; border-radius: var(--radius-lg); background: var(--accent, #3b82f6); color: var(--text-on-accent); cursor: pointer; min-height: 36px; }
+        .gb-send { padding: 8px 18px; font-size: 14px; font-weight: 600; border: none; border-radius: var(--radius-lg); background: var(--accent); color: var(--text-on-accent); cursor: pointer; min-height: 36px; }
         .gb-send:disabled { opacity: 0.5; cursor: default; }
         .gb-invite { padding: 8px 14px; font-size: 13px; font-weight: 600; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); color: var(--text-primary); cursor: pointer; min-height: 36px; }
         .gb-invite:disabled { opacity: 0.5; cursor: default; }
@@ -473,7 +473,7 @@ function GuestCapWall({
         .gb-wall-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
         .gb-wall-body { font-size: 13px; color: var(--text-muted); max-width: 340px; line-height: 1.5; }
         .gb-wall-actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
-        .gb-wall-primary { padding: 10px 20px; font-size: 14px; font-weight: 600; background: var(--accent, #3b82f6); color: var(--text-on-accent); border-radius: var(--radius-lg); text-decoration: none; }
+        .gb-wall-primary { padding: 10px 20px; font-size: 14px; font-weight: 600; background: var(--accent); color: var(--text-on-accent); border-radius: var(--radius-lg); text-decoration: none; }
         .gb-wall-secondary { padding: 10px 20px; font-size: 14px; font-weight: 600; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); text-decoration: none; }
       `}</style>
     </div>
@@ -496,7 +496,7 @@ function GuestDisabledCTA({ t }: { t: ReturnType<typeof useTranslations> }) {
         .gb-disabled .gb-empty-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
         .gb-disabled .gb-empty-body { font-size: 14px; max-width: 300px; line-height: 1.5; }
         .gb-disabled .gb-wall-actions { display: flex; gap: 10px; margin-top: 8px; }
-        .gb-disabled .gb-wall-primary { padding: 10px 20px; font-size: 14px; font-weight: 600; background: var(--accent, #3b82f6); color: var(--text-on-accent); border-radius: var(--radius-lg); text-decoration: none; }
+        .gb-disabled .gb-wall-primary { padding: 10px 20px; font-size: 14px; font-weight: 600; background: var(--accent); color: var(--text-on-accent); border-radius: var(--radius-lg); text-decoration: none; }
         .gb-disabled .gb-wall-secondary { padding: 10px 20px; font-size: 14px; font-weight: 600; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); text-decoration: none; }
       `}</style>
     </div>

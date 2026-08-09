@@ -42,7 +42,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div
       className="rounded-lg px-4 py-3 min-w-0"
-      style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
     >
       <p className="m-0 text-[0.65rem] uppercase tracking-wider truncate" style={{ color: 'var(--text-muted)' }}>
         {label}
@@ -118,7 +118,7 @@ export function DomainSurface({
 
       <section
         className="rounded-lg p-4 min-w-0"
-        style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
         aria-label={t('section.metrics')}
       >
         <h2 className="m-0 mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -130,7 +130,7 @@ export function DomainSurface({
       <div className="grid gap-4 min-w-0" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
         <section
           className="rounded-lg p-4 min-w-0"
-          style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
           aria-label={t('section.items')}
         >
           <h2 className="m-0 mb-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -168,7 +168,7 @@ export function DomainSurface({
 
         <section
           className="rounded-lg p-4 min-w-0"
-          style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
           aria-label={t('section.activity')}
         >
           <h2 className="m-0 mb-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -184,7 +184,7 @@ export function DomainSurface({
           surface (§5 step 5). */}
       <section
         className="rounded-lg p-4 min-w-0"
-        style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
         aria-label={t('section.records')}
       >
         <h2 className="m-0 mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -198,7 +198,7 @@ export function DomainSurface({
           copied into fifteen seat-shaped views. */}
       <section
         className="rounded-lg p-4 min-w-0"
-        style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
         aria-label={t('section.kernel')}
       >
         <h2 className="m-0 mb-1 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>

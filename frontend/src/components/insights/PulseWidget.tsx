@@ -11,11 +11,11 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 
 const btnStyle: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
-  background: 'var(--accent, #7c5cff)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.85rem',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.85rem',
 };
 const chipStyle = (active: boolean): React.CSSProperties => ({
   width: 40, height: 40, borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700,
-  border: active ? '2px solid var(--accent, #7c5cff)' : '1px solid var(--border-subtle)',
+  border: active ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
   background: active ? 'rgba(124,92,255,0.14)' : 'var(--bg-base)',
   color: 'var(--text-primary)',
 });

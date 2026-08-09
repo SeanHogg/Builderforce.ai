@@ -28,8 +28,8 @@ import { PmEmpty, PmError } from '@/components/pm/pmShared';
  * viewer sees the role hint, never a 403.
  */
 
-const TONE_COLOR: Record<ReasonTone, string> = { good: '#16a34a', warn: '#d97706', bad: '#dc2626' };
-const VERDICT_COLOR: Record<Verdict, string> = { yes: '#16a34a', at_risk: '#d97706', no: '#dc2626', no_data: '#6b7280' };
+const TONE_COLOR: Record<ReasonTone, string> = { good: 'var(--success)', warn: 'var(--warning)', bad: 'var(--error)' };
+const VERDICT_COLOR: Record<Verdict, string> = { yes: 'var(--success)', at_risk: 'var(--warning)', no: 'var(--error)', no_data: 'var(--text-muted)' };
 
 export function DeliveryVerdict({ days }: { days: number }) {
   const { currentProjectId } = useProjectScope();

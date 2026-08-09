@@ -86,9 +86,9 @@ export function GuestRoomMeeting({ code, name, onLeave }: { code: string; name: 
         .gr-meeting-title small { font-size: 11px; font-weight: 500; color: var(--text-muted); }
         .gr-meeting-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .gr-media-btn { padding: 6px 10px; font-size: 12px; font-weight: 600; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-primary); cursor: pointer; min-height: 32px; }
-        .gr-media-off { background: var(--danger-bg, rgba(220, 38, 38, 0.12)); border-color: var(--danger, #dc2626); color: var(--danger, #dc2626); }
+        .gr-media-off { background: var(--danger-bg, rgba(220, 38, 38, 0.12)); border-color: var(--danger); color: var(--danger); }
         .gr-media-leave { background: transparent; color: var(--text-muted); }
-        .gr-meeting-error { margin: 0; font-size: 12px; color: var(--danger, #dc2626); }
+        .gr-meeting-error { margin: 0; font-size: 12px; color: var(--danger); }
         @media (max-width: 480px) {
           .gr-meeting-actions { width: 100%; }
           .gr-media-btn { flex: 1 1 auto; }

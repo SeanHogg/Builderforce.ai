@@ -271,7 +271,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
           style={{
             marginTop: 12, padding: 12, borderRadius: 'var(--radius-lg)', fontSize: '0.85rem',
             border: '1px solid var(--warning-border, var(--border-subtle))',
-            borderLeft: '3px solid var(--warning-text, #b45309)',
+            borderLeft: '3px solid var(--warning-text)',
             background: 'var(--bg-base)', color: 'var(--text-primary)',
           }}
         >
@@ -291,8 +291,8 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
                 style={{
                   alignSelf: mine ? 'flex-end' : 'flex-start',
                   maxWidth: 'min(680px, 100%)',
-                  background: mine ? 'var(--accent, #2563eb)' : 'var(--bg-base)',
-                  color: mine ? '#fff' : 'var(--text-primary)',
+                  background: mine ? 'var(--accent)' : 'var(--bg-base)',
+                  color: mine ? 'var(--text-on-accent)' : 'var(--text-primary)',
                   border: mine ? 'none' : '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-lg)', padding: '10px 13px', minWidth: 0,
                 }}
@@ -320,7 +320,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
               aria-hidden
               style={{
                 width: 8, height: 8, borderRadius: '50%',
-                background: 'var(--accent, #2563eb)', animation: 'bf-pulse 1.2s ease-in-out infinite',
+                background: 'var(--accent)', animation: 'bf-pulse 1.2s ease-in-out infinite',
               }}
             />
             {t('thinking', { name: handle?.agentName ?? t('fallbackName') })}
@@ -330,7 +330,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       </div>
 
       {error && (
-        <div style={{ marginTop: 10, fontSize: '0.82rem', color: 'var(--danger-text, #b91c1c)' }}>{error}</div>
+        <div style={{ marginTop: 10, fontSize: '0.82rem', color: 'var(--danger-text)' }}>{error}</div>
       )}
 
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -359,7 +359,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
             onClick={() => void ask(draft)}
             style={{
               padding: '10px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 700, fontSize: '0.85rem',
-              background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)',
+              background: 'var(--accent)', color: 'var(--text-on-accent)',
               cursor: thinking || !draft.trim() ? 'default' : 'pointer',
               opacity: thinking || !draft.trim() || !handle?.agentRef ? 0.6 : 1,
             }}

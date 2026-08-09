@@ -319,7 +319,7 @@ function MenuRow({ icon, label, hint, active, onClick }: {
       <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
       {hint != null && <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
-      {active && <span aria-hidden style={{ color: 'var(--coral-bright, #f4726e)', width: 12 }}>✓</span>}
+      {active && <span aria-hidden style={{ color: 'var(--coral-bright)', width: 12 }}>✓</span>}
     </>
   );
   const shared = { style, role: 'menuitem' as const, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) };
@@ -717,9 +717,9 @@ export function ChatInput({
               borderRadius: 'var(--radius-full)',
               fontSize: 12,
               cursor: disabled ? 'not-allowed' : 'pointer',
-              border: `1px solid ${autoMode ? 'var(--coral-bright, #f4726e)' : 'var(--chat-input-border)'}`,
+              border: `1px solid ${autoMode ? 'var(--coral-bright)' : 'var(--chat-input-border)'}`,
               background: autoMode ? 'var(--surface-coral-soft, rgba(244,114,110,0.12))' : 'transparent',
-              color: autoMode ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
+              color: autoMode ? 'var(--coral-bright)' : 'var(--text-muted)',
             }}
           >
             <BoltIcon />

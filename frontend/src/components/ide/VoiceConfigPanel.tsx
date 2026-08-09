@@ -194,7 +194,7 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
             style={{
               ...ghostBtn, marginTop: 8,
               color: recording ? '#fca5a5' : 'var(--text-secondary)',
-              borderColor: recording ? '#ef4444' : 'var(--border-subtle)',
+              borderColor: recording ? 'var(--error)' : 'var(--border-subtle)',
             }}
           >
             {recording ? t('stopRecording') : t('recordFromMic')}

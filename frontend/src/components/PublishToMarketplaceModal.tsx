@@ -22,7 +22,7 @@ const btn = (primary: boolean): React.CSSProperties => ({
   padding: '8px 16px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
   border: primary ? 'none' : '1px solid var(--border-subtle)',
   background: primary ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-elevated)',
-  color: primary ? '#fff' : 'var(--text-primary)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-primary)',
 });
 
 const POSTING_TYPES: PostingType[] = ['project_bid', 'design', 'fte'];

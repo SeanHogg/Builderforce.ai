@@ -14,10 +14,10 @@ import { useMemo } from 'react';
 import type { WorkflowGraphNode, WorkflowGraphEdge } from '@/lib/builderforceApi';
 
 const STATUS_COLORS: Record<string, string> = {
-  pending:   'var(--text-muted, #8a8f9c)',
+  pending:   'var(--text-muted)',
   running:   'var(--cyan-bright, var(--cyan-bright))',
   completed: 'rgba(34,197,94,0.9)',
-  failed:    'var(--coral-bright, #f4726e)',
+  failed:    'var(--coral-bright)',
 };
 
 const NODE_W = 180;
@@ -190,7 +190,7 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
                 width={NODE_W}
                 height={NODE_H}
                 rx={8}
-                fill="var(--bg-elevated, #1a1c23)"
+                fill="var(--bg-elevated)"
                 stroke={isActive ? color : 'var(--border-subtle, rgba(255,255,255,0.08))'}
                 strokeWidth={isActive ? 1.5 : 1}
               />
@@ -221,7 +221,7 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
                 y={34}
                 fontSize={11}
                 fontWeight={600}
-                fill="var(--text-primary, #e2e5ec)"
+                fill="var(--text-primary)"
               >
                 {n.label.slice(0, 22)}
                 {n.label.length > 22 ? '…' : ''}
@@ -232,7 +232,7 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
                   x={12}
                   y={48}
                   fontSize={9}
-                  fill="var(--text-muted, #8a8f9c)"
+                  fill="var(--text-muted)"
                 >
                   {n.durationMs != null ? `${(n.durationMs / 1000).toFixed(1)}s` : ''}
                   {n.durationMs != null && n.estimatedCostUsd != null ? '  ·  ' : ''}

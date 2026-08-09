@@ -173,7 +173,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
             </div>
           </div>
         )}
-        {error && <div style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"

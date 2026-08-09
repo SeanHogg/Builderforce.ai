@@ -307,7 +307,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
           {readOnly && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{t('workspaceTag')}</span>}
         </span>
         {ok != null && (
-          <span style={{ fontSize: 11, color: ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+          <span style={{ fontSize: 11, color: ok ? 'var(--success)' : 'var(--danger)' }}>
             {ok ? `● ${t('connected')}` : `● ${t('failed')}`}
           </span>
         )}
@@ -330,7 +330,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
             <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>
               {tc('edit')}
             </button>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(c.id)}>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(c.id)}>
               {tc('delete')}
             </button>
           </>
@@ -360,7 +360,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>

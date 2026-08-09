@@ -22,9 +22,9 @@ function ControlButton({ on, onClick, onIcon, offIcon, labelOn, labelOff }: {
         width: 44, height: 44, borderRadius: '50%',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer',
-        background: on ? 'var(--bg-elevated)' : 'var(--error-bg, #7f1d1d)',
-        color: on ? 'var(--text-primary)' : '#fff',
-        border: `1px solid ${on ? 'var(--border-subtle)' : 'var(--error-border, #b91c1c)'}`,
+        background: on ? 'var(--bg-elevated)' : 'var(--error-bg)',
+        color: on ? 'var(--text-primary)' : 'var(--text-on-accent)',
+        border: `1px solid ${on ? 'var(--border-subtle)' : 'var(--error-border)'}`,
       }}
     >
       {on ? onIcon : offIcon}
@@ -87,7 +87,7 @@ export function MediaControls({
           style={{
             width: 44, height: 44, borderRadius: '50%', cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--error-bg, #7f1d1d)', color: 'var(--text-on-accent)', border: '1px solid var(--error-border, #b91c1c)',
+            background: 'var(--error-bg)', color: 'var(--text-on-accent)', border: '1px solid var(--error-border)',
           }}
         >
           {leaveIcon}

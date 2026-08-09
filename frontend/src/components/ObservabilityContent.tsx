@@ -136,10 +136,10 @@ function isErrorEvent(ev: ToolAuditEvent): boolean {
 }
 
 const AGENT_COLORS = [
-  'var(--coral-bright, #f97316)',
-  'var(--accent, #6366f1)',
+  'var(--coral-bright)',
+  'var(--accent)',
   'var(--success, var(--success))',
-  'var(--info, #3b82f6)',
+  'var(--info)',
   'var(--warning, var(--warning))',
 ];
 
@@ -706,7 +706,7 @@ export function ObservabilityContent({
                         connState === 'connected'
                           ? 'var(--success, var(--success))'
                           : connState === 'offline'
-                            ? 'var(--danger, #ef4444)'
+                            ? 'var(--danger)'
                             : 'var(--text-muted)',
                     }}
                   />
@@ -734,7 +734,7 @@ export function ObservabilityContent({
                 type="button"
                 onClick={copyTriage}
                 title={reportTransaction ? t('copyReportTitle') : t('copyTriageTitle')}
-                style={triageCopy.state === 'error' ? { ...smallBtn, color: 'var(--danger, #ef4444)', borderColor: 'var(--danger, #ef4444)' } : smallBtn}
+                style={triageCopy.state === 'error' ? { ...smallBtn, color: 'var(--danger)', borderColor: 'var(--danger)' } : smallBtn}
               >
                 {triageCopy.state === 'copied'
                   ? `${tc('copied')} ✓`
@@ -766,7 +766,7 @@ export function ObservabilityContent({
                     marginBottom: 4,
                     color:
                       l.level === 'error'
-                        ? 'var(--danger, #ef4444)'
+                        ? 'var(--danger)'
                         : l.level === 'warn'
                           ? 'var(--warning, var(--warning))'
                           : 'var(--text-secondary)',
@@ -823,7 +823,7 @@ export function ObservabilityContent({
               </div>
               <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
                 {diagError ? (
-                  <div style={{ color: 'var(--danger, #ef4444)', fontSize: 13 }}>{diagError}</div>
+                  <div style={{ color: 'var(--danger)', fontSize: 13 }}>{diagError}</div>
                 ) : diagLoading && tracks.length === 0 ? (
                   <div style={centerMuted}>{t('loadingTimeline')}</div>
                 ) : tracks.length === 0 ? (
@@ -843,13 +843,13 @@ export function ObservabilityContent({
                             borderRadius: '50%',
                             background:
                               track.status === 'failed'
-                                ? 'var(--danger, #ef4444)'
+                                ? 'var(--danger)'
                                 : track.kind === 'tool'
-                                  ? 'var(--accent, #6366f1)'
+                                  ? 'var(--accent)'
                                   : track.status === 'completed'
                                     ? 'var(--success, var(--success))'
                                     : track.status === 'running'
-                                      ? 'var(--info, #3b82f6)'
+                                      ? 'var(--info)'
                                       : 'var(--text-muted)',
                             marginTop: 5,
                             flexShrink: 0,

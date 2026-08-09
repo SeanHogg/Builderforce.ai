@@ -115,7 +115,7 @@ export function ObjectPanel({
   return (
     <section
       className="flex flex-col min-w-0 h-full rounded-lg overflow-hidden"
-      style={{ background: 'var(--surface, #101624)', border: '1px solid var(--border-subtle)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
       aria-label={t('title')}
     >
       <header

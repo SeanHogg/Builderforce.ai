@@ -19,10 +19,10 @@ const STATUS_LABELS: Record<SocControl['status'], string> = {
 };
 const STATUS_ORDER: SocControl['status'][] = ['not_started', 'in_progress', 'ready', 'out_of_scope'];
 const STATUS_COLOR: Record<SocControl['status'], string> = {
-  not_started: '#94a3b8',
-  in_progress: '#d97706',
-  ready: '#16a34a',
-  out_of_scope: '#64748b',
+  not_started: 'var(--text-muted)',
+  in_progress: 'var(--warning)',
+  ready: 'var(--success)',
+  out_of_scope: 'var(--text-secondary)',
 };
 
 /** Readiness = ready / (controls not marked out_of_scope). Shared by overall + per-category. */
@@ -81,13 +81,13 @@ export function Soc2Content() {
     }
   };
 
-  if (loading) return <div style={{ color: '#64748b' }}>Loading SOC 2 controls…</div>;
+  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>Loading SOC 2 controls…</div>;
 
   if (controls.length === 0) {
     return (
       <div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>SOC 2 Control Tracker</div>
-        <div style={{ color: '#64748b', marginBottom: 16 }}>No controls yet. Seed the SOC 2 Common Criteria (CC1–CC9) baseline to start tracking readiness.</div>
+        <div style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>No controls yet. Seed the SOC 2 Common Criteria (CC1–CC9) baseline to start tracking readiness.</div>
         <button onClick={seed} disabled={busy} style={btnStyle}>{busy ? 'Seeding…' : 'Seed SOC 2 baseline'}</button>
         {error && <div role="alert" style={{ color: 'var(--error-text)', marginTop: 8 }}>{error}</div>}
       </div>
@@ -98,8 +98,8 @@ export function Soc2Content() {
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>SOC 2 Control Tracker</div>
-        <div style={{ fontSize: 13, color: '#64748b' }}>
-          Readiness <strong style={{ color: 'var(--text-primary, #0f172a)' }}>{overall.pct}%</strong> ({overall.ready}/{overall.inScope} in scope)
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          Readiness <strong style={{ color: 'var(--text-primary)' }}>{overall.pct}%</strong> ({overall.ready}/{overall.inScope} in scope)
         </div>
       </div>
       {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
@@ -109,7 +109,7 @@ export function Soc2Content() {
         return (
           <div key={category} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-              {category} <span style={{ color: '#64748b', fontWeight: 400 }}>· {r.pct}% ready</span>
+              {category} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>· {r.pct}% ready</span>
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {items.map((c) => (
@@ -134,13 +134,13 @@ export function Soc2Content() {
 
 const btnStyle: React.CSSProperties = {
   padding: '6px 14px', fontSize: 13, fontWeight: 600,
-  background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
-  padding: '6px 10px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-sm)',
+  padding: '6px 10px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
 };
 const selectStyle: React.CSSProperties = {
   fontSize: 12, padding: '2px 6px', borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)',
+  border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
 };

@@ -31,7 +31,7 @@ function DrillButton({ label, onClick }: { label: string; onClick: () => void })
       onClick={onClick}
       style={{
         padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-        background: 'transparent', color: 'var(--accent, #2563eb)', cursor: 'pointer',
+        background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
         fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap',
       }}
     >
@@ -62,7 +62,7 @@ export function DevexDashboard() {
             onClick={() => open('surveys')}
             style={{
               padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-              background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', cursor: 'pointer',
+              background: 'var(--coral-bright)', color: 'var(--text-on-accent)', cursor: 'pointer',
               fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap',
             }}
           >

@@ -150,7 +150,7 @@ export function ModelExportPanel() {
           style={{
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem',
             background: busy ? 'var(--bg-elevated)' : 'var(--coral-bright, var(--coral-bright))',
-            color: busy ? 'var(--text-muted)' : '#fff',
+            color: busy ? 'var(--text-muted)' : 'var(--text-on-accent)',
             border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
             cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
           }}
@@ -164,7 +164,7 @@ export function ModelExportPanel() {
         <div
           role="alert"
           style={{
-            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: 'var(--error-text)',
+            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error)', color: 'var(--error-text)',
             borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >

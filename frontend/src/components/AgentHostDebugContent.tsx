@@ -204,7 +204,7 @@ export function AgentHostDebugContent({
     connState === 'connected'
       ? 'var(--success-bg, var(--success))'
       : connState === 'offline'
-        ? 'var(--danger-bg, #ef4444)'
+        ? 'var(--danger-bg)'
         : 'var(--text-muted)';
 
   return (

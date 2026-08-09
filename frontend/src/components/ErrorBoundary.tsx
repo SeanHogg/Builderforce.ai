@@ -155,7 +155,7 @@ const primaryBtnStyle: React.CSSProperties = {
   border: 'none',
   cursor: 'pointer',
   background: 'var(--coral-bright, var(--coral-bright))',
-  color: 'var(--text-on-accent, #fff)',
+  color: 'var(--text-on-accent)',
 };
 
 const secondaryBtnStyle: React.CSSProperties = {

@@ -88,7 +88,7 @@ export default function NotificationBell() {
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unread > 0 && (
-          <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 16, height: 16, borderRadius: 'var(--radius-md)', background: '#6366f1', color: 'var(--text-on-accent)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+          <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 16, height: 16, borderRadius: 'var(--radius-md)', background: 'var(--indigo-bright)', color: 'var(--text-on-accent)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -116,7 +116,7 @@ export default function NotificationBell() {
                   onClick={() => void openItem(n)}
                   style={{ display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left', padding: '8px 10px', borderRadius: 'var(--radius-md)', background: n.read ? 'transparent' : 'var(--bg-elevated, rgba(99,102,241,0.08))', border: '1px solid var(--border)', cursor: 'pointer', width: '100%' }}
                 >
-                  <span aria-hidden style={{ fontSize: 8, flexShrink: 0, marginTop: 5, color: n.read ? 'var(--text-muted)' : '#6366f1' }}>●</span>
+                  <span aria-hidden style={{ fontSize: 8, flexShrink: 0, marginTop: 5, color: n.read ? 'var(--text-muted)' : 'var(--indigo-bright)' }}>●</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{n.title}</span>
                     {n.body && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{n.body}</span>}

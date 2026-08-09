@@ -22,13 +22,13 @@ const ALL_CATEGORIES: AllocationCategory[] = ['innovation', 'ktlo', 'support', '
 const CAP_STATUSES: CapitalizationStatus[] = ['capitalized', 'not_capitalized', 'uncategorized'];
 
 const CATEGORY_TONE: Record<AllocationCategory, string> = {
-  innovation: '#2563eb', ktlo: '#16a34a', support: '#d97706', tech_debt: '#9333ea', other: '#9ca3af',
+  innovation: 'var(--info)', ktlo: 'var(--success)', support: 'var(--warning)', tech_debt: '#9333ea', other: 'var(--text-muted)',
 };
 /** Capitalization slice tones — reuse the canonical CAPEX/OPEX tokens. */
 const STATUS_TONE: Record<CapitalizationStatus, string> = {
   capitalized: COST_CLASS_COLORS.capex,
   not_capitalized: COST_CLASS_COLORS.opex,
-  uncategorized: '#9ca3af',
+  uncategorized: 'var(--text-muted)',
 };
 
 const inputStyle: CSSProperties = {
@@ -36,7 +36,7 @@ const inputStyle: CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: CSSProperties = {
-  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
@@ -56,8 +56,8 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
           key={o.value} type="button" onClick={() => onChange(o.value)} aria-pressed={value === o.value}
           style={{
             padding: '5px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: 'none',
-            background: value === o.value ? 'var(--accent, #2563eb)' : 'transparent',
-            color: value === o.value ? '#fff' : 'var(--text-secondary)',
+            background: value === o.value ? 'var(--accent)' : 'transparent',
+            color: value === o.value ? 'var(--text-on-accent)' : 'var(--text-secondary)',
           }}
         >
           {o.label}
@@ -88,7 +88,7 @@ function StatusPill({ status, label }: { status: CapitalizationStatus; label: st
 function Variance({ v }: { v: number | undefined }) {
   const t = useTranslations('insights');
   if (v == null) return <span style={{ color: 'var(--text-muted)' }}>{t('alloc.noGoal')}</span>;
-  const tone = Math.abs(v) < 5 ? '#16a34a' : v < 0 ? 'var(--danger, #dc2626)' : '#d97706';
+  const tone = Math.abs(v) < 5 ? 'var(--success)' : v < 0 ? 'var(--danger)' : 'var(--warning)';
   return <span style={{ color: tone, fontWeight: 600 }}>{v >= 0 ? '+' : ''}{v.toFixed(0)}%</span>;
 }
 
@@ -148,8 +148,8 @@ export function AllocationLens() {
   const tabBtn = (active: boolean): CSSProperties => ({
     padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', cursor: 'pointer',
     fontSize: '0.8rem', fontWeight: 600,
-    background: active ? 'var(--accent, #2563eb)' : 'transparent',
-    color: active ? '#fff' : 'var(--text-secondary)',
+    background: active ? 'var(--accent)' : 'transparent',
+    color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
   });
 
   return (
@@ -249,7 +249,7 @@ export function AllocationLens() {
                   <tr key={m.month} style={trStyle}>
                     <td style={tdStyle}>{m.month}</td>
                     <td style={tdStyle}>
-                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: m.status === 'in_progress' ? '#d97706' : '#16a34a' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: m.status === 'in_progress' ? 'var(--warning)' : 'var(--success)' }}>
                         {m.status === 'in_progress' ? t('alloc.inProgress') : t('alloc.ready')}
                       </span>
                     </td>

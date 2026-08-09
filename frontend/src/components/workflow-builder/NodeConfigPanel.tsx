@@ -184,7 +184,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
           fontSize: 12,
           fontWeight: 600,
           background: 'transparent',
-          color: 'var(--danger, #dc2626)',
+          color: 'var(--danger)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)',
           cursor: 'pointer',

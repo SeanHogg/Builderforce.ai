@@ -79,7 +79,7 @@ export function ObjectComments({
             rows={2}
             className="w-full rounded-md px-3 py-2 text-sm resize-y"
             style={{
-              background: 'var(--surface, #101624)',
+              background: 'var(--surface)',
               color: 'var(--text-primary, var(--text-primary))',
               border: '1px solid var(--border-subtle, rgba(136,146,176,0.25))',
             }}
@@ -90,7 +90,7 @@ export function ObjectComments({
               onClick={() => void submit()}
               disabled={busy || draft.trim().length === 0}
               className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-              style={{ background: 'var(--accent)', color: 'var(--text-on-accent, #fff)' }}
+              style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
             >
               {busy ? t('posting') : t('post')}
             </button>

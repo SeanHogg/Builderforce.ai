@@ -14,8 +14,8 @@ import { diffLines, diffStat, sideBySide, type DiffRow } from '@/lib/textDiff';
  * is computed client-side with the dependency-free LCS util in lib/textDiff.
  */
 
-const ADD_BG = 'color-mix(in srgb, var(--success, #16a34a) 16%, transparent)';
-const DEL_BG = 'color-mix(in srgb, var(--danger, #dc2626) 16%, transparent)';
+const ADD_BG = 'color-mix(in srgb, var(--success) 16%, transparent)';
+const DEL_BG = 'color-mix(in srgb, var(--danger) 16%, transparent)';
 
 export interface PromptVersionDiffProps {
   promptId: string;
@@ -68,7 +68,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="min(760px, 96vw)">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {error && <div style={{ color: 'var(--danger, #e5484d)' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
         {!versions && !error && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}
 
         {versions && versions.length > 0 && (
@@ -95,8 +95,8 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
 
             {/* Diff summary */}
             <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
-              <span style={{ color: 'var(--success, #16a34a)', fontWeight: 700 }}>+{stat.added} {t('added')}</span>
-              <span style={{ color: 'var(--danger, #dc2626)', fontWeight: 700 }}>−{stat.removed} {t('removed')}</span>
+              <span style={{ color: 'var(--success)', fontWeight: 700 }}>+{stat.added} {t('added')}</span>
+              <span style={{ color: 'var(--danger)', fontWeight: 700 }}>−{stat.removed} {t('removed')}</span>
               <span style={{ color: 'var(--text-muted)' }}>{t('unchanged', { n: stat.unchanged })}</span>
             </div>
 

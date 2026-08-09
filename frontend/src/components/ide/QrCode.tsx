@@ -35,8 +35,8 @@ export function QrCode({ value, size = 180, label }: QrCodeProps) {
         style={{
           padding: 12,
           borderRadius: 'var(--radius-lg)',
-          border: '1px dashed var(--border-subtle, #d4d4d8)',
-          color: 'var(--text-muted, #71717a)',
+          border: '1px dashed var(--border-subtle)',
+          color: 'var(--text-muted)',
           fontSize: 12,
           wordBreak: 'break-all',
           fontFamily: 'var(--font-mono, monospace)',

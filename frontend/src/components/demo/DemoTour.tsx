@@ -276,12 +276,12 @@ const styles = `
     color: var(--cyan-bright, var(--cyan-bright)); margin-bottom: 8px;
   }
   .demo-tour-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--text-primary, var(--text-primary)); }
-  .demo-tour-body { margin: 0 0 16px; font-size: 14px; line-height: 1.55; color: var(--text-secondary, #aab3c5); }
+  .demo-tour-body { margin: 0 0 16px; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
   .demo-tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .demo-tour-nav { display: flex; align-items: center; gap: 8px; }
   .demo-tour-skip {
     background: none; border: none; cursor: pointer; font-family: inherit; font-size: 13px;
-    color: var(--text-muted, #7c869c); padding: 6px 4px;
+    color: var(--text-muted); padding: 6px 4px;
   }
   .demo-tour-skip:hover { color: var(--text-primary, var(--text-primary)); }
   .demo-tour-btn {

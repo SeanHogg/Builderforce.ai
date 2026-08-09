@@ -30,7 +30,7 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
         theme: {
           background: '#1a1a2e',
           foreground: '#e0e0e0',
-          cursor: '#ffffff',
+          cursor: 'var(--text-on-accent)',
         },
         fontSize: 13,
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",

@@ -31,7 +31,7 @@ const btn = (v: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
   padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
   border: v === 'primary' ? 'none' : `1px solid ${v === 'danger' ? 'rgba(239,68,68,0.5)' : 'var(--border-subtle)'}`,
   background: v === 'primary' ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-elevated)',
-  color: v === 'primary' ? '#fff' : v === 'danger' ? 'var(--error)' : 'var(--text-primary)',
+  color: v === 'primary' ? 'var(--text-on-accent)' : v === 'danger' ? 'var(--error)' : 'var(--text-primary)',
 });
 const fmtHrs = (m: number) => `${(m / 60).toFixed(1)}h`;
 const money = (c: number, cur: string) => `${cur} ${(c / 100).toFixed(2)}`;

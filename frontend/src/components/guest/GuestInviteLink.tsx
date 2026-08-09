@@ -65,11 +65,11 @@ export function GuestInviteLink({
         }
         .gil-copy {
           flex: 0 0 auto; padding: 7px 12px; font-size: 12px; font-weight: 600;
-          border-radius: var(--radius-md); border: 1px solid var(--accent, #3b82f6);
-          background: var(--accent, #3b82f6); color: var(--text-on-accent); cursor: pointer; min-height: 32px;
+          border-radius: var(--radius-md); border: 1px solid var(--accent);
+          background: var(--accent); color: var(--text-on-accent); cursor: pointer; min-height: 32px;
         }
         .gil-copy:disabled { opacity: 0.55; cursor: default; }
-        .gil-error { margin: 0; font-size: 11px; color: var(--danger, #dc2626); }
+        .gil-error { margin: 0; font-size: 11px; color: var(--danger); }
         .gil-compact .gil-url { font-size: 11px; padding: 5px 8px; }
         @media (max-width: 420px) {
           .gil-row { flex-direction: column; align-items: stretch; }

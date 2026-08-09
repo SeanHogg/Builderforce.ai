@@ -31,7 +31,7 @@ function loadNotesOnce(): Promise<ReleaseNote[]> {
 /** Mid-tone accents read on BOTH themes; backgrounds derive from them via
  *  color-mix so no literal light-only/dark-only surface color exists here. */
 const CATEGORY_ACCENT: Record<'new' | 'improvement' | 'fix', string> = {
-  new: '#6366f1',
+  new: 'var(--indigo-bright)',
   improvement: '#10b981',
   fix: 'var(--warning)',
 };
@@ -62,11 +62,11 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('title')}>
       {error ? (
-        <p style={{ color: 'var(--text-secondary, #94a3b8)', padding: '8px 0' }}>{t('error')}</p>
+        <p style={{ color: 'var(--text-secondary)', padding: '8px 0' }}>{t('error')}</p>
       ) : notes === null ? (
-        <p style={{ color: 'var(--text-secondary, #94a3b8)', padding: '8px 0' }}>{t('loading')}</p>
+        <p style={{ color: 'var(--text-secondary)', padding: '8px 0' }}>{t('loading')}</p>
       ) : notes.length === 0 ? (
-        <p style={{ color: 'var(--text-secondary, #94a3b8)', padding: '8px 0' }}>{t('empty')}</p>
+        <p style={{ color: 'var(--text-secondary)', padding: '8px 0' }}>{t('empty')}</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {notes.map((note) => {
@@ -76,7 +76,7 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
               <article
                 key={note.id}
                 style={{
-                  borderBottom: '1px solid var(--border, #33415555)',
+                  borderBottom: '1px solid var(--border)',
                   paddingBottom: 16,
                 }}
               >
@@ -95,16 +95,16 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
                   >
                     {t(`categories.${key}`)}
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', fontFamily: 'var(--font-mono, monospace)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
                     v{note.version}
                   </span>
                   {note.publishedAt && (
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       {fmtDate(note.publishedAt)}
                     </span>
                   )}
                 </div>
-                <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e2e8f0)' }}>
+                <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {note.title}
                 </h3>
                 {(note.body ?? '')
@@ -112,7 +112,7 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
                   .map((para) => para.trim())
                   .filter(Boolean)
                   .map((para, i) => (
-                    <p key={i} style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary, #cbd5e1)' }}>
+                    <p key={i} style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
                       {para}
                     </p>
                   ))}

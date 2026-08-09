@@ -57,8 +57,8 @@ const chip: React.CSSProperties = {
 const primaryButton: React.CSSProperties = {
   padding: '10px 18px',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--accent, #2f6fed)',
-  background: 'var(--accent, #2f6fed)',
+  border: '1px solid var(--accent)',
+  background: 'var(--accent)',
   color: 'var(--text-on-accent)',
   fontWeight: 600,
   fontSize: 14,
@@ -236,7 +236,7 @@ function ReadinessView({
           href={step.url}
           target="_blank"
           rel="noreferrer"
-          style={{ fontSize: 13, color: 'var(--accent, #2f6fed)' }}
+          style={{ fontSize: 13, color: 'var(--accent)' }}
         >
           {t('openConsole')}
         </a>
@@ -251,7 +251,7 @@ function ReadinessView({
           <div>{t('builtFiles', { files: result.filesWritten.length, handlers: result.handlersWritten.length })}</div>
           <div>{t('builtTickets', { created: result.tasksCreated, skipped: result.tasksSkipped })}</div>
           {result.tasksDispatched > 0 && (
-            <div style={{ color: 'var(--success, #167a4a)' }}>
+            <div style={{ color: 'var(--success)' }}>
               {t('builtDispatched', { count: result.tasksDispatched })}
             </div>
           )}
@@ -404,7 +404,7 @@ export default function ChallengesPage() {
               </button>
             )}
             {selected?.projectId && (
-              <a href={`/projects/${selected.projectId}`} style={{ fontSize: 14, color: 'var(--accent, #2f6fed)' }}>
+              <a href={`/projects/${selected.projectId}`} style={{ fontSize: 14, color: 'var(--accent)' }}>
                 {t('openProject')}
               </a>
             )}
@@ -415,7 +415,7 @@ export default function ChallengesPage() {
         </div>
 
         {error && (
-          <div style={{ ...card, borderColor: 'var(--danger, #b3261e)', color: 'var(--danger, #b3261e)', fontSize: 14 }}>
+          <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: 14 }}>
             {error}
           </div>
         )}

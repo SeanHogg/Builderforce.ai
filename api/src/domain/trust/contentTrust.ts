@@ -14,3 +14,7 @@ export function secretLeakReasons(content: string): string[] {
   if (/Authorization\s*[:=]\s*Bearer\s+[A-Za-z0-9._\-+=]{12,}/i.test(content)) reasons.push('authorization_header');
   return [...new Set(reasons)];
 }
+
+export function isHumanOrExternalOutputTool(toolName: string): boolean {
+  return /(?:ask_human|connector_call|send|message|comment|notify|email|slack|webhook)/i.test(toolName);
+}

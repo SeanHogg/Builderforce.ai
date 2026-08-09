@@ -57,7 +57,7 @@ export function AllowanceBanner() {
         padding: '8px 12px',
         fontSize: 13,
         background: exhausted ? 'var(--danger-bg, rgba(239,68,68,0.12))' : 'var(--warning-bg, rgba(234,179,8,0.12))',
-        color: exhausted ? 'var(--danger-text, #b91c1c)' : 'var(--warning-text, #b45309)',
+        color: exhausted ? 'var(--danger-text)' : 'var(--warning-text)',
         border: `1px solid ${exhausted ? 'var(--danger-border, rgba(239,68,68,0.3))' : 'var(--warning-border, rgba(234,179,8,0.3))'}`,
         borderRadius: 'var(--radius-md)',
       }}

@@ -148,14 +148,14 @@ export function RolesView() {
             {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
           </Select>
           {canManage && (
-            <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none' }}>
+            <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none' }}>
               {t('newRole')}
             </button>
           )}
         </div>
       </div>
 
-      {error && <div style={{ ...card, color: 'var(--coral-bright, #ef4444)', fontSize: 13, marginBottom: 12, padding: 12 }}>{error}</div>}
+      {error && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 12, padding: 12 }}>{error}</div>}
 
       {showNew && canManage && (
         <div style={{ ...card, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -163,7 +163,7 @@ export function RolesView() {
           <Select style={input} value={form.discipline} onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value as Discipline }))}>
             {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
           </Select>
-          <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
+          <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
             {creating ? t('creating') : t('addRole')}
           </button>
           <button type="button" onClick={() => setShowNew(false)} style={{ fontSize: 13, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
@@ -184,14 +184,14 @@ export function RolesView() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
                   <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-strong)' }}>{role.name}</span>
-                  {isStandard && <span style={chip('var(--surface-coral-soft, #eef2ff)', 'var(--accent, #2563eb)')}>{t('standard')}</span>}
+                  {isStandard && <span style={chip('var(--surface-coral-soft)', 'var(--accent)')}>{t('standard')}</span>}
                   {role.builtin
                     ? <span style={chip('var(--surface-2)', 'var(--text-muted)')}>{tk('builtin')}</span>
                     : <span style={chip('var(--surface-2)', 'var(--text-secondary)')}>{t('custom')}</span>}
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t(`discipline.${role.discipline}`)}</span>
                   <span style={{ flex: 1 }} />
                   {canManage && (
-                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)' }}>
+                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' }}>
                       {tk('assign')}
                     </button>
                   )}

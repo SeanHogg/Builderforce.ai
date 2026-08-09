@@ -31,7 +31,7 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  padding: '8px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const ghostBtn: React.CSSProperties = {
@@ -129,7 +129,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
         else if (drag?.kind === 'objective') moveObjective(drag.id, portfolioId);
         setDrag(null); setDropZone(null);
       },
-      style: active ? { outline: '2px dashed var(--accent, #2563eb)', outlineOffset: 2, borderRadius: 'var(--radius-lg)' } : undefined,
+      style: active ? { outline: '2px dashed var(--accent)', outlineOffset: 2, borderRadius: 'var(--radius-lg)' } : undefined,
     };
   };
 

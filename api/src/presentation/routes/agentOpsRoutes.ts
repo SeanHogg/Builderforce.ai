@@ -44,6 +44,7 @@ import type { DbHandle } from '../../application/shared/dbHandle';
 import type { HonoEnv } from '../../env';
 import { getReconciliationDiagnostics, listReconciliationRuns, reconciliationRequesterId, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { listIdeAgentVersions, releaseIdeAgentVersion } from '../../application/agentIdentity/agentRunIdentity';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -236,6 +237,23 @@ export function createAgentOpsRoutes(db: DbHandle) {
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 400);
     }
+  });
+
+  router.get('/agents/:ref/versions', async (c) => {
+    return json(await listIdeAgentVersions(db, c.get('tenantId'), c.req.param('ref')));
+  });
+
+  router.post('/agents/:ref/releases', requireRole(TenantRole.MANAGER), async (c) => {
+    const body: { versionId?: string; mode?: string; canaryPercent?: number } = await c.req.json<{ versionId?: string; mode?: string; canaryPercent?: number }>().catch(() => ({}));
+    if (!body.versionId || !['stable', 'canary', 'rollback'].includes(body.mode ?? '')) return json({ error: 'versionId and mode (stable, canary, rollback) are required' }, 400);
+    try {
+      await releaseIdeAgentVersion(db, {
+        tenantId: c.get('tenantId'), agentRef: c.req.param('ref'), versionId: body.versionId,
+        mode: body.mode as 'stable' | 'canary' | 'rollback', canaryPercent: body.canaryPercent,
+        actorRef: c.get('userId') ?? undefined,
+      });
+      return json({ ok: true });
+    } catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 400); }
   });
 
   return router;

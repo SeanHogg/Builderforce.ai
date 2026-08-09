@@ -846,7 +846,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     style={{
                       flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
                       background: createKind === k ? 'var(--accent)' : 'transparent',
-                      color: createKind === k ? '#fff' : 'var(--text-strong)',
+                      color: createKind === k ? 'var(--text-on-accent)' : 'var(--text-strong)',
                     }}
                   >
                     {k === 'cloud' ? tAdd('tabCloud') : tAdd('tabRemote')}

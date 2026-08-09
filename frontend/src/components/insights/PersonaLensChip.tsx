@@ -30,7 +30,7 @@ export function PersonaLensChip() {
         href="/settings/viewpoint"
         style={{
           fontSize: 12, fontWeight: 700, textDecoration: 'none', padding: '2px 8px', borderRadius: 'var(--radius-full)',
-          color: 'var(--text-on-accent)', background: 'var(--accent, #6366f1)',
+          color: 'var(--text-on-accent)', background: 'var(--accent)',
         }}
       >
         {t(`personas.${persona}`)}

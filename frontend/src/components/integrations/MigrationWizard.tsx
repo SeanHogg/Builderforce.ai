@@ -210,7 +210,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {error && (
-          <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)', background: 'var(--surface-2, rgba(220,38,38,0.08))', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
+          <div role="alert" style={{ fontSize: 13, color: 'var(--danger)', background: 'var(--surface-2, rgba(220,38,38,0.08))', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
             {error}
           </div>
         )}
@@ -362,7 +362,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {detail.run.status === 'completed' ? (
               <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success, #16a34a)' }}>✓ {t('migration.done')}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>✓ {t('migration.done')}</div>
                 <div style={cardStyle}>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <li>{t('migration.summaryProjects', { count: detail.run.summary?.projectsCreated ?? 0 })}</li>

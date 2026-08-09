@@ -115,7 +115,7 @@ const controlStyle: CSSProperties = {
 };
 const primaryBtn: CSSProperties = {
   padding: '9px 16px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: '0.85rem',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: '0.85rem',
 };
 
 export interface ManagerContentProps {
@@ -411,7 +411,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       </div>
 
       {error && data && (
-        <div style={{ ...panelStyle, borderColor: 'var(--danger, #dc2626)', color: 'var(--danger, #dc2626)', fontSize: '0.85rem' }}>
+        <div style={{ ...panelStyle, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '0.85rem' }}>
           {error}
         </div>
       )}
@@ -428,13 +428,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
-            borderColor: 'var(--danger-text, #dc2626)',
+            borderColor: 'var(--danger-text)',
             background: 'var(--danger-bg, rgba(220, 38, 38, 0.08))',
           }}
         >
           <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>🚫</span>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-text, #dc2626)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-text)' }}>
               {t('notConfigured.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>{t('notConfigured.body')}</div>
@@ -457,13 +457,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10,
-            borderColor: 'var(--warning-text, #b45309)',
+            borderColor: 'var(--warning-text)',
             background: 'var(--warning-bg, rgba(180, 83, 9, 0.08))',
           }}
         >
           <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>⏸️</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-text, #b45309)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-text)' }}>
               {t('autonomyPaused.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>
@@ -547,12 +547,12 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           <div style={mutedStyle}>{t('chart.empty')}</div>
         )}
         {(stats.unscored > 0 || stats.unranked > 0) && (
-          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-text, #b45309)' }}>
+          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
             💡 {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
           </div>
         )}
         {stats.flagged > 0 && (
-          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-text, #b45309)' }}>
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
             🚩 {t('coverageNudge', { flagged: stats.flagged })}
           </div>
         )}
@@ -563,7 +563,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       {activeSub === 'policy' && (
       <>
       {workspaceManagerDisabled && (
-        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-text, #b45309)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-text, #b45309)', fontWeight: 600, fontSize: '0.85rem' }}>
+        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-text)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-text)', fontWeight: 600, fontSize: '0.85rem' }}>
           {t('disabledNotice')}
         </div>
       )}
@@ -688,8 +688,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                   onClick={() => setCoachMode(m)}
                   style={{
                     padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer',
-                    background: active ? 'var(--accent, #2563eb)' : 'transparent',
-                    color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
                   }}
                 >
                   {t(`coaching.mode${m === 'task' ? 'Task' : 'Directive'}`)}
@@ -903,7 +903,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={sectionTitleStyle}>{t('activity.title')}</span>
           {running && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)' }}>
               <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', animation: 'bf-pulse 1.2s ease-in-out infinite' }} />
               {t('activity.working')}
             </span>
@@ -944,7 +944,7 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
   return (
     <div style={{ ...panelStyle, padding: 14 }}>
-      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text, #b45309)' : 'var(--text-primary)' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
         {value.toLocaleString()}
       </div>
       <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
@@ -959,7 +959,7 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={rationale || noRationale}>
       <span style={{ fontWeight: 700, fontSize: '0.82rem', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
       <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent, #2563eb)', borderRadius: 'var(--radius-sm)' }} />
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 'var(--radius-sm)' }} />
       </div>
     </div>
   );
@@ -1002,9 +1002,9 @@ function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 
 
 /** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
 const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
-  in_progress: 'var(--accent, #2563eb)',
+  in_progress: 'var(--accent)',
   done: 'var(--success-text, var(--success))',
-  blocked: 'var(--warning-text, #b45309)',
+  blocked: 'var(--warning-text)',
   open: 'var(--text-secondary)',
 };
 
@@ -1041,7 +1041,7 @@ function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeL
         {action.taskId != null && (
           <Link
             href={ticketHref(action.taskId)}
-            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent, #2563eb)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
+            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
           >
             {action.ticketKey ?? `#${action.taskId}`}{action.ticketTitle ? ` · ${action.ticketTitle}` : ''}
           </Link>

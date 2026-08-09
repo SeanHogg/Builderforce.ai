@@ -401,6 +401,31 @@ export const agentDefinitionVersions = pgTable('agent_definition_versions', {
   bySource: index('idx_agent_definition_versions_source').on(t.tenantId, t.sourceKind, t.sourceRef, t.version),
 }));
 
+export const agentDefinitionReleases = pgTable('agent_definition_releases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  sourceKind: varchar('source_kind', { length: 32 }).notNull(),
+  sourceRef: varchar('source_ref', { length: 128 }).notNull(),
+  stableVersionId: uuid('stable_version_id').notNull().references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
+  canaryVersionId: uuid('canary_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
+  canaryPercent: integer('canary_percent').notNull().default(0),
+  updatedBy: varchar('updated_by', { length: 128 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({ source: uniqueIndex('agent_definition_releases_tenant_id_source_kind_source_ref_key').on(t.tenantId, t.sourceKind, t.sourceRef) }));
+
+export const agentDefinitionPromotions = pgTable('agent_definition_promotions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  sourceKind: varchar('source_kind', { length: 32 }).notNull(),
+  sourceRef: varchar('source_ref', { length: 128 }).notNull(),
+  fromVersionId: uuid('from_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
+  toVersionId: uuid('to_version_id').notNull().references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
+  action: varchar('action', { length: 16 }).notNull(),
+  actorRef: varchar('actor_ref', { length: 128 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ bySource: index('idx_agent_definition_promotions_source').on(t.tenantId, t.sourceKind, t.sourceRef, t.createdAt) }));
+
 
 export const skills = pgTable('skills', {
   id:           serial('id').primaryKey(),

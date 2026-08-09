@@ -139,7 +139,7 @@ export function ChatsView() {
                   ) : (
                     messages.map((m) => (
                       <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: m.role === 'user' ? 'var(--cyan-bright, #22d3ee)' : 'var(--text-muted)', textTransform: 'uppercase' }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: m.role === 'user' ? 'var(--cyan-bright)' : 'var(--text-muted)', textTransform: 'uppercase' }}>
                           {m.role}
                         </div>
                         <div style={{

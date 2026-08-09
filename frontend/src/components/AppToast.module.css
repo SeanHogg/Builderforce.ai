@@ -49,7 +49,7 @@
   padding: 7px 14px;
   border: 0;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--coral-bright, var(--coral-bright)), var(--coral-dark, #1e40af));
+  background: linear-gradient(135deg, var(--coral-bright, var(--coral-bright)), var(--coral-dark));
   color: var(--text-on-accent);
   font-family: var(--font-display, sans-serif);
   font-size: 0.8rem;

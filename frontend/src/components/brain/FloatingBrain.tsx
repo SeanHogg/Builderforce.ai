@@ -157,7 +157,7 @@ export function FloatingBrain() {
               border-radius: 50%;
               border: none;
               cursor: pointer;
-              background: linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c2410c));
+              background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
               color: var(--text-on-accent);
               box-shadow: 0 8px 24px rgba(0,0,0,0.35);
               font-size: 26px;
@@ -175,19 +175,19 @@ export function FloatingBrain() {
               height: 20px;
               padding: 0 5px;
               border-radius: var(--radius-lg);
-              background: var(--warning, #d97706);
+              background: var(--warning);
               color: var(--text-on-accent);
               font-size: 11px;
               font-weight: 700;
               line-height: 20px;
               text-align: center;
-              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              box-shadow: 0 0 0 2px var(--bg-base);
               animation: agentPulse 1.4s ease-in-out infinite;
             }
             /* "New unread messages" — indigo count, no pulse (informational, not a
                blocking ask). Distinct hue from the amber answer badge. */
             .brain-launcher-badge-unread {
-              background: var(--badge-unread, #6366f1);
+              background: var(--badge-unread);
               animation: none;
             }
             /* Background activity (something running, nothing blocked) — a quiet
@@ -199,8 +199,8 @@ export function FloatingBrain() {
               width: 12px;
               height: 12px;
               border-radius: 50%;
-              background: var(--coral-bright, #f4726e);
-              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              background: var(--coral-bright);
+              box-shadow: 0 0 0 2px var(--bg-base);
               animation: agentPulse 1.4s ease-in-out infinite;
             }
             @media (prefers-reduced-motion: reduce) {

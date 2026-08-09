@@ -45,7 +45,7 @@ const confirmBtnStyle: React.CSSProperties = {
 function ModalError({ error }: { error?: string | null }) {
   if (!error) return null;
   return (
-    <span style={{ marginRight: 'auto', fontSize: 12, color: 'var(--error-text, #ef4444)' }}>{error}</span>
+    <span style={{ marginRight: 'auto', fontSize: 12, color: 'var(--error-text)' }}>{error}</span>
   );
 }
 

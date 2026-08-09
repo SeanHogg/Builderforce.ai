@@ -65,7 +65,7 @@ export default async function Soc2Page() {
           border: 1px solid var(--border-accent, var(--border-subtle)); border-radius: var(--radius-full); padding: 5px 14px; margin-bottom: 20px;
         }
         .s2-title { font-weight: 800; letter-spacing: -0.03em; line-height: 1.08; font-size: clamp(2.1rem, 5.4vw, 3.4rem); margin: 0 auto 16px; max-width: 15ch; }
-        .s2-grad { background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright, #22d3ee)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .s2-grad { background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .s2-sub { font-size: clamp(1rem, 2vw, 1.15rem); color: var(--text-secondary); line-height: 1.65; margin: 0 auto 28px; max-width: 62ch; }
         .s2-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
         .s2-btn-primary { display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent); font-weight: 600; font-size: 0.95rem; text-decoration: none; box-shadow: 0 6px 20px var(--shadow-coral-mid, rgba(244,114,110,0.28)); transition: transform 0.2s ease; }

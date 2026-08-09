@@ -21,8 +21,8 @@ import type { DeltaDirection } from './metricFormat';
  */
 
 const TONE_COLOR: Record<'good' | 'bad' | 'neutral', string> = {
-  good: 'var(--success, #16a34a)',
-  bad: 'var(--danger, #dc2626)',
+  good: 'var(--success)',
+  bad: 'var(--danger)',
   neutral: 'var(--text-secondary)',
 };
 

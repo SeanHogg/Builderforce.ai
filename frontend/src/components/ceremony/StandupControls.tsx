@@ -13,7 +13,7 @@ const btn = (variant: 'primary' | 'tertiary'): React.CSSProperties => ({
   cursor: 'pointer',
   border: variant === 'primary' ? 'none' : '1px solid var(--border-subtle)',
   background: variant === 'primary' ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-deep)',
-  color: variant === 'primary' ? '#fff' : 'var(--text-secondary)',
+  color: variant === 'primary' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 
 /**

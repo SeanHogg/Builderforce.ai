@@ -6,6 +6,8 @@ import {
   agentCapabilityGrants,
   agentCredentialDelegations,
   agentDefinitionVersions,
+  agentDefinitionReleases,
+  agentDefinitionPromotions,
   agentRunPrincipals,
   executionLimits,
   executions,
@@ -14,6 +16,7 @@ import {
   agentRegistrations,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { selectAgentRelease } from '../../domain/agentIdentity/releaseSelection';
 
 export interface FrozenAgentDefinition {
   id: string;
@@ -39,6 +42,19 @@ export interface RunLimitInput {
   maxFiles?: number | null;
   maxRepositories?: number | null;
   maxSpendMillicents?: number | null;
+}
+
+function parseRunLimits(payload: string | null | undefined): RunLimitInput {
+  if (!payload) return {};
+  try {
+    const value = (JSON.parse(payload) as { containmentLimits?: Record<string, unknown> }).containmentLimits;
+    if (!value) return {};
+    const read = (key: string): number | null | undefined => {
+      const n = value[key];
+      return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.trunc(n) : undefined;
+    };
+    return { maxFiles: read('maxFiles'), maxRepositories: read('maxRepositories'), maxSpendMillicents: read('maxSpendMillicents') };
+  } catch { return {}; }
 }
 
 const DEFAULT_LIMITS: Required<RunLimitInput> = {
@@ -91,8 +107,8 @@ export async function freezeDispatchAgentDefinition(db: Db, args: { tenantId: nu
 export async function ensureAgentRunIdentity(
   db: Db,
   args: { tenantId: number; executionId: number; agentRef?: string; issuedBy: string; capabilities: readonly string[]; limits?: RunLimitInput },
-): Promise<{ principalId: string; definitionVersionId: string | null }> {
-  const frozen = args.agentRef ? await freezeIdeAgentDefinition(db, args.tenantId, args.agentRef) : null;
+): Promise<{ principalId: string; definitionVersionId: string | null; definition: Record<string, unknown> | null }> {
+  const frozen = args.agentRef ? await resolveReleasedIdeAgentDefinition(db, args.tenantId, args.agentRef, args.executionId) : null;
   if (frozen) await db.update(executions).set({ agentDefinitionVersionId: frozen.id }).where(and(eq(executions.id, args.executionId), eq(executions.tenantId, args.tenantId)));
 
   await db.insert(agentRunPrincipals).values({
@@ -110,9 +126,57 @@ export async function ensureAgentRunIdentity(
       tenantId: args.tenantId, principalId: principal.id, capability,
     }))).onConflictDoNothing();
   }
-  const limits = { ...DEFAULT_LIMITS, ...args.limits };
+  const [execution] = await db.select({ payload: executions.payload }).from(executions).where(and(eq(executions.tenantId, args.tenantId), eq(executions.id, args.executionId))).limit(1);
+  const limits = { ...DEFAULT_LIMITS, ...parseRunLimits(execution?.payload), ...args.limits };
   await db.insert(executionLimits).values({ tenantId: args.tenantId, executionId: args.executionId, ...limits }).onConflictDoNothing();
-  return { principalId: principal.id, definitionVersionId: frozen?.id ?? null };
+  return { principalId: principal.id, definitionVersionId: frozen?.id ?? null, definition: frozen?.definition ?? null };
+}
+
+async function resolveReleasedIdeAgentDefinition(db: Db, tenantId: number, agentRef: string, executionId: number): Promise<FrozenAgentDefinition | null> {
+  const [run] = await db.select({ versionId: executions.agentDefinitionVersionId }).from(executions).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId))).limit(1);
+  if (run?.versionId) {
+    const [pinned] = await db.select().from(agentDefinitionVersions).where(and(eq(agentDefinitionVersions.id, run.versionId), eq(agentDefinitionVersions.tenantId, tenantId))).limit(1);
+    return pinned ? pinned as FrozenAgentDefinition : null;
+  }
+  const current = await freezeIdeAgentDefinition(db, tenantId, agentRef);
+  if (!current) return null;
+  await db.insert(agentDefinitionReleases).values({ tenantId, sourceKind: 'ide_agent', sourceRef: agentRef, stableVersionId: current.id }).onConflictDoNothing();
+  const [release] = await db.select().from(agentDefinitionReleases).where(and(eq(agentDefinitionReleases.tenantId, tenantId), eq(agentDefinitionReleases.sourceKind, 'ide_agent'), eq(agentDefinitionReleases.sourceRef, agentRef))).limit(1);
+  const chosenId = release ? selectAgentRelease(executionId, release) : current.id;
+  const [chosen] = await db.select().from(agentDefinitionVersions).where(and(eq(agentDefinitionVersions.id, chosenId), eq(agentDefinitionVersions.tenantId, tenantId))).limit(1);
+  return chosen ? chosen as FrozenAgentDefinition : current;
+}
+
+export async function releaseIdeAgentVersion(db: Db, args: { tenantId: number; agentRef: string; versionId: string; mode: 'stable' | 'canary' | 'rollback'; canaryPercent?: number; actorRef?: string }): Promise<void> {
+  const [version] = await db.select({ id: agentDefinitionVersions.id }).from(agentDefinitionVersions).where(and(
+    eq(agentDefinitionVersions.id, args.versionId), eq(agentDefinitionVersions.tenantId, args.tenantId),
+    eq(agentDefinitionVersions.sourceKind, 'ide_agent'), eq(agentDefinitionVersions.sourceRef, args.agentRef),
+  )).limit(1);
+  if (!version) throw new Error('agent version not found');
+  const [previous] = await db.select().from(agentDefinitionReleases).where(and(eq(agentDefinitionReleases.tenantId, args.tenantId), eq(agentDefinitionReleases.sourceKind, 'ide_agent'), eq(agentDefinitionReleases.sourceRef, args.agentRef))).limit(1);
+  const percent = Math.min(100, Math.max(0, Math.trunc(args.canaryPercent ?? 10)));
+  await db.insert(agentDefinitionReleases).values({
+    tenantId: args.tenantId, sourceKind: 'ide_agent', sourceRef: args.agentRef, stableVersionId: version.id,
+    ...(args.mode === 'canary' ? { canaryVersionId: version.id, canaryPercent: percent } : {}), updatedBy: args.actorRef ?? null,
+  }).onConflictDoUpdate({
+    target: [agentDefinitionReleases.tenantId, agentDefinitionReleases.sourceKind, agentDefinitionReleases.sourceRef],
+    set: args.mode === 'canary'
+      ? { canaryVersionId: version.id, canaryPercent: percent, updatedBy: args.actorRef ?? null, updatedAt: new Date() }
+      : { stableVersionId: version.id, canaryVersionId: null, canaryPercent: 0, updatedBy: args.actorRef ?? null, updatedAt: new Date() },
+  });
+  await db.insert(agentDefinitionPromotions).values({
+    tenantId: args.tenantId, sourceKind: 'ide_agent', sourceRef: args.agentRef,
+    fromVersionId: args.mode === 'canary' ? previous?.canaryVersionId ?? null : previous?.stableVersionId ?? null,
+    toVersionId: version.id, action: args.mode, actorRef: args.actorRef ?? null,
+  });
+}
+
+export async function listIdeAgentVersions(db: Db, tenantId: number, agentRef: string) {
+  const [versions, release] = await Promise.all([
+    db.select().from(agentDefinitionVersions).where(and(eq(agentDefinitionVersions.tenantId, tenantId), eq(agentDefinitionVersions.sourceKind, 'ide_agent'), eq(agentDefinitionVersions.sourceRef, agentRef))).orderBy(desc(agentDefinitionVersions.version)),
+    db.select().from(agentDefinitionReleases).where(and(eq(agentDefinitionReleases.tenantId, tenantId), eq(agentDefinitionReleases.sourceKind, 'ide_agent'), eq(agentDefinitionReleases.sourceRef, agentRef))).limit(1),
+  ]);
+  return { versions, release: release[0] ?? null };
 }
 
 export async function revokeRunPrincipal(db: Db, tenantId: number, executionId: number): Promise<boolean> {

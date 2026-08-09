@@ -24,9 +24,11 @@ import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
  */
 
 const STATUS_COLOR: Record<string, string> = {
-  proposed: '#6b7280', active: '#2563eb', completed: '#16a34a', archived: '#9ca3af',
+  // Two greys, and they have to stay two: `proposed` is work that has not begun
+  // and `archived` is work that never will, so the second reads a step fainter.
+  proposed: 'var(--text-secondary)', active: 'var(--info)', completed: 'var(--success)', archived: 'var(--text-muted)',
 };
-const CRITICAL_COLOR = '#dc2626';
+const CRITICAL_COLOR = 'var(--error)';
 const COL_W = 240;
 const ROW_H = 96;
 
@@ -82,7 +84,7 @@ export function ValueStreamGraph() {
       data: { label: `${n.name} · ${n.completionPct}%` },
       style: {
         borderRadius: 'var(--radius-md)',
-        border: `${n.onCriticalPath ? 3 : 2}px solid ${n.onCriticalPath ? CRITICAL_COLOR : (STATUS_COLOR[n.status] ?? '#6b7280')}`,
+        border: `${n.onCriticalPath ? 3 : 2}px solid ${n.onCriticalPath ? CRITICAL_COLOR : (STATUS_COLOR[n.status] ?? 'var(--text-muted)')}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
         fontSize: 12,
@@ -97,7 +99,7 @@ export function ValueStreamGraph() {
       target: e.toInitiativeId,
       animated: e.onCriticalPath,
       markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: e.onCriticalPath ? CRITICAL_COLOR : 'var(--coral-bright, #f97316)', strokeWidth: e.onCriticalPath ? 2.5 : 1.5 },
+      style: { stroke: e.onCriticalPath ? CRITICAL_COLOR : 'var(--coral-bright)', strokeWidth: e.onCriticalPath ? 2.5 : 1.5 },
     }));
     return { flowNodes, flowEdges };
   }, [data]);

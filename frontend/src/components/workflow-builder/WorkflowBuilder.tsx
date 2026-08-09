@@ -51,7 +51,7 @@ type DndPayload = { kind?: WorkflowNodeKind; integrationId?: string };
 const nodeTypes: NodeTypes = { builder: BuilderNode };
 
 const btnPrimary: React.CSSProperties = {
-  padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright, #f4726e)',
+  padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright)',
   color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {

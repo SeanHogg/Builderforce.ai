@@ -56,7 +56,7 @@ export default function AgentExecutionControl() {
   return (
     <div style={{
       background: disabled ? 'rgba(244,114,94,0.08)' : 'var(--bg-base)',
-      border: `1px solid ${disabled ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
+      border: `1px solid ${disabled ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
       borderRadius: 'var(--radius-lg)', padding: 20, marginTop: 20,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
@@ -77,9 +77,9 @@ export default function AgentExecutionControl() {
             onClick={() => void change(disabled)}
             style={{
               minHeight: 40, padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 700,
-              border: `1px solid ${disabled ? 'var(--accent, #6366f1)' : 'var(--coral-bright, #f4726e)'}`,
-              background: disabled ? 'var(--accent, #6366f1)' : 'rgba(244,114,94,0.1)',
-              color: disabled ? '#fff' : 'var(--coral-bright, #f4726e)',
+              border: `1px solid ${disabled ? 'var(--accent)' : 'var(--coral-bright)'}`,
+              background: disabled ? 'var(--accent)' : 'rgba(244,114,94,0.1)',
+              color: disabled ? 'var(--text-on-accent)' : 'var(--coral-bright)',
               cursor: saving || enabled == null ? 'default' : 'pointer',
               opacity: saving || enabled == null ? 0.6 : 1,
             }}
@@ -88,7 +88,7 @@ export default function AgentExecutionControl() {
           </button>
         </RoleGate>
       </div>
-      <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: disabled ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)' }}>
+      <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: disabled ? 'var(--coral-bright)' : 'var(--text-secondary)' }}>
         Status: {enabled == null ? 'Loading…' : enabled ? 'Execution enabled' : 'EXECUTION DISABLED'}
       </div>
       {notice && <div role="status" style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>{notice}</div>}

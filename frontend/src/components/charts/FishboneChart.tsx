@@ -79,8 +79,8 @@ export function FishboneChart({ problem, categories, ariaLabel }: FishboneChartP
         <g>
           <rect
             x={VBW - HEAD_W} y={SPINE_Y - 54} width={HEAD_W} height={108} rx={12}
-            fill="var(--danger, #dc2626)" fillOpacity={0.14}
-            stroke="var(--danger, #dc2626)" strokeWidth={1.5}
+            fill="var(--danger)" fillOpacity={0.14}
+            stroke="var(--danger)" strokeWidth={1.5}
           />
           {wrap(problem, 22, 3).map((line, i, arr) => (
             <text

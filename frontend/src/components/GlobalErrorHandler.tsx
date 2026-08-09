@@ -213,7 +213,7 @@ function Toast({
         <span
           style={{
             fontWeight: 600,
-            color: 'var(--error-text, #fca5a5)',
+            color: 'var(--error-text)',
             flexShrink: 0,
           }}
         >

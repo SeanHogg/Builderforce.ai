@@ -148,7 +148,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 gap: 10,
                 padding: '8px 12px',
                 background: 'var(--bg-base)',
-                border: `1px solid ${invite.status === 'error' ? 'var(--error-border, #e74c3c)' : invite.status === 'added' ? 'rgba(34,197,94,0.3)' : invite.status === 'invited' ? 'rgba(245,158,11,0.35)' : 'var(--border-subtle)'}`,
+                border: `1px solid ${invite.status === 'error' ? 'var(--error-border)' : invite.status === 'added' ? 'rgba(34,197,94,0.3)' : invite.status === 'invited' ? 'rgba(245,158,11,0.35)' : 'var(--border-subtle)'}`,
                 borderRadius: 'var(--radius-md)',
                 fontSize: 13,
               }}
@@ -167,7 +167,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 <span style={{ fontSize: 11, color: 'var(--warning-text)', fontWeight: 600 }} title={t('statusInvitedHint')}>✉ {t('statusInvited')}</span>
               )}
               {invite.status === 'error' && (
-                <span style={{ fontSize: 11, color: 'var(--error-text, #e74c3c)' }} title={invite.errorMsg}>
+                <span style={{ fontSize: 11, color: 'var(--error-text)' }} title={invite.errorMsg}>
                   ✗ {invite.errorMsg ?? t('statusError')}
                 </span>
               )}

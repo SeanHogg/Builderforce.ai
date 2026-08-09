@@ -20,9 +20,9 @@ export interface ChangeItem {
 }
 
 export const CHANGE_COLOR: Record<FileChangeKind, string> = {
-  created: 'var(--success, #16a34a)',
+  created: 'var(--success)',
   modified: 'var(--coral-bright)',
-  deleted: 'var(--danger, #dc2626)',
+  deleted: 'var(--danger)',
 };
 
 /**

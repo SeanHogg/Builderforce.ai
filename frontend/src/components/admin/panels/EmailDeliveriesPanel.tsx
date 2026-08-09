@@ -10,7 +10,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div style={{ flex: '1 1 150px', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface)' }}>
       <div className="text-muted" style={{ fontSize: 12 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 600, color: value ? 'var(--danger, #dc2626)' : 'var(--text-primary)' }}>{value.toLocaleString()}</div>
+      <div style={{ fontSize: 24, fontWeight: 600, color: value ? 'var(--danger)' : 'var(--text-primary)' }}>{value.toLocaleString()}</div>
     </div>
   );
 }

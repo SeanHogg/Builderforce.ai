@@ -57,7 +57,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
     <div
       style={{
         minWidth: 168,
-        background: 'var(--bg-elevated, #1a1c23)',
+        background: 'var(--bg-elevated)',
         border: `1px solid ${selected ? accent : 'var(--border-subtle, rgba(255,255,255,0.1))'}`,
         borderRadius: 'var(--radius-lg)',
         boxShadow: selected ? `0 0 0 1px ${accent}` : 'none',
@@ -72,7 +72,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
       <div style={{ padding: '8px 11px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span style={{ fontSize: 15 }}>{meta?.icon ?? '◻'}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary, #e2e5ec)' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
             {d.label || meta?.label || d.kind}
           </span>
         </div>
@@ -89,7 +89,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
           {meta?.group ?? d.kind}
         </div>
         {summary && (
-          <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--text-muted, #8a8f9c)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
+          <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
             {summary}
           </div>
         )}

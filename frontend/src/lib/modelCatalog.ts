@@ -238,7 +238,7 @@ export function formatContext(record: ModelRecord): string {
 
 /** Free / Paid / our-product badge color. */
 export function tierColor(record: ModelRecord): string {
-  if (record.tier === 'PRO') return 'var(--coral-bright, #f4726e)';
+  if (record.tier === 'PRO') return 'var(--coral-bright)';
   if (record.tier === 'FREE') return 'var(--success)';
-  return 'var(--accent, #6366f1)';
+  return 'var(--accent)';
 }

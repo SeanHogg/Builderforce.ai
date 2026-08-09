@@ -29,12 +29,12 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 const STATUS_TONE: Record<BudgetState, string> = {
-  over: 'var(--danger, #dc2626)', forecast_over: '#d97706', on_track: '#16a34a', no_budget: 'var(--text-muted)',
+  over: 'var(--danger)', forecast_over: 'var(--warning)', on_track: 'var(--success)', no_budget: 'var(--text-muted)',
 };
 
 function currentMonth(): string {

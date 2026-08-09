@@ -78,7 +78,7 @@ export default async function CompetitorComparePage({
         .vs-sub { font-size: clamp(0.95rem, 2vw, 1.05rem); color: var(--text-secondary); line-height: 1.7; margin: 0; }
         .vs-cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
         .vs-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
-        .vs-btn-primary { background: linear-gradient(135deg, var(--coral-bright), #e23b2e); color: var(--text-on-accent); }
+        .vs-btn-primary { background: linear-gradient(135deg, var(--coral-bright), var(--error)); color: var(--text-on-accent); }
         .vs-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .vs-section { max-width: 900px; margin: 0 auto; padding: 24px; width: 100%; }
         .vs-criteria { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }

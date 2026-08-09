@@ -82,7 +82,7 @@ const EV_STUDIO_CSS = `
   --ev-hypothalamus: #d95926;
   --ev-thalamus: #c98500;
   --ev-basal: #d55181;
-  --ev-personality: #9085e9;
+  --ev-personality: var(--violet-bright);
 }
 :root[data-theme='light'] .ev-studio {
   --ev-neocortex: #2a78d6;

@@ -16,7 +16,7 @@ export function PowerMeter({
 }) {
   const ratio = cap > 0 ? load / cap : (load > 0 ? 1.5 : 0);
   const pct = Math.min(100, Math.round(ratio * 100));
-  const color = ratio <= 0.6 ? 'var(--success)' : ratio <= 1 ? '#eab308' : 'var(--error)';
+  const color = ratio <= 0.6 ? 'var(--success)' : ratio <= 1 ? 'var(--yellow-bright)' : 'var(--error)';
   return (
     <button
       type="button"

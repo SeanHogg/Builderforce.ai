@@ -146,8 +146,8 @@ export function MessagesPanel({ open, onClose, side, context }: {
     maxWidth: '80%', padding: '8px 12px', borderRadius: 'var(--radius-lg)', fontSize: 14, lineHeight: 1.4,
     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
     alignSelf: mine ? 'flex-end' : 'flex-start',
-    background: mine ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-    color: mine ? '#fff' : 'var(--text-primary)',
+    background: mine ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+    color: mine ? 'var(--text-on-accent)' : 'var(--text-primary)',
     border: mine ? 'none' : '1px solid var(--border-subtle)',
   });
 
@@ -164,7 +164,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
       width="min(520px, 96vw)"
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 12, padding: '8px 16px' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 12, padding: '8px 16px' }}>{error}</div>}
 
         {/* Conversation list */}
         {!selected && (
@@ -205,7 +205,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
                       {m.body && <div>{m.body}</div>}
                       {m.hasAttachment && (
                         <button type="button" onClick={() => void openAttachment(m)}
-                          style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? '#fff' : 'var(--coral-bright)', border: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', cursor: 'pointer' }}>
+                          style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? 'var(--text-on-accent)' : 'var(--coral-bright)', border: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', cursor: 'pointer' }}>
                           📎 {m.attachmentName ?? t('attachment')}
                         </button>
                       )}
@@ -221,7 +221,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
               {file && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                   📎 {file.name}
-                  <button type="button" onClick={() => setFile(null)} style={{ background: 'none', border: 'none', color: 'var(--danger, #e5484d)', cursor: 'pointer', fontSize: 12 }}>{t('remove')}</button>
+                  <button type="button" onClick={() => setFile(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 12 }}>{t('remove')}</button>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
@@ -238,7 +238,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
                   style={{ flex: 1, resize: 'none', padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit' }}
                 />
                 <button type="button" onClick={() => void send()} disabled={sending || (!draft.trim() && !file)}
-                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: sending ? 'wait' : 'pointer', opacity: (!draft.trim() && !file) ? 0.5 : 1 }}>
+                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: sending ? 'wait' : 'pointer', opacity: (!draft.trim() && !file) ? 0.5 : 1 }}>
                   {sending ? t('sending') : t('send')}
                 </button>
               </div>

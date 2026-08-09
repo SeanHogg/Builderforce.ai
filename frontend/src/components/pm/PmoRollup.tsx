@@ -19,7 +19,7 @@ const hrs = (n: number | null | undefined) => (n == null ? '—' : `${n.toFixed(
 
 const blockedPill: React.CSSProperties = {
   display: 'inline-block', padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: '0.68rem',
-  fontWeight: 700, color: 'var(--text-on-accent)', background: '#dc2626', whiteSpace: 'nowrap',
+  fontWeight: 700, color: 'var(--text-on-accent)', background: 'var(--error)', whiteSpace: 'nowrap',
 };
 
 export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string } }) {

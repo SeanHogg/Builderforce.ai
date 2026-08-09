@@ -183,7 +183,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
     background: active ? 'var(--bg-elevated)' : 'var(--bg-deep)',
     color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-    border: `1px solid ${active ? 'var(--border-strong, #555)' : 'var(--border-subtle)'}`,
+    border: `1px solid ${active ? 'var(--border-strong)' : 'var(--border-subtle)'}`,
   });
 
   return (
@@ -330,7 +330,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                         display: 'inline-flex', alignItems: 'center', gap: 6,
                       }}
                     >
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: here ? 'var(--cyan-bright)' : 'var(--border-strong, #555)' }} />
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: here ? 'var(--cyan-bright)' : 'var(--border-strong)' }} />
                       {a.memberName}
                       {a.memberKind !== 'human' && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>· {t('agent')}</span>}
                     </span>
@@ -396,7 +396,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
           <button
             type="button"
             onClick={endForAll}
-            style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-full)', cursor: 'pointer', background: 'var(--error-bg, #7f1d1d)', color: 'var(--text-on-accent)', border: '1px solid var(--error-border, #b91c1c)' }}
+            style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-full)', cursor: 'pointer', background: 'var(--error-bg)', color: 'var(--text-on-accent)', border: '1px solid var(--error-border)' }}
           >
             {t('endForAll')}
           </button>

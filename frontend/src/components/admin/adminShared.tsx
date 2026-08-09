@@ -170,7 +170,7 @@ export function ModelPoolBadges({
               padding: '4px 8px',
               borderRadius: 'var(--radius-sm)',
               fontSize: 12,
-              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
+              background: m.available ? 'var(--success-bg)' : 'var(--error-bg)',
               color: m.available ? 'var(--success-text)' : 'var(--error-text)',
             }}
             title={m.cooldownUntil ? t('common.cooldownUntil', { time: new Date(m.cooldownUntil).toLocaleString() }) : m.available ? t('common.available') : t('common.unavailable')}

@@ -145,7 +145,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
               onClick={() => setMode(m)}
               style={{
                 flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
-                background: mode === m ? 'var(--accent)' : 'transparent', color: mode === m ? '#fff' : 'var(--text-strong)',
+                background: mode === m ? 'var(--accent)' : 'transparent', color: mode === m ? 'var(--text-on-accent)' : 'var(--text-strong)',
               }}
             >
               {m === 'self' ? t('modeSelf') : t('modeData')}
@@ -200,7 +200,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                         padding: '12px 14px', fontSize: 13, lineHeight: 1.45, borderRadius: 'var(--radius-lg)', cursor: 'pointer',
                         border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                         background: active ? 'var(--accent)' : 'var(--bg-elevated)',
-                        color: active ? '#fff' : 'var(--text-secondary)',
+                        color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       }}
                     >
                       <span aria-hidden style={{
@@ -250,7 +250,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                             style={{
                               padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
                               border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                              background: active ? 'var(--accent)' : 'var(--bg-elevated)', color: active ? '#fff' : 'var(--text-secondary)',
+                              background: active ? 'var(--accent)' : 'var(--bg-elevated)', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                             }}
                           >
                             {sc.value}

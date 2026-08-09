@@ -105,12 +105,12 @@ export function FeedbackTab() {
           z-index: 9989;
           writing-mode: vertical-rl;
           padding: 16px 7px;
-          border: 1px solid var(--border-subtle, #2c313a);
+          border: 1px solid var(--border-subtle);
           border-right: none;
           border-radius: var(--radius-md) 0 0 var(--radius-md);
           cursor: pointer;
-          background: var(--bg-elevated, #1d222a);
-          color: var(--text-secondary, #98a2b3);
+          background: var(--bg-elevated);
+          color: var(--text-secondary);
           font-size: 12px;
           font-weight: 600;
           letter-spacing: 0.04em;
@@ -118,12 +118,12 @@ export function FeedbackTab() {
           transition: color 0.15s ease, background 0.15s ease;
         }
         .feedback-edge-tab:hover {
-          background: var(--coral-bright, #f4726e);
+          background: var(--coral-bright);
           color: var(--text-on-accent);
-          border-color: var(--coral-bright, #f4726e);
+          border-color: var(--coral-bright);
         }
         .feedback-edge-tab:focus-visible {
-          outline: 2px solid var(--coral-bright, #f4726e);
+          outline: 2px solid var(--coral-bright);
           outline-offset: 2px;
         }
         @media (max-width: 640px) {
@@ -199,7 +199,7 @@ export function FeedbackTab() {
                 />
               </label>
 
-              {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+              {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('form.gateNote')}</div>
 

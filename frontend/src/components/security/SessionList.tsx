@@ -92,7 +92,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
               checked={allSelected}
               onChange={toggleAll}
               aria-label={t('selectAll')}
-              style={{ width: 15, height: 15, accentColor: 'var(--coral-bright, #f4726e)', cursor: 'pointer' }}
+              style={{ width: 15, height: 15, accentColor: 'var(--coral-bright)', cursor: 'pointer' }}
             />
             {selectedCount > 0 ? t('selected', { count: selectedCount }) : t('selectAll')}
           </label>
@@ -103,8 +103,8 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
               disabled={busy}
               style={{
                 padding: '5px 12px', fontSize: 11, fontWeight: 600,
-                background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)',
-                border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-sm)',
+                background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+                border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)',
                 cursor: busy ? 'wait' : 'pointer',
               }}
             >
@@ -123,7 +123,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '10px 12px', borderRadius: 'var(--radius-md)',
               background: 'var(--bg-elevated)',
-              border: `1px solid ${s.isCurrent ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
+              border: `1px solid ${s.isCurrent ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
               opacity: s.isActive ? 1 : 0.45,
             }}>
               <input
@@ -134,7 +134,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
                 aria-label={s.sessionName ?? s.userAgent ?? t('session')}
                 style={{
                   width: 15, height: 15, flexShrink: 0,
-                  accentColor: 'var(--coral-bright, #f4726e)',
+                  accentColor: 'var(--coral-bright)',
                   cursor: isRevocable ? 'pointer' : 'not-allowed',
                   visibility: isRevocable ? 'visible' : 'hidden',
                 }}
@@ -149,7 +149,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', gap: 8, alignItems: 'center' }}>
                   {s.sessionName ?? s.userAgent ?? t('session')}
                   {s.isCurrent && (
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright)' }}>
                       {t('current')}
                     </span>
                   )}
@@ -169,8 +169,8 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
                   disabled={busy}
                   style={{
                     padding: '4px 8px', fontSize: 11, fontWeight: 600, flexShrink: 0,
-                    background: 'none', color: 'var(--coral-bright, #f4726e)',
-                    border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-sm)',
+                    background: 'none', color: 'var(--coral-bright)',
+                    border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)',
                     cursor: busy ? 'wait' : 'pointer',
                   }}
                 >

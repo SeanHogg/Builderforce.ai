@@ -114,7 +114,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
         </label>
       </div>
 
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('triage.loading')}</div>
@@ -147,10 +147,10 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
   const gated = isGated(s);
 
   const statusColour = s.status === 'approved'
-    ? { background: 'var(--success-soft, rgba(22,163,74,.14))', color: 'var(--success, #16a34a)' }
+    ? { background: 'var(--success-soft, rgba(22,163,74,.14))', color: 'var(--success)' }
     : s.status === 'declined'
       ? { background: 'var(--bg-elevated)', color: 'var(--text-muted)' }
-      : { background: 'var(--warning-soft, rgba(217,119,6,.14))', color: 'var(--warning, #b45309)' };
+      : { background: 'var(--warning-soft, rgba(217,119,6,.14))', color: 'var(--warning)' };
 
   return (
     <div style={card}>

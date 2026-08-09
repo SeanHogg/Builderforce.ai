@@ -44,7 +44,7 @@ const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8re
 /** Escalated rows read as "needs a human"; everything else as "manager working". */
 function toneFor(row: StallWatchRow): { fg: string; bg: string } {
   return row.escalatedAt
-    ? { fg: 'var(--warning-text, #b45309)', bg: 'var(--warning-bg, rgba(180, 83, 9, 0.12))' }
+    ? { fg: 'var(--warning-text)', bg: 'var(--warning-bg, rgba(180, 83, 9, 0.12))' }
     : { fg: 'var(--text-muted)', bg: 'var(--bg-base)' };
 }
 
@@ -135,7 +135,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
           <button
             type="button"
             onClick={() => void load()}
-            style={{ background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontWeight: 700, padding: 0 }}
           >
             {t('retry')}
           </button>
@@ -163,7 +163,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
               <div style={{ ...mutedStyle, marginTop: 2 }}>{t('stat.working')}</div>
             </div>
             <div style={{ ...panelStyle, padding: 14 }}>
-              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: (data?.escalated ?? 0) > 0 ? 'var(--warning-text, #b45309)' : 'var(--text-primary)' }}>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: (data?.escalated ?? 0) > 0 ? 'var(--warning-text)' : 'var(--text-primary)' }}>
                 {(data?.escalated ?? 0).toLocaleString()}
               </div>
               <div style={{ ...mutedStyle, marginTop: 2 }}>{t('stat.escalated')}</div>
@@ -196,7 +196,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
                       <td style={tdStyle}>
                         <Link
                           href={ticketHref(row.taskId)}
-                          style={{ color: 'var(--accent, #2563eb)', fontWeight: 600, textDecoration: 'none' }}
+                          style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}
                         >
                           {row.title}
                         </Link>
@@ -217,7 +217,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
                         {row.escalatedAt ? (
                           <Badge
                             label={t('needsYou')}
-                            fg="var(--warning-text, #b45309)"
+                            fg="var(--warning-text)"
                             bg="var(--warning-bg, rgba(180, 83, 9, 0.12))"
                           />
                         ) : (

@@ -106,7 +106,7 @@ export function ActiveRunsPanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span
-            style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--coral-bright, #f4726e)', boxShadow: '0 0 0 3px rgba(244,114,94,0.2)' }}
+            style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--coral-bright)', boxShadow: '0 0 0 3px rgba(244,114,94,0.2)' }}
           />
           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
             Agents working now <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({runs.length})</span>
@@ -120,8 +120,8 @@ export function ActiveRunsPanel() {
             aria-label="Stop all running agents"
             style={{
               minHeight: 36, padding: '7px 12px', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--coral-bright, #f4726e)',
-              background: 'rgba(244,114,94,0.1)', color: 'var(--coral-bright, #f4726e)',
+              border: '1px solid var(--coral-bright)',
+              background: 'rgba(244,114,94,0.1)', color: 'var(--coral-bright)',
               fontSize: 12, fontWeight: 700, cursor: stoppingAll ? 'default' : 'pointer',
               opacity: stoppingAll ? 0.6 : 1,
             }}
@@ -181,7 +181,7 @@ export function ActiveRunsPanel() {
                   style={{
                     fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
-                    color: 'var(--coral-bright, #f4726e)',
+                    color: 'var(--coral-bright)',
                     cursor: cancelling.has(r.id) ? 'default' : 'pointer', opacity: cancelling.has(r.id) ? 0.5 : 1,
                     flexShrink: 0,
                   }}

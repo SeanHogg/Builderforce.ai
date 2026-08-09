@@ -58,9 +58,9 @@ export interface ProjectInspection {
 
 const TIER_COLOR: Record<HealthTier, string> = {
   healthy: 'var(--success)',
-  watch: '#eab308',
+  watch: 'var(--yellow-bright)',
   at_risk: 'var(--warning)',
-  critical: '#ef4444',
+  critical: 'var(--error)',
 };
 
 function tierColor(tier: HealthTier | null): string {

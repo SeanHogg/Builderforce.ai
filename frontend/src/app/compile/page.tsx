@@ -170,7 +170,7 @@ export default function CompilePage() {
               disabled={!text.trim() || !!busy}
               style={{
                 fontSize: 14, fontWeight: 700, padding: '9px 18px', borderRadius: 'var(--radius-md)', cursor: text.trim() && !busy ? 'pointer' : 'not-allowed',
-                background: 'var(--accent, #e2603f)', color: 'var(--text-on-accent)', border: '1px solid transparent', opacity: !text.trim() || busy ? 0.6 : 1,
+                background: 'var(--accent)', color: 'var(--text-on-accent)', border: '1px solid transparent', opacity: !text.trim() || busy ? 0.6 : 1,
               }}
             >
               {busy === 'run' ? t('running') : t('runBtn')}
@@ -179,7 +179,7 @@ export default function CompilePage() {
         </div>
 
         {error && (
-          <div style={{ ...card, borderColor: 'var(--warning-border, #b45309)', color: 'var(--warning-text, #b45309)', fontSize: 14 }}>{error}</div>
+          <div style={{ ...card, borderColor: 'var(--warning-border)', color: 'var(--warning-text)', fontSize: 14 }}>{error}</div>
         )}
 
         {spec && <SpecView spec={spec} t={t} />}

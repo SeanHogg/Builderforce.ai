@@ -246,11 +246,11 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
               </div>
             </div>
 
-            {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 12 }}>{error}</div>}
+            {error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button onClick={onClose} style={{ ...field, width: 'auto', cursor: 'pointer' }}>{tc('cancel')}</button>
-              <button onClick={save} disabled={saving} style={{ ...field, width: 'auto', cursor: 'pointer', background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', border: 'none', opacity: saving ? 0.6 : 1 }}>
+              <button onClick={save} disabled={saving} style={{ ...field, width: 'auto', cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: saving ? 0.6 : 1 }}>
                 {saving ? tc('saving') : t('saveProfile')}
               </button>
             </div>

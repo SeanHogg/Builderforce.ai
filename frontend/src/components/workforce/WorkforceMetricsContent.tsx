@@ -77,8 +77,8 @@ export function WorkforceMetricsContent() {
             <button key={d} onClick={() => setDays(d)} style={{
               padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer',
               border: '1px solid var(--border-subtle)',
-              background: days === d ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
-              color: days === d ? '#fff' : 'var(--text-secondary)',
+              background: days === d ? 'var(--accent)' : 'var(--bg-base)',
+              color: days === d ? 'var(--text-on-accent)' : 'var(--text-secondary)',
             }}>{d}d</button>
           ))}
           <button onClick={doExport} disabled={exporting} title={tw('emp.exportCsv')} style={{
@@ -126,7 +126,7 @@ export function WorkforceMetricsContent() {
             ))}
           </div>
         )}
-        {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -160,8 +160,8 @@ export function WorkforceMetricsContent() {
                   <td style={{ ...td, textAlign: 'left', color: m.discipline ? undefined : 'var(--muted)' }}>{m.discipline ? disciplineLabel(m.discipline) : '—'}</td>
                   <td style={td}>{m.assignedCount}</td>
                   <td style={td}>{m.completedCount}</td>
-                  <td style={{ ...td, color: m.redoCount > 0 ? 'var(--warning, #f5a623)' : undefined }}>{m.redoCount}</td>
-                  <td style={{ ...td, color: m.reopenCount > 0 ? 'var(--danger, #e5484d)' : undefined }}>{m.reopenCount}</td>
+                  <td style={{ ...td, color: m.redoCount > 0 ? 'var(--warning)' : undefined }}>{m.redoCount}</td>
+                  <td style={{ ...td, color: m.reopenCount > 0 ? 'var(--danger)' : undefined }}>{m.reopenCount}</td>
                   <td style={td}>{fmtHrs(m.avgCycleTimeHours)}</td>
                   <td style={td}>{fmtHrs(m.avgPickupLatencyHours)}</td>
                   <td style={td}>{fmtHrs(m.avgIdleAfterDoneHours)}</td>

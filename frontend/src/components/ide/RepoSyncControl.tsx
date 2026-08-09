@@ -138,7 +138,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
       )}
 
       {msg && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>{msg}</div>}
-      {err && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{err}</div>}
     </div>
   );
 }

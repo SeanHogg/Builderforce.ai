@@ -78,7 +78,7 @@ export function LlmUsageContent() {
                 padding: '3px 8px',
                 borderRadius: 'var(--radius-sm)',
                 background: health.status === 'ok' ? 'rgba(0,229,204,0.15)' : 'rgba(244,114,94,0.15)',
-                color: health.status === 'ok' ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--coral-bright, #f4726e)',
+                color: health.status === 'ok' ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--coral-bright)',
               }}
             >
               {health.status}
@@ -107,7 +107,7 @@ export function LlmUsageContent() {
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-subtle)',
                     background: poolTab === pool ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)',
-                    color: poolTab === pool ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)',
+                    color: poolTab === pool ? 'var(--coral-bright)' : 'var(--text-secondary)',
                     cursor: 'pointer',
                     textTransform: 'capitalize',
                   }}
@@ -145,7 +145,7 @@ export function LlmUsageContent() {
                     {m.model}
                   </span>
                   {m.preferred && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright, #f4726e)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)' }}>
                       preferred
                     </span>
                   )}
@@ -195,7 +195,7 @@ export function LlmUsageContent() {
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Usage Summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 16 }}>
               {[
-                { label: 'Total requests', value: fmtNum(usage.totalRequests), color: 'var(--coral-bright, #f4726e)' },
+                { label: 'Total requests', value: fmtNum(usage.totalRequests), color: 'var(--coral-bright)' },
                 { label: 'Prompt tokens', value: fmtNum(usage.promptTokens), color: 'var(--cyan-bright, var(--cyan-bright))' },
                 { label: 'Completion tokens', value: fmtNum(usage.completionTokens), color: 'var(--text-secondary)' },
               ].map(({ label, value, color }) => (
@@ -266,7 +266,7 @@ export function LlmUsageContent() {
                     <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.projectName}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(p.requests)} req</span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, var(--cyan-bright))', flexShrink: 0 }}>{fmtNum(p.totalTokens)} tok</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
                       est. {fmtUsd(p.estimatedCostUsd)}
                     </span>
                   </div>
@@ -296,7 +296,7 @@ export function LlmUsageContent() {
                     <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.userName}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(u.requests)} req</span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, var(--cyan-bright))', flexShrink: 0 }}>{fmtNum(u.totalTokens)} tok</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
                       est. {fmtUsd(u.estimatedCostUsd)}
                     </span>
                   </div>
@@ -326,7 +326,7 @@ export function LlmUsageContent() {
                     <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tm.teamName}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(tm.requests)} req</span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, var(--cyan-bright))', flexShrink: 0 }}>{fmtNum(tm.totalTokens)} tok</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
                       est. {fmtUsd(tm.estimatedCostUsd)}
                     </span>
                   </div>
@@ -356,7 +356,7 @@ export function LlmUsageContent() {
                     <span style={{ flex: 1, fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.repoLabel}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(r.requests)} req</span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, var(--cyan-bright))', flexShrink: 0 }}>{fmtNum(r.totalTokens)} tok</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
                       est. {fmtUsd(r.estimatedCostUsd)}
                     </span>
                   </div>

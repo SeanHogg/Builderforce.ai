@@ -33,12 +33,12 @@ export function scoreColor(score: number): string {
 }
 
 /** Fixed dark ink for the light score tiles (legible in both themes). */
-const TILE_INK = '#16241c';
+const TILE_INK = 'var(--ink-on-light)';
 
 /** Distinct line colours per dimension for the slope chart. */
 const DIM_COLORS: Record<DevexDimension, string> = {
-  flow: '#dc2626', tooling: '#2563eb', ai_tools: '#7c3aed', deep_work: '#d97706',
-  build_test: '#059669', docs: '#db2777', sentiment: '#0891b2',
+  flow: 'var(--error)', tooling: 'var(--info)', ai_tools: 'var(--violet-bright)', deep_work: 'var(--warning)',
+  build_test: 'var(--emerald-bright)', docs: 'var(--pink-bright)', sentiment: 'var(--cyan-bright)',
 };
 
 function fmtDelta(n: number): string {
@@ -67,7 +67,7 @@ export function DeltaChip({ value, goodIsUp = true, title }: { value: number | n
   if (value == null) return <span style={{ color: 'var(--text-muted)' }} title={title}>—</span>;
   const flat = Math.abs(value) < 0.05;
   const good = goodIsUp ? value > 0 : value < 0;
-  const color = flat ? 'var(--text-muted)' : good ? '#16a34a' : '#dc2626';
+  const color = flat ? 'var(--text-muted)' : good ? 'var(--success)' : 'var(--error)';
   const arrow = flat ? '→' : value > 0 ? '↗' : '↘';
   return (
     <span style={{ color, fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }} title={title}>
@@ -84,9 +84,9 @@ export function SentimentBar({ sentiment }: { sentiment: DevexDimensionSentiment
     n > 0 ? <div style={{ width: `${(n / total) * 100}%`, background: bg, height: '100%' }} /> : null;
   return (
     <div style={{ display: 'flex', width: 160, height: 12, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--border-subtle)' }}>
-      {seg(sentiment.negative, '#d9776b')}
-      {seg(sentiment.neutral, '#cbd0d6')}
-      {seg(sentiment.positive, '#3f9e6f')}
+      {seg(sentiment.negative, 'var(--error)')}
+      {seg(sentiment.neutral, 'var(--border-strong)')}
+      {seg(sentiment.positive, 'var(--emerald-bright)')}
     </div>
   );
 }
@@ -192,8 +192,8 @@ function SegmentKindToggle({ value, onChange, available }: { value: DevexSegment
             key={k} type="button" disabled={!enabled} onClick={() => onChange(k)}
             style={{
               padding: '6px 14px', border: 'none', cursor: enabled ? 'pointer' : 'not-allowed',
-              background: on ? 'var(--accent, #2563eb)' : 'transparent',
-              color: on ? '#fff' : enabled ? 'var(--text-primary)' : 'var(--text-muted)',
+              background: on ? 'var(--accent)' : 'transparent',
+              color: on ? 'var(--text-on-accent)' : enabled ? 'var(--text-primary)' : 'var(--text-muted)',
               fontSize: '0.8rem', fontWeight: 600,
             }}
           >
@@ -304,8 +304,8 @@ export function ParticipationChart({ timeline }: { timeline: DevexParticipationP
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={t('devex.participationAria')} style={{ maxWidth: '100%' }}>
       <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="var(--border-subtle)" />
       <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="var(--border-subtle)" />
-      <path d={area} fill="#2563eb22" stroke="none" />
-      <path d={line} fill="none" stroke="#2563eb" strokeWidth={2} />
+      <path d={area} fill="color-mix(in srgb, var(--info) 13%, transparent)" stroke="none" />
+      <path d={line} fill="none" stroke="var(--info)" strokeWidth={2} />
       <text x={PAD} y={PAD - 10} fontSize={11} fill="var(--text-muted)">{max}</text>
       <text x={PAD} y={H - 8} fontSize={10} fill="var(--text-muted)">{timeline[0]!.date.slice(5)}</text>
       <text x={W - PAD} y={H - 8} fontSize={10} fill="var(--text-muted)" textAnchor="end">{timeline[timeline.length - 1]!.date.slice(5)}</text>
@@ -327,7 +327,7 @@ export function ParticipationBySegment({ bySegment }: { bySegment: Partial<Recor
           <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ width: 90, fontSize: '0.8rem', textAlign: 'right', color: 'var(--text-secondary)' }}>{r.label}</span>
             <div style={{ flex: 1, height: 14, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-              <div style={{ width: `${(r.count / max) * 100}%`, height: '100%', background: '#2563eb' }} />
+              <div style={{ width: `${(r.count / max) * 100}%`, height: '100%', background: 'var(--info)' }} />
             </div>
             <span style={{ width: 32, fontSize: '0.8rem', fontWeight: 600 }}>{r.count}</span>
           </div>
@@ -415,8 +415,8 @@ export function BenchmarkModal({
               key={p} type="button" onClick={() => setSel(p)}
               style={{
                 padding: '10px 22px', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontWeight: 600,
-                border: `1.5px solid ${sel === p ? 'var(--accent, #7c3aed)' : 'var(--border-subtle)'}`,
-                background: sel === p ? 'color-mix(in srgb, var(--accent, #7c3aed) 12%, transparent)' : 'transparent',
+                border: `1.5px solid ${sel === p ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                background: sel === p ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
                 color: 'var(--text-primary)',
               }}
             >
@@ -427,7 +427,7 @@ export function BenchmarkModal({
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('devex.benchmarkFootnote', { companies })}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>{t('common.cancel')}</button>
-          <button type="button" onClick={() => onApply(sel)} style={{ padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #7c3aed)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: 'pointer' }}>{t('devex.setBenchmark')}</button>
+          <button type="button" onClick={() => onApply(sel)} style={{ padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: 'pointer' }}>{t('devex.setBenchmark')}</button>
         </div>
       </div>
     </div>

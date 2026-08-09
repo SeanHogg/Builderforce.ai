@@ -86,7 +86,7 @@ export function CanvasPanelProvider({ children }: { children: ReactNode }) {
                 padding: '6px 12px',
                 borderRadius: 'var(--radius-md)',
                 border: 'none',
-                background: 'var(--accent, #2563eb)',
+                background: 'var(--accent)',
                 color: 'var(--text-on-accent)',
                 fontWeight: 600,
                 fontSize: 13,

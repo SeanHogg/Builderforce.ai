@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-08-08 — The CSP allowlisted a font vendor the app never loaded
+
+*Found during the PRD 22 browser-performance re-audit. `next.config.js` allowlisted
+`api.fontshare.com` in `style-src` and `cdn.fontshare.com` + `api.fontshare.com` in `font-src`, and
+`layout.tsx` carried a comment asserting "Fontshare loaded via CSS `@import` in globals.css".*
+
+**Nothing loaded Fontshare.** There is no `@import` anywhere in `globals.css` and no `fontshare`
+reference anywhere in `frontend/src` — the four hits in the whole tree were the two CSP directives
+and the two comments describing them. The real font surface is entirely first-party: `--font-sans`
+(and therefore `--font-display` and `--font-body`) is a system stack declared at `globals.css:70-72`,
+and the only web font is JetBrains Mono, which `next/font/google` self-hosts from the app's own
+origin.
+
+So the two directives were widening a security surface to permit requests that could never happen.
+A CSP allowlist entry with no corresponding dependency is worse than noise: it is a standing
+permission that outlives the reason someone added it, and the accompanying comment made the tree
+*look* like it had a third-party font dependency it did not have.
+
+`style-src` and `font-src` are now `'self'` (plus `data:` for inline font payloads), and the comment
+records why that is the complete surface, so the next person does not re-add an origin to fix an
+imagined breakage.
+
+Verified: `next.config.js` parses, and `check:design-tokens` passes — 255 tokens and 50 `ui-*`
+classes declared, every reference resolves.
+
+Logged and closed in the same pass (PRD 22 §3.16). The other five findings from that re-audit are
+delivery-program scope and remain open in the register.
+
+---
+
 ## ✅ RESOLVED 2026-08-09 — The canvas is the product, for everyone
 
 *A signed-out visitor opened a board at `/create/local-…` and got the marketing header — Home,
@@ -7038,3 +7068,8 @@ The intentionally unimplemented remainder stays in ROADMAP: immutable definition
 versions, scoped credential delegation, trust-tiered context and outbound DLP,
 typed evidence contracts beyond code completion, global/per-run blast limits, semantic cloud recall, unified
 legacy memory stores, multi-repo leases, contention views, and rehearsal comparison.
+## Fully agentic safety contexts completed (2026-08-08)
+
+The retained PRD-21-aligned agentic roadmap is now implemented as bounded backend contexts and one integrated Agent Ops comparison surface. Runs have immutable definition versions, stable/canary/rollback releases, expiring machine principals, scoped capability and repository-credential delegations, an operator halt, and file/repository/spend containment at the actual loop/tool seam. Context inputs are trust-tiered and hashed; commits, PR comments and external/human calls are inspected for credential exfiltration before the effect. Typed immutable claim contracts now cover completion, validation, review, delivery and human messages.
+
+Coordination records and aggregates contention and is readable directly from an execution. Team Memory converges on the governed memory service, knowledge chunks gain tenant/origin/expiry lifecycle, and cloud recall uses semantic embeddings when configured. Rehearsals pin the measured agent version, warn about a missing read-only PRD, sample representative ticket strata, and provide a responsive, localized comparison view. Old executions that never captured a source SHA remain explicitly unpinned—the platform does not invent provenance it cannot recover—and trials remain sequential so evaluation cannot consume live-delivery capacity.

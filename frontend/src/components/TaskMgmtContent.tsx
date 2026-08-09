@@ -2126,8 +2126,8 @@ export function TaskMgmtContent({
                   onClick={() => setDrawerTab(id)}
                   style={{
                     padding: '10px 16px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                    borderBottom: `2px solid ${drawerTab === id ? 'var(--coral-bright, #f4726e)' : 'transparent'}`,
-                    color: drawerTab === id ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
+                    borderBottom: `2px solid ${drawerTab === id ? 'var(--coral-bright)' : 'transparent'}`,
+                    color: drawerTab === id ? 'var(--coral-bright)' : 'var(--text-muted)',
                     fontWeight: drawerTab === id ? 600 : 400,
                   }}
                 >
@@ -2268,7 +2268,7 @@ export function TaskMgmtContent({
                           fontSize: 12,
                           fontWeight: 600,
                           fontFamily: 'var(--font-mono)',
-                          color: 'var(--coral-bright, #f4726e)',
+                          color: 'var(--coral-bright)',
                           textDecoration: 'none',
                           padding: '2px 8px',
                           borderRadius: 'var(--radius-sm)',

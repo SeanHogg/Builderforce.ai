@@ -12,7 +12,7 @@ import { getModality } from '@/lib/modality';
 import styles from './DashboardCreationSessions.module.css';
 
 const KIND_COLOR: Record<string, string> = {
-  workflow: '#7357ed', website: '#3978f6', chat: '#e94b9b', dashboard: '#08b59d',
+  workflow: '#7357ed', website: 'var(--coral-bright)', chat: '#e94b9b', dashboard: '#08b59d',
   project: '#f09a3e', agent: '#8a5cf5', dataset: '#12a6c8', mockup: '#ef6d92',
 };
 
@@ -225,15 +225,15 @@ export function DashboardCreationSessions() {
       <div><h2 style={{ margin: 0, fontSize: 20 }}>{t('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('dashboardSubtitle')}</p></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <div role="group" aria-label="Creation library view" style={{ display: 'flex', padding: 3, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
-          <button type="button" aria-pressed={libraryView === 'card'} onClick={() => selectLibraryView('card')} title="Card view" style={{ border: 0, borderRadius: 'var(--radius-sm)', padding: '6px 9px', background: libraryView === 'card' ? 'var(--accent)' : 'transparent', color: libraryView === 'card' ? '#fff' : 'var(--text-secondary)', cursor: 'pointer' }}>▦ <span>Card</span></button>
-          <button type="button" aria-pressed={libraryView === 'list'} onClick={() => selectLibraryView('list')} title="List view" style={{ border: 0, borderRadius: 'var(--radius-sm)', padding: '6px 9px', background: libraryView === 'list' ? 'var(--accent)' : 'transparent', color: libraryView === 'list' ? '#fff' : 'var(--text-secondary)', cursor: 'pointer' }}>☷ <span>List</span></button>
+          <button type="button" aria-pressed={libraryView === 'card'} onClick={() => selectLibraryView('card')} title="Card view" style={{ border: 0, borderRadius: 'var(--radius-sm)', padding: '6px 9px', background: libraryView === 'card' ? 'var(--accent)' : 'transparent', color: libraryView === 'card' ? 'var(--text-on-accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>▦ <span>Card</span></button>
+          <button type="button" aria-pressed={libraryView === 'list'} onClick={() => selectLibraryView('list')} title="List view" style={{ border: 0, borderRadius: 'var(--radius-sm)', padding: '6px 9px', background: libraryView === 'list' ? 'var(--accent)' : 'transparent', color: libraryView === 'list' ? 'var(--text-on-accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>☷ <span>List</span></button>
         </div>
         <select aria-label="Creation status" value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select>
         <input aria-label="Search creations" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '9px 11px', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }} />
         <button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? 'Archive a Session or upgrade before creating another.' : undefined} className="btn btn-primary">{creating ? 'Creating…' : sessionLimitReached ? 'Session limit reached' : `+ ${t('newSession')}`}</button>
       </div>
     </div>
-    {sessionLimitReached && <p role="alert" style={{ margin: '-7px 0 14px', color: 'var(--warning, #b45309)', fontSize: 12 }}>Your plan includes {sessionQuota?.limit} Sessions. Archive one or upgrade before starting another saved Session.</p>}
+    {sessionLimitReached && <p role="alert" style={{ margin: '-7px 0 14px', color: 'var(--warning)', fontSize: 12 }}>Your plan includes {sessionQuota?.limit} Sessions. Archive one or upgrade before starting another saved Session.</p>}
     {loading || resourcesLoading ? <div style={{ padding: 36, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : visible.length === 0 && resourceItems.length === 0 ?
       <button onClick={createBlank} style={{ width: '100%', minHeight: 220, border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-xl)', background: 'var(--surface-raised)', color: 'var(--text-secondary)', cursor: 'pointer' }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: 18, marginBottom: 6 }}>Start with a blank canvas</strong>Describe what you want to create above, or click here.</button> :
       <div aria-label="Creation library" data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>

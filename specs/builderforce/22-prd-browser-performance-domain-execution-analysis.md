@@ -1,7 +1,10 @@
 # PRD 22 — Browser Performance, Domain Execution, and Codebase Health
 
 > **Status:** ACTIVE ANALYSIS AND CLEANUP PROGRAM · baseline audited 2026-08-08 · first
-> deduplication slice implemented 2026-08-08.
+> deduplication slice implemented 2026-08-08 · **re-audited 2026-08-08 (§2.3 correction, §3.13–§3.17,
+> §4.4, §6.7–§6.8, H-17…H-21)**. The re-audit added the two findings with the largest expected
+> load-time effect — no browser read-through cache (§3.13) and a client-rooted route tree (§3.14) —
+> and recorded that the strategic DDD layer is absent on the frontend rather than partial (§4.4).
 > **Scope:** Static analysis of the browser-facing application, Studio and memory-engine execution
 > seams, plus repository-wide architecture, duplication, cyclomatic complexity and backend-speed
 > risks.
@@ -142,9 +145,18 @@ const IDE = dynamic(
 );
 ```
 
-The direct IDE route uses the same pattern at `frontend/src/app/ide/[id]/page.tsx:20`. Monaco,
-Mermaid, xterm, WebContainer, voice, and model-provider code also contain dynamic imports. These
-are precedents to expand, not replace.
+The direct IDE route uses the same pattern at `frontend/src/app/ide/[id]/page.tsx:20`.
+
+**Correction (2026-08-08 re-audit).** This precedent is far narrower than an earlier draft of this
+document implied. `next/dynamic` appears in exactly **four** files across all of `frontend/src`:
+`app/ide/[id]/page.tsx`, `components/CodeEditor.tsx`, `components/agent/FileChangeViewer.tsx`, and
+`components/creation-canvas/CanvasBuildPanel.tsx`. There are zero `React.lazy` call sites. Runtime
+`await import(...)` appears in roughly 69 places, mostly inside `lib/` modules, which does split
+chunks but does not defer any component subtree.
+
+Component-level code splitting is therefore **not an established pattern to expand — it is a pattern
+to introduce.** §5 Phase 1 must be scoped as introduction, with a per-route owner list, not as
+"add two more `dynamic()` calls".
 
 ### 2.4 The PWA has a controlled update protocol
 
@@ -649,6 +661,162 @@ array on the caller's thread.
 show long tasks. A WASM diff implementation is optional and must beat the worker-hosted TypeScript
 path on representative files.
 
+### 3.13 P0 — The browser has no canonical read-through cache, and three ad-hoc ones instead
+
+**Observed.** The API enforces a single read-through caching contract (`getOrSetCached`, L1 isolate
+Map + L2 KV, invalidated on write). The browser has **no equivalent primitive at all**. There is no
+`@tanstack/react-query`, no SWR, and no other cache/dedup layer in `frontend/package.json`.
+
+`frontend/src/lib/apiClient.ts` — the single sanctioned transport, and the only thing
+`check-api-transport.mjs` guards — is 274 lines with **zero** occurrences of `cache`, `dedup`,
+`inflight`, or a request map. It issues a `fetch` per call, every call.
+
+**270 modules** import `@/lib/builderforceApi`. Combined with 1,034 `useEffect` call sites, the
+default data-access shape is "component mounts → fires its own request". Two components needing the
+same list issue two requests; a remount re-issues them; navigation re-issues them.
+
+Three hand-rolled partial caches have grown up around the gap, each with a comment acknowledging it
+is a client mirror of the server contract:
+
+- `frontend/src/lib/api.ts:51` — an in-flight promise map, *"cleared on settle"*, explicitly noted as
+  standing in for *"the server's cross-isolate `getOrSetCached`, which can't run here"*.
+- `frontend/src/lib/widgets/sharedSource.ts:15` — *"Client mirror of the server's read-through cache
+  contract (`getOrSetCached`)"*.
+- `frontend/src/lib/team/useTeamRoster.ts:14` — *"the same read-through rule the api keeps with
+  `getOrSetCached`"*.
+
+**Likely consequence.** Duplicate in-flight requests, refetch-on-every-mount, no stale-while-
+revalidate, and no shared invalidation. Three independent cache policies means an invalidation bug
+is fixed in one and not the others. This is precisely the "ad-hoc in-process Map caches" anti-pattern
+the repository's own caching rule prohibits, and it is the single largest **perceived**
+load-time defect on already-hydrated routes — the one users experience as "every tab reloads".
+
+**Direction.** One browser-side read-through primitive owned by
+`infrastructure/http/`, mirroring the server contract by name so the two are obviously the same idea:
+
+```ts
+// infrastructure/http/readThrough.ts
+export function getOrSetClientCached<T>(
+  key: string,
+  load: (signal: AbortSignal) => Promise<T>,
+  opts?: { ttlMs?: number; staleWhileRevalidate?: boolean },
+): Promise<T>;
+
+export function invalidateClientCache(keyOrPrefix: string): void;
+```
+
+Requirements:
+
+1. In-flight dedup by key (one network request for N concurrent callers).
+2. Explicit TTL plus opt-in stale-while-revalidate; no unbounded growth.
+3. **Invalidation on write** — every mutating gateway call declares the key prefixes it dirties, the
+   same discipline the API already keeps.
+4. Version-token keys where the keyspace is unbounded (search, filtered lists).
+5. All three existing ad-hoc caches migrate to it **in the same slice** that introduces it. A fourth
+   parallel cache is a worse outcome than the current three.
+6. `check-api-transport.mjs` extends to fail on a new hand-rolled `Map`-plus-TTL cache in `src/lib/**`,
+   the same way it already fails on a second `fetch`.
+
+Adopting a library (`@tanstack/react-query`) is an acceptable implementation of this contract, but the
+domain gateways must depend on the **contract**, not on the library, so the cache is replaceable.
+
+**Proof required.** Request count and total transferred bytes for a dashboard → workforce → dashboard
+navigation loop, before and after.
+
+### 3.14 P0 — The application is a client-side SPA wearing an App Router
+
+**Observed.** Of 1,227 `.ts`/`.tsx` files under `frontend/src`, **755 carry `'use client'`**. Of 137
+`app/**/page.tsx` route entries, **68 are client components** — the page itself, not a leaf.
+
+The root layout (`frontend/src/app/layout.tsx`) composes nine nested client context providers around
+every route:
+
+```tsx
+<LocaleProvider>… <AuthProvider><CartProvider><EmulationProvider><RolePreviewProvider>
+  <PermissionDebuggerProvider><ConfirmProvider><ToastProvider><DemoModeProvider>
+```
+
+**Likely consequence.** A `'use client'` page boundary forces its entire import subtree into the
+client bundle regardless of whether the code is interactive, which is the *mechanism* behind §3.1 —
+`AppShell.tsx:14`'s eager `CanvasStage` import is a symptom of a client-rooted tree, not an isolated
+mistake. Dynamic-importing `CanvasStage` treats the symptom; it does not move a byte of the other 67
+client pages. Additionally, a client-rooted page cannot stream, so first paint waits on hydration,
+and every provider-level state change re-renders the shell subtree.
+
+This finding **subsumes and outranks §3.1**: §3.1 is one edge of a graph whose root is here.
+
+**Direction.**
+
+1. Classify all 68 client pages: genuinely interactive at the root, or client-by-accident (a hook, a
+   context read, or an event handler that belongs in a leaf).
+2. Push `'use client'` down to the leaf that needs it. The page shell, data fetch, and static chrome
+   become server components; `<Suspense>` boundaries stream the rest.
+3. Split the provider stack: providers needed on **every** route stay in the root layout; the rest
+   (`CartProvider`, `EmulationProvider`, `RolePreviewProvider`, `PermissionDebuggerProvider`,
+   `DemoModeProvider`) move to the layouts of the route groups that use them.
+4. Ratchet the counts. Both numbers may only fall.
+
+**Constraint acknowledged.** The shell renders statically in the default locale and `LocaleProvider`
+swaps to the cookie locale after hydration (`layout.tsx:125-126`). That decision is not reopened here,
+but it does mean RSC conversion must be validated against locale-swap behaviour per route, and any
+page converted to a server component must read its locale server-side rather than inherit the
+post-hydration swap.
+
+**Proof required.** Per-route first-load JS, and hydration time on the dashboard and workforce routes.
+
+### 3.15 P1 — There is no frontend architecture ratchet
+
+**Observed.** Every architecture ratchet in this repository is API-side. `api/scripts/` contains
+`check-layering.mjs`, `check-domain-boundary.mjs`, `check-db-access.mjs`, `check-shape-lint.mjs`,
+`check-signature-duplication.mjs` and twenty more; `.layering-baseline.txt` — the file §9.2's "127
+known presentation files importing infrastructure" counts — lives at
+`api/scripts/.layering-baseline.txt`.
+
+`frontend/scripts/` contains three checks, wired into `npm test`: `check-api-transport.mjs`,
+`check-design-tokens.mjs`, `check-design-scale.mjs`. **None of them enforces layering, module size,
+complexity, or code splitting.**
+
+`frontend/src/domains/` does not exist.
+
+**Likely consequence.** §6.3 ("automated dependency checks enforce presentation → application →
+domain") and §11.5's complexity/size ratchets have **no frontend implementation to extend**. Read
+literally, §9.2's DDD verdict describes the API only; the frontend's layering state is not
+*better or worse* than 127 violations, it is **unmeasured**. §3.4 and §3.5 propose the largest
+structural moves in this document into a codebase with no guard to hold the result.
+
+**Direction.** Phase 0 must land `frontend/scripts/check-layering.mjs` with its own baseline file
+*before* Phase 3 moves anything, plus a size/complexity ratchet covering both areas. Ordering matters:
+a ratchet added after the move records the move's mistakes as the baseline.
+
+### 3.16 P2 — Config carries dead allowlist entries
+
+**Observed.** `next.config.js:169-170` allowlists `api.fontshare.com` in `style-src` and
+`cdn.fontshare.com`/`api.fontshare.com` in `font-src`, and `layout.tsx:153` comments *"Fontshare
+loaded via CSS @import in globals.css"*. There is **no** `@import` in `globals.css` and **no**
+reference to `fontshare` anywhere in `frontend/src`. The only font actually loaded is
+`JetBrains_Mono` via `next/font/google`.
+
+**Direction.** Remove the dead CSP entries and the stale comment. A CSP allowlist is a security
+surface; entries that no longer correspond to a real dependency widen it for nothing. This is small,
+but it is the kind of drift a document that claims a durable evidence index must not carry forward.
+
+### 3.17 Ranking correction
+
+The re-audit changes the priority order. §3.13 and §3.14 are the two findings with the largest
+expected effect on **load time and perceived speed**, and neither appeared in the original draft:
+
+| Rank | Finding | Why |
+|---:|---|---|
+| 1 | §3.14 client-rooted routing | Root cause of the delivery problem; §3.1 is a leaf of it |
+| 2 | §3.13 no client read cache | Governs every post-hydration navigation; three divergent caches today |
+| 3 | §3.4 / §3.5 ownership concentration | Governs maintainability and future splitting |
+| 4 | §3.2 / §3.3 training thread + lifecycle | High severity, narrow blast radius (training users only) |
+| 5 | §3.6 – §3.12 | Real, bounded, and correctly sequenced behind measurement |
+
+§3.2 and §3.3 remain P0 by severity — an undestroyed `GPUDevice` is a leak, not a slow path — but
+they affect the subset of sessions that open the training panel, whereas §3.13 and §3.14 affect
+every session.
+
 ---
 
 ## 4 · Target architecture
@@ -715,6 +883,75 @@ interface BrowserCapabilities {
 Each domain then decides what those facts mean. A Canvas renderer and a training engine should not
 share a global `canUseGPU` boolean because their requirements differ.
 
+### 4.4 Where this document is and is not Domain-Driven
+
+The layering in §4.1 is correct and the ports are correctly shaped. But **layering is not DDD** —
+it is the hexagonal/clean-architecture half. The tactical patterns are present; the strategic ones
+are largely absent. Named honestly:
+
+| DDD element | State in this document | Required correction |
+|---|---|---|
+| Layered architecture | ✅ Explicit and enforced (§4.1) | — |
+| Ports and adapters | ✅ `TrainingEngine` + two adapters (§4.1) | — |
+| Repository / gateway | ✅ §3.5 gateway split | — |
+| **Bounded contexts** | 🟡 Named ad hoc — "Canvas domain", "Training domain", "Inference domain", "Voice domain" appear in §4.2 with no defining list | Publish the frontend context list and align it to PRD 20's 15 backend contexts |
+| **Context map** | ❌ Absent | Declare each relationship: shared kernel, customer/supplier, conformist, or anti-corruption layer |
+| **Aggregates and roots** | ❌ Absent | §3.4 proposes `graph.ts`/`history.ts`/`selection.ts` — modules, not aggregates. Name the root and its invariant |
+| **Ubiquitous language** | ❌ Absent | The same concept is `CanvasData`, `node`, `object`, `card` and `creative` across surfaces |
+| **Domain events** | ❌ Absent | §3.7's `CanvasCommand` is a command union; collaboration/undo/persistence need the event side too |
+| **Anti-corruption layer** | ❌ Absent | ONNX/WebGPU/WebContainer/HuggingFace vocabulary would otherwise leak inward |
+| **Invariant enforcement** | 🟡 Asserted, never specified | State the invariants that make an operation illegal |
+
+Four corrections this document needs to actually claim DDD:
+
+**(a) Aggregates before modules.** §3.4 splits `CreationCanvas.tsx` by *topic*, which is a file-layout
+decision. The DDD question is: what is the consistency boundary? A defensible answer:
+
+> **`CanvasBoard` is the aggregate root.** Nodes and edges are entities inside it and are never
+> addressed from outside except through the root. Invariants: no edge may reference a missing node;
+> node ids are unique within the board; a locked board rejects every mutating command; a command that
+> would violate an invariant is rejected *before* it enters history.
+
+Without that, `graph.ts` is a folder of functions and the invariants stay where they are today —
+implicit in React callbacks.
+
+**(b) Commands and events are different things.** §3.7's `CanvasCommand` is an *intent* — it can be
+rejected. Collaboration broadcast, undo, and persistence should ride the *fact* that follows:
+
+```ts
+// intent — may be rejected by the aggregate
+type CanvasCommand = { type: 'node.move'; id: string; to: Point };
+
+// fact — already happened, safe to broadcast/persist/replay
+type CanvasEvent   = { type: 'node.moved'; id: string; from: Point; to: Point; at: number };
+```
+
+Broadcasting commands (as §3.7 currently allows: *"Collaboration can broadcast the same commands"*)
+means every peer re-runs validation and may legitimately disagree — a divergence bug, not a
+performance bug. Broadcast events; keep command validation on the originating aggregate.
+
+**(c) Context alignment is a decision, not an accident.** PRD 20 established 15 backend bounded
+contexts. §4.2 introduces frontend "domains" with no stated relationship to them. Every frontend
+context must declare one:
+
+- **Conformist** — the frontend adopts the backend's model as-is (most CRUD surfaces).
+- **Anti-corruption layer** — the frontend keeps its own model and translates (Canvas, whose graph
+  model is genuinely browser-native and must not be dragged toward the persistence shape).
+- **Shared kernel** — one model, changed only by joint agreement (tenancy, permissions, plan
+  entitlement).
+
+Unstated, the default outcome is that backend table shapes leak into component props, which is what
+§3.5's god module already demonstrates at 8,408 lines.
+
+**(d) Ubiquitous language has a gate, or it does not exist.** Add a glossary to the Canvas domain and
+assert it — the repository already proves the technique works with
+`api/scripts/check-prompt-tool-names.mjs`, which pins prompt vocabulary to advertised tool names.
+
+**Verdict.** §9.2's "partially Domain-Driven" is accurate for the API and **generous for the
+frontend**, where the finding is not partial adoption but absence of the strategic layer entirely.
+The corrections above are the difference between this program producing *smaller files* and producing
+*owned domains*.
+
 ---
 
 ## 5 · Delivery sequence
@@ -727,12 +964,30 @@ share a global `canUseGPU` boolean because their requirements differ.
    or parse, dataset profile, local training, and Studio initialise/dispose.
 3. Record long tasks, INP, heap, GPU memory where available, transferred bytes, and storage use.
 4. Add a CI maximum for initial shell JS only after a trustworthy baseline exists.
+5. **Land `frontend/scripts/check-layering.mjs` with its own baseline file, plus size/complexity
+   ratchets covering both `api` and `frontend` (§3.15).** These must exist *before* Phase 3 moves
+   code, or the move's mistakes become the baseline.
+6. **Record the `'use client'` census as a ratchet** (755/1,227 files, 68/137 pages) — both numbers
+   may only fall (§3.14).
+7. **Record the client request census** — requests and transferred bytes for a
+   dashboard → workforce → dashboard navigation loop (§3.13).
 
-### Phase 1 — Delivery boundaries
+### Phase 1 — Delivery and data-access boundaries
 
-1. Dynamically load `CanvasStage` from the shell.
-2. Dynamically load training, 3D, voice, game, Studio, and other modality panels from Canvas.
-3. Confirm PRD 21's mounted-stage survival test remains green after first activation.
+1. **Introduce the browser read-through primitive** `getOrSetClientCached` + `invalidateClientCache`,
+   and migrate all three ad-hoc caches (`lib/api.ts`, `lib/widgets/sharedSource.ts`,
+   `lib/team/useTeamRoster.ts`) onto it in the same slice. Extend `check-api-transport.mjs` to reject
+   a fourth hand-rolled cache (§3.13).
+2. **Begin the client→server component conversion**, highest-traffic routes first. Split the root
+   layout provider stack so route-specific providers move to their route groups (§3.14).
+3. Dynamically load `CanvasStage` from the shell.
+4. Dynamically load training, 3D, voice, game, Studio, and other modality panels from Canvas.
+5. Confirm PRD 21's mounted-stage survival test remains green after first activation.
+6. Remove the dead Fontshare CSP entries and stale comment (§3.16).
+
+Steps 1 and 2 precede 3 and 4: dynamic-importing a component inside a client-rooted page recovers
+much less than the same import inside a server-rooted one, and measuring 3–4 before 2 attributes the
+gain to the wrong change.
 
 ### Phase 2 — Worker isolation
 
@@ -744,10 +999,18 @@ share a global `canUseGPU` boolean because their requirements differ.
 
 ### Phase 3 — Domain extraction
 
-1. Extract Canvas graph/history/selection policy without changing behaviour.
-2. Extract Canvas application use cases and infrastructure gateways.
-3. Split `builderforceApi.ts` into owning domain gateways over one HTTP transport.
-4. Add dependency-boundary checks so presentation cannot import infrastructure engines directly.
+0. **Publish the frontend bounded-context list and its context map against PRD 20's 15 backend
+   contexts** — each relationship declared conformist, ACL, or shared kernel (§4.4c). Nothing moves
+   before its owner is named.
+1. Name the `CanvasBoard` aggregate root and its invariants, then extract Canvas graph/history/
+   selection policy behind it without changing behaviour (§4.4a).
+2. Separate `CanvasCommand` (intent, validated by the aggregate) from `CanvasEvent` (fact, broadcast
+   and persisted). Collaboration broadcasts events, never commands (§4.4b).
+3. Extract Canvas application use cases and infrastructure gateways.
+4. Split `builderforceApi.ts` into owning domain gateways over one HTTP transport, each consuming the
+   Phase 1 read-through contract.
+5. Add a Canvas glossary and a vocabulary check modelled on `check-prompt-tool-names.mjs` (§4.4d).
+6. Reduce the Phase 0 frontend layering baseline; presentation cannot import infrastructure engines.
 
 ### Phase 4 — PWA and storage correctness
 
@@ -776,6 +1039,28 @@ Only after phases 0-4:
 - Opening a Canvas loads its base chunk once and keeps the mounted stage alive across navigation.
 - Opening a non-training Canvas does not load training-engine code.
 - Production bundle reports identify each heavy chunk by owning domain.
+- The `'use client'` file and page counts are ratcheted and strictly decreasing; a new client-rooted
+  `page.tsx` requires a checked-in reason.
+- The root layout carries only providers every route needs.
+
+### 6.7 Client data access
+
+- Exactly one browser read-through cache primitive exists; `check-api-transport.mjs` fails on a
+  second hand-rolled `Map`-plus-TTL cache in `src/lib/**`.
+- Concurrent callers of the same key produce one network request.
+- Every mutating gateway call declares the key prefixes it invalidates; a write is observable on the
+  next read without a full reload.
+- Unbounded keyspaces (search, filtered lists) use a version token rather than accumulating entries.
+- A dashboard → workforce → dashboard navigation loop issues strictly fewer requests than baseline.
+
+### 6.8 Domain-Driven Design
+
+- The frontend bounded-context list is published, and each context declares its relationship to a
+  PRD 20 backend context (conformist, anti-corruption layer, or shared kernel).
+- The Canvas aggregate root is named and its invariants are stated and tested; an invariant-violating
+  command is rejected before it reaches history.
+- Collaboration broadcasts domain events, not commands.
+- A Canvas glossary exists and is asserted by a check.
 
 ### 6.2 Responsiveness
 
@@ -849,6 +1134,13 @@ Only after phases 0-4:
 | Accessible CSS 3D decision | `frontend/src/components/canvas/Canvas3DView.tsx:122-133` |
 | Unoptimised priority hero | `frontend/next.config.js:19`; `BrainBackdrop.tsx:142-147`; `public/images/hero/evermind-brain.png` |
 | Bounded O(n*m) diff | `frontend/src/lib/unifiedDiff.ts:12-37,80-87` |
+| No client read-through cache | `frontend/src/lib/apiClient.ts` (274 lines, zero cache/dedup); no `@tanstack/react-query`/`swr` in `frontend/package.json`; 270 modules import `@/lib/builderforceApi` |
+| Three ad-hoc client caches | `frontend/src/lib/api.ts:51`; `frontend/src/lib/widgets/sharedSource.ts:15`; `frontend/src/lib/team/useTeamRoster.ts:14` |
+| Client-rooted routing | 755 of 1,227 `frontend/src` files carry `'use client'`; 68 of 137 `app/**/page.tsx` are client components |
+| Provider stack depth | `frontend/src/app/layout.tsx:170-197` — nine nested client providers around every route |
+| Code splitting near-absent | `next/dynamic` in 4 files only (`app/ide/[id]/page.tsx`, `CodeEditor.tsx`, `agent/FileChangeViewer.tsx`, `creation-canvas/CanvasBuildPanel.tsx`); zero `React.lazy` |
+| No frontend architecture ratchet | `frontend/scripts/` has only `check-api-transport`, `check-design-tokens`, `check-design-scale`; `.layering-baseline.txt` is at `api/scripts/`; `frontend/src/domains/` absent |
+| Dead CSP allowlist | `frontend/next.config.js:169-170` allowlists Fontshare; no `@import` in `globals.css`, no `fontshare` reference in `frontend/src` |
 
 Line numbers describe the 2026-08-08 working tree and will drift as implementation proceeds. File
 names and quoted code are the durable evidence; implementation PRs must update this index when they
@@ -1019,6 +1311,13 @@ Status is factual and must be updated when evidence lands.
 | Full API test suite | ⏳ NOT RUN BY THIS AUDIT | Focused tests and type checks passed; full suite remains a delivery gate |
 | Browser/runtime profiling | ⏳ NOT STARTED | Static evidence exists; no production measurements fabricated |
 | React render profiling | ⏳ NOT STARTED | Begin with Creation Canvas interactions in §5 Phase 0 |
+| Browser read-through cache primitive | 🔴 ABSENT | §3.13; `apiClient.ts` has no cache/dedup; three ad-hoc mirrors in `lib/api.ts`, `widgets/sharedSource.ts`, `team/useTeamRoster.ts` |
+| Client→server component conversion | 🔴 NOT STARTED | §3.14; 68/137 pages and 755/1,227 files are `'use client'` |
+| Component code splitting | 🔴 NEAR-ZERO | §2.3 correction; `next/dynamic` in 4 files, zero `React.lazy` |
+| Frontend layering/complexity ratchet | 🔴 DOES NOT EXIST | §3.15; all layering ratchets are API-side; must land before Phase 3 |
+| Frontend bounded-context list + context map | 🔴 NOT DEFINED | §4.4c; §4.2 names domains ad hoc with no PRD 20 alignment |
+| Canvas aggregate root + invariants | 🔴 NOT DEFINED | §4.4a; §3.4 proposes modules, not a consistency boundary |
+| Dead Fontshare CSP entries | 🟡 OPEN | §3.16; one-line removal in `next.config.js` + `layout.tsx:153` comment |
 
 ---
 
@@ -1238,6 +1537,11 @@ The browser criteria in §6 remain mandatory. These criteria cover the consolida
 | H-14 | Cloud/manager refactors preserve cancellation, steering, approval, finish gates and serial PR correctness | Characterization/integration tests |
 | H-15 | Type checks, focused tests, architecture checks and migration checks are green for each slice | CI |
 | H-16 | Optimisation never weakens tenancy, authorization, audit ordering or usage-cap semantics | Security/integration tests |
+| H-17 | Exactly one browser read-through cache exists and every mutating gateway declares its invalidation keys | Extended `check-api-transport.mjs` + request-count test |
+| H-18 | `'use client'` file and page counts strictly decrease; a new client-rooted `page.tsx` needs a checked-in reason | RSC census ratchet |
+| H-19 | The frontend has a layering baseline that only shrinks, landed before any Phase 3 move | `frontend/scripts/check-layering.mjs` |
+| H-20 | Every frontend bounded context declares a conformist / ACL / shared-kernel relationship to a PRD 20 context | Checked-in context map + review |
+| H-21 | Canvas invariants are enforced by the aggregate, and collaboration broadcasts events rather than commands | Aggregate unit tests + collaboration divergence test |
 
 Completion is not “all files are small.” Completion is zero unowned boundary violations, bounded new
 complexity, shrinking duplicate baselines and demonstrated latency improvements on material paths.

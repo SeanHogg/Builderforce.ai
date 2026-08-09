@@ -39,8 +39,8 @@ const inputStyle: React.CSSProperties = {
 /** Native `<option>` needs its own opaque colours — the popup does not inherit
  *  the control's theme on every platform. */
 const optionStyle: React.CSSProperties = {
-  background: 'var(--bg-deep, #ffffff)',
-  color: 'var(--text-primary, #14161a)',
+  background: 'var(--bg-deep)',
+  color: 'var(--text-primary)',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -186,13 +186,13 @@ export function ConnectorNodeFields({ config, setConfig, patchConfig }: Props) {
 
       {/* An action that spends money or messages a customer, on an unattended
           schedule, is worth one sentence of warning before it is saved. */}
-      {action?.mutates && <div style={{ ...hintStyle, color: 'var(--warning, #9a6200)' }}>{t('mutatesWarning')}</div>}
+      {action?.mutates && <div style={{ ...hintStyle, color: 'var(--warning)' }}>{t('mutatesWarning')}</div>}
 
       {connector && connector.authFields.length > 0 && (
         <div style={hintStyle}>{t('connectionHint', { name: connector.name })}</div>
       )}
 
-      {error && <div style={{ ...hintStyle, color: 'var(--danger, #b3261e)' }}>{error}</div>}
+      {error && <div style={{ ...hintStyle, color: 'var(--danger)' }}>{error}</div>}
     </div>
   );
 }

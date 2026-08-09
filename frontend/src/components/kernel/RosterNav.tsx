@@ -238,7 +238,7 @@ export function RosterNav({
           style={{
             left: 60,
             top: flyout.top,
-            background: 'var(--surface, #101624)',
+            background: 'var(--surface)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
             boxShadow: '0 8px 24px rgba(0,0,0,.28)',

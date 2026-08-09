@@ -24,7 +24,7 @@ export function PmEmpty({ message }: { message: string }) {
 }
 
 export function PmError({ message }: { message: string }) {
-  return <div style={{ ...noticeStyle, color: 'var(--danger, #dc2626)' }}>{message}</div>;
+  return <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{message}</div>;
 }
 
 /** A titled section card matching the dashboard surfaces. */
@@ -41,20 +41,20 @@ export function PmCard({ title, action, children }: { title: string; action?: Re
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  done: '#16a34a',
-  shipped: '#16a34a',
-  in_progress: '#2563eb',
-  in_review: '#7c3aed',
-  blocked: '#dc2626',
-  planned: '#6b7280',
-  now: '#16a34a',
-  next: '#2563eb',
-  later: '#6b7280',
+  done: 'var(--success)',
+  shipped: 'var(--success)',
+  in_progress: 'var(--info)',
+  in_review: 'var(--violet-bright)',
+  blocked: 'var(--error)',
+  planned: 'var(--text-muted)',
+  now: 'var(--success)',
+  next: 'var(--info)',
+  later: 'var(--text-muted)',
 };
 
 /** A small colored status/horizon pill. */
 export function StatusPill({ value }: { value: string }) {
-  const color = STATUS_COLORS[value] ?? '#6b7280';
+  const color = STATUS_COLORS[value] ?? 'var(--text-muted)';
   return (
     <span
       style={{
@@ -79,7 +79,7 @@ export function StatusPill({ value }: { value: string }) {
  */
 export function ProgressBar({ value, label }: { value: number; label?: string }) {
   const pct = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)) * 100;
-  const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626';
+  const color = pct >= 70 ? 'var(--success)' : pct >= 40 ? 'var(--warning)' : 'var(--error)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ flex: 1, height: 8, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden' }}>

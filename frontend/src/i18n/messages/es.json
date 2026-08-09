@@ -12821,7 +12821,20 @@
       "reportTitle": "Lo que el agente habría hecho",
       "frozenAt": "Leyó el repositorio en",
       "suppressedTitle": "Efectos suprimidos",
-      "noSteps": "El agente no produjo ningún efecto: ni escribió código ni guardó nada."
+      "noSteps": "El agente no produjo ningún efecto: ni escribió código ni guardó nada.",
+      "compareSelected": "Comparar selección ({count}/2)",
+      "compareHint": "Selecciona dos ensayos para comparar sus efectos.",
+      "selectCompare": "Seleccionar",
+      "selected": "Seleccionado",
+      "comparisonTitle": "Comparación de ensayos",
+      "sameTicket": "Mismo ticket",
+      "differentTicket": "Tickets distintos",
+      "sameRef": "Misma referencia del repositorio",
+      "differentRef": "Las referencias difieren o no están disponibles",
+      "operation": "Operación",
+      "baseline": "Base",
+      "candidate": "Candidato",
+      "delta": "Cambio"
     }
   },
   "quickStart": {

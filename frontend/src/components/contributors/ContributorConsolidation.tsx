@@ -22,8 +22,8 @@ const cardStyle: React.CSSProperties = {
 const btn = (primary = false): React.CSSProperties => ({
   fontSize: 12, padding: '5px 11px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   border: '1px solid var(--border-subtle)',
-  background: primary ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
-  color: primary ? '#fff' : 'var(--text-secondary)',
+  background: primary ? 'var(--accent)' : 'var(--bg-base)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 export function ContributorConsolidation() {
   const t = useTranslations('contributorMerge');
@@ -95,7 +95,7 @@ export function ContributorConsolidation() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {/* Suggested duplicates */}
       <div style={cardStyle}>

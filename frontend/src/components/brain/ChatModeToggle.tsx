@@ -68,7 +68,7 @@ export function ChatModeToggle({ value, onChange }: ChatModeToggleProps) {
               whiteSpace: 'nowrap',
               cursor: 'pointer',
               background: active ? 'var(--bg-elevated, rgba(128,128,128,0.16))' : 'transparent',
-              color: active ? 'var(--text-primary, #111)' : 'var(--text-muted, #6b7280)',
+              color: active ? 'var(--text-primary)' : 'var(--text-muted)',
               boxShadow: active ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
             }}
           >

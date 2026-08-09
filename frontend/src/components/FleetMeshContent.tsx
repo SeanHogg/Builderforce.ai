@@ -124,8 +124,8 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
             )}
 
           {/* Hub */}
-          <circle cx={cx} cy={cy} r={18} fill="var(--bg-elevated)" stroke="var(--coral-bright, #f4726e)" strokeWidth={2} />
-          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={9} fontWeight={700} fill="var(--coral-bright, #f4726e)">
+          <circle cx={cx} cy={cy} r={18} fill="var(--bg-elevated)" stroke="var(--coral-bright)" strokeWidth={2} />
+          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={9} fontWeight={700} fill="var(--coral-bright)">
             HUB
           </text>
 
@@ -265,7 +265,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
         </div>
 
         {dispatchError && (
-          <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginBottom: 10 }}>{dispatchError}</div>
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{dispatchError}</div>
         )}
 
         {dispatchResult && (
@@ -296,8 +296,8 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               padding: '8px 18px',
               fontSize: 13,
               fontWeight: 600,
-              background: selectedAgentHost && !dispatching ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-              color: selectedAgentHost && !dispatching ? '#fff' : 'var(--text-muted)',
+              background: selectedAgentHost && !dispatching ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+              color: selectedAgentHost && !dispatching ? 'var(--text-on-accent)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-md)',
               cursor: !selectedAgentHost || dispatching ? 'not-allowed' : 'pointer',

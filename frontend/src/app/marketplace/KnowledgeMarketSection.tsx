@@ -65,7 +65,7 @@ export function KnowledgeMarketSection() {
       <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 4px' }}>{t('marketTitle')}</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px' }}>{t('marketSubtitle')}</p>
       {error && (
-        <p role="alert" style={{ color: 'var(--danger, #ef4444)', fontSize: 13, margin: '0 0 12px' }}>{error}</p>
+        <p role="alert" style={{ color: 'var(--danger)', fontSize: 13, margin: '0 0 12px' }}>{error}</p>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {listings.map((l) => (

@@ -129,7 +129,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
           </div>
         )}
         {webStatus === 'error' && (
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--error-text, #e74c3c)' }}>{t('webError')}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--error-text)' }}>{t('webError')}</div>
         )}
       </div>
 
@@ -158,7 +158,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
                 <span style={{ display: 'block', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{a.name}</span>
                 <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{a.blurb}</span>
               </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: st === 'done' ? 'var(--success)' : st === 'error' ? 'var(--error-text, #e74c3c)' : st === 'running' ? 'var(--coral-bright)' : isSel ? 'var(--coral-bright)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: st === 'done' ? 'var(--success)' : st === 'error' ? 'var(--error-text)' : st === 'running' ? 'var(--coral-bright)' : isSel ? 'var(--coral-bright)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {st === 'running' ? t('running') : st === 'done' ? t('started') : st === 'error' ? t('failed') : isSel ? '✓' : ''}
               </span>
             </button>

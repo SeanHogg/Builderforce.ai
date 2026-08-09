@@ -54,10 +54,10 @@ function fmtBench(value: number | null, unit: string | null): string {
 }
 
 const RATING_COLOR: Record<BenchmarkRating, { bg: string; fg: string }> = {
-  elite: { bg: 'rgba(16,185,129,0.16)', fg: '#059669' },
-  high: { bg: 'rgba(59,130,246,0.16)', fg: '#2563eb' },
-  medium: { bg: 'rgba(245,158,11,0.16)', fg: '#b45309' },
-  low: { bg: 'rgba(239,68,68,0.16)', fg: '#dc2626' },
+  elite: { bg: 'rgba(16,185,129,0.16)', fg: 'var(--emerald-bright)' },
+  high: { bg: 'rgba(59,130,246,0.16)', fg: 'var(--info)' },
+  medium: { bg: 'rgba(245,158,11,0.16)', fg: 'var(--warning)' },
+  low: { bg: 'rgba(239,68,68,0.16)', fg: 'var(--error)' },
 };
 
 function RatingBadge({ rating }: { rating: BenchmarkRating | null }) {

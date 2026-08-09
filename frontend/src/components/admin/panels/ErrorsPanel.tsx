@@ -38,7 +38,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
         style={{
           fontSize: 24,
           fontWeight: 600,
-          color: tone === 'danger' && value > 0 ? 'var(--danger, #dc2626)' : 'var(--text-primary)',
+          color: tone === 'danger' && value > 0 ? 'var(--danger)' : 'var(--text-primary)',
         }}
       >
         {value.toLocaleString()}
@@ -209,7 +209,7 @@ export default function ErrorsPanel() {
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{g.source ?? '—'}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{g.operation ?? '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{g.count.toLocaleString()}</td>
-                    <td style={{ textAlign: 'right', color: g.unhandledCount > 0 ? 'var(--danger, #dc2626)' : undefined }}>
+                    <td style={{ textAlign: 'right', color: g.unhandledCount > 0 ? 'var(--danger)' : undefined }}>
                       {g.unhandledCount.toLocaleString()}
                     </td>
                     <td style={{ textAlign: 'right' }}>{g.tenantCount}</td>
@@ -281,7 +281,7 @@ export default function ErrorsPanel() {
                               fontSize: 11,
                               fontWeight: 600,
                               border: '1px solid var(--border)',
-                              color: e.handled ? 'var(--text-muted)' : 'var(--danger, #dc2626)',
+                              color: e.handled ? 'var(--text-muted)' : 'var(--danger)',
                             }}
                           >
                             {e.handled ? t('errors.handled_handled') : t('errors.handled_unhandled')}

@@ -17,7 +17,7 @@ const field: React.CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 12,
 };
 const btn: React.CSSProperties = {
-  ...field, cursor: 'pointer', background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', border: 'none', fontWeight: 600,
+  ...field, cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', fontWeight: 600,
 };
 
 function fmtH(h: number): string { return h >= 10 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`; }
@@ -68,14 +68,14 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('windowTotal', { days, hours: fmtH(data?.totalHours ?? 0) })}</span>
       </div>
 
-      {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 11 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 11 }}>{error}</div>}
 
       {/* Daily bars */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 56 }}>
         {(data?.daily ?? []).map((d) => (
           <div key={d.date} title={`${d.date}: ${fmtH(d.hours)}`}
             style={{ flex: 1, minWidth: 2, height: `${Math.max(2, (d.hours / maxHours) * 100)}%`,
-              background: d.hours > 0 ? 'var(--accent, #6366f1)' : 'var(--border-subtle)', borderRadius: 'var(--radius-sm)', alignSelf: 'flex-end' }} />
+              background: d.hours > 0 ? 'var(--accent)' : 'var(--border-subtle)', borderRadius: 'var(--radius-sm)', alignSelf: 'flex-end' }} />
         ))}
         {data == null && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('loading')}</span>}
       </div>

@@ -520,7 +520,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
     <button
       type="button"
       onClick={onClick}
-      style={{ fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--radius-full)', cursor: 'pointer', border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, background: active ? 'var(--coral-bright)' : 'transparent', color: active ? '#fff' : 'var(--text-secondary)' }}
+      style={{ fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--radius-full)', cursor: 'pointer', border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, background: active ? 'var(--coral-bright)' : 'transparent', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)' }}
     >
       {label}
     </button>

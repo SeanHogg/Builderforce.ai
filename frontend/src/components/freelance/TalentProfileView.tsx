@@ -29,7 +29,7 @@ function TalentStats({ stats }: { stats: FreelancerStats }) {
 
   const tiles: { key: string; value: string; label: string; sub: string; accent: string }[] = [
     { key: 'aiUsage', value: num(stats.aiActions), label: t('stats.aiUsage'), sub: t('stats.aiUsageSub'), accent: 'var(--cyan-bright, var(--cyan-bright))' },
-    { key: 'activity', value: `${num(stats.activeDays)}${t('stats.daysSuffix')}`, label: t('stats.activity'), sub: t('stats.activitySub', { signals: num(stats.activitySignals) }), accent: 'var(--coral-bright, #f4726e)' },
+    { key: 'activity', value: `${num(stats.activeDays)}${t('stats.daysSuffix')}`, label: t('stats.activity'), sub: t('stats.activitySub', { signals: num(stats.activitySignals) }), accent: 'var(--coral-bright)' },
     { key: 'awarded', value: num(stats.projectsAwarded), label: t('stats.awarded'), sub: t('stats.awardedSub', { count: stats.activeEngagements }), accent: 'rgba(34,197,94,0.9)' },
     { key: 'inProposal', value: num(stats.proposalsActive), label: t('stats.inProposal'), sub: t('stats.inProposalSub'), accent: 'rgba(245,158,11,0.95)' },
     { key: 'earned', value: money(stats.earnedToDateCents, stats.currency), label: t('stats.earned'), sub: t('stats.earnedSub'), accent: 'var(--text-primary)' },

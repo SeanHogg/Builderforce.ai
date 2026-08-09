@@ -48,7 +48,7 @@ export function EmbedConsentModal({ version, onAgree, onCancel }: Props) {
           <button
             type="button"
             onClick={onAgree}
-            style={{ ...button, background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none' }}
+            style={{ ...button, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none' }}
           >
             {t('agreeAndEnable')}
           </button>

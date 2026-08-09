@@ -34,7 +34,7 @@ export function WorkOptionsPicker({ mode, onPick, disabled }: WorkOptionsPickerP
 
   return (
     <div style={{ width: '100%', maxWidth: 720, padding: '0 16px' }}>
-      <div style={{ fontSize: 12, color: 'var(--text-muted, #6b7280)', textAlign: 'center', marginBottom: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 10 }}>
         {t('tilesHint')}
       </div>
       <div
@@ -58,7 +58,7 @@ export function WorkOptionsPicker({ mode, onPick, disabled }: WorkOptionsPickerP
               borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--border-subtle, rgba(128,128,128,0.3))',
               background: 'var(--bg-elevated, rgba(128,128,128,0.06))',
-              color: 'var(--text-primary, #111)',
+              color: 'var(--text-primary)',
               cursor: disabled ? 'default' : 'pointer',
               textAlign: 'left',
             }}
@@ -66,7 +66,7 @@ export function WorkOptionsPicker({ mode, onPick, disabled }: WorkOptionsPickerP
             <span aria-hidden style={{ fontSize: 18, lineHeight: 1.2, flexShrink: 0 }}>{option.icon}</span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{t(`${option.id}.label`)}</span>
-              <span style={{ display: 'block', fontSize: 11, marginTop: 2, color: 'var(--text-muted, #6b7280)', overflowWrap: 'anywhere' }}>
+              <span style={{ display: 'block', fontSize: 11, marginTop: 2, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
                 {t(`${option.id}.hint`)}
               </span>
             </span>

@@ -14,7 +14,7 @@ import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
-import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { containerGitCloneUrl, mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
 import { mintPreviewToken, PREVIEW_TOKEN_TTL_SECONDS } from '../../application/runtime/previewToken';
 import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
@@ -50,6 +50,7 @@ import { resolveProjectInferenceModel } from '../../application/llm/projectEverm
 import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
+import { executeGitProxy } from '../../application/repos/gitProxy';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -789,10 +790,10 @@ async function startDispatchedExecution(
         // every run from a stale default and cannot see earlier passes' work; carrying
         // headBranch lets the container check it out and fall back to base on run #1
         // when the branch doesn't exist yet.
-        const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
-          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
-          : null;
         const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
+        const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
+          ? { cloneUrl: containerGitCloneUrl(internalBaseUrl, execution.id, token), baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
+          : null;
         const res = await stub.fetch('https://agent-container/run', {
           method: 'POST',
           body: JSON.stringify({
@@ -1070,6 +1071,29 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
     return c.json(res.body as Record<string, unknown>, res.status as 200);
   });
+
+  const containerGitProxy = async (c: Context<RuntimeHonoEnv>, subPath: string, method: 'GET' | 'POST'): Promise<Response> => {
+    const executionId = Number(c.req.param('executionId'));
+    const auth = c.req.header('Authorization') ?? '';
+    let token = '';
+    if (auth.startsWith('Basic ')) {
+      try { token = atob(auth.slice(6)).split(':').slice(1).join(':'); } catch { token = ''; }
+    }
+    if (!Number.isFinite(executionId) || !token || !(await verifyContainerRunToken(c.env.JWT_SECRET, executionId, token))) return c.json({ error: 'invalid run credential' }, 403);
+    const run = await loadContainerRunContext(c.env as Env, db, executionId);
+    if (!run) return c.json({ error: 'execution not found' }, 404);
+    const resolved = await resolveTicketRepoContext(db, gitSecret(c.env as Env), run.tenantId, run.taskId);
+    if (!resolved.ok) return c.json({ error: resolved.reason }, 400);
+    const proxied = await executeGitProxy({
+      repo: resolved.ctx, token: resolved.ctx.token, subPath, method,
+      query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
+      contentType: c.req.header('Content-Type'), body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
+    });
+    return proxied.ok ? proxied.response : c.json({ error: proxied.error }, 400);
+  };
+  router.get('/internal/container-git/:executionId.git/info/refs', (c) => containerGitProxy(c, 'info/refs', 'GET'));
+  router.post('/internal/container-git/:executionId.git/git-upload-pack', (c) => containerGitProxy(c, 'git-upload-pack', 'POST'));
+  router.post('/internal/container-git/:executionId.git/git-receive-pack', (c) => containerGitProxy(c, 'git-receive-pack', 'POST'));
 
   router.use('*', authMiddleware);
 

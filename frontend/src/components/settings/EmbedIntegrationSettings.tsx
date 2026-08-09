@@ -152,7 +152,7 @@ export function EmbedIntegrationSettings() {
               disabled={saving}
               style={{
                 padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)',
+                background: 'var(--accent)', color: 'var(--text-on-accent)',
                 border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer',
               }}
             >

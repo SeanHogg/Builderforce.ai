@@ -104,7 +104,7 @@ export function GitHubDeployPanel({ projectId, subdomain }: GitHubDeployPanelPro
           </button>
 
           {error && (
-            <div style={{ color: 'var(--error-text, #c0392b)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>
+            <div style={{ color: 'var(--error-text)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>
               {error}
             </div>
           )}
@@ -119,7 +119,7 @@ export function GitHubDeployPanel({ projectId, subdomain }: GitHubDeployPanelPro
                   href={actionsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ fontSize: 12.5, color: 'var(--coral-bright, #e2654a)', fontWeight: 600 }}
+                  style={{ fontSize: 12.5, color: 'var(--coral-bright)', fontWeight: 600 }}
                 >
                   {t('deploy.viewRuns')}
                 </a>

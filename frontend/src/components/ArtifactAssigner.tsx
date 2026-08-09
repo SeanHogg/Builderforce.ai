@@ -191,7 +191,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         width="min(480px, 96vw)"
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {error && <div style={{ color: 'var(--error-text, #ef4444)', fontSize: 12 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--error-text)', fontSize: 12 }}>{error}</div>}
           {success && <div style={{ color: 'var(--success-text, var(--success))', fontSize: 12 }}>{success}</div>}
 
           {loading ? (

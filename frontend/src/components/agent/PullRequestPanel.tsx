@@ -22,15 +22,15 @@ import { getMergeBlockReason } from './pullRequestMergeState';
 
 const STATUS_COLOR: Record<string, string> = {
   open: 'var(--coral-bright)',
-  merged: 'var(--success, #16a34a)',
+  merged: 'var(--success)',
   closed: 'var(--text-muted)',
   draft: 'var(--text-muted)',
 };
 
 const CHECK_COLOR: Record<string, string> = {
-  success: 'var(--success, #16a34a)',
-  failure: 'var(--danger, #dc2626)',
-  pending: 'var(--warning, #d97706)',
+  success: 'var(--success)',
+  failure: 'var(--danger)',
+  pending: 'var(--warning)',
 };
 
 const MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
@@ -66,7 +66,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
         {status === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
         {validating && <span style={{ color: 'var(--text-muted)' }}>⏳ validating…</span>}
         {status === 'failure' && (
-          <span style={{ color: 'var(--warning, #d97706)' }}>
+          <span style={{ color: 'var(--warning)' }}>
             {phase === 'pre-merge'
               ? 'auto-fix dispatched — the agent will push a fix to this branch.'
               : 'auto-fix dispatched — a new PR will open for review.'}
@@ -172,12 +172,12 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       {detail?.supported && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
           {checks && <span style={{ color: CHECK_COLOR[checks] }}>● CI {checks}{detail.checksTotal ? ` (${detail.checksTotal})` : ''}</span>}
-          {mergeBlockReason && !isMerged && <span style={{ color: 'var(--danger, #dc2626)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
+          {mergeBlockReason && !isMerged && <span style={{ color: 'var(--danger)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
           {(detail.changedFiles != null) && (
             <span style={{ color: 'var(--text-muted)' }}>
               {detail.changedFiles} file{detail.changedFiles === 1 ? '' : 's'}
-              {detail.additions != null && <span style={{ color: 'var(--success, #16a34a)' }}> +{detail.additions}</span>}
-              {detail.deletions != null && <span style={{ color: 'var(--danger, #dc2626)' }}> −{detail.deletions}</span>}
+              {detail.additions != null && <span style={{ color: 'var(--success)' }}> +{detail.additions}</span>}
+              {detail.deletions != null && <span style={{ color: 'var(--danger)' }}> −{detail.deletions}</span>}
             </span>
           )}
         </div>
@@ -211,19 +211,19 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
             disabled={merging || !!mergeBlockReason}
             style={{
               fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: merging || mergeBlockReason ? 'not-allowed' : 'pointer',
-              background: 'var(--success, #16a34a)', color: 'var(--text-on-accent, #fff)', opacity: merging || mergeBlockReason ? 0.6 : 1,
+              background: 'var(--success)', color: 'var(--text-on-accent)', opacity: merging || mergeBlockReason ? 0.6 : 1,
             }}
           >
             {merging ? 'Merging…' : 'Approve & Merge'}
           </button>
-          {mergeBlockReason && <span style={{ fontSize: 12, color: 'var(--danger, #dc2626)' }}>{mergeBlockReason}</span>}
-          {!mergeBlockReason && checksRed && <span style={{ fontSize: 12, color: 'var(--warning, #d97706)' }}>⚠ CI is {checks}. Repository rules may block merging until required checks pass.</span>}
+          {mergeBlockReason && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{mergeBlockReason}</span>}
+          {!mergeBlockReason && checksRed && <span style={{ fontSize: 12, color: 'var(--warning)' }}>⚠ CI is {checks}. Repository rules may block merging until required checks pass.</span>}
         </div>
       )}
 
       {isMerged && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 13, color: 'var(--success, #16a34a)' }}>
+          <div style={{ fontSize: 13, color: 'var(--success)' }}>
             ✓ Merged{pr.mergedAt ? ` ${new Date(pr.mergedAt).toLocaleString()}` : ''}.
           </div>
           {/* Post-merge deploy-branch build validation (status + reason + auto-fix). */}
@@ -231,7 +231,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 8 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
 
       {pr.url && (
         <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>

@@ -100,7 +100,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
     }
   };
 
-  if (loading) return <div style={{ color: '#64748b' }}>Loading {title}…</div>;
+  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>Loading {title}…</div>;
 
   return (
     <div>
@@ -116,7 +116,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
             {fields.map((f) => (
               <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
-                <span style={{ fontSize: 12, color: '#64748b' }}>{f.label}{f.required ? ' *' : ''}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{f.label}{f.required ? ' *' : ''}</span>
                 <FieldInput field={f} value={form[f.key]} onChange={(v) => setForm({ ...form, [f.key]: v })} />
               </label>
             ))}
@@ -127,7 +127,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
           </div>
         </div>
       ) : rows.length === 0 ? (
-        <div style={{ color: '#64748b' }}>No entries yet.</div>
+        <div style={{ color: 'var(--text-secondary)' }}>No entries yet.</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -177,11 +177,11 @@ function FieldInput({ field, value, onChange }: { field: TrackerField; value: un
   return <input {...common} type={type} value={String(value ?? '')} onChange={(e) => onChange(field.type === 'number' ? Number(e.target.value) : e.target.value)} />;
 }
 
-const btn: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
-const btnGhost: React.CSSProperties = { ...btn, background: 'transparent', color: 'var(--text-secondary, #64748b)', border: '1px solid var(--border-subtle, #e2e8f0)' };
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontSize: 12, padding: '2px 6px' };
-const card: React.CSSProperties = { border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-md)', padding: 16, background: 'var(--bg-base, #f8fafc)' };
-const th: React.CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle, #e2e8f0)', color: '#64748b', fontWeight: 600 };
-const td: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--border-subtle, #f1f5f9)' };
-const input: React.CSSProperties = { fontSize: 13, padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)', color: 'var(--text-primary, #0f172a)', width: '100%' };
-const badge: React.CSSProperties = { fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated, #f1f5f9)', color: 'var(--text-secondary, #475569)' };
+const btn: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const btnGhost: React.CSSProperties = { ...btn, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' };
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, padding: '2px 6px' };
+const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 16, background: 'var(--bg-base)' };
+const th: React.CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontWeight: 600 };
+const td: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' };
+const input: React.CSSProperties = { fontSize: 13, padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', width: '100%' };
+const badge: React.CSSProperties = { fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' };

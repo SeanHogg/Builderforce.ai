@@ -27,9 +27,9 @@ import type { MetricSeries } from '@/lib/kernel/kernelApi';
  *  apart without inventing a palette that only reads in one theme. */
 const SERIES_TOKENS = [
   'var(--accent)',
-  'var(--cyan-bright, #00b8a9)',
-  'var(--badge-unread, #6366f1)',
-  'var(--warning, #d97706)',
+  'var(--cyan-bright)',
+  'var(--badge-unread)',
+  'var(--warning)',
 ];
 
 function path(points: { at: string; value: number }[], w: number, h: number, pad: number): string {

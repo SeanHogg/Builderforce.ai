@@ -50,7 +50,7 @@ export default async function MarketplaceSkillPage({
         .mps-tag { font-size: 0.74rem; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 12px; }
         .mps-cta-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 28px; }
         .mps-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: var(--radius-lg); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
-        .mps-btn-primary { background: linear-gradient(135deg, var(--coral-bright), #e23b2e); color: var(--text-on-accent); }
+        .mps-btn-primary { background: linear-gradient(135deg, var(--coral-bright), var(--error)); color: var(--text-on-accent); }
         .mps-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .mps-readme { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 22px 24px; color: var(--text-primary); line-height: 1.7; white-space: pre-wrap; font-size: 0.92rem; }
         .mps-h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--text-primary); margin: 0 0 12px; }

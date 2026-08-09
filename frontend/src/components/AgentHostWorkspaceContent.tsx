@@ -17,7 +17,7 @@ const cardStyle: React.CSSProperties = {
 const STATUS_COLORS: Record<string, string> = {
   synced: 'var(--cyan-bright, var(--cyan-bright))',
   pending: 'var(--text-muted)',
-  error: 'var(--coral-bright, #f4726e)',
+  error: 'var(--coral-bright)',
 };
 
 function FileIcon({ path }: { path: string }) {

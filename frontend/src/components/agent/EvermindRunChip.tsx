@@ -34,11 +34,11 @@ export function EvermindRunChip({ models, projectId }: { models: readonly string
       style={{
         fontSize: 11,
         fontWeight: 600,
-        color: 'var(--ev-personality, #9085e9)',
+        color: 'var(--ev-personality, var(--violet-bright))',
         padding: '2px 8px',
         borderRadius: 'var(--radius-sm)',
         background: 'var(--bg-deep)',
-        border: '1px solid var(--ev-personality, #9085e9)',
+        border: '1px solid var(--ev-personality, var(--violet-bright))',
       }}
     >
       {label}

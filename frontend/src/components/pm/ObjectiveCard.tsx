@@ -28,7 +28,7 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 12px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  padding: '7px 12px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const ghostBtn: React.CSSProperties = {
@@ -37,7 +37,7 @@ const ghostBtn: React.CSSProperties = {
 const classBtn = (active: boolean, color: string): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
   border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
-  background: active ? color : 'transparent', color: active ? '#fff' : 'var(--text-secondary)',
+  background: active ? color : 'transparent', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 
 /** Derive a 'YYYY-Qn' period label from an ISO/date string (for reporting/grouping). */

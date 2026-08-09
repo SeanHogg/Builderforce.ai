@@ -22,29 +22,29 @@ const cardStyle: React.CSSProperties = {
 // Actor-type visual system. Colours are literal accents layered on translucent
 // fills that read in BOTH themes (the fill carries the tint; text uses the accent).
 const ACTOR_STYLE: Record<ActivityActorType, { color: string; glyph: string }> = {
-  human:      { color: '#39d353', glyph: '👤' },
-  hire:       { color: '#f5a524', glyph: '🤝' },
-  cloud_agent:{ color: '#b388ff', glyph: '🤖' },
-  host_agent: { color: '#8a4be0', glyph: '🖥️' },
+  human:      { color: 'var(--emerald-bright)', glyph: '👤' },
+  hire:       { color: 'var(--amber-bright)', glyph: '🤝' },
+  cloud_agent:{ color: 'var(--violet-bright)', glyph: '🤖' },
+  host_agent: { color: 'var(--purple-bright)', glyph: '🖥️' },
   system:     { color: '#8b98a5', glyph: '⚙️' },
 };
 const ACTOR_ORDER: ActivityActorType[] = ['human', 'hire', 'cloud_agent', 'host_agent', 'system'];
 
 // Verb → an accent so the timeline scans by change-type at a glance.
 const VERB_COLOR: Record<string, string> = {
-  'task.created': '#39d353',
-  'task.updated': '#6366f1',
-  'task.status_changed': '#3b82f6',
-  'task.assigned': '#8a4be0',
-  'task.moved': '#6366f1',
-  'task.deleted': '#e5484d',
+  'task.created': 'var(--emerald-bright)',
+  'task.updated': 'var(--indigo-bright)',
+  'task.status_changed': 'var(--coral-bright)',
+  'task.assigned': 'var(--purple-bright)',
+  'task.moved': 'var(--indigo-bright)',
+  'task.deleted': 'var(--error)',
   'code.changed': '#26a641',
   'deploy.recorded': '#30a46c',
-  'deploy.failed': '#e5484d',
-  'role.assigned': '#8a4be0',
-  'engagement.created': '#f5a524',
-  'member.hired': '#f5a524',
-  'doc.published': '#0ea5e9',
+  'deploy.failed': 'var(--error)',
+  'role.assigned': 'var(--purple-bright)',
+  'engagement.created': 'var(--amber-bright)',
+  'member.hired': 'var(--amber-bright)',
+  'doc.published': 'var(--sky-bright)',
 };
 
 /**
@@ -153,7 +153,7 @@ export function AuditTrailPanel() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {filters.map((f) => {
             const active = actorType === f;
-            const accent = f === 'all' ? 'var(--accent, #6366f1)' : ACTOR_STYLE[f].color;
+            const accent = f === 'all' ? 'var(--accent)' : ACTOR_STYLE[f].color;
             return (
               <button
                 key={f}
@@ -163,7 +163,7 @@ export function AuditTrailPanel() {
                   fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
                   border: `1px solid ${active ? accent : 'var(--border-subtle)'}`,
                   background: active ? accent : 'var(--bg-base)',
-                  color: active ? '#fff' : 'var(--text-secondary)',
+                  color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                   fontWeight: active ? 600 : 400,
                 }}
               >
@@ -176,7 +176,7 @@ export function AuditTrailPanel() {
 
       {loading && <div style={{ color: 'var(--muted)', fontSize: 14, padding: 8 }}>{t('loading')}</div>}
       {error && (
-        <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>
+        <div style={{ ...cardStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>
       )}
 
       {!loading && !error && events.length === 0 && (

@@ -138,7 +138,7 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
       )}
 
       {archMsg && (
-        <div style={{ fontSize: 12, color: archState === 'error' ? '#ef4444' : 'var(--success)' }}>{archMsg}</div>
+        <div style={{ fontSize: 12, color: archState === 'error' ? 'var(--error)' : 'var(--success)' }}>{archMsg}</div>
       )}
 
       <div style={cardStyle}>

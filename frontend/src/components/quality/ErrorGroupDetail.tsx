@@ -101,7 +101,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
           <button type="button" style={btnSubtle} onClick={onClose} aria-label={t('detail.close')}>✕</button>
         </div>
 
-        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
         {g && (
           <>

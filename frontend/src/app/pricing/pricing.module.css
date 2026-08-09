@@ -110,7 +110,7 @@
 
 .planButton[data-plan='teams'] {
   border: 0;
-  background: #3b82f6;
+  background: var(--coral-bright);
   color: var(--text-on-accent);
 }
 

@@ -210,11 +210,11 @@ export function ConnectorBuilder({ open, editKey, onClose, onSaved }: {
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {errors.length > 0 && (
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--danger, #dc2626)', lineHeight: 1.6 }}>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--danger)', lineHeight: 1.6 }}>
             {errors.map((e) => <li key={e}>{e}</li>)}
           </ul>
         )}
-        {notice && <div style={{ fontSize: 12.5, color: 'var(--success, #16a34a)' }}>{notice}</div>}
+        {notice && <div style={{ fontSize: 12.5, color: 'var(--success)' }}>{notice}</div>}
         {warnings.length > 0 && (
           <details style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 650 }}>{t('builder.warnings', { count: warnings.length })}</summary>
@@ -276,13 +276,13 @@ export function ConnectorBuilder({ open, editKey, onClose, onSaved }: {
               <label style={labelStyle} htmlFor="man-json">{t('builder.manifestLabel')}</label>
               <textarea
                 id="man-json"
-                style={{ ...codeArea, borderColor: parsed.ok ? 'var(--border-subtle)' : 'var(--danger, #dc2626)' }}
+                style={{ ...codeArea, borderColor: parsed.ok ? 'var(--border-subtle)' : 'var(--danger)' }}
                 value={json}
                 spellCheck={false}
                 onChange={(e) => setJson(e.target.value)}
               />
               {!parsed.ok && (
-                <p style={{ fontSize: 11, color: 'var(--danger, #dc2626)', margin: '4px 0 0' }}>{parsed.message}</p>
+                <p style={{ fontSize: 11, color: 'var(--danger)', margin: '4px 0 0' }}>{parsed.message}</p>
               )}
               {parsed.ok && (
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
@@ -302,7 +302,7 @@ export function ConnectorBuilder({ open, editKey, onClose, onSaved }: {
                 {t('builder.publish')}
               </button>
               {rowId && (
-                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={remove}>
+                <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} disabled={busy} onClick={remove}>
                   {tc('delete')}
                 </button>
               )}

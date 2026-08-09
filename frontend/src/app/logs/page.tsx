@@ -12,9 +12,9 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   user_login: 'var(--cyan-bright, var(--cyan-bright))',
   task_created: 'var(--text-secondary)',
   task_updated: 'var(--text-secondary)',
-  task_submitted: 'var(--coral-bright, #f4726e)',
+  task_submitted: 'var(--coral-bright)',
   execution_completed: 'rgba(34,197,94,0.9)',
-  execution_failed: 'var(--coral-bright, #f4726e)',
+  execution_failed: 'var(--coral-bright)',
   agent_host_registered: 'var(--text-secondary)',
   approval_created: 'rgba(245,158,11,0.9)',
   approval_decided: 'rgba(245,158,11,0.9)',
@@ -158,7 +158,7 @@ export default function AuditLogsContent() {
             padding: 16,
             borderRadius: 'var(--radius-lg)',
             background: 'rgba(244,114,94,0.1)',
-            color: 'var(--coral-bright, #f4726e)',
+            color: 'var(--coral-bright)',
             fontSize: 13,
             marginBottom: 16,
           }}
@@ -327,7 +327,7 @@ export default function AuditLogsContent() {
                     fontWeight: 600,
                     background: 'none',
                     border: 'none',
-                    color: 'var(--coral-bright, #f4726e)',
+                    color: 'var(--coral-bright)',
                     cursor: 'pointer',
                   }}
                 >

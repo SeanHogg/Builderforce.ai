@@ -76,11 +76,11 @@ const button: React.CSSProperties = {
 /** Verdict → theme-token colour. Both themes get the variable, with a literal
  *  fallback so an unset token still reads. */
 const VERDICT_COLOR: Record<string, string> = {
-  ok: 'var(--success, #167a4a)',
-  unverified: 'var(--warning, #9a6200)',
-  'no-handler': 'var(--warning, #9a6200)',
-  'rate-limited': 'var(--warning, #9a6200)',
-  error: 'var(--danger, #b3261e)',
+  ok: 'var(--success)',
+  unverified: 'var(--warning)',
+  'no-handler': 'var(--warning)',
+  'rate-limited': 'var(--warning)',
+  error: 'var(--danger)',
 };
 
 export default function ProjectBackendPanel({ projectId }: { projectId: number }) {
@@ -226,8 +226,8 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
                   title={s.summary}
                   style={{
                     ...button,
-                    borderColor: active ? 'var(--accent, #2f6fed)' : 'var(--border-subtle)',
-                    color: active ? 'var(--accent, #2f6fed)' : 'var(--text-primary)',
+                    borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                    color: active ? 'var(--accent)' : 'var(--text-primary)',
                     cursor: active ? 'default' : 'pointer',
                     opacity: busy && !active ? 0.6 : 1,
                   }}
@@ -248,8 +248,8 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
             disabled={busy}
             style={{
               ...button,
-              borderColor: paused ? 'var(--warning, #9a6200)' : 'var(--border-subtle)',
-              color: paused ? 'var(--warning, #9a6200)' : 'var(--text-primary)',
+              borderColor: paused ? 'var(--warning)' : 'var(--border-subtle)',
+              color: paused ? 'var(--warning)' : 'var(--text-primary)',
               opacity: busy ? 0.6 : 1,
             }}
           >
@@ -269,20 +269,20 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
             ...card,
             display: 'grid',
             gap: 8,
-            borderColor: health.reachable && unboundSecrets.length === 0 ? 'var(--border-subtle)' : 'var(--warning, #9a6200)',
+            borderColor: health.reachable && unboundSecrets.length === 0 ? 'var(--border-subtle)' : 'var(--warning)',
           }}
         >
           <div style={label}>{t('workerHealthLabel')}</div>
           {!health.reachable ? (
-            <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--warning)', lineHeight: 1.5 }}>
               {t('workerUnreachable', { reason: health.reason ?? '' })}
             </div>
           ) : unboundSecrets.length > 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--warning)', lineHeight: 1.5 }}>
               {t('workerMissingSecrets', { names: unboundSecrets.join(', ') })}
             </div>
           ) : (
-            <div style={{ fontSize: 13, color: 'var(--success, #167a4a)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--success)', lineHeight: 1.5 }}>
               {t('workerReady', { count: Object.keys(health.secrets).length })}
             </div>
           )}
@@ -309,7 +309,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
         {view.handlers.map((h) => (
           <div key={h.name} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'baseline' }}>
             <span style={code}>{h.method} {h.siteUrl ?? h.url}</span>
-            <span style={{ fontSize: 12.5, color: h.verify === 'none' ? 'var(--warning, #9a6200)' : 'var(--text-secondary)' }}>
+            <span style={{ fontSize: 12.5, color: h.verify === 'none' ? 'var(--warning)' : 'var(--text-secondary)' }}>
               {h.verify === 'none' ? t('unverified') : h.verify}
             </span>
             <button
@@ -346,10 +346,10 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       )}
 
       {view.handlerErrors.length > 0 && (
-        <div style={{ ...card, display: 'grid', gap: 8, borderColor: 'var(--danger, #b3261e)' }}>
+        <div style={{ ...card, display: 'grid', gap: 8, borderColor: 'var(--danger)' }}>
           <div style={label}>{t('brokenLabel')}</div>
           {view.handlerErrors.map((e) => (
-            <div key={e.path} style={{ fontSize: 13, color: 'var(--danger, #b3261e)' }}>
+            <div key={e.path} style={{ fontSize: 13, color: 'var(--danger)' }}>
               {e.path}: {e.reason}
             </div>
           ))}
@@ -360,7 +360,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
         <div style={label}>{t('secretsLabel')}</div>
 
         {view.missingSecrets.length > 0 && (
-          <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: 'var(--warning)', lineHeight: 1.5 }}>
             {t('missingSecrets', { names: view.missingSecrets.join(', ') })}
           </div>
         )}
@@ -476,7 +476,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       </div>
 
       {error && (
-        <div style={{ ...card, borderColor: 'var(--danger, #b3261e)', color: 'var(--danger, #b3261e)', fontSize: 14 }}>
+        <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: 14 }}>
           {error}
         </div>
       )}

@@ -151,7 +151,7 @@ export default function SecurityClient() {
                     <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                       {user.displayName ?? user.username}
                       {isCurrentUser && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright)' }}>
                           {t('you')}
                         </span>
                       )}

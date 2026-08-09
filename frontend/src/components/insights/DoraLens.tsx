@@ -23,7 +23,7 @@ import { hrs, pct } from './format';
 type TierKey = 'elite' | 'high' | 'medium' | 'low';
 const TIER_ORDER: TierKey[] = ['elite', 'high', 'medium', 'low'];
 const TIER_COLOR: Record<TierKey, string> = {
-  elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: '#ef4444',
+  elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: 'var(--error)',
 };
 
 // ── DORA tier classification (index 0=Elite … 3=Low) ─────────────────────────
@@ -80,7 +80,7 @@ export function DoraLens() {
   const trendLabels = series.map((p) => p.bucketStart.slice(5)); // MM-DD
   const trendSeries: TrendSeries[] = [
     { key: 'deploy', label: t('dora.deployFreq'), color: TIER_COLOR.elite, values: series.map((p) => score(p.totalDeployments > 0 ? tierDeployFreq(p.deploymentFrequencyPerDay) : null)) },
-    { key: 'lead', label: t('dora.leadTime'), color: '#2563eb', values: series.map((p) => score(p.leadTimeHours != null ? tierLeadTime(p.leadTimeHours) : null)) },
+    { key: 'lead', label: t('dora.leadTime'), color: 'var(--info)', values: series.map((p) => score(p.leadTimeHours != null ? tierLeadTime(p.leadTimeHours) : null)) },
     { key: 'cfr', label: t('dora.cfr'), color: TIER_COLOR.medium, values: series.map((p) => score(p.changeFailureRatePct != null ? tierCfr(p.changeFailureRatePct) : null)) },
     { key: 'mttr', label: t('dora.mttr'), color: TIER_COLOR.low, values: series.map((p) => score(p.mttrHours != null ? tierMttr(p.mttrHours) : null)) },
   ];

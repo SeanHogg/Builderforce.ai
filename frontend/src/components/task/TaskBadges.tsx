@@ -88,7 +88,7 @@ export function TaskBadges({
           title={tBoard('audit.flaggedTitle')}
           style={{
             ...chip, display: 'inline-flex', alignItems: 'center', gap: 3,
-            background: 'var(--danger-bg, #fee2e2)', color: 'var(--danger-text, #991b1b)', fontWeight: 700,
+            background: 'var(--danger-bg)', color: 'var(--danger-text)', fontWeight: 700,
           }}
         >
           ⚑ {tBoard('audit.flagged')}
@@ -99,8 +99,8 @@ export function TaskBadges({
           title={tBoard('audit.participantsTitle')}
           style={{
             ...chip, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 700,
-            background: participants.percent >= 100 ? 'var(--success-bg, #dcfce7)' : 'var(--bg-deep, #eef2ff)',
-            color: participants.percent >= 100 ? 'var(--success-text, #166534)' : 'var(--text-secondary, #475569)',
+            background: participants.percent >= 100 ? 'var(--success-bg)' : 'var(--bg-deep)',
+            color: participants.percent >= 100 ? 'var(--success-text)' : 'var(--text-secondary)',
           }}
         >
           ✅ {participants.completed}/{participants.required}

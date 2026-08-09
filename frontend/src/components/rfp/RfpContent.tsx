@@ -26,7 +26,7 @@ const card: React.CSSProperties = {
 };
 
 const DEFAULT_BRAND: BrandPalette = {
-  primary: '#334155', secondary: '#64748b', accent: '#0ea5e9', text: 'var(--bg-elevated)', background: '#ffffff', logoUrl: '',
+  primary: '#334155', secondary: 'var(--text-secondary)', accent: 'var(--sky-bright)', text: 'var(--bg-elevated)', background: '#ffffff', logoUrl: '',
 };
 
 const EMPTY: RfpRequestInput = {
@@ -102,7 +102,7 @@ export default function RfpContent() {
       </div>
 
       {loading && <div style={card}>{t('loading')}</div>}
-      {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && !error && (
         rows.length === 0 ? (
@@ -128,7 +128,7 @@ export default function RfpContent() {
                     {r.latestResponse ? t('quoted', { price: money(r.latestResponse.quotedPriceUsdCents) }) : t('notGenerated')}
                   </span>
                   {r.latestResponse?.scanRefreshed && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent, #0ea5e9)' }}>{t('scanFresh')}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)' }}>{t('scanFresh')}</span>
                   )}
                 </div>
               </button>

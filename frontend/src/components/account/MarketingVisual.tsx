@@ -43,7 +43,7 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
           <circle cx="204" cy="102" r="3" fill="var(--coral-bright)" />
           {/* Play badge (hired.video résumé) */}
           <circle cx="278" cy="102" r="14" fill="var(--coral-bright)" />
-          <path d="M274 96l8 6-8 6z" fill="#fff" />
+          <path d="M274 96l8 6-8 6z" fill="var(--text-on-accent)" />
         </svg>
       </div>
     );

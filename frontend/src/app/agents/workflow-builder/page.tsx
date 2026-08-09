@@ -100,7 +100,7 @@ export default function WorkflowBuilderMarketingPage() {
               <h3
                 style={{
                   fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                  color: group === 'LLM Logic' ? 'var(--cyan-bright)' : 'var(--text-muted, #8a8f9c)', margin: '0 0 10px',
+                  color: group === 'LLM Logic' ? 'var(--cyan-bright)' : 'var(--text-muted)', margin: '0 0 10px',
                 }}
               >
                 {group}{group === 'LLM Logic' ? '  · the differentiator' : ''}
@@ -117,8 +117,8 @@ export default function WorkflowBuilderMarketingPage() {
                   >
                     <span style={{ fontSize: 20, lineHeight: 1 }}>{m.icon}</span>
                     <div>
-                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary, #e2e5ec)' }}>{m.label}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted, #8a8f9c)', marginTop: 3, lineHeight: 1.45 }}>{m.blurb}</div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)' }}>{m.label}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.45 }}>{m.blurb}</div>
                     </div>
                   </div>
                 ))}
@@ -139,10 +139,10 @@ export default function WorkflowBuilderMarketingPage() {
               return (
                 <div key={cat.id} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderLeft: `3px solid ${cat.accent}`, borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary, #e2e5ec)' }}>{cat.icon} {cat.label}</span>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{cat.icon} {cat.label}</span>
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: cat.accent }}>{items.length}</span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted, #8a8f9c)', marginTop: 6, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
                     {items.slice(0, 8).map((i) => `${integrationIcon(i)} ${i.label}`).join(' · ')}
                     {items.length > 8 ? ` +${items.length - 8} more` : ''}
                   </div>
@@ -157,9 +157,9 @@ export default function WorkflowBuilderMarketingPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {HOW_IT_WORKS.map((s) => (
               <div key={s.n} style={{ padding: '18px 18px 20px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ width: 30, height: 30, borderRadius: 'var(--radius-md)', background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15 }}>{s.n}</div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary, #e2e5ec)', margin: '12px 0 6px' }}>{s.title}</div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted, #8a8f9c)', lineHeight: 1.5 }}>{s.body}</div>
+                <div style={{ width: 30, height: 30, borderRadius: 'var(--radius-md)', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15 }}>{s.n}</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: '12px 0 6px' }}>{s.title}</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{s.body}</div>
               </div>
             ))}
           </div>

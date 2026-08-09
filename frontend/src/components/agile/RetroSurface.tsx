@@ -72,10 +72,10 @@ export function RetroSurface() {
           {retros.map((r) => (
             <button key={r.id} onClick={() => setSelected(r.id)} style={row}>
               <span style={{ fontWeight: 600 }}>{r.name}</span>
-              <span style={{ color: '#64748b', fontSize: 12 }}>{r.template.replace(/_/g, ' ')}</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{r.template.replace(/_/g, ' ')}</span>
             </button>
           ))}
-          {retros.length === 0 && <div style={{ color: '#64748b' }}>No retrospectives yet.</div>}
+          {retros.length === 0 && <div style={{ color: 'var(--text-secondary)' }}>No retrospectives yet.</div>}
         </div>
       </div>
     );
@@ -115,10 +115,10 @@ export function RetroSurface() {
   );
 }
 
-const inp: React.CSSProperties = { fontSize: 13, padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)', flex: 1, minWidth: 0 };
-const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
-const link: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontSize: 13, padding: 0 };
-const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base, #fff)', cursor: 'pointer', textAlign: 'left' };
-const colStyle: React.CSSProperties = { border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 'var(--radius-md)', padding: 12, background: 'var(--bg-base, #f8fafc)', minWidth: 0 };
-const itemStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated, #fff)', border: '1px solid var(--border-subtle, #eef2f7)' };
-const voteBtn: React.CSSProperties = { fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle, #e2e8f0)', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' };
+const inp: React.CSSProperties = { fontSize: 13, padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', flex: 1, minWidth: 0 };
+const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const link: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, padding: 0 };
+const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', cursor: 'pointer', textAlign: 'left' };
+const colStyle: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 12, background: 'var(--bg-base)', minWidth: 0 };
+const itemStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' };
+const voteBtn: React.CSSProperties = { fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' };

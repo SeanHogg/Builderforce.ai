@@ -24,7 +24,7 @@ export interface Soc2AuditVisualLabels {
 const STATE_COLORS: Record<'pass' | 'partial' | 'gap', { fg: string; bg: string; border: string }> = {
   pass: { fg: 'var(--success)', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
   partial: { fg: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
-  gap: { fg: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.4)' },
+  gap: { fg: 'var(--error)', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.4)' },
 };
 
 export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {
@@ -63,7 +63,7 @@ export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {
             <defs>
               <linearGradient id="soc2grad" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="var(--coral-bright)" />
-                <stop offset="100%" stopColor="var(--cyan-bright, #22d3ee)" />
+                <stop offset="100%" stopColor="var(--cyan-bright)" />
               </linearGradient>
             </defs>
           </svg>

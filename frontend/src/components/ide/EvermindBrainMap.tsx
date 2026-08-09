@@ -574,8 +574,8 @@ const BRAINMAP_CSS = `
   --ev-hypothalamus: #d95926;
   --ev-thalamus: #c98500;
   --ev-basal: #d55181;
-  --ev-personality: #9085e9;
-  --ev-core: var(--coral-bright, #ff6b5e);
+  --ev-personality: var(--violet-bright);
+  --ev-core: var(--coral-bright);
 }
 :root[data-theme='light'] .ev-brainmap {
   --ev-neocortex: #2a78d6;
@@ -588,8 +588,8 @@ const BRAINMAP_CSS = `
 }
 .ev-brainmap .ev-region-label { fill: var(--text-primary); font-size: 13px; font-weight: 700; font-family: var(--font-display, system-ui); }
 .ev-brainmap .ev-region-label-sm { font-size: 11px; }
-.ev-brainmap .ev-region-badge { fill: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.ev-brainmap .ev-core-label { fill: #fff; font-size: 11px; font-weight: 700; font-family: var(--font-display, system-ui); }
+.ev-brainmap .ev-region-badge { fill: var(--text-on-accent); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ev-brainmap .ev-core-label { fill: var(--text-on-accent); font-size: 11px; font-weight: 700; font-family: var(--font-display, system-ui); }
 .ev-brainmap .ev-core-emoji { dominant-baseline: middle; }
 .ev-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-subtle); background: var(--bg-elevated); }
 .ev-status-dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: currentColor; }

@@ -74,8 +74,8 @@ export function FinopsLens({ initialTab = 'rd' }: { initialTab?: FinopsTab }) {
       onClick={() => setTab(id)}
       style={{
         padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-        background: tab === id ? 'var(--accent, #2563eb)' : 'var(--bg-elevated)',
-        color: tab === id ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+        background: tab === id ? 'var(--accent)' : 'var(--bg-elevated)',
+        color: tab === id ? 'var(--text-on-accent)' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 13,
       }}
     >
       {label}
@@ -143,7 +143,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
     }
   };
 
-  if (error) return <div style={{ ...card, color: 'var(--danger, #ef4444)' }}>{error}</div>;
+  if (error) return <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>;
   if (!config || !report) return <div style={card}>{t('loading')}</div>;
 
   return (
@@ -173,7 +173,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
         <div style={{ marginTop: 12 }}>
           <RoleGate capability={FINOPS_CAP}>
             <button onClick={() => void save()} disabled={saving}
-              style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', cursor: 'pointer', fontWeight: 600 }}>
+              style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)', color: 'var(--text-on-accent)', cursor: 'pointer', fontWeight: 600 }}>
               {saving ? t('saving') : t('rd.save')}
             </button>
           </RoleGate>
@@ -265,7 +265,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
     }
   };
 
-  if (error) return <div style={{ ...card, color: 'var(--danger, #ef4444)' }}>{error}</div>;
+  if (error) return <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>;
   if (!coverage) return <div style={card}>{t('loading')}</div>;
 
   return (
@@ -376,7 +376,7 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
         </button>
       </div>
 
-      {error && <div style={{ ...card, color: 'var(--danger, #ef4444)' }}>{error}</div>}
+      {error && <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>}
       {loading && <div style={card}>{t('loading')}</div>}
 
       {report && !loading && (

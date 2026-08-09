@@ -32,7 +32,7 @@ export default function SeatPage({ params }: { params: Promise<{ domain: string 
   if (!isDomain(domain)) notFound();
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] min-w-0" style={{ background: 'var(--bg-deep, #060910)' }}>
+    <div className="flex min-h-[calc(100vh-4rem)] min-w-0" style={{ background: 'var(--bg-deep)' }}>
       <RosterNav
         activeDomain={domain as Domain}
         onSelect={(next) => router.push(`/seat/${next}`)}

@@ -332,20 +332,20 @@ export function SourceControlContent({
                   {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>{t('defaultBadge')}</span>}
                   {r.credentialId
                     ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? t('key')}</span>
-                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger, #dc2626)' }}>{t('noKey')}</span>}
+                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger)' }}>{t('noKey')}</span>}
                 </span>
                 {result && (
-                  <span style={{ fontSize: 11, color: result.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+                  <span style={{ fontSize: 11, color: result.ok ? 'var(--success)' : 'var(--danger)' }}>
                     ● {result.message}
                   </span>
                 )}
                 {imp && (
-                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success)' : 'var(--danger)' }}>
                     ● {imp.message}
                   </span>
                 )}
                 {act && (
-                  <span style={{ fontSize: 11, color: act.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)', flexBasis: '100%' }}>
+                  <span style={{ fontSize: 11, color: act.ok ? 'var(--success)' : 'var(--danger)', flexBasis: '100%' }}>
                     ● {act.message}
                   </span>
                 )}
@@ -399,7 +399,7 @@ export function SourceControlContent({
                 <button type="button" style={iconBtn} title={t('editRepository')} aria-label={t('editRepository')} onClick={() => openEdit(r)}>
                   <PencilIcon />
                 </button>
-                <button type="button" style={{ ...iconBtn, color: 'var(--danger, #dc2626)' }} title={t('removeRepository')} aria-label={t('removeRepository')} onClick={() => remove(r.id)}>
+                <button type="button" style={{ ...iconBtn, color: 'var(--danger)' }} title={t('removeRepository')} aria-label={t('removeRepository')} onClick={() => remove(r.id)}>
                   <TrashIcon />
                 </button>
               </div>
@@ -408,7 +408,7 @@ export function SourceControlContent({
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>

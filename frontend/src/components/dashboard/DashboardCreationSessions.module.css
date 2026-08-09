@@ -22,7 +22,7 @@
 }
 
 .eyebrow {
-  color: var(--coral-bright, #f4726e);
+  color: var(--coral-bright);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .12em;
@@ -45,9 +45,9 @@
 }
 
 .templatePath {
-  border-color: color-mix(in srgb, var(--coral-bright, #f4726e) 28%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--coral-bright) 28%, var(--border-subtle));
   background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--coral-bright, #f4726e) 10%, transparent), transparent 45%),
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--coral-bright) 10%, transparent), transparent 45%),
     color-mix(in srgb, var(--surface-raised) 88%, transparent);
 }
 
@@ -76,10 +76,10 @@
   width: 26px;
   height: 26px;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--coral-bright, #f4726e) 42%, var(--border-subtle));
+  border: 1px solid color-mix(in srgb, var(--coral-bright) 42%, var(--border-subtle));
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--coral-bright, #f4726e) 10%, transparent);
-  color: var(--coral-bright, #f4726e);
+  background: color-mix(in srgb, var(--coral-bright) 10%, transparent);
+  color: var(--coral-bright);
   font-size: 12px;
   font-weight: 800;
 }
@@ -161,7 +161,7 @@
 
 .cardAction b,
 .templateAction b {
-  color: var(--coral-bright, #f4726e);
+  color: var(--coral-bright);
   font-size: 15px;
 }
 
@@ -202,7 +202,7 @@
   grid-column: 2;
   align-items: center;
   justify-content: space-between;
-  color: var(--coral-bright, #f4726e);
+  color: var(--coral-bright);
   font-size: 11px;
   font-weight: 700;
 }
@@ -224,7 +224,7 @@
 
 .blankButton b {
   margin-right: 4px;
-  color: var(--coral-bright, #f4726e);
+  color: var(--coral-bright);
 }
 
 .quotaWarning {
@@ -235,21 +235,21 @@
 
 .typeCard:hover:not(:disabled),
 .templateCard:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--coral-bright, #f4726e) 58%, var(--border-subtle));
-  background: color-mix(in srgb, var(--surface-raised) 94%, var(--coral-bright, #f4726e));
+  border-color: color-mix(in srgb, var(--coral-bright) 58%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--coral-bright));
   box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
   transform: translateY(-2px);
 }
 
 .blankButton:hover:not(:disabled) {
-  border-color: var(--coral-bright, #f4726e);
+  border-color: var(--coral-bright);
   color: var(--text-primary);
 }
 
 .typeCard:focus-visible,
 .templateCard:focus-visible,
 .blankButton:focus-visible {
-  outline: 2px solid var(--coral-bright, #f4726e);
+  outline: 2px solid var(--coral-bright);
   outline-offset: 2px;
 }
 

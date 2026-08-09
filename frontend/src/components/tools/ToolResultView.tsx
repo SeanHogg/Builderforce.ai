@@ -18,7 +18,7 @@ import { RadarChart } from '@/components/charts/RadarChart';
  * the project score view and the workspace rollup — upgrading it lifts them all.
  */
 
-const TIER_COLOR = ['#ef4444', 'var(--warning)', '#eab308', '#3b82f6', 'var(--success)'];
+const TIER_COLOR = ['var(--error)', 'var(--warning)', 'var(--yellow-bright)', 'var(--coral-bright)', 'var(--success)'];
 const tierColor = (n: number) => TIER_COLOR[Math.max(1, Math.min(5, Math.round(n))) - 1];
 
 const card: CSSProperties = {

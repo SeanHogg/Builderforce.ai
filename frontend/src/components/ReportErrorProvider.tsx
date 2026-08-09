@@ -146,7 +146,7 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
               style={{
                 padding: '8px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 600, fontSize: 14,
                 cursor: canSubmit ? 'pointer' : 'not-allowed', opacity: canSubmit ? 1 : 0.6,
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark, #d94f4a))', color: 'var(--text-on-accent)',
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)',
               }}
             >
               {submitting ? t('submitting') : t('submit')}

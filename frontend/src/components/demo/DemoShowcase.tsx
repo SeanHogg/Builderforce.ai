@@ -168,7 +168,7 @@ const styles = `
   .demo-showcase-heading { max-width: 760px; margin: 0; color: var(--text-primary); font-size: clamp(36px,5vw,58px); line-height: 1.03; letter-spacing: -.04em; }
   .demo-showcase-lead {
     max-width: 720px; margin: 16px 0 0; text-align: left;
-    font-size: 17px; line-height: 1.65; color: var(--text-secondary, #aab3c5);
+    font-size: 17px; line-height: 1.65; color: var(--text-secondary);
   }
   .demo-showcase-track {
     display: flex; gap: 14px; margin-top: 36px; overflow-x: auto; padding: 3px 1px 22px;

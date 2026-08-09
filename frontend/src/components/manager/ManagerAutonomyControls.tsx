@@ -87,7 +87,7 @@ export function ManagerKillSwitch({ checked, disabled, onChange }: {
       onClick={() => onChange(!checked)}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px 7px 12px',
-        border: `1px solid ${checked ? 'var(--success, var(--success))' : 'var(--coral-bright, #ef4444)'}`,
+        border: `1px solid ${checked ? 'var(--success, var(--success))' : 'var(--coral-bright)'}`,
         borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
         cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.65 : 1,
       }}
@@ -129,8 +129,8 @@ function Segment({ label, title, active, disabled, onClick }: {
       onClick={onClick}
       style={{
         padding: '6px 11px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: disabled ? 'default' : 'pointer',
-        background: active ? 'var(--accent, #2563eb)' : 'transparent',
-        color: active ? '#fff' : 'var(--text-secondary)',
+        background: active ? 'var(--accent)' : 'transparent',
+        color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
         fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap',
       }}
     >

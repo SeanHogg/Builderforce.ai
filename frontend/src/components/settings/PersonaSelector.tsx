@@ -95,8 +95,8 @@ export default function PersonaSelector() {
                   key={p}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 'var(--radius-lg)',
-                    border: `1px solid ${on ? 'var(--accent, #6366f1)' : 'var(--border-subtle)'}`,
-                    background: on ? 'color-mix(in srgb, var(--accent, #6366f1) 12%, transparent)' : 'var(--bg-elevated)',
+                    border: `1px solid ${on ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                    background: on ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-elevated)',
                     cursor: 'pointer', transition: 'all 0.15s',
                   }}
                   onClick={() => toggle(p)}
@@ -133,8 +133,8 @@ export default function PersonaSelector() {
                   href={LENS_ROUTES[lens].href}
                   style={{
                     fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-full)', textDecoration: 'none',
-                    color: i === 0 ? '#fff' : 'var(--text-secondary)',
-                    background: i === 0 ? 'var(--accent, #6366f1)' : 'var(--bg-elevated)',
+                    color: i === 0 ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+                    background: i === 0 ? 'var(--accent)' : 'var(--bg-elevated)',
                     border: `1px solid ${i === 0 ? 'transparent' : 'var(--border-subtle)'}`,
                   }}
                 >
@@ -156,7 +156,7 @@ export default function PersonaSelector() {
               disabled={saving}
               style={{
                 padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', border: 'none', opacity: saving ? 0.6 : 1,
+                background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: saving ? 0.6 : 1,
               }}
             >
               {saving ? t('saving') : t('save')}

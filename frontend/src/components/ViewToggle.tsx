@@ -141,7 +141,7 @@ const buttonStyle = (active: boolean): React.CSSProperties => ({
   borderRadius: 'var(--radius-sm)',
   cursor: 'pointer',
   background: active ? 'var(--coral-bright)' : 'transparent',
-  color: active ? '#fff' : 'var(--text-secondary)',
+  color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 
 export function ViewToggle<T extends string = ViewMode>({

@@ -38,8 +38,8 @@ import { useConfirm } from '@/components/ConfirmProvider';
  */
 
 const STATUS_COLOR: Record<string, string> = {
-  done: '#16a34a', shipped: '#16a34a', in_progress: '#2563eb',
-  in_review: '#7c3aed', blocked: '#dc2626', backlog: '#6b7280',
+  done: 'var(--success)', shipped: 'var(--success)', in_progress: 'var(--info)',
+  in_review: 'var(--violet-bright)', blocked: 'var(--error)', backlog: 'var(--text-muted)',
 };
 
 const COL_W = 230;
@@ -142,7 +142,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       data: { label: `${t.key} · ${t.title}` },
       style: {
         borderRadius: 'var(--radius-md)',
-        border: `2px solid ${STATUS_COLOR[t.status] ?? '#6b7280'}`,
+        border: `2px solid ${STATUS_COLOR[t.status] ?? 'var(--text-muted)'}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
         fontSize: 12,
@@ -158,7 +158,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
         target: String(d.successorTaskId),
         animated: !onCycle,
         markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: onCycle ? '#dc2626' : 'var(--coral-bright, #f97316)', strokeWidth: 2 },
+        style: { stroke: onCycle ? 'var(--error)' : 'var(--coral-bright)', strokeWidth: 2 },
         label: onCycle ? t('depCycle') : d.depType !== 'finish_to_start' ? DEP_TYPE_CODE[d.depType] : undefined,
         data: { edgeId: d.id },
       };
@@ -170,7 +170,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
         id: `epic-${t.parentTaskId}-${t.id}`,
         source: String(t.parentTaskId),
         target: String(t.id),
-        style: { stroke: 'var(--text-muted, #9ca3af)', strokeWidth: 1.5, strokeDasharray: '4 4' },
+        style: { stroke: 'var(--text-muted)', strokeWidth: 1.5, strokeDasharray: '4 4' },
         markerEnd: { type: MarkerType.Arrow },
       }));
     return { flowNodes, edges: [...epicEdges, ...depEdges] };
@@ -268,7 +268,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
           >
             {t('depAddButton')}
           </button>
-          {formError && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{formError}</span>}
+          {formError && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{formError}</span>}
         </div>
       )}
       <Canvas3DControlsProvider>

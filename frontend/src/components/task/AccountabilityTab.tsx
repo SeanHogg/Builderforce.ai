@@ -21,14 +21,14 @@ import {
  */
 
 const STATE_TONE: Record<string, { bg: string; fg: string }> = {
-  completed:          { bg: 'var(--success-bg, #dcfce7)', fg: 'var(--success-text, #166534)' },
-  waived:             { bg: 'var(--warning-bg, #fef9c3)', fg: 'var(--warning-text, #854d0e)' },
-  in_progress:        { bg: 'var(--info-bg, #dbeafe)',   fg: 'var(--info-text, #1e40af)' },
-  assigned:           { bg: 'var(--bg-deep, #eef2ff)',   fg: 'var(--text-secondary, #475569)' },
-  changes_requested:  { bg: 'var(--danger-bg, #fee2e2)', fg: 'var(--danger-text, #991b1b)' },
-  unstaffed:          { bg: 'var(--danger-bg, #fee2e2)', fg: 'var(--danger-text, #991b1b)' },
-  pending:            { bg: 'var(--bg-deep, #f1f5f9)',   fg: 'var(--text-muted, #64748b)' },
-  skipped:            { bg: 'var(--bg-deep, #f1f5f9)',   fg: 'var(--text-muted, #64748b)' },
+  completed:          { bg: 'var(--success-bg)', fg: 'var(--success-text)' },
+  waived:             { bg: 'var(--warning-bg)', fg: 'var(--warning-text)' },
+  in_progress:        { bg: 'var(--info-bg)',   fg: 'var(--info-text)' },
+  assigned:           { bg: 'var(--bg-deep)',   fg: 'var(--text-secondary)' },
+  changes_requested:  { bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
+  unstaffed:          { bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
+  pending:            { bg: 'var(--bg-deep)',   fg: 'var(--text-muted)' },
+  skipped:            { bg: 'var(--bg-deep)',   fg: 'var(--text-muted)' },
 };
 
 function StateChip({ state, label }: { state: string; label: string }) {
@@ -59,8 +59,8 @@ function gapDetailKey(g: AccountabilityGap): string {
 }
 
 const GAP_TONE = {
-  blocking: { border: 'var(--danger-border, #fecaca)', bg: 'var(--danger-bg, #fef2f2)', fg: 'var(--danger-text, #991b1b)' },
-  advisory: { border: 'var(--warning-border, #fed7aa)', bg: 'var(--warning-bg, #fffbeb)', fg: 'var(--warning-text, #854d0e)' },
+  blocking: { border: 'var(--danger-border)', bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
+  advisory: { border: 'var(--warning-border)', bg: 'var(--warning-bg)', fg: 'var(--warning-text)' },
 } as const;
 
 /**
@@ -193,7 +193,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
   const stateLabel = (s: string) => t.has(`state.${s}` as never) ? t(`state.${s}` as never) : s;
 
   if (loading) return <div style={{ padding: 16, color: 'var(--text-muted)' }}>{t('loading')}</div>;
-  if (error) return <div style={{ padding: 16, color: 'var(--danger-text, #991b1b)' }}>{error}</div>;
+  if (error) return <div style={{ padding: 16, color: 'var(--danger-text)' }}>{error}</div>;
   if (!report) return null;
 
   const required = report.participants.filter((p) => p.required);
@@ -207,8 +207,8 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
           {t('signedHeader', { done: report.completedCount, total: report.requiredCount })}
         </div>
-        <div style={{ flex: 1, minWidth: 120, height: 8, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
-          <div style={{ width: `${report.percentComplete}%`, height: '100%', background: report.percentComplete >= 100 ? 'var(--success, #16a34a)' : 'var(--coral-bright, #f97316)' }} />
+        <div style={{ flex: 1, minWidth: 120, height: 8, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep)', overflow: 'hidden' }}>
+          <div style={{ width: `${report.percentComplete}%`, height: '100%', background: report.percentComplete >= 100 ? 'var(--success)' : 'var(--coral-bright)' }} />
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{report.percentComplete}%</div>
       </div>
@@ -303,7 +303,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                               disabled={busy || (NEEDS_REASON.has(verdict) && !summary.trim())}
                               style={{
                                 padding: '7px 14px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-md)', border: 'none',
-                                background: 'var(--coral-bright, #f97316)', color: 'var(--text-on-accent)',
+                                background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
                                 cursor: busy ? 'not-allowed' : 'pointer',
                                 opacity: busy || (NEEDS_REASON.has(verdict) && !summary.trim()) ? 0.6 : 1,
                               }}
@@ -333,23 +333,23 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
               value={addRole}
               onChange={(e) => setAddRole(e.target.value)}
               aria-label={t('assess.rolePlaceholder')}
-              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}
+              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
             >
-              <option value="" style={{ background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}>{t('assess.rolePlaceholder')}</option>
+              <option value="" style={{ background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>{t('assess.rolePlaceholder')}</option>
               {roles.map((r) => (
-                <option key={r.key} value={r.key} style={{ background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}>{r.name}</option>
+                <option key={r.key} value={r.key} style={{ background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>{r.name}</option>
               ))}
             </Select>
             <input
               value={addNote}
               onChange={(e) => setAddNote(e.target.value)}
               placeholder={t('assess.notePlaceholder')}
-              style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}
+              style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
             />
             <button
               onClick={assess}
               disabled={!addRole || busy}
-              style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', cursor: addRole && !busy ? 'pointer' : 'not-allowed', background: 'var(--coral-bright, #f97316)', color: 'var(--text-on-accent)', opacity: addRole && !busy ? 1 : 0.6 }}
+              style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', cursor: addRole && !busy ? 'pointer' : 'not-allowed', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', opacity: addRole && !busy ? 1 : 0.6 }}
             >
               {t('assess.add')}
             </button>

@@ -108,7 +108,7 @@ export function SecurityTicketAccessCard() {
                   type="checkbox"
                   checked={cfg.audiences[a.key]}
                   onChange={() => toggle(a.key)}
-                  style={{ marginTop: 2, width: 16, height: 16, accentColor: 'var(--coral-bright, #f4726e)', flexShrink: 0 }}
+                  style={{ marginTop: 2, width: 16, height: 16, accentColor: 'var(--coral-bright)', flexShrink: 0 }}
                 />
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{a.label}</span>
@@ -146,7 +146,7 @@ export function SecurityTicketAccessCard() {
               disabled={saving}
               style={{
                 padding: '8px 16px', fontSize: 13, fontWeight: 600,
-                background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)',
+                background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
                 border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
               }}
             >

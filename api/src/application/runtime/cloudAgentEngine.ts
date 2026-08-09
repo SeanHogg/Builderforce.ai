@@ -48,7 +48,7 @@ import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
-  CONTAINER_AGENT_TOOLS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
+  CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
@@ -82,9 +82,9 @@ import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
 import { isAgentRunnable } from '../../domain/containment/agentState';
 import { recordCodeCompletionClaim, recordTypedExecutionClaim } from '../provenance/finishClaimService';
-import { delegateCredential, ensureAgentRunIdentity } from '../agentIdentity/agentRunIdentity';
+import { authorizeCredentialDelegation, delegateCredential, ensureAgentRunIdentity } from '../agentIdentity/agentRunIdentity';
 import { checkRunLimits } from '../../domain/containment/runLimits';
-import { trustNotice } from '../../domain/trust/contentTrust';
+import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
 import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { boards, executionLimits, executions, llmUsageLog, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
@@ -1616,6 +1616,8 @@ function buildCloudProvider(args: {
   webSearch: ResolvedWebSearchBacking;
   /** Replay: pin repo reads to this ref rather than computing base→branch. */
   frozenReadRef?: string;
+  principalId?: string;
+  repositoryDelegationId?: string;
 }): CapabilityProvider {
   const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
   // Read/list against the ticket branch only once it exists (created on the first
@@ -1628,6 +1630,10 @@ function buildCloudProvider(args: {
   const readRef = (): string =>
     args.frozenReadRef ?? (repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '');
   const noRepo = (suffix = ''): string => `no repo bound to this task (${repoMiss})${suffix}`;
+  const credentialAllowed = (scope: 'repository:read' | 'repository:write'): Promise<boolean> =>
+    args.principalId && args.repositoryDelegationId
+      ? authorizeCredentialDelegation(db, { tenantId, principalId: args.principalId, delegationId: args.repositoryDelegationId, requiredScope: scope })
+      : Promise.resolve(false);
 
   // WHO this run is, for coordination purposes. A ticket is one blackboard, so every
   // agent staffed onto the same ticket — in the same stage or a later one — shares a
@@ -1650,6 +1656,7 @@ function buildCloudProvider(args: {
     repoRead: {
       async listFiles(sub, glob) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const ref = readRef();
         const ls = await listRepoFiles({ ...repoCtx, ref }, sub);
         if (!ls.ok) return { ok: false, error: ls.reason };
@@ -1660,11 +1667,14 @@ function buildCloudProvider(args: {
       },
       async readFile(path) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
+        if (rf.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'repository_file', sourceRef: `${repoCtx.owner}/${repoCtx.repo}:${path}`, trustTier: 'repository', content: rf.content });
         return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
       },
       async searchCode(query, scope) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         // The `path` scope is applied INSIDE searchRepoCode (server-side via GitHub's
         // `path:` qualifier), not post-filtered here — a post-filter over the capped
         // top-N global hits dropped a subdir's real matches and carried a stale
@@ -1682,6 +1692,7 @@ function buildCloudProvider(args: {
     repoWrite: guardRepoWrite({
       async writeFile(path, content, _summary) {
         if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
+        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content });
         if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
         const firstWriteThisRun = !writtenPaths.has(path);
@@ -1697,6 +1708,7 @@ function buildCloudProvider(args: {
       },
       async editFile(path, oldString, newString, replaceAll) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
         if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
         if (rf.truncated) return { ok: false, error: `'${path}' is too large to edit safely here — rewrite it with write_file instead` };
@@ -1718,6 +1730,7 @@ function buildCloudProvider(args: {
       },
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
         const del = await deleteAgentFile(repoCtx, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
@@ -1789,10 +1802,24 @@ function buildCloudProvider(args: {
     // or an instance buys is WIDER coverage, which the result states. SSRF egress policy
     // + byte cap + timeout + the read-through cache + per-query metering all live in
     // cloudWeb.
-    web: buildCloudWebCapability({
+    web: (() => {
+      const capability = buildCloudWebCapability({
       env,
       search: { vendor: args.webSearch.vendor, auth: args.webSearch.auth, meter: { db, tenantId } },
-    }),
+      });
+      return {
+        async fetch(url: string) {
+          const result = await capability.fetch(url);
+          if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_fetch', sourceRef: result.url ?? url, trustTier: 'external', content: result.content ?? '' });
+          return result;
+        },
+        async search(query: string) {
+          const result = await capability.search!(query);
+          if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_search', sourceRef: query, trustTier: 'external', content: JSON.stringify(result) });
+          return result;
+        },
+      };
+    })(),
   };
 }
 
@@ -1839,7 +1866,7 @@ export async function runCloudToolLoop(
   // `baseModel: null` means "run on the plan default" → effectiveModel = undefined.
   // Unknown/non-tenant refs resolve to null and pass through unchanged.
   const tenantModel = await resolveTenantModel(env, db, tenantId, model);
-  const effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
+  let effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
   // Curated platform tools give this run the SAME work-management reach the Brain
   // has (create follow-up tasks, update OKRs, read what's remaining) — advertised
   // alongside the repo/file tools and dispatched in-process below. The prompt
@@ -1856,12 +1883,14 @@ export async function runCloudToolLoop(
     tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
     capabilities: [...surfaceCaps],
   });
-  if (repoCtx) {
-    await delegateCredential(db, {
+  const releasedModel = runIdentity.definition?.baseModel;
+  if (typeof releasedModel === 'string' && releasedModel.trim() && releasedModel !== AGENT_DEFAULT_MODEL_SENTINEL) effectiveModel = releasedModel.trim();
+  const repositoryDelegationId = repoCtx
+    ? await delegateCredential(db, {
       tenantId, principalId: runIdentity.principalId, credentialKind: 'repository', credentialRef: repoCtx.repoId,
       scopes: ['repository:read', 'repository:write'],
-    });
-  }
+    })
+    : undefined;
   const [declaredLimits] = await db.select({
     maxFiles: executionLimits.maxFiles,
     maxRepositories: executionLimits.maxRepositories,
@@ -2049,6 +2078,8 @@ export async function runCloudToolLoop(
   const builtProvider = buildCloudProvider({
     env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
     capabilities: surfaceCaps, webSearch: webSearchCred,
+    principalId: runIdentity.principalId,
+    ...(repositoryDelegationId ? { repositoryDelegationId } : {}),
     ...(opts?.frozenReadRef ? { frozenReadRef: opts.frozenReadRef } : {}),
   });
   // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
@@ -2248,7 +2279,12 @@ export async function runCloudToolLoop(
       const containmentBlock = declaredLimits ? checkRunLimits(declaredLimits, {
         files: prospectiveFiles, repositories: repoCtx ? 1 : 0, spendMillicents: 0,
       }) : null;
-      if (containmentBlock) {
+      const outboundInspection = isHumanOrExternalOutputTool(name)
+        ? await inspectOutboundContent(db, { tenantId, executionId, seam: 'tool_output', target: name, content: JSON.stringify(parsed) })
+        : { ok: true as const };
+      if (!outboundInspection.ok) {
+        toolResult = { ok: false, error: `Outbound content blocked: ${outboundInspection.reasons.join(', ')}. Remove credential material before contacting a human or external system.` };
+      } else if (containmentBlock) {
         toolResult = { ok: false, error: `Blocked by the run's declared containment policy: ${containmentBlock}.` };
         await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'containment.blocked', category: 'tool', toolCallId: tc.id, detail: { tool: name, path: candidatePath, limits: declaredLimits }, result: containmentBlock });
       } else if (gate.action === 'block') {
@@ -2953,9 +2989,13 @@ export async function prepareCloudRun(
   },
 ): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
   const tPrep0 = Date.now();
+  const prepIdentity = await ensureAgentRunIdentity(db, {
+    tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
+    capabilities: [...(opts?.shell ? CONTAINER_SURFACE_CAPS : CLOUD_SURFACE_CAPS)],
+  });
   // The agent's OWN personality (independent of assigned personas) — folded into the
   // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
-  const frozenPsychometric = opts?.agentDefinitionSnapshot?.psychometric;
+  const frozenPsychometric = opts?.agentDefinitionSnapshot?.psychometric ?? prepIdentity.definition?.psychometric;
   const agentPsychometric = typeof frozenPsychometric === 'string'
     ? frozenPsychometric
     : await loadAgentPsychometric(env, tenantId, cloudAgentRef);

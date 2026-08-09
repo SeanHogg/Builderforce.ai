@@ -22,7 +22,7 @@ export function TrustBadge({ badge, jss, size = 'md', showJss = true }: {
   const pad = size === 'sm' ? '1px 7px' : '3px 9px';
   const fs = size === 'sm' ? 11 : 12;
   const tone = badge === 'top_rated'
-    ? { bg: 'var(--surface-coral-soft)', fg: 'var(--coral-bright, #f4726e)', icon: '★', label: t('topRated') }
+    ? { bg: 'var(--surface-coral-soft)', fg: 'var(--coral-bright)', icon: '★', label: t('topRated') }
     : badge === 'rising_talent'
       ? { bg: 'rgba(34,197,94,0.12)', fg: 'rgba(34,197,94,0.95)', icon: '↑', label: t('risingTalent') }
       : null;
@@ -35,7 +35,7 @@ export function TrustBadge({ badge, jss, size = 'md', showJss = true }: {
         </span>
       )}
       {showJss && jss != null && (
-        <span title={t('jssTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: fs, fontWeight: 700, padding: pad, borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: jss >= 90 ? 'rgba(34,197,94,0.95)' : jss >= 75 ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+        <span title={t('jssTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: fs, fontWeight: 700, padding: pad, borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: jss >= 90 ? 'rgba(34,197,94,0.95)' : jss >= 75 ? 'var(--coral-bright)' : 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
           {t('jss')} {jss}%
         </span>
       )}

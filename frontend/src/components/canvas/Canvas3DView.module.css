@@ -24,8 +24,8 @@
   overflow: hidden;
   background:
     radial-gradient(120% 90% at 50% 8%, color-mix(in srgb, var(--canvas-accent) 12%, transparent) 0%, transparent 62%),
-    var(--canvas-board, var(--bg-deep, #f7faff));
-  color: var(--canvas-ink, var(--text-primary, #152033));
+    var(--canvas-board, var(--bg-deep));
+  color: var(--canvas-ink, var(--text-primary));
 }
 
 /* ---------- the projected scene ---------- */
@@ -69,7 +69,7 @@
   place-items: center;
   margin: 0;
   padding: 0 24px;
-  color: var(--canvas-muted, var(--text-secondary, #6d7d94));
+  color: var(--canvas-muted, var(--text-secondary));
   font-size: 12px;
   text-align: center;
 }
@@ -95,7 +95,7 @@
   display: flex;
   align-items: baseline;
   gap: 12px;
-  color: var(--canvas-muted, var(--text-secondary, #6d7d94));
+  color: var(--canvas-muted, var(--text-secondary));
   font: 700 30px var(--font-sans, inherit);
   letter-spacing: .04em;
   white-space: nowrap;
@@ -143,10 +143,10 @@
   gap: 10px;
   box-sizing: border-box;
   padding: 22px 24px;
-  border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
+  border: 1px solid var(--canvas-line, var(--border-subtle));
   border-top: 5px solid var(--canvas-3d-accent, var(--canvas-accent));
   border-radius: var(--radius-xl);
-  background: var(--canvas-panel, var(--bg-elevated, #fff));
+  background: var(--canvas-panel, var(--bg-elevated));
   box-shadow: 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
   color: inherit;
   text-align: left;
@@ -206,7 +206,7 @@
   height: 190px;
   flex: none;
   object-fit: contain;
-  border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
+  border: 1px solid var(--canvas-line, var(--border-subtle));
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 10%, var(--canvas-panel, #fff));
 }
@@ -223,7 +223,7 @@
 
 .cardSub {
   overflow: hidden;
-  color: var(--canvas-muted, var(--text-secondary, #6d7d94));
+  color: var(--canvas-muted, var(--text-secondary));
   font-size: 20px;
   line-height: 1.35;
   display: -webkit-box;
@@ -249,9 +249,9 @@
   position: relative;
   z-index: 2;
   padding: 7px 12px 7px 62px;
-  border-top: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, #fff)) 92%, transparent);
-  color: var(--canvas-muted, var(--text-secondary, #6d7d94));
+  border-top: 1px solid var(--canvas-line, var(--border-subtle));
+  background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated)) 92%, transparent);
+  color: var(--canvas-muted, var(--text-secondary));
   font-size: 9px;
 }
 

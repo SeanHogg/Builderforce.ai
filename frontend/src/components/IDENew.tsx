@@ -1033,7 +1033,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         {/* Right: collab status, run */}
         {collabConnected && (
           <span style={{ fontSize: '0.72rem', color: 'var(--success-text)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%', display: 'inline-block' }} />
+            <span style={{ width: 6, height: 6, background: 'var(--emerald-bright)', borderRadius: '50%', display: 'inline-block' }} />
             Live
           </span>
         )}
@@ -1048,7 +1048,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               title={checkResults.map(r => `${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`).join('\n')}
               style={{
                 fontSize: '0.72rem', fontWeight: 600, flexShrink: 0,
-                color: failed > 0 ? 'var(--error)' : '#4ade80',
+                color: failed > 0 ? 'var(--error)' : 'var(--emerald-bright)',
               }}
             >
               {failed > 0 ? `✗ ${failed} check${failed > 1 ? 's' : ''} failed` : `✓ ${passed} check${passed > 1 ? 's' : ''} passed`}
@@ -1101,7 +1101,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               disabled={disabled}
               title={isVoice && !voice.selectedCloneId ? 'Create or select a voice first' : undefined}
               style={{
-                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--success), #16a34a)',
+                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--success), var(--success))',
                 color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
                 padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
                 cursor: active ? 'wait' : (disabled ? 'not-allowed' : 'pointer'), fontFamily: 'var(--font-display)',
@@ -1224,7 +1224,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 18px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
                 border: '1px solid var(--border-subtle)',
-                background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #d94f4a))',
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
                 color: 'var(--text-on-accent)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem',
                 boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
               }}

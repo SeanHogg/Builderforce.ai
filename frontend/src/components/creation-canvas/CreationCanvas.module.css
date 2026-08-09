@@ -631,7 +631,7 @@
    both themes; the layout collapses to one column well above 360px. */
 .gamePanel { display:grid; gap:16px; }
 .gamePanelNotice { margin:0; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border,var(--canvas-line)); background:var(--surface-muted,var(--canvas-panel-muted)); color:var(--text-secondary,var(--canvas-muted)); font-size:13px; }
-.gamePanelError { margin:0; padding:10px 12px; border-radius:var(--radius-md); border:1px solid color-mix(in srgb,#e5484d 40%,var(--border,var(--canvas-line))); background:color-mix(in srgb,#e5484d 10%,var(--surface,#fff)); color:var(--text-primary,var(--canvas-ink)); font-size:13px; }
+.gamePanelError { margin:0; padding:10px 12px; border-radius:var(--radius-md); border:1px solid color-mix(in srgb,#e5484d 40%,var(--border,var(--canvas-line))); background:color-mix(in srgb,#e5484d 10%,var(--surface)); color:var(--text-primary,var(--canvas-ink)); font-size:13px; }
 .gamePhoneLead { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; padding:16px; border-radius:var(--radius-lg); border:1px solid var(--border,var(--canvas-line)); background:var(--surface-muted,var(--canvas-panel-muted)); }
 .gamePhoneLead > div:first-child { flex:1 1 260px; min-width:0; }
 .gamePhoneLead h3 { margin:0 0 4px; font-size:15px; color:var(--text-primary,var(--canvas-ink)); }
@@ -641,7 +641,7 @@
 .gameQr svg { display:block; width:176px; height:176px; max-width:40vw; }
 .gameInstallHints { margin:10px 0 0; padding-left:18px; display:grid; gap:4px; font-size:12px; color:var(--text-secondary,var(--canvas-muted)); }
 .gameTargetList { display:grid; gap:12px; }
-.gameTargetCard { padding:14px; border-radius:var(--radius-lg); border:1px solid var(--border,var(--canvas-line)); background:var(--surface,#fff); display:grid; gap:10px; }
+.gameTargetCard { padding:14px; border-radius:var(--radius-lg); border:1px solid var(--border,var(--canvas-line)); background:var(--surface); display:grid; gap:10px; }
 .gameTargetCard header { display:flex; gap:10px; align-items:flex-start; }
 .gameTargetCard header > span[aria-hidden] { font-size:18px; color:var(--canvas-accent); line-height:1.2; }
 .gameTargetCard header strong { display:block; font-size:14px; color:var(--text-primary,var(--canvas-ink)); }
@@ -658,7 +658,7 @@
 .gamePanelActions button:disabled { opacity:.55; cursor:not-allowed; }
 .gameRoblox { display:grid; gap:8px; padding-top:10px; border-top:1px solid var(--border,var(--canvas-line)); }
 .gameRoblox label { display:grid; gap:4px; font-size:12px; color:var(--text-secondary,var(--canvas-muted)); }
-.gameRoblox input { padding:8px 10px; min-height:36px; border-radius:var(--radius-md); border:1px solid var(--border,var(--canvas-line)); background:var(--surface,#fff); color:var(--text-primary,var(--canvas-ink)); font-size:13px; }
+.gameRoblox input { padding:8px 10px; min-height:36px; border-radius:var(--radius-md); border:1px solid var(--border,var(--canvas-line)); background:var(--surface); color:var(--text-primary,var(--canvas-ink)); font-size:13px; }
 @media (max-width:520px) { .gamePhoneLead { flex-direction:column; } .gameQr svg { width:60vw; height:60vw; max-width:none; } }
 
 /* ---- game:the artifact is playable, so the body plays it ---- */

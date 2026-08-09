@@ -63,7 +63,7 @@ export function RunTaskButton({
           )}
         </button>
       </RoleGate>
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</div>}
     </div>
   );
 }

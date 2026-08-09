@@ -149,7 +149,7 @@ export default function ModelApiSamples({
               fontSize: 13, padding: '6px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600,
               border: '1px solid var(--border-subtle)',
               background: lang === l ? 'var(--coral-bright)' : 'transparent',
-              color: lang === l ? '#fff' : 'var(--text-secondary)',
+              color: lang === l ? 'var(--text-on-accent)' : 'var(--text-secondary)',
             }}
           >
             {LANG_LABEL[l]}

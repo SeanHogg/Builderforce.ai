@@ -24,7 +24,7 @@ const cardStyle: React.CSSProperties = {
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#dc2626', high: '#f4726e', medium: 'var(--warning)', low: '#3b82f6', info: '#6b7280',
+  critical: 'var(--error)', high: '#f4726e', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
 };
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 
@@ -32,7 +32,7 @@ const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 function scoreColor(score: number): string {
   if (score >= 80) return 'var(--success)';
   if (score >= 50) return 'var(--warning)';
-  return '#dc2626';
+  return 'var(--error)';
 }
 
 function ScoreGauge({ score, label }: { score: number; label: string }) {
@@ -116,7 +116,7 @@ export function WebSecurityScanPanel() {
   const sevLabel = (s: string) => t(`sev_${s}` as 'sev_critical');
   const deltaChip = (delta: number) => {
     const up = delta >= 0;
-    const color = up ? 'var(--success)' : '#dc2626';
+    const color = up ? 'var(--success)' : 'var(--error)';
     return (
       <span style={{
         fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-full)',
@@ -168,7 +168,7 @@ export function WebSecurityScanPanel() {
           disabled={running || !target.trim()}
           style={{
             padding: '9px 16px', fontSize: 13, fontWeight: 700, flexShrink: 0,
-            background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)',
+            background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
             border: 'none', borderRadius: 'var(--radius-md)',
             cursor: running || !target.trim() ? 'default' : 'pointer', opacity: running || !target.trim() ? 0.7 : 1,
           }}

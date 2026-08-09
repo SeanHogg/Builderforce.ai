@@ -55,7 +55,7 @@ export function CapabilityArtifactNotice({
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--warning-border, rgba(234,179,8,0.3))',
         background: 'var(--warning-bg, rgba(234,179,8,0.12))',
-        color: 'var(--warning-text, #b45309)',
+        color: 'var(--warning-text)',
         fontSize: 12,
       }}
     >

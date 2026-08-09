@@ -73,7 +73,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
   };
   const BADGE_TONE: Record<BadgeTone, { fg: string; bg: string; border: string }> = {
     good: { fg: 'var(--success)', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
-    progress: { fg: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
+    progress: { fg: 'var(--coral-bright)', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
     warn: { fg: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
   };
 

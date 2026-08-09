@@ -30,7 +30,7 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}
-        style={{ background: 'none', border: 'none', color: 'var(--coral-bright, #f4726e)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
+        style={{ background: 'none', border: 'none', color: 'var(--coral-bright)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
         ★ {t('rate')}
       </button>
       <SlideOutPanel open={open} onClose={() => setOpen(false)} title={clientName ? t('titleNamed', { name: clientName }) : t('title')} width="min(420px, 96vw)">
@@ -52,9 +52,9 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
                 <input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />
                 {t('wouldWorkAgain')}
               </label>
-              {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 12 }}>{error}</div>}
+              {error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>}
               <button type="button" onClick={() => void submit()} disabled={busy}
-                style={{ alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer' }}>
+                style={{ alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer' }}>
                 {busy ? t('submitting') : t('submit')}
               </button>
             </>

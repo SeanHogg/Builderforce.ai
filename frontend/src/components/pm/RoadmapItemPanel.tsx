@@ -88,7 +88,7 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
           <label style={labelStyle} htmlFor="rm-target">Target date</label>
           <input id="rm-target" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={fieldStyle} />
         </div>
-        {error && <div style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
             {isEdit ? 'Save changes' : 'Create'}

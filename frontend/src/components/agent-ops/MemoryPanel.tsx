@@ -160,7 +160,7 @@ export function MemoryPanel() {
 function Tile({ label, value, hint, tone = 'neutral' }: { label: string; value: number; hint: string; tone?: 'neutral' | 'warn' }) {
   return (
     <div style={card}>
-      <div style={{ fontSize: '1.6rem', fontWeight: 700, color: tone === 'warn' ? 'var(--warning, #b45309)' : 'var(--text-primary)' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: 700, color: tone === 'warn' ? 'var(--warning)' : 'var(--text-primary)' }}>
         {value}
       </div>
       <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>

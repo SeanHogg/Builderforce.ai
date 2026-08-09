@@ -136,7 +136,7 @@ export default function FactsPageClient() {
       </div>
 
       {loading && <div style={card}>{t('loading')}</div>}
-      {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && !error && (
         facts.length === 0 ? (

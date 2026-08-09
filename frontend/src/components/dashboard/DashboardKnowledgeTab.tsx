@@ -9,9 +9,9 @@ import { RoleGate } from '@/components/RoleGate';
 
 const DOC_TYPE_COLOR: Record<KnowledgeDoc['docType'], string> = {
   sop: 'var(--cyan-bright, var(--cyan-bright))',
-  process: 'var(--coral-bright, #f4726e)',
+  process: 'var(--coral-bright)',
   doc: 'var(--text-muted)',
-  postmortem: 'var(--error-text, #ef4444)',
+  postmortem: 'var(--error-text)',
   known_error: 'var(--warning-text, var(--warning))',
 };
 

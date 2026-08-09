@@ -56,9 +56,9 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
 };
 
 const TONE_COLOR: Record<'ok' | 'warn' | 'muted' | 'info', string> = {
-  ok: 'var(--success, #16a34a)',
-  warn: 'var(--warning, #d97706)',
-  info: 'var(--coral-bright, #f97316)',
+  ok: 'var(--success)',
+  warn: 'var(--warning)',
+  info: 'var(--coral-bright)',
   muted: 'var(--text-muted)',
 };
 
@@ -181,7 +181,7 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
             width: 'min(320px, 80vw)',
             maxHeight: 360,
             overflowY: 'auto',
-            background: 'var(--surface, #1a1a1a)',
+            background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
@@ -204,7 +204,7 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border)',
                   background: eligibleCount > 0 ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-                  color: eligibleCount > 0 ? '#fff' : 'var(--text-muted)',
+                  color: eligibleCount > 0 ? 'var(--text-on-accent)' : 'var(--text-muted)',
                   cursor: eligibleCount > 0 ? 'pointer' : 'not-allowed',
                   whiteSpace: 'nowrap',
                 }}
@@ -215,7 +215,7 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
           </div>
 
           {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 2px' }}>{t('loading')}</div>}
-          {error && <div style={{ fontSize: 11, color: 'var(--danger, #dc2626)', padding: '6px 2px' }}>{error}</div>}
+          {error && <div style={{ fontSize: 11, color: 'var(--danger)', padding: '6px 2px' }}>{error}</div>}
 
           {!loading && !error && candidates.map((tk) => {
             const d = diagnostics.get(tk.id);
@@ -257,7 +257,7 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
                       borderRadius: 'var(--radius-sm)',
                       border: '1px solid var(--border)',
                       background: canRun && !isRunning ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-                      color: canRun && !isRunning ? '#fff' : 'var(--text-muted)',
+                      color: canRun && !isRunning ? 'var(--text-on-accent)' : 'var(--text-muted)',
                       cursor: canRun && !isRunning ? 'pointer' : 'not-allowed',
                       whiteSpace: 'nowrap',
                       flexShrink: 0,

@@ -17,10 +17,10 @@ function formatPrice(item: CartItem): string {
 
 function TypeBadge({ type }: { type: CartItem['type'] }) {
   const colors: Record<CartItem['type'], string> = {
-    skill: '#6366f1',
-    persona: '#8b5cf6',
-    content: '#0891b2',
-    agent: '#059669',
+    skill: 'var(--indigo-bright)',
+    persona: 'var(--purple-bright)',
+    content: 'var(--cyan-bright)',
+    agent: 'var(--emerald-bright)',
   };
   return (
     <span
@@ -99,7 +99,7 @@ export default function ShoppingCart() {
           right: 0,
           bottom: 0,
           width: 'min(420px, 100vw)',
-          background: 'var(--bg-elevated, #1a1a2e)',
+          background: 'var(--bg-elevated)',
           borderLeft: '1px solid var(--border, rgba(255,255,255,0.1))',
           zIndex: 9999,
           display: 'flex',
@@ -124,7 +124,7 @@ export default function ShoppingCart() {
             </svg>
             <span style={{ fontWeight: 700, fontSize: 16 }}>Cart</span>
             {count > 0 && (
-              <span style={{ background: 'var(--accent, #6366f1)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
+              <span style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
                 {count}
               </span>
             )}
@@ -218,7 +218,7 @@ export default function ShoppingCart() {
                     padding: '12px 0',
                     borderRadius: 'var(--radius-lg)',
                     border: 'none',
-                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    background: 'linear-gradient(135deg, var(--indigo-bright), var(--purple-bright))',
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: 15,
@@ -250,7 +250,7 @@ export default function ShoppingCart() {
                       textAlign: 'center',
                       padding: '10px 0',
                       borderRadius: 'var(--radius-md)',
-                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      background: 'linear-gradient(135deg, var(--indigo-bright), var(--purple-bright))',
                       color: 'var(--text-on-accent)',
                       fontWeight: 600,
                       fontSize: 13,

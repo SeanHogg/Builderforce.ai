@@ -107,7 +107,7 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
                   aria-label={name}
                   style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', overflow: 'hidden' }}
                 >
-                  <div style={{ width: `${value}%`, height: '100%', background: 'var(--accent, #6366f1)', borderRadius: 'var(--radius-full)' }} />
+                  <div style={{ width: `${value}%`, height: '100%', background: 'var(--accent)', borderRadius: 'var(--radius-full)' }} />
                 </div>
               </div>
             );

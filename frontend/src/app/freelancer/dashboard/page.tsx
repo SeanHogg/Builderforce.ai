@@ -27,7 +27,7 @@ const money = (cents: number, cur = 'USD') => `${cur} ${(cents / 100).toFixed(2)
 const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
 
 const ENGAGEMENT_TONE: Record<Engagement['status'], string> = {
-  invited: 'var(--warning-text, #b45309)',
+  invited: 'var(--warning-text)',
   interviewing: 'var(--cyan-bright, var(--cyan-bright))',
   active: 'rgba(34,197,94,0.9)',
   declined: 'var(--text-muted)',
@@ -38,8 +38,8 @@ const TIMECARD_TONE: Record<Timecard['status'], string> = {
   draft: 'var(--text-muted)',
   submitted: 'var(--cyan-bright, var(--cyan-bright))',
   approved: 'rgba(34,197,94,0.9)',
-  rejected: 'var(--danger, #dc2626)',
-  paid: 'var(--coral-bright, #f4726e)',
+  rejected: 'var(--danger)',
+  paid: 'var(--coral-bright)',
 };
 
 /**
@@ -165,7 +165,7 @@ export default function FreelancerDashboardPage() {
               series={engagementSeries}
               delta={buildInsightDelta(engagementSeries, true)}
               href="/marketplace?category=gigs"
-              color="var(--coral-bright, #f4726e)"
+              color="var(--coral-bright)"
             />
             <InsightStat
               label={t('metric.billableHours')}

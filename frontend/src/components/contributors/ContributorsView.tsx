@@ -21,8 +21,8 @@ const cardStyle: React.CSSProperties = {
 
 // GitHub-style intensity palettes. Humans = green, agents = purple, so the
 // activity calendar visibly distinguishes people from agentHosts.
-const GREEN = ['#0e4429', '#006d32', '#26a641', '#39d353'];
-const PURPLE = ['#3a2063', '#5b2da6', '#8a4be0', '#b388ff'];
+const GREEN = ['#0e4429', '#006d32', '#26a641', 'var(--emerald-bright)'];
+const PURPLE = ['#3a2063', '#5b2da6', 'var(--purple-bright)', 'var(--violet-bright)'];
 const EMPTY = 'var(--border-subtle)';
 
 const CELL = 11;
@@ -111,7 +111,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
   return (
     <span style={{
       fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-full)',
-      color: isAgent ? '#b388ff' : '#39d353',
+      color: isAgent ? 'var(--violet-bright)' : 'var(--emerald-bright)',
       background: isAgent ? 'rgba(138,75,224,0.12)' : 'rgba(38,166,65,0.12)',
       border: `1px solid ${isAgent ? 'rgba(138,75,224,0.4)' : 'rgba(38,166,65,0.4)'}`,
     }}>
@@ -182,7 +182,7 @@ export function ContributorsView() {
           style={{
             flexShrink: 0,
             fontSize: 13, padding: '8px 14px', borderRadius: 'var(--radius-md)', cursor: syncing ? 'default' : 'pointer',
-            background: 'var(--accent, #2563eb)', color: 'var(--text-on-accent)', border: 'none', opacity: syncing ? 0.6 : 1,
+            background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: syncing ? 0.6 : 1,
           }}
         >
           {syncing ? t('syncing') : t('syncAgents')}
@@ -192,7 +192,7 @@ export function ContributorsView() {
       <TenantActivityPanel />
 
       {loading && <div style={cardStyle}>{t('loading')}</div>}
-      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {data && !loading && (
         <>
@@ -200,8 +200,8 @@ export function ContributorsView() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
             <Stat label={t('stat.contributions')} value={totalContributions.toLocaleString()} />
             <Stat label={t('stat.teamMembers')} value={String(data.contributors.length)} />
-            <Stat label={t('stat.humans')} value={String(humans.length)} accent="#39d353" />
-            <Stat label={t('stat.agents')} value={String(agents.length)} accent="#b388ff" />
+            <Stat label={t('stat.humans')} value={String(humans.length)} accent="var(--emerald-bright)" />
+            <Stat label={t('stat.agents')} value={String(agents.length)} accent="var(--violet-bright)" />
           </div>
 
           {/* Team / selected calendar */}
@@ -318,5 +318,5 @@ function Legend() {
 }
 
 const linkBtn: React.CSSProperties = {
-  background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontSize: 13, padding: 0,
+  background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, padding: 0,
 };

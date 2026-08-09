@@ -48,7 +48,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
               ...SPAN[def.size ?? 'sm'],
               position: 'relative',
               opacity: drag.draggingKey === id ? 0.4 : 1,
-              outline: drag.dropKey === id ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
+              outline: drag.dropKey === id ? '2px dashed var(--coral-bright)' : 'none',
               outlineOffset: 2,
               borderRadius: 'var(--radius-lg)',
               transition: 'opacity 120ms ease',

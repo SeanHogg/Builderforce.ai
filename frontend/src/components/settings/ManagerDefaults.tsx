@@ -133,7 +133,7 @@ function ManagerDefaultsInner() {
       </div>
 
       {error && (
-        <p style={{ fontSize: 12, color: 'var(--coral-bright, #ef4444)', margin: '0 0 12px' }}>{error}</p>
+        <p style={{ fontSize: 12, color: 'var(--coral-bright)', margin: '0 0 12px' }}>{error}</p>
       )}
 
       {/* What a project with no manager settings of its own gets — server-resolved. */}
@@ -151,7 +151,7 @@ function ManagerDefaultsInner() {
 
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '16px 0 0' }}>
         {t('managerDefaultsProjectHint')}{' '}
-        <Link href="/projects?tab=manager&sub=policy" style={{ color: 'var(--accent, #2563eb)' }}>
+        <Link href="/projects?tab=manager&sub=policy" style={{ color: 'var(--accent)' }}>
           {t('managerDefaultsProjectLink')}
         </Link>
       </p>

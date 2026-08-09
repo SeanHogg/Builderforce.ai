@@ -44,7 +44,7 @@ function memberBars(members: WorkforcePlanMember[], color: string): BarDatum[] {
       label: m.memberName,
       value: m.openWip,
       secondary: m.maxConcurrentWip ?? undefined,
-      color: m.overAllocated ? 'var(--coral-bright, #f4726e)' : color,
+      color: m.overAllocated ? 'var(--coral-bright)' : color,
     }));
 }
 
@@ -61,7 +61,7 @@ export function WorkforcePlanView() {
     return () => { alive = false; };
   }, []);
 
-  if (error) return <div style={{ fontSize: 13, color: 'var(--coral-bright, #f4726e)' }}>{error}</div>;
+  if (error) return <div style={{ fontSize: 13, color: 'var(--coral-bright)' }}>{error}</div>;
   if (!plan) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 
   const { totals, members } = plan;

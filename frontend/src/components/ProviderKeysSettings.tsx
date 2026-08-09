@@ -82,7 +82,7 @@ const buttonPrimary: React.CSSProperties = {
 };
 const buttonDanger: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'none',
-  color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+  color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const dividerRow: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600,
@@ -193,7 +193,7 @@ function ReorderableList({
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap',
             background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             cursor: 'grab', opacity: drag.draggingKey === key ? 0.4 : 1,
-            outline: drag.dropKey === key ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
+            outline: drag.dropKey === key ? '2px dashed var(--coral-bright)' : 'none',
             outlineOffset: 2, transition: 'opacity 120ms ease',
           }}
         >
@@ -383,8 +383,8 @@ function probeVerdict(
  */
 function ProbeResultLine({ result, t }: { result: ProbeVerdict; t: TFn }) {
   const color = result.tone === 'ok' ? 'rgba(34,197,94,0.9)'
-    : result.tone === 'warn' ? 'var(--warning-text, #b45309)'
-    : 'var(--error, #ef4444)';
+    : result.tone === 'warn' ? 'var(--warning-text)'
+    : 'var(--error)';
   const { diagnostic } = result;
   return (
     <div
@@ -489,8 +489,8 @@ function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
         fontSize: 11.5,
         lineHeight: 1.5,
         background: 'var(--warning-bg, rgba(245,158,11,0.16))',
-        color: 'var(--warning-text, #b45309)',
-        border: '1px solid var(--warning, #d97706)',
+        color: 'var(--warning-text)',
+        border: '1px solid var(--warning)',
       }}
     >
       <strong style={{ fontWeight: 700 }}>{t('authAlert.title')}</strong>
@@ -532,7 +532,7 @@ function ProviderStatusChip({
     : authType === 'oauth' ? t('status.connected', { subscription })
     : t('status.keyConfigured', { label });
   const color = authType === null ? 'var(--text-muted)'
-    : alert ? 'var(--warning-text, #b45309)'
+    : alert ? 'var(--warning-text)'
     : 'rgba(34,197,94,0.9)';
   return <span style={{ fontSize: 12, fontWeight: 650, color, ...style }}>{text}</span>;
 }
@@ -687,7 +687,7 @@ function ProviderConnectionCard({
           {/* `usable` alone would paint this green for a credential that decrypts and then
               403s on every call, so an outstanding alert downgrades it the same way it
               downgrades the chip below. */}
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text, #b45309)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
             {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
@@ -1231,7 +1231,7 @@ export function ProviderKeysSettings({
                   <span style={{
                     flex: 1, minWidth: 0,
                     fontSize: 12, fontWeight: 650, whiteSpace: 'normal',
-                    color: brokenConnections ? 'var(--warning-text, #b45309)'
+                    color: brokenConnections ? 'var(--warning-text)'
                       : openRouterConnections.length ? 'rgba(34,197,94,0.9)'
                       : 'var(--text-muted)',
                   }}>

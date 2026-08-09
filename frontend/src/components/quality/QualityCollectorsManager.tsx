@@ -84,7 +84,7 @@ export function QualityCollectorsManager() {
       </div>
 
       {created && <CreatedKeyPanel created={created} onDismiss={() => setCreated(null)} t={t} />}
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
@@ -170,11 +170,11 @@ function CollectorPanel({
               {testing ? t('setup.testing') : t('setup.test')}
             </button>
             <button type="button" style={btnSubtle} onClick={toggle}>{collector.enabled ? t('setup.pause') : t('setup.resume')}</button>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={remove}>{t('setup.delete')}</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={remove}>{t('setup.delete')}</button>
           </RoleGate>
         </div>
 
-        {testMessage && <div role="status" style={{ fontSize: 12, color: 'var(--success, #16a34a)', marginTop: 10 }}>{testMessage}</div>}
+        {testMessage && <div role="status" style={{ fontSize: 12, color: 'var(--success)', marginTop: 10 }}>{testMessage}</div>}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>{t('setup.snippetNote')}</div>
         <CopyBlock label={t('setup.sdkSnippet')} value={sdkSnippet} />
@@ -243,7 +243,7 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
             <code style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, wordBreak: 'break-all' }}>{AUTH_API_URL}{i.webhookUrl}</code>
             <RoleGate capability="quality.manageSources">
               {i.provider === 'sentry' && <button type="button" style={btnSubtle} disabled={backfilling} onClick={backfill}>{backfilling ? t('setup.integrations.backfilling') : t('setup.integrations.backfill')}</button>}
-              <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(i.provider)}>{t('setup.integrations.remove')}</button>
+              <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(i.provider)}>{t('setup.integrations.remove')}</button>
             </RoleGate>
           </div>
           {i.provider === 'sentry' && msg && <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 90 }}>{msg}</div>}
@@ -337,7 +337,7 @@ function MappingSection({ collector, projects, projName, onChanged, setError, t 
             <span style={{ color: 'var(--text-muted)' }}> → {projName(r.projectId)} ({t('setup.mapping.priority')} {r.priority})</span>
           </span>
           <RoleGate capability="quality.manageSources">
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(r.id)}>{t('setup.mapping.remove')}</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(r.id)}>{t('setup.mapping.remove')}</button>
           </RoleGate>
         </div>
       ))}

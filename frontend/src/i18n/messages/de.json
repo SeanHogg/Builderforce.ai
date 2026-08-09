@@ -12821,7 +12821,20 @@
       "reportTitle": "Was der Agent getan hätte",
       "frozenAt": "Repository gelesen bei",
       "suppressedTitle": "Unterdrückte Auswirkungen",
-      "noSteps": "Der Agent hat überhaupt keine Auswirkungen erzeugt – weder Code geschrieben noch etwas gespeichert."
+      "noSteps": "Der Agent hat überhaupt keine Auswirkungen erzeugt – weder Code geschrieben noch etwas gespeichert.",
+      "compareSelected": "Auswahl vergleichen ({count}/2)",
+      "compareHint": "Wähle zwei Probeläufe aus, um ihre Auswirkungen zu vergleichen.",
+      "selectCompare": "Auswählen",
+      "selected": "Ausgewählt",
+      "comparisonTitle": "Probelaufvergleich",
+      "sameTicket": "Gleiches Ticket",
+      "differentTicket": "Unterschiedliche Tickets",
+      "sameRef": "Gleiche Repository-Referenz",
+      "differentRef": "Repository-Referenzen unterscheiden sich oder fehlen",
+      "operation": "Operation",
+      "baseline": "Ausgangslage",
+      "candidate": "Kandidat",
+      "delta": "Änderung"
     }
   },
   "quickStart": {

@@ -32,8 +32,8 @@ import {
 // ---------------------------------------------------------------------------
 
 const card: React.CSSProperties = {
-  background: 'var(--surface, #ffffff)',
-  border: '1px solid var(--border, #e5e7eb)',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
   borderRadius: 'var(--radius-lg)',
   padding: 'clamp(12px, 3vw, 20px)',
   marginTop: 16,
@@ -42,7 +42,7 @@ const card: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
-  color: 'var(--text-muted, #6b7280)',
+  color: 'var(--text-muted)',
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
 };
@@ -52,8 +52,8 @@ const input: React.CSSProperties = {
   minWidth: 0,
   padding: '8px 10px',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border, #e5e7eb)',
-  background: 'var(--surface-2, #f9fafb)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
 };
@@ -61,8 +61,8 @@ const input: React.CSSProperties = {
 const button: React.CSSProperties = {
   padding: '8px 14px',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border, #e5e7eb)',
-  background: 'var(--surface-2, #f9fafb)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'var(--text-primary, var(--bg-elevated))',
   fontSize: 14,
   cursor: 'pointer',
@@ -71,9 +71,9 @@ const button: React.CSSProperties = {
 
 const primaryButton: React.CSSProperties = {
   ...button,
-  background: 'var(--accent, #2563eb)',
-  borderColor: 'var(--accent, #2563eb)',
-  color: 'var(--text-on-accent, #ffffff)',
+  background: 'var(--accent)',
+  borderColor: 'var(--accent)',
+  color: 'var(--text-on-accent)',
 };
 
 /** A copyable DNS value. Monospace and horizontally scrollable — a TXT token
@@ -87,9 +87,9 @@ function DnsValue({ children }: { children: string }) {
         whiteSpace: 'nowrap',
         padding: '6px 8px',
         borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface-2, #f3f4f6)',
+        background: 'var(--surface-2)',
         color: 'var(--text-primary, var(--bg-elevated))',
-        border: '1px solid var(--border, #e5e7eb)',
+        border: '1px solid var(--border)',
         fontSize: 12,
       }}
     >
@@ -101,9 +101,9 @@ function DnsValue({ children }: { children: string }) {
 /** Status pill. `tone` drives the colour so the mapping lives in one place. */
 function Pill({ tone, children }: { tone: 'ok' | 'pending' | 'bad'; children: React.ReactNode }) {
   const palette = {
-    ok: { bg: 'var(--success-bg, #dcfce7)', fg: 'var(--success-text, #166534)' },
-    pending: { bg: 'var(--warning-bg, #fef3c7)', fg: 'var(--warning-text, #92400e)' },
-    bad: { bg: 'var(--danger-bg, #fee2e2)', fg: 'var(--danger-text, #991b1b)' },
+    ok: { bg: 'var(--success-bg)', fg: 'var(--success-text)' },
+    pending: { bg: 'var(--warning-bg)', fg: 'var(--warning-text)' },
+    bad: { bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
   }[tone];
   return (
     <span style={{
@@ -168,7 +168,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
         </h3>
         {state.hostname && <Pill tone={toneForDomain(state.status)}>{t(`status.${state.status}`)}</Pill>}
       </div>
-      <p style={{ margin: '6px 0 12px', fontSize: 13, color: 'var(--text-muted, #6b7280)' }}>
+      <p style={{ margin: '6px 0 12px', fontSize: 13, color: 'var(--text-muted)' }}>
         {t('description')}
       </p>
 
@@ -219,7 +219,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
       {state.live && state.hostname && (
         <p style={{ marginTop: 12, fontSize: 13 }}>
           <a href={`https://${state.hostname}`} target="_blank" rel="noreferrer"
-            style={{ color: 'var(--accent, #2563eb)' }}>
+            style={{ color: 'var(--accent)' }}>
             {t('visit', { hostname: state.hostname })}
           </a>
         </p>
@@ -228,13 +228,13 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
       {/* Verified but the CNAME is missing is the single most common "why is it
           still broken" — say it explicitly rather than leaving them guessing. */}
       {state.status !== 'unset' && state.cnamePointsAtUs === false && (
-        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--warning-text, #92400e)' }}>{t('cnameMissing')}</p>
+        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--warning-text)' }}>{t('cnameMissing')}</p>
       )}
       {state.error && (
-        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted, #6b7280)' }}>{state.error}</p>
+        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)' }}>{state.error}</p>
       )}
       {error && (
-        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text, #991b1b)' }}>{error}</p>
+        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p>
       )}
     </section>
   );
@@ -291,19 +291,19 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
       <h3 id="site-forms-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, var(--bg-elevated))' }}>
         {t('title')}
       </h3>
-      <p style={{ margin: '6px 0 12px', fontSize: 13, color: 'var(--text-muted, #6b7280)' }}>
+      <p style={{ margin: '6px 0 12px', fontSize: 13, color: 'var(--text-muted)' }}>
         {t('description')}
       </p>
 
       <div style={{ display: 'grid', gap: 10 }}>
         {collections.map((collection) => (
           <div key={collection.id} style={{
-            border: '1px solid var(--border, #e5e7eb)', borderRadius: 'var(--radius-lg)', padding: 12,
-            background: 'var(--surface-2, #f9fafb)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 12,
+            background: 'var(--surface-2)',
           }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
               <strong style={{ fontSize: 14, color: 'var(--text-primary, var(--bg-elevated))' }}>{collection.name}</strong>
-              <span style={{ fontSize: 12, color: 'var(--text-muted, #6b7280)' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {t('submissionCount', { count: collection.recordCount })}
               </span>
             </div>
@@ -318,20 +318,20 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
             {openId === collection.id && (
               <div style={{ marginTop: 10, overflowX: 'auto' }}>
                 {records.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted, #6b7280)', margin: 0 }}>{t('noSubmissions')}</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('noSubmissions')}</p>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: '28rem' }}>
                     <thead>
                       <tr>
-                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted, #6b7280)' }}>{t('when')}</th>
-                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted, #6b7280)' }}>{t('email')}</th>
-                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted, #6b7280)' }}>{t('fields')}</th>
+                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted)' }}>{t('when')}</th>
+                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted)' }}>{t('email')}</th>
+                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted)' }}>{t('fields')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {records.map((record) => (
-                        <tr key={record.id} style={{ borderTop: '1px solid var(--border, #e5e7eb)' }}>
-                          <td style={{ padding: 6, color: 'var(--text-muted, #6b7280)', whiteSpace: 'nowrap' }}>
+                        <tr key={record.id} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td style={{ padding: 6, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                             {new Date(record.createdAt).toLocaleString()}
                           </td>
                           <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>{record.email ?? '—'}</td>
@@ -363,7 +363,7 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
         </button>
       </div>
       {error && (
-        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text, #991b1b)' }}>{error}</p>
+        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p>
       )}
     </section>
   );
@@ -408,9 +408,9 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
                 padding: '4px 10px',
                 minHeight: 30,
                 fontSize: 12,
-                background: days === option ? 'var(--accent, #2563eb)' : 'var(--surface-2, #f9fafb)',
-                color: days === option ? 'var(--text-on-accent, #ffffff)' : 'var(--text-primary, var(--bg-elevated))',
-                borderColor: days === option ? 'var(--accent, #2563eb)' : 'var(--border, #e5e7eb)',
+                background: days === option ? 'var(--accent)' : 'var(--surface-2)',
+                color: days === option ? 'var(--text-on-accent)' : 'var(--text-primary, var(--bg-elevated))',
+                borderColor: days === option ? 'var(--accent)' : 'var(--border)',
               }}
             >
               {t('window', { days: option })}
@@ -441,7 +441,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
                 flex: 1,
                 minWidth: 2,
                 height: `${Math.max(4, (day.pageViews / peak) * 100)}%`,
-                background: 'var(--accent, #2563eb)',
+                background: 'var(--accent)',
                 borderRadius: 'var(--radius-sm)',
                 opacity: 0.85,
               }}
@@ -450,7 +450,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
         </div>
       )}
 
-      <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted, #6b7280)' }}>
+      <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
         {t('approximate')}
       </p>
     </section>
@@ -460,8 +460,8 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
 function Stat({ label: name, value }: { label: string; value: number }) {
   return (
     <div style={{
-      border: '1px solid var(--border, #e5e7eb)', borderRadius: 'var(--radius-lg)', padding: 10,
-      background: 'var(--surface-2, #f9fafb)',
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 10,
+      background: 'var(--surface-2)',
     }}>
       <div style={label}>{name}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, var(--bg-elevated))' }}>

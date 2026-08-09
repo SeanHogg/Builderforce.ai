@@ -83,7 +83,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
                 minHeight: 84,
                 padding: '12px 8px',
                 borderRadius: 'var(--radius-lg)',
-                border: `1px solid ${active ? 'var(--accent, #3b82f6)' : 'var(--border-subtle)'}`,
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                 background: active ? 'var(--accent-subtle, rgba(59,130,246,0.12))' : 'var(--bg-elevated)',
                 color: 'var(--text-primary)',
                 cursor: disabled ? 'default' : 'pointer',

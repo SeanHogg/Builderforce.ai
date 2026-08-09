@@ -12821,7 +12821,20 @@
       "reportTitle": "智能体本会做的事",
       "frozenAt": "读取代码库的版本",
       "suppressedTitle": "被抑制的副作用",
-      "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。"
+      "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。",
+      "compareSelected": "比较所选项（{count}/2）",
+      "compareHint": "选择两个演练以比较其效果。",
+      "selectCompare": "选择",
+      "selected": "已选择",
+      "comparisonTitle": "演练比较",
+      "sameTicket": "同一工单",
+      "differentTicket": "不同工单",
+      "sameRef": "同一仓库引用",
+      "differentRef": "仓库引用不同或不可用",
+      "operation": "操作",
+      "baseline": "基线",
+      "candidate": "候选",
+      "delta": "变化"
     }
   },
   "quickStart": {

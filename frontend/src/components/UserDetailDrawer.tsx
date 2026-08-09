@@ -278,7 +278,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                         &nbsp;·&nbsp;
                         <span style={{ color: 'var(--success-text)' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
                         {effectivePerms.userGrants.length > 0 && (
-                          <span style={{ marginLeft: 8, color: '#3b82f6' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
+                          <span style={{ marginLeft: 8, color: 'var(--coral-bright)' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
                         )}
                         {effectivePerms.userRevocations.length > 0 && (
                           <span style={{ marginLeft: 8, color: 'var(--error-text)' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
@@ -295,7 +295,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                               padding: '2px 7px',
                               fontSize: 11,
                               fontFamily: 'monospace',
-                              color: effectivePerms.userRevocations.includes(p) ? '#ef4444' : effectivePerms.userGrants.includes(p) ? '#3b82f6' : 'var(--text)',
+                              color: effectivePerms.userRevocations.includes(p) ? 'var(--error)' : effectivePerms.userGrants.includes(p) ? 'var(--coral-bright)' : 'var(--text)',
                             }}
                           >
                             {p}
@@ -359,7 +359,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="user-drawer__field">
                         <span className="user-drawer__field-label">{t('users.drawer.fieldMfa')}</span>
-                        <span style={{ color: secDetails.mfa.enabled ? 'var(--success)' : '#ef4444' }}>
+                        <span style={{ color: secDetails.mfa.enabled ? 'var(--success)' : 'var(--error)' }}>
                           {secDetails.mfa.enabled ? t('users.drawer.mfaEnabled') : t('users.drawer.mfaDisabled')}
                         </span>
                       </div>

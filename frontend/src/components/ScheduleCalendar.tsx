@@ -139,7 +139,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                     fontWeight: isToday ? 700 : 500,
                     borderRadius: '50%',
                     marginBottom: 4,
-                    color: isToday ? '#fff' : 'var(--text-secondary)',
+                    color: isToday ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                     background: isToday ? 'var(--coral-bright)' : 'transparent',
                   }}
                 >

@@ -1,4 +1,4 @@
-.shell { min-height: calc(100vh - 64px); padding: 48px 24px; background: radial-gradient(circle at 10% 0%, rgba(70, 118, 255, .14), transparent 38%), var(--bg, #080b12); color: var(--text, #f7f8fb); }
+.shell { min-height: calc(100vh - 64px); padding: 48px 24px; background: radial-gradient(circle at 10% 0%, rgba(70, 118, 255, .14), transparent 38%), var(--bg); color: var(--text); }
 .card { width: min(880px, 100%); margin: 0 auto; padding: 34px; border: 1px solid rgba(148, 163, 184, .22); border-radius: var(--radius-xl); background: rgba(18, 23, 35, .88); box-shadow: 0 24px 70px rgba(0,0,0,.24); }
 .card h1 { margin: 4px 0 10px; font-size: clamp(28px, 4vw, 44px); }
 .card p { color: #aab4c7; line-height: 1.6; }

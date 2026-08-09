@@ -425,7 +425,7 @@ export default function PricingPageClient() {
                       const cycleLabel = c === 'yearly' ? t('cycleYearly') : t('cycleMonthly');
                       return (
                         <button key={c} type="button" onClick={() => setBillingCycle(c)}
-                          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: billingCycle === c ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)', color: billingCycle === c ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)', cursor: 'pointer' }}>
+                          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: billingCycle === c ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)', color: billingCycle === c ? 'var(--coral-bright)' : 'var(--text-secondary)', cursor: 'pointer' }}>
                           {c === 'yearly' ? t('cycleYearlyWithSaving', { cycle: cycleLabel, saving }) : cycleLabel}
                         </button>
                       );
@@ -471,7 +471,7 @@ export default function PricingPageClient() {
                   {upgradeTarget === 'teams' && ` ${t('totalForSeats', { seats })}`}
                 </div>
 
-                {upgradeError && <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)' }}>{upgradeError}</div>}
+                {upgradeError && <div style={{ fontSize: 12, color: 'var(--coral-bright)' }}>{upgradeError}</div>}
 
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button type="button" onClick={() => { setUpgradeTarget(null); setUpgradeError(null); }}
@@ -479,7 +479,7 @@ export default function PricingPageClient() {
                     {t('cancel')}
                   </button>
                   <button type="submit" disabled={upgrading || !pricing}
-                    style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? 'var(--info)' : 'var(--coral-bright, #f4726e)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: upgrading ? 'wait' : 'pointer' }}>
+                    style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? 'var(--info)' : 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: upgrading ? 'wait' : 'pointer' }}>
                     {upgrading ? t('redirecting') : t('continueToPayment')}
                   </button>
                 </div>

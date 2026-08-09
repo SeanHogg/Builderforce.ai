@@ -197,7 +197,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                 }}
               />
               {handoffError && (
-                <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)' }}>{handoffError}</div>
+                <div style={{ fontSize: 12, color: 'var(--coral-bright)' }}>{handoffError}</div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button
@@ -215,8 +215,8 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                     padding: '7px 14px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: handoffTargetId && !handing ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-                    color: handoffTargetId && !handing ? '#fff' : 'var(--text-muted)',
+                    background: handoffTargetId && !handing ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+                    color: handoffTargetId && !handing ? 'var(--text-on-accent)' : 'var(--text-muted)',
                     border: 'none',
                     borderRadius: 'var(--radius-md)',
                     cursor: !handoffTargetId || handing ? 'not-allowed' : 'pointer',

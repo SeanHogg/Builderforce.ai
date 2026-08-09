@@ -38,7 +38,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
  */
 
 const KIND_ACCENT: Record<TeamMemberKind, string> = {
-  human: '#3b82f6',
+  human: 'var(--coral-bright)',
   cloud_agent: 'var(--coral-bright)',
   host_agent: 'var(--success)',
 };
@@ -301,7 +301,7 @@ export function TeamsView() {
               <button
                 type="button"
                 onClick={() => setConfirmDelete(detail)}
-                style={{ ...btnSubtle, color: 'var(--error-text)', borderColor: '#ef4444' }}
+                style={{ ...btnSubtle, color: 'var(--error-text)', borderColor: 'var(--error)' }}
               >
                 {tc('delete')}
               </button>

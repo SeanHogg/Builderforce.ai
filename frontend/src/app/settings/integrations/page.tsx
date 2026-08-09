@@ -52,7 +52,7 @@ export default function SettingsIntegrationsPage() {
         <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--text-primary)' }}>{t('categoryLabel')}</span>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
           {CATEGORIES.filter((item) => item.id !== 'developer' || isOwner).map((item) => (
-            <button key={item.id} type="button" onClick={() => { setCategory(item.id); if (item.id !== 'all' && item.id !== 'models') setPriorityOpen(false); }} aria-pressed={category === item.id} style={{ padding: '8px 13px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: category === item.id ? 'var(--coral-bright)' : 'var(--bg-base)', color: category === item.id ? '#fff' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+            <button key={item.id} type="button" onClick={() => { setCategory(item.id); if (item.id !== 'all' && item.id !== 'models') setPriorityOpen(false); }} aria-pressed={category === item.id} style={{ padding: '8px 13px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: category === item.id ? 'var(--coral-bright)' : 'var(--bg-base)', color: category === item.id ? 'var(--text-on-accent)' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
               {item.icon ? `${item.icon} ` : ''}{t(`category.${item.id}`)}
             </button>
           ))}

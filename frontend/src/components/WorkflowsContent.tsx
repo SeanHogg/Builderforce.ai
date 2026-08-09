@@ -36,7 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'var(--text-muted)',
   running: 'var(--cyan-bright, var(--cyan-bright))',
   completed: 'rgba(34,197,94,0.9)',
-  failed: 'var(--coral-bright, #f4726e)',
+  failed: 'var(--coral-bright)',
   cancelled: 'var(--text-muted)',
 };
 
@@ -118,7 +118,7 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
             {task.output}
           </div>
         )}
-        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright, #f4726e)', marginTop: 4 }}>{task.error}</div>}
+        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 4 }}>{task.error}</div>}
       </div>
       <StatusPill status={task.status} />
     </div>

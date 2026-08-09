@@ -59,7 +59,7 @@ function CartButton() {
               minWidth: 16,
               height: 16,
               borderRadius: 'var(--radius-md)',
-              background: '#6366f1',
+              background: 'var(--indigo-bright)',
               color: 'var(--text-on-accent)',
               fontSize: 10,
               fontWeight: 700,

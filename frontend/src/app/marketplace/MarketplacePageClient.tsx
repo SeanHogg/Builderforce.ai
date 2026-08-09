@@ -976,7 +976,7 @@ export default function MarketplacePageClient() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {filtered.map((item) => {
-            const typeColor = item.type === 'persona' ? 'var(--accent,#6366f1)' : 'var(--success)';
+            const typeColor = item.type === 'persona' ? 'var(--accent)' : 'var(--success)';
             const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
             const k = key(item.type, item.artifactSlug);
             const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };

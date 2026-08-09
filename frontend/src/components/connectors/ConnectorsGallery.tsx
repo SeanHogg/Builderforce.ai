@@ -170,7 +170,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
                   <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.name}
                   </span>
-                  <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: c.connectionCount > 0 ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>
+                  <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: c.connectionCount > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                     {c.connectionCount > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
                   </span>
                 </div>
@@ -331,7 +331,7 @@ function ConnectionsTab({ detail, canManage, onChanged }: {
       </p>
 
       {message && (
-        <div style={{ fontSize: 12, color: message.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+        <div style={{ fontSize: 12, color: message.ok ? 'var(--success)' : 'var(--danger)' }}>
           {message.text}
         </div>
       )}
@@ -349,7 +349,7 @@ function ConnectionsTab({ detail, canManage, onChanged }: {
               {Object.entries(row.publicFields).map(([k, v]) => `${k}: ${v}`).join(' · ') || t('connect.credentialsStored', { count: row.secretFieldsSet.length })}
             </div>
           </div>
-          <span style={{ fontSize: 11, color: row.lastTestOk === false ? 'var(--danger, #dc2626)' : row.lastTestOk ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>
+          <span style={{ fontSize: 11, color: row.lastTestOk === false ? 'var(--danger)' : row.lastTestOk ? 'var(--success)' : 'var(--text-muted)' }}>
             {row.lastTestOk == null ? t('connect.untested') : row.lastTestOk ? t('connect.healthy') : t('connect.failing')}
           </span>
           {canManage && (
@@ -358,7 +358,7 @@ function ConnectionsTab({ detail, canManage, onChanged }: {
               <button type="button" style={btnSubtle} onClick={() => toggle(row)}>
                 {row.enabled ? t('connect.disable') : t('connect.enable')}
               </button>
-              <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(row)}>
+              <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(row)}>
                 {t('connect.remove')}
               </button>
             </>
@@ -465,12 +465,12 @@ function ActivityTab({ connectorKey }: { connectorKey: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {logs.map((l) => (
         <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11.5, color: 'var(--text-secondary)', flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
-          <span style={{ color: l.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>● {l.statusCode ?? '—'}</span>
+          <span style={{ color: l.ok ? 'var(--success)' : 'var(--danger)' }}>● {l.statusCode ?? '—'}</span>
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{l.actionKey}</span>
           <span>{t(`activity.actor.${l.actorKind === 'user' || l.actorKind === 'test' ? l.actorKind : 'agent'}`)}</span>
           <span>{new Date(l.createdAt).toLocaleString()}</span>
           {l.durationMs != null && <span>{l.durationMs}ms</span>}
-          {l.error && <span style={{ color: 'var(--danger, #dc2626)', flexBasis: '100%', wordBreak: 'break-word' }}>{l.error}</span>}
+          {l.error && <span style={{ color: 'var(--danger)', flexBasis: '100%', wordBreak: 'break-word' }}>{l.error}</span>}
         </div>
       ))}
     </div>

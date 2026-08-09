@@ -189,7 +189,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
       {error && (
         <div role="alert" style={{
           fontSize: 12, padding: '8px 12px', borderRadius: 'var(--radius-md)',
-          background: 'var(--bg-elevated)', color: 'var(--danger, #ef4444)',
+          background: 'var(--bg-elevated)', color: 'var(--danger)',
           border: '1px solid var(--border-subtle)',
         }}>{error}</div>
       )}

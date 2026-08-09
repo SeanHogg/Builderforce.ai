@@ -22,10 +22,10 @@ const chip = (color: string): React.CSSProperties => ({
 const btn = (active: boolean, color: string): React.CSSProperties => ({
   padding: '4px 9px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
   border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
-  background: active ? color : 'transparent', color: active ? '#fff' : 'var(--text-secondary)',
+  background: active ? color : 'transparent', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 const primaryBtn: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent, #2563eb)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
 };
 

@@ -90,7 +90,7 @@ export function DashboardQualityTab() {
               }}
             />
           </label>
-          {error && <div style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
           <button
             type="button"
             onClick={submit}
