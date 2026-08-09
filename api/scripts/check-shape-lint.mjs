@@ -73,6 +73,14 @@ const KERNEL_TABLES = new Set([
  */
 const ADJUDICATED = new Map([
   [
+    'agent_definition_versions',
+    'an executable identity boundary, not an edit-history entry. Releases, runs and ' +
+      'rehearsals hold restrictive foreign keys to its content-addressed UUID; the generic ' +
+      '`revisions` primitive has a bigint history id, requires an objects-registry owner, ' +
+      'and stores patches or external snapshot keys rather than the executable definition. ' +
+      'Substituting it would weaken exact-definition pinning and release rollback.',
+  ],
+  [
     'placement_documents',
     'the DOCUMENT is an `artifacts` row; this is the obligation to hold one — a ' +
       'compliance requirement with a status, an expiry and a verifier. Deleting the ' +

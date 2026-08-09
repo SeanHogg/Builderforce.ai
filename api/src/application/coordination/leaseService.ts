@@ -32,11 +32,12 @@ import {
   resourcePathFromKey,
   type LeaseLike,
 } from '../../domain/coordination/resourceKey';
-import { coordinationContentionEvents, resourceLeases } from '../../infrastructure/database/schema';
+import { resourceLeases } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 
 /** Identity of the run asking for a lease. */
 export interface LeaseHolder {
@@ -53,6 +54,34 @@ export interface LeaseHolder {
 }
 
 const LEASE_LIST_L1_TTL_MS = 5_000;
+
+/** Contention is an activity-log event, not a second subsystem-specific event store. */
+async function recordContention(
+  env: Env,
+  db: Db,
+  holder: LeaseHolder,
+  resourceKey: string,
+  holderExecutionId: number | null,
+  holderLabel: string,
+): Promise<void> {
+  await recordActivity(env, db, {
+    tenantId: holder.tenantId,
+    actor: SYSTEM_ACTOR,
+    verb: 'coordination.lease_contended',
+    targetType: 'coordination_scope',
+    targetId: holder.scopeKey,
+    targetLabel: resourceKey,
+    metadata: {
+      scopeKey: holder.scopeKey,
+      taskId: holder.taskId,
+      resourceKey,
+      claimantExecutionId: holder.executionId,
+      holderExecutionId,
+      claimantLabel: holder.label,
+      holderLabel,
+    },
+  });
+}
 const versionKey = (tenantId: number, scopeKey: string): string => `lease:ver:${tenantId}:${scopeKey}`;
 
 async function invalidateScope(env: Env, tenantId: number, scopeKey: string): Promise<void> {
@@ -115,11 +144,7 @@ export async function acquireLease(
       | (LeaseLike & { holderLabel: string; reason: string | null })
       | null;
     if (blocking) {
-      await db.insert(coordinationContentionEvents).values({
-        tenantId: holder.tenantId, scopeKey: holder.scopeKey, taskId: holder.taskId,
-        resourceKey: key, claimantExecutionId: holder.executionId,
-        holderExecutionId: blocking.executionId, claimantLabel: holder.label, holderLabel: blocking.holderLabel,
-      });
+      await recordContention(env, db, holder, key, blocking.executionId, blocking.holderLabel);
       return {
         ok: true,
         resource: path,
@@ -186,12 +211,7 @@ export async function acquireLease(
     if (inserted.length === 0) {
       // Lost the race between the read and the insert — report the winner.
       const [winner] = (await liveLeasesFor(db, holder.tenantId, [key])) as Array<LeaseLike & { holderLabel: string }>;
-      await db.insert(coordinationContentionEvents).values({
-        tenantId: holder.tenantId, scopeKey: holder.scopeKey, taskId: holder.taskId,
-        resourceKey: key, claimantExecutionId: holder.executionId,
-        holderExecutionId: winner?.executionId ?? null, claimantLabel: holder.label,
-        holderLabel: winner?.holderLabel ?? 'another agent',
-      });
+      await recordContention(env, db, holder, key, winner?.executionId ?? null, winner?.holderLabel ?? 'another agent');
       return {
         ok: true,
         resource: path,

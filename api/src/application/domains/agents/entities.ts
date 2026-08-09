@@ -22,7 +22,6 @@ import {
   agentDefinitionVersions,
   agentOutboundInspections,
   agentRunPrincipals,
-  coordinationContentionEvents,
   enrichmentCache,
   executionClaimEvidence,
   executionClaims,
@@ -60,5 +59,4 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   entity(executionLimits, { readOnly: true }),
   entity(agentContextContributions, { readOnly: true }),
   entity(agentOutboundInspections, { readOnly: true }),
-  entity(coordinationContentionEvents, { readOnly: true }),
 ]);

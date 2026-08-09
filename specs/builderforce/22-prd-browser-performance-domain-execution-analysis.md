@@ -767,10 +767,11 @@ Requirements:
 3. **Invalidation on write** — every mutating gateway call declares the key prefixes it dirties, the
    same discipline the API already keeps.
 4. Version-token keys where the keyspace is unbounded (search, filtered lists).
-5. All three existing ad-hoc caches migrate to it **in the same slice** that introduces it. A fourth
-   parallel cache is a worse outcome than the current three.
-6. `check-api-transport.mjs` extends to fail on a new hand-rolled `Map`-plus-TTL cache in `src/lib/**`,
-   the same way it already fails on a second `fetch`.
+5. All thirteen existing ad-hoc request/result caches migrate to it **in the same slice** that
+   introduces it. A fourteenth parallel policy is a worse outcome than the current thirteen.
+6. `check-api-transport.mjs` extends to detect new hand-rolled HTTP request/result caches while
+   allowing registries and bounded computational memoization. The check enforces the ownership
+   contract rather than banning every legitimate `Map` or TTL in `src/lib/**`.
 
 Adopting a library (`@tanstack/react-query`) is an acceptable implementation of this contract, but the
 domain gateways must depend on the **contract**, not on the library, so the cache is replaceable.
@@ -896,6 +897,75 @@ Two corrections to how an earlier draft of this section argued:
 
 Nothing in this section overrides §5 Phase 0: no ordering here is final until the measurements exist.
 
+### 3.18 P1 — Frontend reuse and object creation have no enforced maintainability contract
+
+#### Reusable components
+
+**Observed.** A shared UI system exists at `frontend/src/components/ui/`, but it currently exports only
+six primitive families (`Badge`, `Button`, `EmptyState`, `Field`, `PageHeader`, `Surface`) and only
+**12 `.tsx` files** import `@/components/ui` across **638 component `.tsx` files**. Meanwhile the
+frontend contains 1,720 raw `<button>` elements, 529 raw `<input>` elements, 124 raw `<textarea>`
+elements, 135 raw `<table>` elements and 9,457 inline `style={{...}}` expressions.
+
+Those raw counts are not themselves duplicate counts: semantic HTML and local layout remain valid.
+They are decisive evidence that the documented UI contract is not the normal construction path. The
+same loading, empty, error, dialog, toolbar, form, table, pagination and status treatments can therefore
+drift independently across hundreds of feature components. §11.7 identifies a few duplicated screens,
+but does not establish component reuse as a frontend-wide maintainability requirement.
+
+**Direction.** Treat reusable presentation contracts as a layered system rather than one global bag of
+components:
+
+1. **Primitives** own accessibility, tokens and interaction semantics: buttons, fields, dialog,
+   icon button, tabs, spinner/skeleton, table shell and feedback/status.
+2. **Patterns** compose primitives for repeated behavior: async-state panel, filter/search bar,
+   paginated data table, confirmation flow, settings section and resource picker.
+3. **Domain components** remain inside their bounded context when their change reason is domain-specific.
+   A `CanvasObjectInspector` is reusable within Canvas; it is not a global `GenericInspector`.
+4. Extract a shared component when the same semantics recur, not merely because markup looks similar.
+   Three occurrences is the review trigger; accessibility or correctness risk can justify earlier
+   extraction.
+5. Every shared component has focused behavior/accessibility tests and a documented API. New feature
+   code reuses it by default; deviations carry a local reason.
+
+Ratchet adoption by semantic category, not by banning raw HTML. A blanket `<button>` prohibition would
+replace clear markup with wrappers without proving reuse.
+
+#### Creational design patterns
+
+**Observed.** The codebase has good precedents—`lib/browserRuntime/factory.ts` selects a runtime and
+`creationObjectRegistry.ts` supplies `createData()` defaults—but construction is not consistently owned
+at composition boundaries:
+
+- `AITrainingPanel.tsx`, `AgentStateViewer.tsx` and `AgentPublishPanel.tsx` directly construct
+  `WebGPUTrainer`, `MambaEngine` and `MambaModelProvider` from presentation code.
+- `CreationCanvas.tsx` repeatedly assembles complete `CreationFlowNode` literals even though
+  `creationObjectRegistry.ts` already owns defaults for each object kind.
+- Complex request/configuration objects are assembled incrementally inside event handlers, coupling
+  validation, defaults, capability selection and rendering.
+
+**Direction.** TypeScript/JavaScript creation follows an explicit, narrow policy:
+
+- **Factory Method** creates one domain/infrastructure object behind an interface when selection depends
+  on browser capability, tenant policy or execution target.
+- **Abstract Factory** creates a coherent family only where implementations must vary together—for
+  example local-worker versus remote training engine, artifact store and telemetry adapter.
+- **Builder** constructs genuinely multi-step validated values such as training requests, workflow
+  definitions or complex Canvas artifacts; `build()` returns a valid value or typed validation errors.
+- **Registry + factory** is the single path for Canvas object creation. It owns IDs, defaults, schema
+  version and invariant validation; palette, AI, templates, paste and imports supply overrides rather
+  than rebuilding the object shape.
+- Constructors for browser engines, workers and provider SDKs live in infrastructure factories or a
+  composition root. React components depend on ports and request creation through application use cases.
+
+Do not mandate a named pattern for simple immutable DTOs, React props or one-line value objects. The
+goal is centralized invariants and replaceable implementations, not class-heavy ceremony.
+
+**Proof required.** A checked-in reuse census, a shrinking baseline of direct infrastructure
+construction in presentation, component tests demonstrating identical loading/error/accessibility
+behavior across migrated surfaces, and Canvas tests proving every creation path receives the same
+defaults and validation.
+
 ---
 
 ## 4 · Target architecture
@@ -1005,9 +1075,12 @@ type CanvasCommand = { type: 'node.move'; id: string; to: Point };
 type CanvasEvent   = { type: 'node.moved'; id: string; from: Point; to: Point; at: number };
 ```
 
-Broadcasting commands (as §3.7 currently allows: *"Collaboration can broadcast the same commands"*)
-means every peer re-runs validation and may legitimately disagree — a divergence bug, not a
-performance bug. Broadcast events; keep command validation on the originating aggregate.
+§3.7 says *"Collaboration can broadcast the same commands where ordering rules allow it"* — and that
+hedge is doing real work, so this is a sharpening rather than a contradiction. Made explicit: when a
+command is broadcast, every peer re-runs validation and may legitimately disagree, which is a
+divergence bug rather than a performance one. The hedge should become the rule — broadcast events,
+keep command validation on the originating aggregate — so that "where ordering rules allow it" is not
+left as a judgement call at each call site.
 
 **(c) Context alignment is a decision, not an accident.** PRD 20 established 15 backend bounded
 contexts. §4.2 introduces frontend "domains" with no stated relationship to them. Every frontend
@@ -1052,6 +1125,9 @@ The corrections above are the difference between this program producing *smaller
    dashboard → workforce → dashboard navigation loop (§3.13). This census **gates** §3.13's
    priority: if the thirteen existing caches already cover the observed traffic, §3.13 is a
    correctness/DRY slice rather than a performance one, and should be scheduled as such.
+8. **Record the frontend reuse and construction census** (§3.18): shared-UI imports by primitive,
+   repeated interaction-pattern candidates, and direct construction of infrastructure engines from
+   presentation. Add baselines that can shrink without banning legitimate semantic HTML.
 
 ### Phase 1 — Delivery and data-access boundaries
 
@@ -1061,12 +1137,15 @@ The corrections above are the difference between this program producing *smaller
    repository worse than it started — fourteen caches instead of thirteen. Each migration must
    preserve its current TTL and invalidation behaviour, or record why it changes: `useConsumption`'s
    60 s and `pendingWork`'s tenant-keyed 30 s are behavioural, not incidental. Extend
-   `check-api-transport.mjs` to reject a new hand-rolled `Map`-plus-TTL cache in `src/lib/**`.
+   `check-api-transport.mjs` to reject a new hand-rolled HTTP request/result cache while allowing
+   bounded computational caches and registries.
 2. **Begin the client→server component conversion**, highest-traffic routes first. Split the root
    layout provider stack so route-specific providers move to their route groups (§3.14).
 3. Dynamically load `CanvasStage` from the shell (component-level; §2.3).
 4. Dynamically load training, 3D, voice, game, Studio, and other modality panels from Canvas.
 5. Confirm PRD 21's mounted-stage survival test remains green after first activation.
+6. Expand the shared UI contract with the first measured high-frequency patterns and migrate complete
+   vertical slices, including loading, empty, error and accessibility behavior (§3.18).
 
 Step 2 precedes 3 and 4: dynamic-importing a component inside a client-rooted page recovers less than
 the same import inside a server-rooted one, and measuring 3–4 before 2 attributes the gain to the
@@ -1096,6 +1175,8 @@ DRY/correctness slice and must not be reported as a performance result.
    Phase 1 read-through contract.
 5. Add a Canvas glossary and a vocabulary check modelled on `check-prompt-tool-names.mjs` (§4.4d).
 6. Reduce the Phase 0 frontend layering baseline; presentation cannot import infrastructure engines.
+7. Move runtime construction behind typed factories/composition roots and make the Canvas registry
+   factory the canonical object-creation path (§3.18).
 
 ### Phase 4 — PWA and storage correctness
 
@@ -1169,9 +1250,9 @@ Only after phases 0-4:
 
 ### 6.7 Client data access
 
-- Exactly one browser read-through cache primitive exists, and **all thirteen** caches listed in
-  §3.13 consume it; `check-api-transport.mjs` fails on a new hand-rolled `Map`-plus-TTL cache in
-  `src/lib/**`.
+- Exactly one browser read-through cache primitive exists, and **all thirteen** request/result caches
+  listed in §3.13 consume it; `check-api-transport.mjs` fails on a new hand-rolled HTTP cache without
+  flagging bounded computational memoization or registries.
 - Each migrated cache preserves its prior TTL and invalidation behaviour, or records why it changed.
 - Concurrent callers of the same key produce one network request.
 - Every mutating gateway call declares the key prefixes it invalidates; a write is observable on the
@@ -1189,6 +1270,20 @@ Only after phases 0-4:
   command is rejected before it reaches history.
 - Collaboration broadcasts domain events, not commands.
 - A Canvas glossary exists and is asserted by a check.
+
+### 6.9 Frontend maintainability and creation
+
+- Shared primitives own tokens, accessibility and interaction semantics; repeated loading, empty,
+  error, dialog, form and data-display behavior uses tested reusable patterns.
+- The baseline of feature files bypassing an applicable shared primitive or pattern only shrinks.
+  Raw semantic HTML remains allowed where no shared behavioral contract applies.
+- React presentation does not directly construct browser engines, workers or provider SDKs; it
+  requests an application port whose implementation is selected by an infrastructure factory or
+  composition root.
+- Every production Canvas object-creation path uses the registry factory and receives identical IDs,
+  defaults, schema versioning and invariant validation before overrides are applied.
+- Builders return a valid object or typed validation errors; partially valid configuration objects do
+  not escape into application or domain code.
 
 ---
 
@@ -1406,7 +1501,9 @@ Status is factual and must be updated when evidence lands.
 | Frontend layering/complexity ratchet | 🔴 DOES NOT EXIST | §3.15; all layering ratchets are API-side; must land before Phase 3 |
 | Frontend bounded-context list + context map | 🔴 NOT DEFINED | §4.4c; §4.2 names domains ad hoc with no PRD 20 alignment |
 | Canvas aggregate root + invariants | 🔴 NOT DEFINED | §4.4a; §3.4 proposes modules, not a consistency boundary |
-| Dead Fontshare CSP entries | 🟡 OPEN | §3.16; one-line removal in `next.config.js` + `layout.tsx:153` comment |
+| Shared UI/component adoption | 🔴 LOW / UNRATCHETED | §3.18; six primitive families, 12 importing `.tsx` files across 638 component files; repeated interaction patterns not inventoried |
+| Creational-pattern boundary | 🔴 NOT ENFORCED | §3.18; presentation directly constructs training/model engines and Canvas creation bypasses its registry factory |
+| Dead Fontshare CSP entries | ✅ RESOLVED | §3.16; CSP and layout comment corrected; design-token check passed |
 
 ---
 
@@ -1492,6 +1589,30 @@ Add a repository-owned checker with actionable file/line/function output:
 Clone rate is a guardrail, not a target to drive to zero. Similar code may remain separate when its change
 reasons differ.
 
+### 11.8 Reusable frontend component program
+
+1. Inventory recurring interaction contracts, starting with async state, dialogs, settings/forms,
+   status presentation, filters and data tables. Count semantics and behavior, not CSS resemblance.
+2. Extend `components/ui` for cross-domain primitives and patterns; keep domain-specific reuse inside
+   its bounded context.
+3. Migrate one complete feature slice at a time so loading, empty, failure, focus, keyboard and mobile
+   behavior move together.
+4. Add focused tests and usage documentation before declaring a component canonical.
+5. Add a baseline-aware check for newly duplicated canonical patterns. Do not mechanically wrap every
+   native element or convert local layout into prop-heavy generic components.
+
+### 11.9 Creational-pattern program
+
+1. Move `WebGPUTrainer`, `MambaEngine` and model-provider construction out of React components into
+   infrastructure factories selected through application ports.
+2. Make `creationObjectRegistry` the sole production factory for `CreationFlowNode`; route palette,
+   templates, AI tools, import, paste and programmatic actions through it.
+3. Use builders for complex values only when construction is staged or invariants span multiple fields.
+4. Keep constructors and implementation selection in composition roots; return interfaces to callers
+   and inject test doubles through the same ports.
+5. Add a presentation-boundary check that rejects new direct construction of known infrastructure
+   engines and a Canvas test that enumerates every object kind through the canonical factory.
+
 ---
 
 ## 12 · Backend speed and execution controls
@@ -1561,6 +1682,7 @@ Section 5 remains the detailed browser-execution sequence. Repository-wide deliv
 - Execute §5 Phase 0 browser measurements.
 - Keep LOC, clone and complexity reports reproducible.
 - Land complexity, file-size and sequential-I/O ratchets.
+- Record shared-component adoption and direct-construction baselines (§3.18).
 - Keep layering, domain, schema, migration and source checks green.
 - Resolve the current `agent_definition_versions` shape decision.
 - Record full API/frontend test results from a stable working tree.
@@ -1570,6 +1692,7 @@ Section 5 remains the detailed browser-execution sequence. Repository-wide deliv
 - Monthly non-token cap policy — implemented and verified.
 - Complete §5 Phase 1 delivery boundaries.
 - Assignment/auth/ledger/insight clone clusters.
+- Migrate the first measured UI pattern families into the shared component contract.
 - Presentation boundary cleanup by bounded context.
 - Registry-only table disposition register.
 
@@ -1577,6 +1700,7 @@ Section 5 remains the detailed browser-execution sequence. Repository-wide deliv
 
 - Complete §5 Phase 2 worker isolation.
 - Creation Canvas ownership split.
+- Runtime factories for browser/model engines and one canonical Canvas object factory.
 - Cloud agent state machine.
 - Manager service/PR queue split.
 - LLM/admin route adapters and Brain reply orchestration.
@@ -1631,6 +1755,8 @@ The browser criteria in §6 remain mandatory. These criteria cover the consolida
 | H-19 | The frontend has a layering baseline that only shrinks, landed before any Phase 3 move | `frontend/scripts/check-layering.mjs` |
 | H-20 | Every frontend bounded context declares a conformist / ACL / shared-kernel relationship to a PRD 20 context | Checked-in context map + review |
 | H-21 | Canvas invariants are enforced by the aggregate, and collaboration broadcasts events rather than commands | Aggregate unit tests + collaboration divergence test |
+| H-22 | A new implementation of an existing canonical UI behavior requires an explicit reason; shared-component adoption baselines only improve | Reuse census + component/accessibility tests |
+| H-23 | Presentation cannot directly construct registered infrastructure engines, and every Canvas object creation path uses the canonical factory | Boundary check + exhaustive factory tests |
 
 Completion is not “all files are small.” Completion is zero unowned boundary violations, bounded new
 complexity, shrinking duplicate baselines and demonstrated latency improvements on material paths.
@@ -1649,6 +1775,8 @@ complexity, shrinking duplicate baselines and demonstrated latency improvements 
 | Concurrent cleanup overwrites unrelated work | Check dirty targets and isolate slices by ownership area |
 | LOC incentives produce compressed code | LOC is inventory only; boundary, complexity and latency are gates |
 | Generic registry access is mistaken for adoption | Require explicit disposition and named feature paths where behavior exists |
+| Reuse work creates a prop-heavy global component framework | Extract by shared behavior/change reason; keep domain components with their owner |
+| Design-pattern mandate adds classes and indirection without invariants | Require a selection, lifecycle, staged-validation or family-creation reason for each factory/builder |
 
 The non-goals in §7 also apply to this program. In addition, this document does not authorise replacing
 TypeScript, React, Drizzle or Hono; driving clone rate/domain percentage to an aesthetic number; deleting

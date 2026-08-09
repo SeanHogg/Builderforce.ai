@@ -1590,21 +1590,6 @@ export const coordinationNotes = pgTable('coordination_notes', {
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
-/** Append-only observations of lease conflicts, used to identify hot files/repos. */
-export const coordinationContentionEvents = pgTable('coordination_contention_events', {
-  id: bigserial('id', { mode: 'number' }).primaryKey(),
-  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  scopeKey: varchar('scope_key', { length: 255 }).notNull(),
-  taskId: integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
-  resourceKey: varchar('resource_key', { length: 512 }).notNull(),
-  claimantExecutionId: integer('claimant_execution_id'),
-  holderExecutionId: integer('holder_execution_id'),
-  claimantLabel: varchar('claimant_label', { length: 255 }).notNull(),
-  holderLabel: varchar('holder_label', { length: 255 }).notNull(),
-  occurredAt: timestamp('occurred_at').notNull().defaultNow(),
-}, (t) => ({ byScope: index('idx_coordination_contention_scope').on(t.tenantId, t.scopeKey, t.occurredAt) }));
-
-
 // ═══ from llm.ts ═══
 /**
  * Schema — llm context.

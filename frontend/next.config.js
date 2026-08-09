@@ -71,6 +71,13 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       'onnxruntime-node$': false,
+      // Linked packages have their own development installs. With
+      // `symlinks:false`, resolving `onnxruntime-web` from one of those packages
+      // can pair that nested runtime with a different hoisted
+      // `onnxruntime-common`, causing missing-export failures at build time.
+      // Keep every browser consumer on the frontend's pinned, self-contained
+      // bundle, matching the Turbopack alias above.
+      'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'),
       sharp$: false,
     };
     // Silence unactionable "Critical dependency" warnings emitted from inside

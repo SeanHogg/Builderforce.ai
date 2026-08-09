@@ -21,7 +21,7 @@
  * rather than a retry loop.
  */
 
-import { and, count, desc, eq, max } from 'drizzle-orm';
+import { and, count, desc, eq, max, sql } from 'drizzle-orm';
 import type {
   CoordinationCapability,
   LeaseClaimResult,
@@ -35,7 +35,7 @@ import type {
 import { acquireLease, listLeases, releaseLease, type LeaseHolder } from './leaseService';
 import { postNote, readNotes } from './blackboardService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
-import { coordinationContentionEvents, projects, tasks } from '../../infrastructure/database/schema';
+import { activityLog, projects, tasks } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -58,13 +58,19 @@ export async function getTicketCoordination(
   const owned = await taskTitleIfInTenant(db, taskId, tenantId);
   if (owned == null) return null;
   const scopeKey = coordinationScopeKey(taskId);
+  const contentionResourceKey = sql<string>`${activityLog.metadata} ->> 'resourceKey'`;
   const [leases, notes, contentionRows] = await Promise.all([
     listLeases(env, db, tenantId, scopeKey),
     readNotes(env, db, tenantId, scopeKey, { limit: 50 }),
-    db.select({ resourceKey: coordinationContentionEvents.resourceKey, count: count(), latestAt: max(coordinationContentionEvents.occurredAt) })
-      .from(coordinationContentionEvents)
-      .where(and(eq(coordinationContentionEvents.tenantId, tenantId), eq(coordinationContentionEvents.scopeKey, scopeKey)))
-      .groupBy(coordinationContentionEvents.resourceKey)
+    db.select({ resourceKey: contentionResourceKey, count: count(), latestAt: max(activityLog.occurredAt) })
+      .from(activityLog)
+      .where(and(
+        eq(activityLog.tenantId, tenantId),
+        eq(activityLog.verb, 'coordination.lease_contended'),
+        sql`${activityLog.metadata} ->> 'scopeKey' = ${scopeKey}`,
+        sql`${activityLog.metadata} ->> 'resourceKey' IS NOT NULL`,
+      ))
+      .groupBy(contentionResourceKey)
       .orderBy(desc(count())).limit(20),
   ]);
   return {
