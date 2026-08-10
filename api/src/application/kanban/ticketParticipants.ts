@@ -268,6 +268,7 @@ export class TicketParticipantsService {
         assigneeName,
         state: 'assigned',
         signoffId: null,
+        evidence: null,
         updatedAt: new Date(),
       })
       .where(and(

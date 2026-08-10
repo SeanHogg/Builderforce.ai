@@ -50,7 +50,7 @@ describe('TicketParticipantsService.assignParticipant', () => {
     expect(result.updated).toBe(1);
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
       assigneeKind: 'agent', assigneeRef: 'john', assigneeName: 'John Coder',
-      state: 'assigned', signoffId: null,
+      state: 'assigned', signoffId: null, evidence: null,
     }));
   });
 
