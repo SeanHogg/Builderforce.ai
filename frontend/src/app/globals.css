@@ -1287,10 +1287,10 @@ html[data-theme='light'] .nebula {
 }
 
 .global-footer-inner {
-  max-width: 1200px;
+  max-width: var(--marketing-max);
   margin: 0 auto;
   min-height: 44px;
-  padding: 0 24px;
+  padding: 0 var(--marketing-gutter);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1330,9 +1330,9 @@ html[data-theme='light'] .nebula {
    Desktop: a full-width row — brand on the left, link columns on the right.
    Tablet/mobile: the grid collapses to stacked rows. */
 .global-footer-full {
-  max-width: 1200px;
+  max-width: var(--marketing-max);
   margin: 0 auto;
-  padding: 48px 24px 28px;
+  padding: 48px var(--marketing-gutter) 28px;
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 2.2fr);
   gap: 48px;
@@ -3758,6 +3758,8 @@ select.input option {
   border-bottom: 1px solid var(--border);
 }
 .mh-inner {
+  /* The containing block for the mega panels — see `.mh-panel-wide`. */
+  position: relative;
   max-width: var(--marketing-max);
   margin: 0 auto;
   height: 66px;
@@ -3820,6 +3822,13 @@ select.input option {
 .mh-link.active { color: var(--coral-bright); }
 .mh-caret { transition: transform 0.2s ease; opacity: 0.7; }
 .mh-item { position: relative; display: inline-flex; }
+/* A mega panel is anchored to the COLUMN, not to its trigger — so it opens
+   inside the header's own left and right edges instead of spilling past them
+   (Learn ▾ sits left of centre, so a trigger-centred panel hung 70px outside
+   the logo). Dropping the item's containing block hands the panel to
+   `.mh-inner`; the hover bridge below follows it and becomes column-wide,
+   which is what the wide panel wants anyway. */
+.mh-item.has-menu:has(> .mh-panel-wide) { position: static; }
 .mh-item.has-menu:hover .mh-caret,
 .mh-item.has-menu:focus-within .mh-caret { transform: rotate(180deg); }
 
@@ -3859,9 +3868,10 @@ select.input option {
 .mh-item.has-menu[data-open]::after { display: block; }
 
 .mh-panel-wide {
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
-  width: min(1040px, 94vw);
+  left: var(--marketing-gutter);
+  right: var(--marketing-gutter);
+  width: auto;
+  transform: translateY(8px);
 }
 /* Three ways in, one open state: hover for a pointer, focus for a keyboard, and
    `data-open` for the click that a touchscreen has and hover does not. */
@@ -3877,7 +3887,7 @@ select.input option {
 .mh-item.has-menu[data-open] .mh-panel-wide {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 .mh-trigger[aria-expanded='true'] .mh-caret { transform: rotate(180deg); }
 /* ── The mega-menus (PRD 21 §11.4.6) ──────────────────────────────────────

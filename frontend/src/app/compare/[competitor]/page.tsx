@@ -17,8 +17,7 @@ import {
 // it can't use `generateStaticParams` (and Next 15.5 forbids combining that with
 // `runtime = 'edge'` anyway). next-on-pages then requires every non-static route to
 // opt into the Edge Runtime. Invalid slugs 404 via `notFound()` in `resolve()`, so
-// no slug enumeration is needed. (Differs from /integrations/[tool], which has no
-// cookie-i18n and stays static.)
+// no slug enumeration is needed. Same shape as /integrations/[tool].
 export const runtime = 'edge';
 
 type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };

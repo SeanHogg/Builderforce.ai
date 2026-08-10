@@ -5,13 +5,15 @@ import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { integrationSchema } from '@/lib/structured-data';
-import { SEO_INTEGRATIONS, INTEGRATION_SLUG_MAP } from '@/lib/content';
+import { INTEGRATION_SLUG_MAP } from '@/lib/content';
 
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return SEO_INTEGRATIONS.map((it) => ({ tool: it.slug }));
-}
+// Dynamic on the Edge Runtime — NOT statically prerendered. `getTranslations()`
+// reads the locale cookie (cookie-based i18n), which forces this route dynamic, so
+// it can't use `generateStaticParams` (and Next 15.5 forbids combining that with
+// `runtime = 'edge'` anyway). next-on-pages then requires every non-static route to
+// opt into the Edge Runtime. Invalid slugs 404 via `notFound()` below, so no slug
+// enumeration is needed. Same shape as /compare/[competitor].
+export const runtime = 'edge';
 
 export async function generateMetadata({
   params,

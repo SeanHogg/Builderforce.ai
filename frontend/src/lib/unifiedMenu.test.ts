@@ -126,6 +126,7 @@ describe('no in-app destination points at a marketing page', () => {
 
   it('resolves a reference page by its public slug', () => {
     expect(referenceBySlug('business-intelligence')?.seat).toBe('CFO');
+    expect(referenceBySlug('companies-contacts')?.kind).toBe('foundation');
     expect(referenceBySlug('not-a-page')).toBeUndefined();
   });
 });
@@ -156,7 +157,7 @@ describe('a public page is public — the regression that made the product map i
   // called them app routes: a signed-out visitor got "This is part of
   // Builderforce.ai" instead of the page, and every marketing surface the
   // Product menu points at was unreachable and unindexable.
-  const PUBLIC_PAGES = ['/features', '/product-management', '/business-intelligence', '/soc2', '/integrations', '/survival-focused-agile'];
+  const PUBLIC_PAGES = ['/features', '/product-management', '/business-intelligence', '/companies-contacts', '/soc2', '/integrations', '/survival-focused-agile'];
 
   it.each(PUBLIC_PAGES)('renders %s to a signed-out visitor', (href) => {
     expect(classifyShell(href)).toBe('public');

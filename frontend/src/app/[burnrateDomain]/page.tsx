@@ -8,7 +8,7 @@ export const runtime = 'edge';
 export async function generateMetadata({ params }: { params: Promise<{ burnrateDomain: string }> }) {
   const { burnrateDomain } = await params;
   const domain = referenceBySlug(burnrateDomain);
-  if (!domain || domain.kind !== 'domain') return {};
+  if (!domain) return {};
   const t = await getTranslations('burnrateMarketing');
   const copy = t.raw(`domains.${domain.copyId}`) as BurnrateDomainCopy;
   return { title: `${copy.title} | Builderforce.ai`, description: copy.description };
@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ burnrateD
 export default async function ConsolidatedDomainRoute({ params }: { params: Promise<{ burnrateDomain: string }> }) {
   const { burnrateDomain } = await params;
   const domain = referenceBySlug(burnrateDomain);
-  if (!domain || domain.kind !== 'domain') notFound();
+  if (!domain) notFound();
   const t = await getTranslations('burnrateMarketing');
   return <BurnrateDomainPage domain={domain} copy={t.raw(`domains.${domain.copyId}`) as BurnrateDomainCopy} shared={t.raw('shared') as BurnrateSharedCopy} />;
 }
