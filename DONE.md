@@ -1,3 +1,27 @@
+## ✅ RESOLVED 2026-08-09 — the frontend deploy failed on a localized route that was still declared static
+
+**`Deploy frontend` failed after 5m48s** with next-on-pages' `The following routes were not
+configured to run with the Edge Runtime: - /integrations/[tool]`. The Next build itself had already
+succeeded; the failure came at the very end of `cf-build`.
+
+- **Root cause:** `app/integrations/[tool]/page.tsx` was localized — `getTranslations()` reads the
+  locale cookie under cookie-based i18n — while still declaring `generateStaticParams` +
+  `dynamicParams = false`. The route stopped being fully static, and next-on-pages requires the Edge
+  Runtime for every non-static route. `/compare/[competitor]` had already hit this and documented the
+  shape; its comment even cited `/integrations/[tool]` as the "stays static" counterexample, which
+  had silently stopped being true.
+- **Fixed:** the route is now `export const runtime = 'edge'` with the enumeration dropped (invalid
+  slugs already 404 via `notFound()`), the now-unused `SEO_INTEGRATIONS` import is gone, and the
+  stale comment on `/compare/[competitor]` is corrected.
+- **Ratcheted:** `scripts/check-edge-runtime.mjs` reproduces next-on-pages' rule statically in
+  milliseconds — for every `page`/`route` file it resolves the runtime *through ancestor layouts*
+  (so `legal/layout.tsx` and `seat/[domain]/layout.tsx` correctly cover their subtrees) and fails
+  when a dynamic segment does not land on the Edge Runtime, or when a route combines
+  `runtime = 'edge'` with `generateStaticParams`. Verified against the regression: with the fix
+  reverted it names exactly the one route CI named. Wired into `npm test` **and** into the
+  `deploy-frontend` job *before* `cf-build`, so this class of failure costs seconds instead of six
+  minutes.
+
 ## ✅ RESOLVED 2026-08-09 — PRD 21 §11: the unified menu (M0–M2 + the IA halves of M3/M4)
 
 **Seven registries became one.** `NAV_GROUPS` now carries `seat`, `stage` and `rung`, and

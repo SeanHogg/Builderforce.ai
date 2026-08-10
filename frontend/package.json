@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.7.206",
+  "version": "2026.7.207",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",
@@ -15,7 +15,8 @@
     "check:api-transport": "node scripts/check-api-transport.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:architecture": "node scripts/check-frontend-architecture.mjs",
-    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "check:edge-runtime": "node scripts/check-edge-runtime.mjs",
+    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && npm run check:edge-runtime && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "typecheck:native": "tsgo --noEmit",
     "type-check": "tsgo --noEmit && tsc --noEmit",

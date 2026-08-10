@@ -375,6 +375,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile || pnpm install
+          # next-on-pages only reports a missing Edge Runtime AFTER the full Next
+          # build — ~6 minutes in, at the very end of cf-build. This static check
+          # answers the same question in milliseconds, so the deploy fails fast on
+          # a route that was localized without being moved to the Edge Runtime.
+          pnpm run check:edge-runtime
           pnpm run cf-build
           wrangler deploy --no-bundle
 
