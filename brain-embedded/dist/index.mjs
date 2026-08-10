@@ -2,7 +2,7 @@ import {
   BrainRequestError,
   brainRequestError,
   chatErrorAction
-} from "./chunk-XMWB5HDP.mjs";
+} from "./chunk-P2QWNA6W.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";

@@ -491,7 +491,8 @@ interface PromptOptionsMenuProps {
 }
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
- * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * runs in, whether it remembers, whether actions auto-apply, run shaping (effort,
+ * thinking), the model in use
  * and the model picker, plus account settings. One affordance, shared by every
  * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
  *
