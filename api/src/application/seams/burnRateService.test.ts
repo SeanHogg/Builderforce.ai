@@ -1,71 +1,42 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { fetchBurnRate } from './burnRateService';
 
-/** Mock db whose two select() calls return the tenant row then the segment row. */
-function makeDb(tenantSettings: string | null, segmentRow: { externalAccountId: string | null; externalCompanyId: string | null } | null) {
-  let call = 0;
-  const db = {
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => {
-            call += 1;
-            if (call === 1) return [{ settings: tenantSettings }];
-            return segmentRow ? [segmentRow] : [];
-          },
-        }),
-      }),
-    }),
-  };
-  return db as any;
+function makeDb(rows: unknown[]) {
+  const chain: Record<string, unknown> = {};
+  for (const method of ['from', 'where', 'orderBy']) chain[method] = () => chain;
+  chain.limit = async () => rows;
+  return { select: () => chain } as any;
 }
 
-const hostBi = (extra: Record<string, unknown> = {}) =>
-  JSON.stringify({ hostBi: { baseUrl: 'https://host.example', token: 'tok' }, ...extra });
-
 describe('fetchBurnRate', () => {
-  it('returns not_configured when host BI config is absent', async () => {
-    const db = makeDb(null, { externalAccountId: 'a', externalCompanyId: 'c' });
-    const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl: vi.fn() });
-    expect(res).toEqual({ available: false, reason: 'not_configured' });
+  it('returns no_data when Builderforce has no local finance facts', async () => {
+    expect(await fetchBurnRate(makeDb([]), { tenantId: 1, segmentId: 'seg' }))
+      .toEqual({ available: false, reason: 'no_data' });
   });
 
-  it('returns no_company when the segment has no external company id', async () => {
-    const db = makeDb(hostBi(), { externalAccountId: 'a', externalCompanyId: null });
-    const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl: vi.fn() });
-    expect(res).toEqual({ available: false, reason: 'no_company' });
+  it('returns the newest local burn and runway metrics', async () => {
+    const at = new Date('2026-08-10T12:00:00.000Z');
+    const result = await fetchBurnRate(makeDb([
+      { metric: 'finance.burn', value: '50000.000000', bucketAt: at, computedAt: at },
+      { metric: 'finance.runway_months', value: '8.250000', bucketAt: at, computedAt: at },
+      { metric: 'finance.burn', value: '49000.000000', bucketAt: new Date('2026-07-10'), computedAt: new Date('2026-07-10') },
+    ]), { tenantId: 1, segmentId: 'seg' });
+
+    expect(result).toEqual({
+      available: true,
+      source: 'builderforce',
+      monthlyBurn: 50000,
+      runwayMonths: 8.25,
+      asOf: at.toISOString(),
+    });
   });
 
-  it('pulls burn + runway and passes the bearer token + company id', async () => {
-    const db = makeDb(hostBi(), { externalAccountId: 'acct', externalCompanyId: 'co' });
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ monthlyBurn: 50000, runwayMonths: 8 }), { status: 200 }));
-    const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl });
-    expect(res).toEqual({ available: true, source: 'host', monthlyBurn: 50000, runwayMonths: 8 });
-    const [url, init] = (fetchImpl.mock.calls as any[])[0] as [string, RequestInit];
-    expect(url).toContain('https://host.example/api/bi/burn-rate?');
-    expect(url).toContain('companyId=co');
-    expect(url).toContain('accountId=acct');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
-  });
-
-  it('degrades to unavailable on a non-200', async () => {
-    const db = makeDb(hostBi(), { externalAccountId: null, externalCompanyId: 'co' });
-    const fetchImpl = vi.fn(async () => new Response('nope', { status: 502 }));
-    const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl });
-    expect(res).toEqual({ available: false, reason: 'unreachable' });
-  });
-
-  it('degrades to bad_response when neither metric is present', async () => {
-    const db = makeDb(hostBi(), { externalAccountId: null, externalCompanyId: 'co' });
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ unrelated: 1 }), { status: 200 }));
-    const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl });
-    expect(res).toEqual({ available: false, reason: 'bad_response' });
-  });
-
-  it('never throws when fetch rejects', async () => {
-    const db = makeDb(hostBi(), { externalAccountId: null, externalCompanyId: 'co' });
-    const fetchImpl = vi.fn(async () => { throw new Error('boom'); });
-    const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl });
-    expect(res).toEqual({ available: false, reason: 'unreachable' });
+  it('returns a partial local snapshot when only one metric exists', async () => {
+    const at = new Date('2026-08-10T12:00:00.000Z');
+    expect(await fetchBurnRate(makeDb([
+      { metric: 'finance.runway_months', value: '4', bucketAt: at, computedAt: at },
+    ]), { tenantId: 2, segmentId: 'seg-2' })).toEqual({
+      available: true, source: 'builderforce', runwayMonths: 4, asOf: at.toISOString(),
+    });
   });
 });

@@ -46,7 +46,7 @@ Once every action is instrumented and attributed, the same data answers every ro
 - Engineering sees DORA and which AI approach actually merges.
 - Finance sees cost-per-outcome and can set budgets instead of reading invoices.
 - The PMO sees a portfolio rollup with real cost and real outcomes attached.
-- Security gets an immutable, per-action audit trail of everything every agent touched.
+- Security gets retained records for instrumented agent execution paths, with coverage gaps identified separately.
 - The CEO sees innovation throughput and the ROI of the whole AI investment.
 
 None of those are separate products. They are lenses onto one record.

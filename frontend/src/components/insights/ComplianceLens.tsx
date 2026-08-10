@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { insightsApi, type ComplianceSummary } from '@/lib/builderforceApi';
 import { apiRequestText } from '@/lib/apiClient';
+import { downloadText } from '@/lib/download';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, StatusPill } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -11,7 +12,7 @@ import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { int } from './format';
 
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
 };
 
@@ -26,12 +27,7 @@ export function ComplianceLens() {
     setExporting(true);
     try {
       const csv = await apiRequestText(`/api/insights/compliance/export?format=csv&days=90`);
-      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `evidence-pack-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadText(csv, `evidence-pack-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
     } finally {
       setExporting(false);
     }

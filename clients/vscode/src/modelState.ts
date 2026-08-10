@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { getProjectEvermindHead } from "./bfApi";
+import { getModels, isModelAllowed } from "./gateway";
 import { getSelectedProject } from "./projectState";
 
 /**
@@ -11,14 +12,26 @@ import { getSelectedProject } from "./projectState";
  */
 const PROJECT_EVERMIND_PIN = "project_evermind:";
 
-/** The selected model, shared across all chat panels (single source of truth). */
-let selected: string | undefined;
+export type EffectiveModelChoice = {
+  model?: string;
+  modelStrict?: boolean;
+  routingMode: "auto" | "byo_pool";
+};
+
+/** Undefined means inherit project/config. Once the user chooses, Auto and Pool
+ * remain explicit choices rather than collapsing back into that inheritance. */
+let selected: { mode: "auto" | "byo_pool" | "model"; model?: string } | undefined;
 const emitter = new vscode.EventEmitter<string | undefined>();
 export const onModelChange = emitter.event;
 
 export function setSelectedModel(model: string | undefined): void {
-  selected = model;
+  selected = model ? { mode: "model", model } : { mode: "auto" };
   emitter.fire(model);
+}
+
+export function setSelectedModelPool(): void {
+  selected = { mode: "byo_pool" };
+  emitter.fire(undefined);
 }
 
 /** The configured fallback model (empty → let the gateway auto-select). */
@@ -40,11 +53,45 @@ function defaultModel(): string | undefined {
  * always works.
  */
 export async function resolveEffectiveModel(secrets: vscode.SecretStorage): Promise<string | undefined> {
-  if (selected) return selected;
+  return (await resolveEffectiveModelChoice(secrets)).model;
+}
+
+export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage): Promise<EffectiveModelChoice> {
+  if (selected?.mode === "auto") return { routingMode: "auto" };
+  if (selected?.mode === "byo_pool") return { routingMode: "byo_pool" };
+  if (selected?.mode === "model" && selected.model) {
+    const model = await entitled(secrets, selected.model);
+    return model ? { model, modelStrict: true, routingMode: "auto" } : { routingMode: "auto" };
+  }
   const project = getSelectedProject();
   if (project) {
     const head = await getProjectEvermindHead(secrets, project.id).catch(() => undefined);
-    if (head?.inferenceEnabled && head.seeded) return `${PROJECT_EVERMIND_PIN}${project.id}`;
+    if (head?.inferenceEnabled && head.seeded) return { model: `${PROJECT_EVERMIND_PIN}${project.id}`, routingMode: "auto" };
   }
-  return defaultModel();
+  const model = await entitled(secrets, defaultModel());
+  return { ...(model ? { model } : {}), routingMode: "auto" };
+}
+
+/**
+ * Drop a pin the tenant's plan can't actually use, falling back to gateway
+ * auto-select.
+ *
+ * A pin outlives the entitlement that justified it: a hand-edited
+ * `builderforce.defaultModel`, a pick made while on Pro, or a trial that lapsed.
+ * The gateway then refuses EVERY turn with a 402 ("Premium models … require a
+ * validated card on file") — a chat that is simply broken, naming a model the
+ * user never knowingly selected. Falling back to auto keeps a free-plan user on
+ * the free BuilderForce models (which their allowance covers) instead.
+ *
+ * Best-effort: if entitlements can't be read (offline, signed out) the pin is
+ * honoured unchanged, so this can never take away a model that does work.
+ */
+async function entitled(
+  secrets: vscode.SecretStorage,
+  model: string | undefined,
+): Promise<string | undefined> {
+  if (!model) return undefined;
+  const choices = await getModels(secrets).catch(() => undefined);
+  if (!choices) return model;
+  return isModelAllowed(choices, model) ? model : undefined;
 }

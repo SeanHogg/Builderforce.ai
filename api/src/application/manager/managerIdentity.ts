@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * managerIdentity — resolve the DESIGNATED manager as a real identity.
  *
@@ -43,7 +44,9 @@ function parseProfile(raw: string | null): { vector?: Record<string, number>; en
   try {
     const o = JSON.parse(raw) as Record<string, unknown>;
     if (o && typeof o === 'object') return o as { vector?: Record<string, number>; enneagramType?: number };
-  } catch { /* ignore */ }
+  } catch (error) { /* ignore */ 
+    reportCaughtError(error, { source: "application/manager/managerIdentity.ts", operation: "parseProfile" });
+  }
   return undefined;
 }
 

@@ -10,6 +10,7 @@ import {
 } from '@/lib/builderforceApi';
 import { computeDeliveryVerdict, type Verdict, type ReasonTone } from '@/lib/deliveryVerdict';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
 
 /**
@@ -27,10 +28,11 @@ import { PmEmpty, PmError } from '@/components/pm/pmShared';
  * viewer sees the role hint, never a 403.
  */
 
-const TONE_COLOR: Record<ReasonTone, string> = { good: '#16a34a', warn: '#d97706', bad: '#dc2626' };
-const VERDICT_COLOR: Record<Verdict, string> = { yes: '#16a34a', at_risk: '#d97706', no: '#dc2626', no_data: '#6b7280' };
+const TONE_COLOR: Record<ReasonTone, string> = { good: 'var(--success)', warn: 'var(--warning)', bad: 'var(--error)' };
+const VERDICT_COLOR: Record<Verdict, string> = { yes: 'var(--success)', at_risk: 'var(--warning)', no: 'var(--error)', no_data: 'var(--text-muted)' };
 
 export function DeliveryVerdict({ days }: { days: number }) {
+  const { currentProjectId } = useProjectScope();
   const t = useTranslations('insights.delivhub.verdict');
   const { allowed } = usePermission('insights.delivery');
 
@@ -41,13 +43,13 @@ export function DeliveryVerdict({ days }: { days: number }) {
       </RoleGate>
     );
   }
-  return <VerdictInner t={t} days={days} />;
+  return <VerdictInner t={t} days={days} projectId={currentProjectId} />;
 }
 
-function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days: number }) {
-  const dora = usePmData<DoraInsights>(() => insightsApi.dora(days), [days]);
-  const life = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days), [days]);
-  const bott = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days), [days]);
+function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslations>; days: number; projectId: number | null }) {
+  const dora = usePmData<DoraInsights>(() => insightsApi.dora(days, projectId), [days, projectId]);
+  const life = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days, projectId), [days, projectId]);
+  const bott = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, projectId), [days, projectId]);
 
   const err = dora.error || life.error || bott.error;
   if (err) return <PmError message={err} />;
@@ -59,7 +61,7 @@ function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days
   return (
     <div
       style={{
-        background: 'var(--bg-elevated)', borderRadius: 12, padding: 20,
+        background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20,
         border: '1px solid var(--border-subtle)', borderLeft: `5px solid ${color}`,
       }}
     >
@@ -83,7 +85,7 @@ function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600,
                     color: TONE_COLOR[r.tone], background: 'var(--bg-base)', border: `1px solid ${TONE_COLOR[r.tone]}`,
-                    padding: '4px 10px', borderRadius: 999,
+                    padding: '4px 10px', borderRadius: 'var(--radius-full)',
                   }}
                 >
                   <span aria-hidden>{r.tone === 'good' ? '✓' : r.tone === 'warn' ? '!' : '✕'}</span>

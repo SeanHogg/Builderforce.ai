@@ -54,8 +54,8 @@ export function allocationCategoryLabel(c: AllocationCategory): string {
 
 /** Map an {@link ActionType} to its default investment category. The technical
  *  axis is the strongest free signal: net-new build (UI/API/SQL) defaults to
- *  innovation; maintenance work (bugfix/tests/docs/CI/migration) to KTLO; a
- *  refactor pays down tech debt. */
+ *  innovation; maintenance/provisioning work to KTLO; a refactor pays down tech
+ *  debt; analysis/decisions stay explicit `other` until business context assigns them. */
 const ACTION_TO_ALLOCATION: Record<ActionType, AllocationCategory> = {
   sql:            'innovation',
   frontend_ui:    'innovation',
@@ -66,6 +66,9 @@ const ACTION_TO_ALLOCATION: Record<ActionType, AllocationCategory> = {
   docs:           'ktlo',
   devops_ci:      'ktlo',
   data_migration: 'ktlo',
+  analysis:       'other',
+  provisioning:   'ktlo',
+  decision:       'other',
   other:          'other',
 };
 

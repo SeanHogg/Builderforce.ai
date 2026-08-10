@@ -34,7 +34,7 @@ function gaugeRange(unit: string, value: number): { min: number; max: number } {
 
 function TitledCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16, height: '100%', boxSizing: 'border-box' }}>
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 10 }}>{title}</div>
       {children}
     </div>

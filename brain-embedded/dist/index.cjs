@@ -21,27 +21,53 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   ADDRESSED_TO_META_KEY: () => ADDRESSED_TO_META_KEY,
+  API_VERSION_TTL_MS: () => API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
+  BrainRequestError: () => BrainRequestError,
+  CHAT_MODES: () => CHAT_MODES,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
+  DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
+  MODEL_CATEGORIES: () => MODEL_CATEGORIES,
+  NEW_CHAT_MODE: () => NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
+  RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
+  TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
+  TOOL_ROUTER_FIND: () => TOOL_ROUTER_FIND,
+  TOOL_ROUTER_INVOKE: () => TOOL_ROUTER_INVOKE,
+  XmlToolCallFilter: () => XmlToolCallFilter,
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
+  activeModelKey: () => activeModelKey,
+  allowanceState: () => allowanceState,
+  announcesUntakenAction: () => announcesUntakenAction,
   attachEvermindLearn: () => attachEvermindLearn,
+  brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
+  buildModelItems: () => buildModelItems,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
+  byoVendorLabel: () => byoVendorLabel,
+  catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
+  chatConversationDirective: () => chatConversationDirective,
+  chatErrorAction: () => chatErrorAction,
+  chatModeDirective: () => chatModeDirective,
+  chatWorkDirective: () => chatWorkDirective,
   chatWorkLinkingDirective: () => chatWorkLinkingDirective,
+  claimsMissingToolData: () => claimsMissingToolData,
+  classifyModelFunding: () => classifyModelFunding,
   clearRunError: () => clearRunError,
   codeChangeFile: () => codeChangeFile,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
@@ -49,44 +75,85 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   countReconciledMemories: () => countReconciledMemories,
   deriveChatTitle: () => deriveChatTitle,
+  describeTool: () => describeTool,
+  detectAnnouncedButUnmadeToolCall: () => detectAnnouncedButUnmadeToolCall,
+  detectUnbackedTicketClaim: () => detectUnbackedTicketClaim,
+  detectUnbackedWriteClaim: () => detectUnbackedWriteClaim,
+  effortProfile: () => effortProfile,
+  extractXmlToolCalls: () => extractXmlToolCalls,
+  fetchApiVersionVia: () => fetchApiVersionVia,
+  fetchMcpToolEntries: () => fetchMcpToolEntries,
   filterMentionCandidates: () => filterMentionCandidates,
+  filterModelItems: () => filterModelItems,
+  findTools: () => findTools,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
   formatBrainProvenance: () => formatBrainProvenance,
   formatChatDiagnostics: () => formatChatDiagnostics,
   formatEvermindLearnStep: () => formatEvermindLearnStep,
   formatEvermindMemoryBlock: () => formatEvermindMemoryBlock,
   getGlobalRunState: () => getGlobalRunState,
+  getLastResolvedModel: () => getLastResolvedModel,
+  getMcpToolStatus: () => getMcpToolStatus,
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
+  handleRouterCall: () => handleRouterCall,
+  isChatMode: () => isChatMode,
   isCodeChangeTool: () => isCodeChangeTool,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
+  isEffort: () => isEffort,
   isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  isRouterTool: () => isRouterTool,
   isRunning: () => isRunning,
   isStepMessage: () => isStepMessage,
   isTicketRecordingTool: () => isTicketRecordingTool,
   lastConsolidationIndex: () => lastConsolidationIndex,
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
+  mcpActionsFrom: () => mcpActionsFrom,
   mentionRecipient: () => mentionRecipient,
+  modelCategoryLabel: () => modelCategoryLabel,
+  modelFailoversInTrace: () => modelFailoversInTrace,
+  modelInUse: () => modelInUse,
   modelsUsedInTrace: () => modelsUsedInTrace,
+  narratedUnadvertisedInTrace: () => narratedUnadvertisedInTrace,
+  nextFallbackModel: () => nextFallbackModel,
+  normalizeChatMode: () => normalizeChatMode,
   parseByoUnresolved: () => parseByoUnresolved,
   parseDirectedRecipient: () => parseDirectedRecipient,
   parseMessageAuthor: () => parseMessageAuthor,
   parseMessageProvenance: () => parseMessageProvenance,
+  parseStepMessage: () => parseStepMessage,
+  perMillionUsd: () => perMillionUsd,
+  premiumCostLabel: () => premiumCostLabel,
   prepareImageDataUrl: () => prepareImageDataUrl,
+  reasoningForRun: () => reasoningForRun,
+  resetApiVersionCache: () => resetApiVersionCache,
+  resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
+  routerToolSpecs: () => routerToolSpecs,
   runBrainLoop: () => startRun,
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => scopeToConsolidation,
+  selectToolsForTurn: () => selectToolsForTurn,
+  setLastResolvedModel: () => setLastResolvedModel,
+  setMcpToolStatus: () => setMcpToolStatus,
+  stallRecoveriesInTrace: () => stallRecoveriesInTrace,
+  stallUnrecoveredInTrace: () => stallUnrecoveredInTrace,
   startRun: () => startRun,
+  stepSig: () => stepSig,
   stopRun: () => stopRun,
   streamChatCompletion: () => streamChatCompletion,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
+  subscribeToChatMessages: () => subscribeToChatMessages,
   takePendingPrompt: () => takePendingPrompt,
+  toolExposureInTrace: () => toolExposureInTrace,
+  toolNamesMentionedIn: () => toolNamesMentionedIn,
+  toolSpecsFor: () => toolSpecsFor,
+  traceWithPersistedSteps: () => traceWithPersistedSteps,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
   useBrainConfig: () => useBrainConfig,
@@ -105,14 +172,40 @@ module.exports = __toCommonJS(src_exports);
 var import_react = require("react");
 
 // src/xmlToolCalls.ts
-var OPEN = "<tool_call>";
-var CLOSE = "</tool_call>";
+var DIALECTS = [
+  { prefix: "<tool_call>", open: /<tool_call>/, close: "</tool_call>", namedInOpenTag: false },
+  { prefix: "<function_call>", open: /<function_call>/, close: "</function_call>", namedInOpenTag: false },
+  { prefix: "<tool_use>", open: /<tool_use>/, close: "</tool_use>", namedInOpenTag: false },
+  { prefix: "<invoke", open: /<invoke\s+name\s*=\s*"([^"]*)"\s*>/, close: "</invoke>", namedInOpenTag: true },
+  { prefix: "<function=", open: /<function\s*=\s*([^>]+)>/, close: "</function>", namedInOpenTag: true }
+];
 function partialTailPrefix(buf, tag) {
   const max = Math.min(buf.length, tag.length - 1);
   for (let L = max; L > 0; L--) {
     if (buf.slice(buf.length - L) === tag.slice(0, L)) return L;
   }
   return 0;
+}
+function holdLength(buf) {
+  let hold = 0;
+  for (const d of DIALECTS) {
+    hold = Math.max(hold, partialTailPrefix(buf, d.prefix));
+    if (d.namedInOpenTag) {
+      const idx = buf.lastIndexOf(d.prefix);
+      if (idx >= 0 && !buf.slice(idx).includes(">")) hold = Math.max(hold, buf.length - idx);
+    }
+  }
+  return Math.min(hold, buf.length);
+}
+function findOpen(buf) {
+  let best = null;
+  for (const dialect of DIALECTS) {
+    const m = dialect.open.exec(buf);
+    if (!m) continue;
+    if (best && m.index >= best.index) continue;
+    best = { dialect, index: m.index, length: m[0].length, ...m[1] ? { name: m[1].trim() } : {} };
+  }
+  return best;
 }
 function coerceArg(raw) {
   const v = raw.trim();
@@ -123,21 +216,45 @@ function coerceArg(raw) {
     return v;
   }
 }
+var ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
+var PARAMETER_TAG = /<parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/parameter>/g;
+function argsFromTags(body) {
+  const args = {};
+  let found = false;
+  for (const re of [ARG_KEY_VALUE, PARAMETER_TAG]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const key = m[1].trim();
+      if (!key) continue;
+      args[key] = coerceArg(m[2]);
+      found = true;
+    }
+  }
+  return found ? args : null;
+}
+function parseNamedBody(name, body, seq) {
+  if (!name) return null;
+  const tagged = argsFromTags(body);
+  if (tagged) return { id: `xmltc_${seq}`, name, args: JSON.stringify(tagged) };
+  const jsonStart = body.indexOf("{");
+  if (jsonStart >= 0) {
+    try {
+      const obj = JSON.parse(body.slice(jsonStart));
+      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj ?? {}) };
+    } catch {
+    }
+  }
+  return { id: `xmltc_${seq}`, name, args: "{}" };
+}
 function parseInner(inner, seq) {
   const trimmed = inner.trim();
   if (!trimmed) return null;
-  const firstArg = trimmed.indexOf("<arg_key>");
+  const firstArg = trimmed.search(/<arg_key>|<parameter\s/);
   if (firstArg >= 0) {
     const name = trimmed.slice(0, firstArg).trim();
     if (!name) return null;
-    const args = {};
-    const re = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-    let m;
-    while ((m = re.exec(trimmed)) !== null) {
-      const key = m[1].trim();
-      if (key) args[key] = coerceArg(m[2]);
-    }
-    return { id: `xmltc_${seq}`, name, args: JSON.stringify(args) };
+    return { id: `xmltc_${seq}`, name, args: JSON.stringify(argsFromTags(trimmed) ?? {}) };
   }
   const jsonStart = trimmed.indexOf("{");
   if (jsonStart >= 0) {
@@ -148,7 +265,7 @@ function parseInner(inner, seq) {
         return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj ?? {}) };
       }
       if (obj && typeof obj === "object" && typeof obj.name === "string") {
-        const a = obj.arguments ?? obj.parameters ?? {};
+        const a = obj.arguments ?? obj.parameters ?? obj.input ?? {};
         const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
         return { id: `xmltc_${seq}`, name: obj.name, args: argsStr };
       }
@@ -161,41 +278,48 @@ function parseInner(inner, seq) {
 }
 var XmlToolCallFilter = class {
   buf = "";
-  inside = false;
+  inside = null;
+  insideName;
   innerBuf = "";
   clean = "";
   calls = [];
   seq = 0;
+  /** Close the call currently being accumulated and record it. */
+  commit() {
+    const parsed = this.inside?.namedInOpenTag ? parseNamedBody(this.insideName ?? "", this.innerBuf, this.seq++) : parseInner(this.innerBuf, this.seq++);
+    if (parsed) this.calls.push(parsed);
+    this.innerBuf = "";
+    this.inside = null;
+    this.insideName = void 0;
+  }
   /** Feed a content delta; returns clean (markup-free) text to emit now. */
   push(delta) {
     this.buf += delta;
     let emit2 = "";
     for (; ; ) {
       if (!this.inside) {
-        const open = this.buf.indexOf(OPEN);
-        if (open >= 0) {
-          emit2 += this.buf.slice(0, open);
-          this.buf = this.buf.slice(open + OPEN.length);
-          this.inside = true;
+        const open = findOpen(this.buf);
+        if (open) {
+          emit2 += this.buf.slice(0, open.index);
+          this.buf = this.buf.slice(open.index + open.length);
+          this.inside = open.dialect;
+          this.insideName = open.name;
           this.innerBuf = "";
           continue;
         }
-        const hold2 = partialTailPrefix(this.buf, OPEN);
+        const hold2 = holdLength(this.buf);
         emit2 += this.buf.slice(0, this.buf.length - hold2);
         this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
         break;
       }
-      const close = this.buf.indexOf(CLOSE);
+      const close = this.buf.indexOf(this.inside.close);
       if (close >= 0) {
         this.innerBuf += this.buf.slice(0, close);
-        this.buf = this.buf.slice(close + CLOSE.length);
-        this.inside = false;
-        const parsed = parseInner(this.innerBuf, this.seq++);
-        if (parsed) this.calls.push(parsed);
-        this.innerBuf = "";
+        this.buf = this.buf.slice(close + this.inside.close.length);
+        this.commit();
         continue;
       }
-      const hold = partialTailPrefix(this.buf, CLOSE);
+      const hold = partialTailPrefix(this.buf, this.inside.close);
       this.innerBuf += this.buf.slice(0, this.buf.length - hold);
       this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
       break;
@@ -208,14 +332,12 @@ var XmlToolCallFilter = class {
     let emit2 = "";
     if (this.inside) {
       this.innerBuf += this.buf;
-      const parsed = parseInner(this.innerBuf, this.seq++);
-      if (parsed) this.calls.push(parsed);
+      this.commit();
     } else {
       emit2 = this.buf;
     }
     this.buf = "";
     this.innerBuf = "";
-    this.inside = false;
     this.clean += emit2;
     return emit2;
   }
@@ -235,11 +357,69 @@ function extractXmlToolCalls(raw) {
   return { text: f.cleanText(), toolCalls: f.toolCalls() };
 }
 
+// src/chatError.ts
+var BrainRequestError = class extends Error {
+  status;
+  code;
+  reason;
+  unlock;
+  requiredPlan;
+  feature;
+  constructor(message, init) {
+    super(message);
+    this.name = "BrainRequestError";
+    this.status = init.status;
+    this.code = init.code;
+    this.reason = init.reason;
+    this.unlock = init.unlock;
+    this.requiredPlan = init.requiredPlan;
+    this.feature = init.feature;
+  }
+};
+function str(v) {
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function brainRequestError(status2, body, statusText) {
+  const b = body ?? {};
+  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status2})`;
+  return new BrainRequestError(message, {
+    status: status2,
+    code: str(b.code),
+    reason: str(b.reason),
+    unlock: str(b.unlock),
+    requiredPlan: str(b.requiredPlan),
+    feature: str(b.feature)
+  });
+}
+var AUTH_PROSE = /invalid or expired token|unauthor/i;
+var CARD_PROSE = /validated card|add a card|card on file/i;
+var UPGRADE_PROSE = /requires? a paid plan|upgrade to (pro|teams)|plan (token )?limit|not included in your plan/i;
+function chatErrorAction(err) {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (err instanceof BrainRequestError) {
+    const base = { requiredPlan: err.requiredPlan, feature: err.feature };
+    if (err.status === 401) return { kind: "auth", ...base };
+    if (err.unlock === "validate_card" || err.reason === "card_required") {
+      return { kind: "validate_card", ...base };
+    }
+    if (err.unlock === "upgrade" || err.reason === "plan_required" || err.status === 402) {
+      return { kind: "upgrade", ...base };
+    }
+    if (err.status === 429 && /plan_.*limit/.test(err.code ?? "")) {
+      return { kind: "upgrade", ...base };
+    }
+  }
+  if (!message) return null;
+  if (AUTH_PROSE.test(message)) return { kind: "auth" };
+  if (CARD_PROSE.test(message)) return { kind: "validate_card" };
+  if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
+  return null;
+}
+
 // src/streamChatCompletion.ts
 async function defaultMapError(res) {
   const body = await res.json().catch(() => ({}));
-  const msg = typeof body.error === "string" && body.error || typeof body.message === "string" && body.message || res.statusText || `Request failed (${res.status})`;
-  return new Error(msg);
+  return brainRequestError(res.status, body, res.statusText);
 }
 async function streamChatCompletion(opts, handlers = {}) {
   const { transport } = opts;
@@ -247,7 +427,6 @@ async function streamChatCompletion(opts, handlers = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const body = {
-    model: opts.model ?? transport.defaultModel ?? "openai/gpt-4o-mini",
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
@@ -256,9 +435,22 @@ async function streamChatCompletion(opts, handlers = {}) {
     // Providers that ignore it simply omit usage — the parse below is tolerant.
     stream_options: { include_usage: true }
   };
+  const model = opts.model ?? transport.defaultModel;
+  if (model) body.model = model;
+  if (model && opts.modelStrict) body.strict = true;
+  if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
+  }
+  if (opts.reasoning && opts.reasoning.level !== "off") {
+    body.reasoning = { level: opts.reasoning.level };
+  }
+  if (opts.metadata) {
+    const meta = Object.fromEntries(
+      Object.entries(opts.metadata).filter(([, v]) => v !== void 0 && v !== null)
+    );
+    if (Object.keys(meta).length > 0) body.metadata = meta;
   }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
   const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
@@ -381,7 +573,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -410,6 +602,40 @@ function useBrainConfig() {
   const ctx = (0, import_react.useContext)(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/effort.ts
+var EFFORT_PROFILES = {
+  quick: {
+    effort: "quick",
+    maxTokens: 2048,
+    reasoningLevel: "low",
+    thinkingBudgetTokens: 2048,
+    directive: "Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more."
+  },
+  balanced: {
+    effort: "balanced",
+    maxTokens: 4096,
+    reasoningLevel: "medium",
+    thinkingBudgetTokens: 8192,
+    directive: ""
+  },
+  thorough: {
+    effort: "thorough",
+    maxTokens: 16384,
+    reasoningLevel: "high",
+    thinkingBudgetTokens: 16384,
+    directive: "Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete."
+  }
+};
+function effortProfile(effort) {
+  return EFFORT_PROFILES[effort] ?? EFFORT_PROFILES.balanced;
+}
+function isEffort(value) {
+  return value === "quick" || value === "balanced" || value === "thorough";
+}
+function reasoningForRun(o) {
+  return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
 // src/imagePrep.ts
@@ -541,6 +767,20 @@ function countReconciledMemories(items, answer) {
 
 // src/BrainActionsContext.tsx
 var import_react2 = require("react");
+
+// src/toolSpecs.ts
+function toolSpecsFor(actions) {
+  return actions.map((action) => ({
+    type: "function",
+    function: {
+      name: action.name,
+      description: action.description,
+      parameters: action.parameters
+    }
+  }));
+}
+
+// src/BrainActionsContext.tsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var BrainActionsContext = (0, import_react2.createContext)(null);
 function BrainActionsProvider({ children }) {
@@ -586,14 +826,7 @@ function BrainActionsProvider({ children }) {
     return !!m;
   }, []);
   const toolSpecs = (0, import_react2.useMemo)(() => {
-    return [...registry.current.values()].map(({ action }) => ({
-      type: "function",
-      function: {
-        name: action.name,
-        description: action.description,
-        parameters: action.parameters
-      }
-    }));
+    return toolSpecsFor([...registry.current.values()].map((e) => e.action));
   }, [version]);
   const value = (0, import_react2.useMemo)(
     () => ({ toolSpecs, runTool, isMutating, register }),
@@ -619,10 +852,40 @@ function useRegisterBrainActions(actions) {
 
 // src/useMcpExtensions.ts
 var import_react3 = require("react");
+
+// src/mcpToolStatus.ts
+var status = { count: 0, error: null, loading: true };
+function setMcpToolStatus(next) {
+  status = next;
+}
+function getMcpToolStatus() {
+  return status;
+}
+
+// src/lastResolvedModel.ts
+var lastResolvedModel;
+function setLastResolvedModel(model) {
+  const trimmed = typeof model === "string" ? model.trim() : "";
+  if (trimmed) lastResolvedModel = trimmed;
+}
+function getLastResolvedModel() {
+  return lastResolvedModel;
+}
+
+// src/mcpCatalog.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
 function nowMs() {
   return typeof Date !== "undefined" ? Date.now() : 0;
+}
+var CURRENT_MODEL_TOOL = "session.current_model";
+function withObservedModel(tool, args) {
+  if (tool !== CURRENT_MODEL_TOOL) return args;
+  const observed = getLastResolvedModel();
+  if (!observed) return args;
+  const supplied = args ?? {};
+  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
 }
 function stableStringify(value) {
   if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -636,23 +899,84 @@ function isCreateTool(name, tool) {
 function isErrorResult(out) {
   return !!out && typeof out === "object" && typeof out.error === "string";
 }
+async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
+  const token = transport.getToken();
+  const headers = { Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers });
+  if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+  const body = await res.json();
+  const skip = new Set(skipExtensionIds);
+  return (body.tools ?? []).filter((t) => !skip.has(t.extensionId));
+}
+function mcpActionsFrom(entries, transport, onToolResult) {
+  return entries.map((entry) => ({
+    name: entry.name,
+    description: entry.description,
+    parameters: entry.parameters,
+    // Gate writes off the advertised flag; only an explicit mutates=false is
+    // read-only. Undefined (external servers) ⇒ mutating, so the host's
+    // confirm-before-mutate gate fires (fail safe).
+    mutates: entry.mutates !== false,
+    run: (args) => {
+      const mutating = entry.mutates !== false;
+      const exec = async () => {
+        const token = transport.getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) })
+        });
+        const body = await res.json().catch(() => ({}));
+        const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
+        onToolResult?.({
+          name: entry.name,
+          tool: entry.tool,
+          extensionId: entry.extensionId,
+          mutating,
+          ok: res.ok && !isErrorResult(out)
+        });
+        return out;
+      };
+      if (mutating && isCreateTool(entry.name, entry.tool)) {
+        const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
+        const now = nowMs();
+        const prior = recentCreates.get(key);
+        if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
+        const result = exec();
+        recentCreates.set(key, { at: now, result });
+        for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
+        result.then((out) => {
+          if (isErrorResult(out)) recentCreates.delete(key);
+        }).catch(() => recentCreates.delete(key));
+        return result;
+      }
+      return exec();
+    }
+  }));
+}
+
+// src/useMcpExtensions.ts
 function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = (0, import_react3.useState)([]);
   const [loading, setLoading] = (0, import_react3.useState)(true);
+  const [error, setError] = (0, import_react3.useState)(null);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
   const onToolResultRef = (0, import_react3.useRef)(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
   (0, import_react3.useEffect)(() => {
     let cancelled = false;
-    const token = transport.getToken();
-    const headers = { Accept: "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const skip = new Set(skipKey ? skipKey.split(",") : []);
-    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then((res) => res.ok ? res.json() : { tools: [] }).then((body) => {
-      if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
-    }).catch(() => {
-      if (!cancelled) setEntries([]);
+    fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
+      if (cancelled) return;
+      setEntries(tools);
+      setError(null);
+    }).catch((e) => {
+      if (cancelled) return;
+      setEntries([]);
+      setError(e instanceof Error ? e.message : "tool catalog fetch failed");
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -661,56 +985,14 @@ function useMcpExtensions(options) {
     };
   }, [transport, skipKey]);
   const actions = (0, import_react3.useMemo)(
-    () => entries.map((entry) => ({
-      name: entry.name,
-      description: entry.description,
-      parameters: entry.parameters,
-      // Gate writes off the advertised flag; only an explicit mutates=false is
-      // read-only. Undefined (external servers) ⇒ mutating, so the host's
-      // confirm-before-mutate gate fires (fail safe).
-      mutates: entry.mutates !== false,
-      run: (args) => {
-        const mutating = entry.mutates !== false;
-        const exec = async () => {
-          const token = transport.getToken();
-          const headers = { "Content-Type": "application/json" };
-          if (token) headers.Authorization = `Bearer ${token}`;
-          const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
-          });
-          const body = await res.json().catch(() => ({}));
-          const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
-          onToolResultRef.current?.({
-            name: entry.name,
-            tool: entry.tool,
-            extensionId: entry.extensionId,
-            mutating,
-            ok: res.ok && !isErrorResult(out)
-          });
-          return out;
-        };
-        if (mutating && isCreateTool(entry.name, entry.tool)) {
-          const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
-          const now = nowMs();
-          const prior = recentCreates.get(key);
-          if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
-          const result = exec();
-          recentCreates.set(key, { at: now, result });
-          for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
-          result.then((out) => {
-            if (isErrorResult(out)) recentCreates.delete(key);
-          }).catch(() => recentCreates.delete(key));
-          return result;
-        }
-        return exec();
-      }
-    })),
+    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info)),
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  return { loading, toolCount: actions.length };
+  (0, import_react3.useEffect)(() => {
+    setMcpToolStatus({ count: actions.length, error, loading });
+  }, [actions.length, error, loading]);
+  return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
@@ -786,6 +1068,164 @@ function useOptionalBrainContext() {
 
 // src/useBrainChats.ts
 var import_react5 = require("react");
+
+// src/chatWorkLinking.ts
+var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
+  "builtin_tickets_from_delta",
+  "builtin_chats_link_ticket",
+  "builtin_reviews_record"
+]);
+var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
+  "write_file",
+  "edit_file",
+  "delete_file"
+]);
+function isCodeChangeTool(name) {
+  return CODE_CHANGE_TOOLS.has(name);
+}
+var CREATE_TOOL_KIND = {
+  builtin_objectives_create: "objective",
+  builtin_specs_create: "spec",
+  builtin_portfolios_create: "portfolio",
+  builtin_initiatives_create: "initiative"
+};
+function workItemLinkFromCreate(toolName, result) {
+  if (!result || typeof result !== "object") return null;
+  const row = result;
+  const id = row.id;
+  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
+  if (!ref) return null;
+  const linkType = row.deduped === true ? "linked" : "created";
+  if (toolName === "builtin_tasks_create") {
+    const t = typeof row.taskType === "string" ? row.taskType : "task";
+    const kind2 = t === "epic" || t === "gap" ? t : "task";
+    return { kind: kind2, ref, linkType };
+  }
+  const kind = CREATE_TOOL_KIND[toolName];
+  return kind ? { kind, ref, linkType } : null;
+}
+function isTicketRecordingTool(name) {
+  return TICKET_RECORDING_TOOLS.has(name);
+}
+var READ_ONLY_PLATFORM_SUFFIXES = [
+  "_list",
+  "_get",
+  "_search",
+  "_recall",
+  "_read",
+  "_assignees",
+  "_audit",
+  "_trace",
+  "_tree",
+  "_rollup",
+  "_runs",
+  "_graph",
+  "_triggers",
+  "_metrics",
+  "_usage",
+  "_query",
+  "_health",
+  "_models",
+  "_providers",
+  "_proposals",
+  "_ticket_lineage",
+  "_get_messages",
+  "_run_targets",
+  "_activity_calendar",
+  "_check_key",
+  "_browse_public",
+  "_tool_audit",
+  "_task_file_changes",
+  "_list_active",
+  "_list_agents",
+  "_list_all",
+  "_list_for_task",
+  "_list_mine",
+  "_list_recent",
+  "_list_tickets",
+  "_list_sessions",
+  "_list_users",
+  "_list_templates",
+  "_list_purchased",
+  "_list_directories",
+  "_list_error_groups",
+  "_list_pull_requests",
+  "_get_session",
+  "_get_stats",
+  "_get_user",
+  "_get_config",
+  "_get_access",
+  "_get_error_group"
+];
+function isReadOnlyPlatformTool(name) {
+  if (!name.startsWith("builtin_")) return false;
+  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
+var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
+var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
+function linkedTicketsToAdvance(listResult) {
+  let rows = listResult;
+  if (typeof rows === "string") {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(rows)) return [];
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const row = r;
+    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (row.exists === false) continue;
+    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
+    if (!ref) continue;
+    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    out.push({ kind: row.kind, ref });
+  }
+  return out;
+}
+function codeChangeFile(args) {
+  if (args && typeof args === "object" && "path" in args) {
+    const p = args.path;
+    if (typeof p === "string" && p.trim()) return p;
+  }
+  return null;
+}
+function chatWorkLinkingDirective(chatId) {
+  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
+\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
+\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
+\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
+\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
+}
+
+// src/chatMode.ts
+var CHAT_MODES = ["chat", "work"];
+var NEW_CHAT_MODE = "work";
+var RESTING_CHAT_MODE = "chat";
+function isChatMode(value) {
+  return typeof value === "string" && CHAT_MODES.includes(value);
+}
+function normalizeChatMode(value) {
+  return isChatMode(value) ? value : RESTING_CHAT_MODE;
+}
+function chatConversationDirective() {
+  return "MODE: CHAT. This conversation is a conversation. Your job is to understand the question and answer it.\n\u2022 Read, search, inspect and reason as much as the question needs \u2014 every read-only tool is available to you and using them is encouraged. Ground the answer in what you actually looked up.\n\u2022 Do NOT create, staff, re-status, or dispatch board work as a side effect of answering. Identifying that something ought to be done is part of a good answer; opening a ticket about it is not.\n\u2022 If the work plainly ought to be tracked, END the answer with one short line naming it and telling the user they can switch this conversation to Work mode to have it opened and run. Offer it once; do not repeat the offer on later turns.\n\u2022 The single exception: if the user explicitly asks you to create, assign, schedule or run something in THIS message, do it. An explicit instruction outranks the mode.";
+}
+function chatWorkDirective(chatId) {
+  return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a running agent.
+${chatWorkLinkingDirective(chatId)}
+\u2022 FINISH BY DISPATCHING. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>).
+\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane \u2014 report the EXACT reason the tool returned and what would clear it. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
+}
+function chatModeDirective(mode, chatId) {
+  return mode === "work" ? chatWorkDirective(chatId) : chatConversationDirective();
+}
+
+// src/useBrainChats.ts
 var DEFAULT_CHAT_TITLE = "New chat";
 function deriveChatTitle(text) {
   const firstLine = (text.split("\n").find((l) => l.trim()) ?? "").replace(/\s+/g, " ").trim();
@@ -859,7 +1299,7 @@ function useBrainChats(options = {}) {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId });
+      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? NEW_CHAT_MODE });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -868,6 +1308,28 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, defaultProjectId, setActiveChatId]);
+  const setCapability = (0, import_react5.useCallback)(async (id, capability) => {
+    const prevValue = chatsRef.current.find((c) => c.id === id)?.capability ?? null;
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability } : c));
+    try {
+      const updated = await persistence.updateChat(id, { capability });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: updated.capability ?? null } : c));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: prevValue } : c));
+      setError(e instanceof Error ? e.message : "Failed to set capability");
+    }
+  }, [persistence]);
+  const setMode = (0, import_react5.useCallback)(async (id, mode) => {
+    const prevValue = normalizeChatMode(chatsRef.current.find((c) => c.id === id)?.mode);
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode } : c));
+    try {
+      const updated = await persistence.updateChat(id, { mode });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode: normalizeChatMode(updated.mode) } : c));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode: prevValue } : c));
+      setError(e instanceof Error ? e.message : "Failed to switch mode");
+    }
+  }, [persistence]);
   const rename = (0, import_react5.useCallback)(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -948,6 +1410,8 @@ function useBrainChats(options = {}) {
     select,
     create,
     rename,
+    setCapability,
+    setMode,
     autoTitle,
     summarize,
     remove,
@@ -1085,6 +1549,204 @@ function resolveRecipient(choice, mention) {
   return choice ?? mention;
 }
 
+// ../packages/agent-stall/src/index.ts
+var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
+var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
+var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
+var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
+function toolNamesMentionedIn(text) {
+  return [...new Set(text.match(new RegExp(TOOL_IDENT, "gi")) ?? [])];
+}
+var PSEUDO_CALL = [
+  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "builtin_x({…})" / "builtin_x(" — the call written as code
+  `${TOOL_IDENT}\\s*[({]`,
+  // "builtin_x with chatId is 85" — the call written as an argument clause
+  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
+];
+var ANNOUNCED_ACTION = new RegExp(
+  [
+    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
+    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
+    "(one|just a) (moment|second|sec)\\b",
+    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
+    "stand ?by\\b",
+    ...PSEUDO_CALL
+  ].join("|"),
+  "i"
+);
+var TAIL_CHARS = 240;
+function announcesUntakenAction(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS));
+}
+var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
+var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
+function catalogToolNamesMentionedIn(text) {
+  return [...new Set(text.match(new RegExp(DOTTED_TOOL_IDENT, "gi")) ?? [])];
+}
+var UNCALLED_TOOL_CLAIM = new RegExp(
+  [
+    // "The tools required are X, Y and Z." / "The required tools are …"
+    "\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)",
+    // "…tools have not returned results" / "…the tool has not returned anything yet"
+    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
+    // "no tool results", "no results from the tools", "no tool outputs for project 11"
+    "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
+    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
+    // rather than at the results: an inventory of what it would need, from a turn that
+    // called none of it. Observed as the closing sentence of the measured replies.
+    "\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b",
+    "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
+    // "tool outputs never provided" / "the tool results were never returned"
+    "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
+    // "requires the tool outputs" / "awaiting the tool results"
+    "\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)",
+    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
+    // manager.digest", "missing builtin_manager_policy results". The name IS the
+    // discriminator here: prose does not carry tool identifiers by accident.
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
+  ].join("|"),
+  "i"
+);
+function claimsMissingToolData(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return UNCALLED_TOOL_CLAIM.test(t);
+}
+var MAX_ANNOUNCEMENT_RECOVERIES = 3;
+function stallRecoveryNudge(lastChance) {
+  return (
+    // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
+    // ("the required tools have not returned results"). The second wording matters —
+    // a model told only "you said you would call a tool" when it never said any such
+    // thing tends to repeat the same excuse rather than act.
+    "Your last turn made zero tool calls. You either said you would call a tool and did not, reported that tool results were missing \u2014 no results exist because you never made the call \u2014 or returned nothing at all. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call, and do not reply with an empty message." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
+  );
+}
+function isEmptyTurn(input) {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.text.trim() === "";
+}
+function isStalledTurn(input) {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text) || isEmptyTurn(input));
+}
+function shouldRecoverStalledTurn(input) {
+  return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
+}
+function isExhaustedStall(input) {
+  return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
+}
+function whatItDid(emptyTurn) {
+  return emptyTurn ? `returned an empty turn \u2014 no tool call and no words \u2014 ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row` : `described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+}
+function modelFailoverNotice(from, to, emptyTurn = false) {
+  const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
+  return `${who} ${whatItDid(emptyTurn)}, so it cannot complete this request. Retrying on \`${to}\`.`;
+}
+function stallExhaustedNotice(model, tried, emptyTurn = false) {
+  const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
+  const others = (tried ?? []).filter((m) => m && m !== model);
+  return `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and ` + (emptyTurn ? "there is no answer above to show you." : "the answer above is only a description of intended actions.") + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.");
+}
+function ids(list) {
+  return (list ?? []).map((m) => m.id).filter((id) => !!id);
+}
+function nextFallbackModel(surface, tried) {
+  if (!surface) return void 0;
+  const used = new Set(tried.filter(Boolean));
+  const byo = ids(surface.byo?.models);
+  const byoSet = new Set(byo);
+  const coding = (surface.codingModels ?? []).filter(Boolean);
+  const pool = ids(surface.data);
+  const tiers = [
+    coding.filter((m) => byoSet.has(m)),
+    coding,
+    byo,
+    pool
+  ];
+  for (const tier of tiers) {
+    const hit = tier.find((m) => !used.has(m));
+    if (hit) return hit;
+  }
+  return void 0;
+}
+var MAX_MODEL_FAILOVERS = 2;
+function chooseStallFailover(input) {
+  for (const m of [input.activeModel, input.resolvedModel]) {
+    if (m && m !== "default" && !input.tried.includes(m)) input.tried.push(m);
+  }
+  if (input.failoversUsed >= MAX_MODEL_FAILOVERS) return void 0;
+  const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
+  return next && !input.tried.includes(next) ? next : void 0;
+}
+
+// src/persistedSteps.ts
+function stepSig(category, label, tsIso) {
+  return `${category}|${label}|${tsIso ?? ""}`;
+}
+function parseStepMessage(metadata) {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata);
+    if (m.kind !== "step" || typeof m.category !== "string") return null;
+    return {
+      step: {
+        category: m.category,
+        label: typeof m.label === "string" ? m.label : m.category,
+        args: m.args,
+        result: m.result,
+        isError: m.isError,
+        durationMs: m.durationMs,
+        resultBytes: m.resultBytes,
+        truncated: m.truncated,
+        usage: m.usage,
+        finishReason: m.finishReason,
+        textChars: m.textChars,
+        ttftMs: m.ttftMs
+      },
+      tsIso: typeof m.ts === "string" ? m.ts : void 0
+    };
+  } catch {
+    return null;
+  }
+}
+function traceWithPersistedSteps(messages, trace) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
+  const fromMessages = [];
+  for (const message of messages) {
+    if (!isStepMessage(message)) continue;
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed) continue;
+    const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    const s = parsed.step;
+    fromMessages.push({
+      ts: parsed.tsIso ?? message.createdAt ?? "",
+      recovered: true,
+      category: s.category,
+      label: s.label,
+      args: s.args,
+      result: s.result,
+      ...s.isError ? { isError: true } : {},
+      ...s.durationMs != null ? { durationMs: s.durationMs } : {},
+      ...s.ttftMs != null ? { ttftMs: s.ttftMs } : {},
+      ...s.resultBytes != null ? { resultBytes: s.resultBytes } : {},
+      ...s.truncated ? { truncated: true } : {},
+      ...s.usage ? { usage: s.usage } : {},
+      ...s.finishReason !== void 0 ? { finishReason: s.finishReason } : {},
+      ...s.textChars != null ? { textChars: s.textChars } : {}
+    });
+  }
+  if (fromMessages.length === 0) return trace;
+  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+}
+
 // src/brainTriage.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -1117,9 +1779,70 @@ function detectUnbackedTicketClaim(events, messages) {
   if (filedOk) return false;
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
 }
+function detectAnnouncedButUnmadeToolCall(events, messages) {
+  if (events.some((e) => e.category === "tool")) return false;
+  return messages.some(
+    (m) => m.role === "assistant" && typeof m.content === "string" && announcesUntakenAction(m.content)
+  );
+}
+var LOOP_STEP = {
+  recovery: "loop.recover_announced_tool_call",
+  failover: "loop.model_failover",
+  unrecovered: "loop.stall_unrecovered"
+};
+function stallRecoveriesInTrace(events) {
+  return events.filter((e) => e.label === LOOP_STEP.recovery).length;
+}
+function modelFailoversInTrace(events) {
+  return events.filter((e) => e.label === LOOP_STEP.failover).length;
+}
+function stallUnrecoveredInTrace(events) {
+  return events.some((e) => e.label === LOOP_STEP.unrecovered);
+}
+function toolExposureInTrace(events) {
+  let lastTurn = null;
+  let min = null;
+  let catalog = null;
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = ev.args;
+    if (typeof a?.advertisedTools === "number") {
+      lastTurn = a.advertisedTools;
+      min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
+    }
+    if (typeof a?.catalogTools === "number") catalog = a.catalogTools;
+  }
+  return { lastTurn, min, catalog };
+}
+function narratedUnadvertisedInTrace(events) {
+  const seen = [];
+  for (const ev of events) {
+    const raw = ev.args?.narratedUnadvertised;
+    if (!Array.isArray(raw)) continue;
+    for (const n of raw) {
+      if (typeof n === "string" && n && !seen.includes(n)) seen.push(n);
+    }
+  }
+  return seen;
+}
+function memoryAnswersInTrace(events) {
+  const out = [];
+  for (const ev of events) {
+    if (ev.category !== "recall") continue;
+    if (ev.label !== "evermind.answer" && ev.label !== "memory.answer") continue;
+    const r = ev.result;
+    if (r?.skippedLlm !== true) continue;
+    out.push({
+      source: r.source === "evermind" ? "evermind" : "qa-cache",
+      ...typeof r.version === "number" ? { version: r.version } : {},
+      ...typeof r.evermindProjectId === "number" ? { projectId: r.evermindProjectId } : {}
+    });
+  }
+  return out;
+}
 function cap(s, n = 2e3) {
-  const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
+  const str2 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str2.length > n ? str2.slice(0, n) + `\u2026 (+${str2.length - n} chars)` : str2;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -1168,6 +1891,8 @@ function byoReasonHint(reason) {
       return "its token expired and the refresh failed (often transient) \u2014 retry, or reconnect it under Settings \u25B8 API Keys";
     case "undecryptable":
       return "its stored credential could not be read \u2014 re-enter it under Settings \u25B8 API Keys";
+    case "unsupported-auth":
+      return "it is stored as a subscription (OAuth) but this provider only supports an API key \u2014 re-connect it with an API key under Settings \u25B8 API Keys";
     case "other-workspace":
       return "you connected this account in a DIFFERENT workspace \u2014 switch to that workspace, or connect it in this one under Settings \u25B8 API Keys";
     default:
@@ -1201,7 +1926,7 @@ function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
 }
-function computeBrainDiagnostics(events, requestedModel) {
+function computeBrainDiagnostics(events, requestedModel, messages = []) {
   const llm = events.filter((e) => e.category === "llm");
   const toolEvents = events.filter((e) => e.category === "tool");
   const errors = events.filter((e) => e.isError || e.category === "error");
@@ -1228,8 +1953,10 @@ function computeBrainDiagnostics(events, requestedModel) {
     const toolCallsThisTurn = ev.args?.toolCalls;
     const askedNoTools = typeof toolCallsThisTurn === "number" ? toolCallsThisTurn === 0 : true;
     if (finish === "length" || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
-    const resolved = ev.args?.model;
-    if (req && typeof resolved === "string" && resolved && resolved !== "default" && resolved !== req) downgradeEvents += 1;
+    const a = ev.args;
+    const asked = typeof a?.requestedModel === "string" && a.requestedModel !== "default" ? a.requestedModel : req;
+    const resolved = a?.model;
+    if (asked && typeof resolved === "string" && resolved && resolved !== "default" && resolved !== asked) downgradeEvents += 1;
   }
   let toolResultBytes = 0;
   let truncatedToolResults = 0;
@@ -1242,9 +1969,23 @@ function computeBrainDiagnostics(events, requestedModel) {
   }
   const modelsUsed = modelsUsedInTrace(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
+  const memoryAnswers = memoryAnswersInTrace(events);
+  const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
+  const recoveredTurns = llm.filter((e) => e.recovered).length;
+  const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
   const contextSignal = promptTokenPeak >= 24e3 || truncatedToolResults > 0 || downgradeEvents > 0 || largestToolResult != null && largestToolResult.bytes >= 2e4;
   const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < 24e3) && truncatedToolResults === 0;
-  const likelyCause = contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : "inconclusive";
+  const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
+  const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
+  const stallRecoveries = stallRecoveriesInTrace(events);
+  const modelFailovers = modelFailoversInTrace(events);
+  const stallUnrecovered = stallUnrecoveredInTrace(events);
+  const exposure = toolExposureInTrace(events);
+  const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
+  const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
+  const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
+  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && didWork;
+  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -1261,6 +2002,16 @@ function computeBrainDiagnostics(events, requestedModel) {
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
+    announcedUnmadeToolCall,
+    stallRecoveries,
+    modelFailovers,
+    stallUnrecovered,
+    advertisedToolsLastTurn: exposure.lastTurn,
+    advertisedToolsMin: exposure.min,
+    catalogTools: exposure.catalog,
+    narratedUnadvertisedTools,
+    memoryAnswers,
+    turnCoveragePartial,
     likelyCause
   };
 }
@@ -1268,26 +2019,55 @@ function kb(bytes) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 function formatBrainDiagnostics(d) {
-  const verdict = d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
-  lines.push(`Turns: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
+  const scope = d.turnCoveragePartial ? " (this session)" : "";
+  lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
   if (d.tokensMeasured) {
     lines.push(
-      `Tokens: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
+      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
     );
   } else {
     lines.push("Tokens: not reported by the gateway for this run.");
   }
+  if (d.turnCoveragePartial) {
+    lines.push(
+      "Coverage: tool steps were recovered from this chat's durable history, but its earlier TURNS predate durable turn records \u2014 so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run."
+    );
+  }
   lines.push(
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
   );
+  if (d.advertisedToolsLastTurn != null) {
+    const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
+    lines.push(
+      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ""}${d.advertisedToolsMin === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`
+    );
+  } else {
+    lines.push("Tools advertised per turn: not recorded (this run predates per-turn tool accounting).");
+  }
+  if (d.narratedUnadvertisedTools.length) {
+    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(", ")} \u2014 the model was told to call a tool it was not given.`);
+  }
+  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
+    lines.push(
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : " \xB7 recovered"}`
+    );
+  }
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
+  if (d.memoryAnswers?.length) {
+    lines.push(
+      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : "Q&A cache").join(", ")
+    );
+  }
   return lines;
 }
 function buildBrainTriageReport(opts) {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const events = traceWithPersistedSteps(messages, opts.events);
   const errors = events.filter((e) => e.isError || e.category === "error");
   const lines = [];
   lines.push("=== BuilderForce Brain Triage ===");
@@ -1297,7 +2077,7 @@ function buildBrainTriageReport(opts) {
   lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
-  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages)));
   if (detectUnbackedWriteClaim(events, messages)) {
     lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
   }
@@ -1342,12 +2122,13 @@ function parseMessageProvenance(msg) {
   if (!msg.metadata) return null;
   try {
     const p = JSON.parse(msg.metadata).provenance;
-    if (p && typeof p.model === "string" && p.model.length > 0 && (p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused")) {
+    if (p && typeof p.model === "string" && p.model.length > 0) {
       const ev = p.evermind;
       const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
+      const account = p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused" ? p.account : void 0;
       return {
         model: p.model,
-        account: p.account,
+        ...account ? { account } : {},
         ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
         ...evermind ? { evermind } : {}
       };
@@ -1362,144 +2143,234 @@ function withProvenanceMetadata(provenance, base) {
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
 
-// src/chatWorkLinking.ts
-var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
-  "builtin_tickets_from_delta",
-  "builtin_chats_link_ticket",
-  "builtin_reviews_record"
+// src/selectTools.ts
+var DEFAULT_TOOL_LIMIT = 64;
+var STOP_WORDS = /* @__PURE__ */ new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "of",
+  "for",
+  "to",
+  "in",
+  "on",
+  "is",
+  "are",
+  "was",
+  "be",
+  "by",
+  "with",
+  "from",
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "as",
+  "at",
+  "me",
+  "my",
+  "\u6211",
+  "i",
+  "we",
+  "you",
+  "your",
+  "please",
+  "can",
+  "could",
+  "would",
+  "should",
+  "do",
+  "does",
+  "did",
+  "get",
+  "show",
+  "give",
+  "make",
+  "now",
+  "all",
+  "any",
+  "how",
+  "what",
+  "which",
+  "who",
+  "when"
 ]);
-var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
-  "write_file",
-  "edit_file",
-  "delete_file"
-]);
-function isCodeChangeTool(name) {
-  return CODE_CHANGE_TOOLS.has(name);
+function tokenize(text) {
+  return text.toLowerCase().split(/[^a-z0-9一-鿿]+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
 }
-var CREATE_TOOL_KIND = {
-  builtin_objectives_create: "objective",
-  builtin_specs_create: "spec",
-  builtin_portfolios_create: "portfolio",
-  builtin_initiatives_create: "initiative"
-};
-function workItemLinkFromCreate(toolName, result) {
-  if (!result || typeof result !== "object") return null;
-  const row = result;
-  const id = row.id;
-  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
-  if (!ref) return null;
-  const linkType = row.deduped === true ? "linked" : "created";
-  if (toolName === "builtin_tasks_create") {
-    const t = typeof row.taskType === "string" ? row.taskType : "task";
-    const kind2 = t === "epic" || t === "gap" ? t : "task";
-    return { kind: kind2, ref, linkType };
+function stem(word) {
+  if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
+  if (word.length > 2 && word.endsWith("s")) return word.slice(0, -1);
+  return word;
+}
+function scoreTool(tool, queryStems) {
+  const name = (tool.function?.name ?? "").toLowerCase();
+  const description = (tool.function?.description ?? "").toLowerCase();
+  if (!name) return 0;
+  let score = 0;
+  const nameStems = new Set(tokenize(name).map(stem));
+  for (const s of nameStems) if (queryStems.has(s)) score += 10;
+  const descStems = new Set(tokenize(description).map(stem));
+  for (const s of descStems) if (queryStems.has(s)) score += 1;
+  return score;
+}
+function selectToolsForTurn(tools, options) {
+  const available = tools?.length ?? 0;
+  const limit = options.limit ?? DEFAULT_TOOL_LIMIT;
+  if (!tools || available <= limit) {
+    return { tools: tools ?? [], trimmed: false, available };
   }
-  const kind = CREATE_TOOL_KIND[toolName];
-  return kind ? { kind, ref, linkType } : null;
+  const required = new Set(options.required ?? []);
+  const pinned = new Set(options.pinned ?? []);
+  const queryStems = new Set(tokenize(options.query).map(stem));
+  const chosen = [];
+  const taken = /* @__PURE__ */ new Set();
+  const take = (tool) => {
+    const name = tool.function?.name;
+    if (!name || taken.has(name)) return;
+    taken.add(name);
+    chosen.push(tool);
+  };
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (required.has(tool.function?.name ?? "")) take(tool);
+  }
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (pinned.has(tool.function?.name ?? "")) take(tool);
+  }
+  const scored = tools.map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
+  for (const entry of scored) {
+    if (chosen.length >= limit) break;
+    take(entry.tool);
+  }
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    take(tool);
+  }
+  return { tools: chosen, trimmed: true, available };
 }
-function isTicketRecordingTool(name) {
-  return TICKET_RECORDING_TOOLS.has(name);
+
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
 }
-var READ_ONLY_PLATFORM_SUFFIXES = [
-  "_list",
-  "_get",
-  "_search",
-  "_recall",
-  "_read",
-  "_assignees",
-  "_audit",
-  "_trace",
-  "_tree",
-  "_rollup",
-  "_runs",
-  "_graph",
-  "_triggers",
-  "_metrics",
-  "_usage",
-  "_query",
-  "_health",
-  "_models",
-  "_providers",
-  "_proposals",
-  "_ticket_lineage",
-  "_get_messages",
-  "_run_targets",
-  "_activity_calendar",
-  "_check_key",
-  "_browse_public",
-  "_tool_audit",
-  "_task_file_changes",
-  "_list_active",
-  "_list_agents",
-  "_list_all",
-  "_list_for_task",
-  "_list_mine",
-  "_list_recent",
-  "_list_tickets",
-  "_list_sessions",
-  "_list_users",
-  "_list_templates",
-  "_list_purchased",
-  "_list_directories",
-  "_list_error_groups",
-  "_list_pull_requests",
-  "_get_session",
-  "_get_stats",
-  "_get_user",
-  "_get_config",
-  "_get_access",
-  "_get_error_group"
-];
-function isReadOnlyPlatformTool(name) {
-  if (!name.startsWith("builtin_")) return false;
-  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
-}
-var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
-var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
-function linkedTicketsToAdvance(listResult) {
-  let rows = listResult;
-  if (typeof rows === "string") {
-    try {
-      rows = JSON.parse(rows);
-    } catch {
-      return [];
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact tool name to call." },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
     }
-  }
-  if (!Array.isArray(rows)) return [];
-  const out = [];
-  for (const r of rows) {
-    if (!r || typeof r !== "object") continue;
-    const row = r;
-    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
-    if (row.exists === false) continue;
-    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
-    if (!ref) continue;
-    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
-    out.push({ kind: row.kind, ref });
-  }
-  return out;
+  ];
 }
-function codeChangeFile(args) {
-  if (args && typeof args === "object" && "path" in args) {
-    const p = args.path;
-    if (typeof p === "string" && p.trim()) return p;
-  }
-  return null;
+function words(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
 }
-function chatWorkLinkingDirective(chatId) {
-  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
-\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item now (builtin_tasks_create with taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it to this conversation with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). To hand a large or long-horizon job off to run autonomously, set assignedAgentRef on the created task.
-\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
-\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
-\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words(query);
+  if (terms.length === 0) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score += 10;
+      else if (haystackDesc.includes(t)) score += 1;
+    }
+    if (score > 0) scored.push({ m: { name, description }, score, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  return catalog.find((t) => t.function?.name === name) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target2 = typeof a.name === "string" ? a.name : "";
+    const spec = describeTool(catalog, target2);
+    return {
+      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target = typeof a.name === "string" ? a.name : "";
+  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
+  }
+  if (!describeTool(catalog, target)) {
+    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  return { dispatch: { name: target, args: a.args ?? {} } };
 }
 
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
-  const account = result.account;
-  if (!model || account !== "own" && account !== "shared" && account !== "shared_byo_unused") return void 0;
-  return withProvenanceMetadata({ model, account });
+  if (!model) return void 0;
+  const a = result.account;
+  const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
+  return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
@@ -1548,6 +2419,7 @@ var EMPTY_SNAPSHOT = {
   running: false,
   streamingText: "",
   error: "",
+  errorAction: null,
   pendingConfirm: null,
   messagesEpoch: 0,
   appended: [],
@@ -1563,6 +2435,7 @@ function makeCell() {
     running: false,
     streamingText: "",
     error: "",
+    errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
     appended: [],
@@ -1603,6 +2476,7 @@ function emit(c) {
     running: c.running,
     streamingText: c.streamingText,
     error: c.error,
+    errorAction: c.errorAction,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
@@ -1636,6 +2510,13 @@ function persistStep(chatId, persistence, ev) {
     result,
     isError: ev.isError ?? false,
     ...ev.durationMs != null ? { durationMs: ev.durationMs } : {},
+    // Diagnostics scalars — tiny, and the whole point of keeping the row.
+    ...ev.resultBytes != null ? { resultBytes: ev.resultBytes } : {},
+    ...ev.truncated ? { truncated: true } : {},
+    ...ev.usage ? { usage: ev.usage } : {},
+    ...ev.finishReason != null ? { finishReason: ev.finishReason } : {},
+    ...ev.textChars != null ? { textChars: ev.textChars } : {},
+    ...ev.ttftMs != null ? { ttftMs: ev.ttftMs } : {},
     ts: ev.ts
   });
   void persistence.sendMessages(chatId, [{ role: "tool", content: "", metadata }]).catch(() => {
@@ -1779,6 +2660,9 @@ ${summary}`;
   }
   return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
 }
+function resetBrainRunStore() {
+  cells.clear();
+}
 function subscribeRunStore(listener) {
   storeListeners.add(listener);
   return () => {
@@ -1830,6 +2714,7 @@ function clearRunError(chatId) {
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = "";
+  c.errorAction = null;
   emit(c);
 }
 function resolveRunConfirm(chatId, ok) {
@@ -1846,6 +2731,7 @@ async function startRun(chatId, req) {
   if (c.running) return;
   c.running = true;
   c.error = "";
+  c.errorAction = null;
   c.streamingText = "";
   c.byoUnresolved = [];
   c.providerCap = [];
@@ -1859,7 +2745,10 @@ async function startRun(chatId, req) {
   try {
     await runLoop(chatId, c, req);
   } catch (e) {
-    if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : "Reply failed";
+    if (!c.abort?.signal.aborted) {
+      c.error = e instanceof Error ? e.message : "Reply failed";
+      c.errorAction = chatErrorAction(e);
+    }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;
@@ -1962,9 +2851,18 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
   });
 }
 async function runLoop(chatId, c, req) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const usedTools = /* @__PURE__ */ new Set();
+  const runMode = normalizeChatMode(req.chatMode ?? "work");
+  const metadata = {
+    chatId,
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
+    mode: runMode,
+    ...req.projectId != null ? { projectId: req.projectId } : {}
+  };
   let systemPrompt = resolvedSystemPrompt;
   let recalled = null;
   if (evermind?.recall) {
@@ -1997,7 +2895,7 @@ ${block}`;
     if (query) {
       let memAnswer = null;
       try {
-        memAnswer = await evermind.answer(query);
+        memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
       } catch {
         memAnswer = null;
       }
@@ -2015,7 +2913,11 @@ ${block}`;
           result: {
             source: memAnswer.source,
             skippedLlm: true,
-            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {}
+            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
+            // WHICH head served it — a project can target several, so without this a
+            // memory hit from a sibling IDE build's Evermind is indistinguishable from
+            // the chat project's own.
+            ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
           }
         });
         emit(c);
@@ -2037,20 +2939,93 @@ ${extra}`;
   }
   systemPrompt = `${systemPrompt}
 
-${chatWorkLinkingDirective(chatId)}`;
+${chatModeDirective(runMode, chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
+  let announcementRecoveries = 0;
+  let activeModel = model;
+  const triedModels = [];
+  let modelFailovers = 0;
+  const requestQuery = (req.userTurn !== void 0 ? latestUserText([{ role: "user", content: req.userTurn }]) : "") || latestUserText(convo) || "";
+  const promptNamedTools = toolNamesMentionedIn(systemPrompt);
+  const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+      });
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+      if (reconciled > 0) {
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "reconcile",
+          label: "evermind.reconcile",
+          result: { count: reconciled, version: learn.version }
+        });
+      }
+    } else if (learn && learn.reason && learn.reason !== "too-short") {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+      });
+    }
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) {
+        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
+        });
+      }
+    }
+  };
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
-    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
     if (c.abort?.signal.aborted) return;
     const llmStart = nowMs2();
     let firstTokenAt;
     let result;
+    const selection = selectToolsForTurn(allTools, {
+      // The REQUEST, captured once before the loop — never "the latest user message".
+      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+      // tool-budget close-out), so reading the newest one re-rolled the advertised
+      // set from text WE wrote: after one recovery the query became "…made zero tool
+      // calls… answer using its result…", which scores `key_results`/`dashboards`/
+      // `incidents` and drops the ticket tools the user actually asked for. The tool
+      // the model was told to call then genuinely did not exist, and it narrated.
+      // Holding the request steady also keeps the advertised set STABLE across turns
+      // — a tool must not vanish between one turn and the next.
+      query: requestQuery,
+      pinned: usedTools,
+      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+      // directive names `builtin_chats_list_tickets`) are never optional: telling a
+      // model to call a tool we then decline to advertise is the exact contradiction
+      // that produces a narrated call. Derived from the prompt text, so a directive
+      // edit can never silently desync from this list.
+      required: promptNamedTools
+    });
+    const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
+    const tools = advertised.length > 0 ? advertised : void 0;
+    const advertisedNames = new Set(advertised.map((t) => t.function.name));
+    if (selection.trimmed) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "tools.selected",
+        args: { step: iter },
+        result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
+      });
+    }
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2064,7 +3039,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         category: "error",
         label: "llm.complete",
         durationMs: nowMs2() - llmStart,
-        args: { model: model ?? "default", step: iter },
+        args: { model: activeModel ?? "default", step: iter },
         result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
         isError: true
       });
@@ -2072,8 +3047,9 @@ ${chatWorkLinkingDirective(chatId)}`;
     }
     accrueByoUnresolved(c, result.byoUnresolved);
     accrueProviderCap(c, result.providerCap);
-    const resolved = result.resolvedModel ?? model ?? "default";
-    const requested = model ?? "default";
+    const resolved = result.resolvedModel ?? activeModel ?? "default";
+    const requested = activeModel ?? "default";
+    setLastResolvedModel(result.resolvedModel);
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
       pushTrace(c, {
         ts: nowIso(),
@@ -2083,7 +3059,8 @@ ${chatWorkLinkingDirective(chatId)}`;
         result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
       });
     }
-    pushTrace(c, {
+    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
+    pushDurableStep(c, chatId, persistence, {
       ts: nowIso(),
       category: "llm",
       label: "llm.complete",
@@ -2102,7 +3079,14 @@ ${chatWorkLinkingDirective(chatId)}`;
         // could NOT resolve — so triage tells "ran on the shared pool despite a
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
-        byoUnresolved: result.byoUnresolved
+        byoUnresolved: result.byoUnresolved,
+        // How many tools the turn was actually OFFERED, out of the whole catalog.
+        // A zero here is the difference between "the model refused to act" and "it had
+        // nothing to act with" — previously unanswerable from a copied report, which
+        // only ever carried the registry-wide total.
+        advertisedTools: advertised.length,
+        catalogTools: allTools?.length ?? 0,
+        ...narratedUnadvertised.length ? { narratedUnadvertised } : {}
       },
       // Structured diagnostics fields — the A-vs-B triage reads these directly.
       usage: result.usage,
@@ -2133,7 +3117,30 @@ ${chatWorkLinkingDirective(chatId)}`;
       }
       c.streamingText = "";
       emit(c);
-      for (const tc of result.toolCalls) {
+      for (const rawCall of result.toolCalls) {
+        let tc = rawCall;
+        if (isRouterTool(tc.name)) {
+          const routed = handleRouterCall(allTools ?? [], tc.name, parseArgs(tc.args));
+          if ("result" in routed) {
+            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(routed.result) });
+            pushDurableStep(c, chatId, persistence, {
+              ts: nowIso(),
+              category: "tool",
+              label: tc.name,
+              args: parseArgs(tc.args),
+              result: routed.result
+            });
+            continue;
+          }
+          tc = { ...tc, name: routed.dispatch.name, args: JSON.stringify(routed.dispatch.args ?? {}) };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "message",
+            label: "tools.routed",
+            args: { step: iter, via: rawCall.name },
+            result: `Called ${tc.name} through the tool router (it was not advertised directly this turn).`
+          });
+        }
         const args = parseArgs(tc.args);
         if (needsConfirm && needsConfirm({ name: tc.name, args })) {
           const ok = await new Promise((resolve) => {
@@ -2193,7 +3200,35 @@ ${chatWorkLinkingDirective(chatId)}`;
           truncated: trimmedOut.truncated
         });
         if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
+        usedTools.add(tc.name);
       }
+      continue;
+    }
+    if (runTool && shouldRecoverStalledTurn({
+      text: result.text,
+      toolCallCount: result.toolCalls.length,
+      availableToolCount: toolSpecs?.length ?? 0,
+      recoveriesUsed: announcementRecoveries
+    })) {
+      announcementRecoveries += 1;
+      const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+      const narration = result.text.trim();
+      if (narration) {
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
+        recordAppended(c, narrationMsg);
+      }
+      convo.push({ role: "assistant", content: result.text });
+      convo.push({ role: "user", content: stallRecoveryNudge(lastChance) });
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_announced_tool_call",
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length },
+        result: `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+      });
+      c.streamingText = "";
+      emit(c);
       continue;
     }
     const finalText = result.text.trim() || "No response.";
@@ -2202,41 +3237,48 @@ ${chatWorkLinkingDirective(chatId)}`;
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
-    emit(c);
-    const learn = assistantMsg?.evermindLearn;
-    if (learn?.learned) {
-      pushDurableStep(c, chatId, persistence, {
-        ts: nowIso(),
-        category: "learn",
-        label: "evermind.learn",
-        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-        // so the timeline can name each by id; the renderer falls back to `version` alone.
-        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+    if (runTool && isExhaustedStall({
+      text: result.text,
+      toolCallCount: result.toolCalls.length,
+      availableToolCount: toolSpecs?.length ?? 0,
+      recoveriesUsed: announcementRecoveries
+    })) {
+      const next = chooseStallFailover({
+        activeModel,
+        resolvedModel: resolved,
+        tried: triedModels,
+        failoversUsed: modelFailovers,
+        pick: pickFallbackModel
       });
-      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
-      if (reconciled > 0) {
+      if (next) {
+        modelFailovers += 1;
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
-          category: "reconcile",
-          label: "evermind.reconcile",
-          result: { count: reconciled, version: learn.version }
+          category: "message",
+          label: "loop.model_failover",
+          args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+          result: modelFailoverNotice(resolved, next)
         });
+        activeModel = next;
+        announcementRecoveries = 0;
+        convo.push({ role: "user", content: stallRecoveryNudge(false) });
+        c.streamingText = "";
+        emit(c);
+        continue;
       }
-    } else if (learn && learn.reason && learn.reason !== "too-short") {
+      const notice = stallExhaustedNotice(resolved, triedModels);
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
-        category: "learn",
-        label: "evermind.learn",
-        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+        category: "error",
+        label: "loop.stall_unrecovered",
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length },
+        result: notice,
+        isError: true
       });
+      c.error = notice;
     }
-    if (evermind?.cacheAnswer) {
-      const q = latestUserText(convo);
-      if (q) {
-        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
-        });
-      }
-    }
+    emit(c);
+    emitEvermindLearnReconcile(assistantMsg, finalText);
     onActivity?.(chatId);
     return;
   }
@@ -2255,7 +3297,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       let closeFirstTokenAt;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, signal: c.abort?.signal },
+        { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2270,7 +3312,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
         ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? model ?? "default", requestedModel: model ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -2284,6 +3326,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         c.streamingText = "";
         recordAppended(c, assistantMsg);
         emit(c);
+        emitEvermindLearnReconcile(assistantMsg, closingText);
         onActivity?.(chatId);
         return;
       }
@@ -2314,6 +3357,11 @@ function useBrainConversation(options) {
     extraSystem,
     systemPrompt,
     model,
+    modelStrict,
+    routingMode,
+    pickFallbackModel,
+    maxTokens,
+    reasoning,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -2321,7 +3369,8 @@ function useBrainConversation(options) {
     onActivity,
     onFirstUserTurn,
     evermind,
-    augmentSystemPrompt
+    augmentSystemPrompt,
+    chatMode
   } = options;
   const [messages, setMessages] = (0, import_react6.useState)([]);
   const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
@@ -2360,6 +3409,23 @@ function useBrainConversation(options) {
     };
   }, [persistence, chatId, reloadNonce]);
   (0, import_react6.useEffect)(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
+  const lastMarkedRef = (0, import_react6.useRef)(null);
+  (0, import_react6.useEffect)(() => {
+    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
+    let maxSeq = 0;
+    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
+    if (maxSeq <= 0) return;
+    const prev = lastMarkedRef.current;
+    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
+    lastMarkedRef.current = { chatId, seq: maxSeq };
+    void persistence.markChatRead(chatId, maxSeq).catch(() => {
+      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
+    });
+  }, [persistence, chatId, messages]);
+  (0, import_react6.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     setMessages((prev) => {
@@ -2388,6 +3454,11 @@ ${extraSystem}` : resolvedSystemPrompt;
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
       model,
+      modelStrict,
+      routingMode,
+      pickFallbackModel,
+      maxTokens,
+      reasoning,
       runTool,
       needsConfirm,
       stream,
@@ -2397,9 +3468,10 @@ ${extraSystem}` : resolvedSystemPrompt;
       augmentSystemPrompt,
       seed,
       userTurn,
-      projectId
+      projectId,
+      chatMode
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode]
   );
   const send = (0, import_react6.useCallback)(
     async (text, opts) => {
@@ -2560,6 +3632,10 @@ ${refs}`;
     reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
+    /** What the user can DO about `error` (reconnect / upgrade / add a card), when
+     *  the failure was actionable. Only meaningful for a RUN error — a local error
+     *  (e.g. a failed rename) has no gateway verdict behind it. */
+    errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,
@@ -2586,6 +3662,81 @@ ${refs}`;
   };
 }
 
+// src/chatMessageSubscription.ts
+function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
+  let stopped = false;
+  let socket = null;
+  let retry = null;
+  let attempt = 0;
+  const connect = () => {
+    if (stopped || typeof WebSocket === "undefined") return;
+    const token = getToken();
+    if (!token) return;
+    const url = new URL(`/api/brain/chats/${chatId}/stream`, baseUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("token", token);
+    try {
+      socket = new WebSocket(url.toString());
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    socket.onopen = () => {
+      attempt = 0;
+    };
+    socket.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(String(event.data));
+        if (frame.type === "changed") onChanged();
+      } catch {
+      }
+    };
+    socket.onclose = () => scheduleReconnect();
+    socket.onerror = () => socket?.close();
+  };
+  const scheduleReconnect = () => {
+    if (stopped || retry) return;
+    const delay = Math.min(1e3 * 2 ** attempt++, 3e4);
+    retry = setTimeout(() => {
+      retry = null;
+      connect();
+    }, delay);
+  };
+  connect();
+  return () => {
+    stopped = true;
+    if (retry) clearTimeout(retry);
+    socket?.close();
+    socket = null;
+  };
+}
+
+// src/apiVersion.ts
+var API_VERSION_TTL_MS = 6e4;
+var cached = null;
+var cachedAt = 0;
+var inflight = null;
+function resetApiVersionCache() {
+  cached = null;
+  cachedAt = 0;
+  inflight = null;
+}
+function fetchApiVersionVia(read, now = Date.now) {
+  if (cached && now() - cachedAt < API_VERSION_TTL_MS) return Promise.resolve(cached);
+  if (inflight) return inflight;
+  inflight = read().then((data) => {
+    const next = data?.version ?? null;
+    if (next) {
+      cached = next;
+      cachedAt = now();
+    }
+    return next;
+  }).catch(() => null).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
 // src/pendingPrompt.ts
 var PENDING_PROMPT_KEY = "bf_pending_prompt";
 function savePendingPrompt(text) {
@@ -2608,10 +3759,162 @@ function takePendingPrompt() {
   }
 }
 
+// src/modelChoice.ts
+var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+var DEFAULT_MODEL_CHOICE_LABELS = {
+  categoryAuto: "Auto",
+  categoryByo: "BYO",
+  categoryFree: "Free",
+  categoryPlan: "Plan",
+  categoryPaid: "Paid",
+  categoryConfigured: "Configured",
+  autoLabel: "Auto",
+  autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
+  poolLabel: "BYO pool",
+  poolDetail: "Tries your connected accounts in the order configured in Account settings.",
+  freeDetail: "Free \xB7 included with BuilderForce",
+  planDetail: "Included with your BuilderForce plan",
+  paidDetail: "Premium \u2014 metered at cost + 1\xA2 per request",
+  paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
+  byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
+  configuredDetail: "Saved workspace LLM configuration",
+  evermindLabel: "Project Evermind",
+  evermindDetail: "Your project's own learned Evermind model."
+};
+var BYO_VENDOR_LABELS = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  "kimi-code": "Kimi Code",
+  moonshot: "Moonshot AI",
+  google: "Google",
+  meta: "Meta",
+  xai: "xAI",
+  mistral: "Mistral",
+  deepseek: "DeepSeek"
+};
+function byoVendorLabel(vendor) {
+  return BYO_VENDOR_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
+}
+function perMillionUsd(rate) {
+  return `$${(rate * 1e6).toFixed(2)}`;
+}
+function premiumCostLabel(pricing, template) {
+  return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
+}
+var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
+function modelCategoryLabel(category, labels) {
+  switch (category) {
+    case "auto":
+      return labels.categoryAuto;
+    case "byo":
+      return labels.categoryByo;
+    case "free":
+      return labels.categoryFree;
+    case "plan":
+      return labels.categoryPlan;
+    case "paid":
+      return labels.categoryPaid;
+    case "configured":
+      return labels.categoryConfigured;
+  }
+}
+function buildModelItems(options, labels) {
+  const items = [
+    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
+  ];
+  const normalized = (value) => typeof value === "string" ? { id: value } : value;
+  const seen = /* @__PURE__ */ new Set();
+  const add = (id, label, detail, category) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
+  };
+  for (const value of options.free) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.freeDetail, "free");
+  }
+  const free = new Set(options.free.map((value) => normalized(value).id));
+  for (const value of options.plan) {
+    const model = normalized(value);
+    if (!free.has(model.id)) add(model.id, model.id, model.cost ?? labels.planDetail, "plan");
+  }
+  for (const value of options.paid) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
+  }
+  if (options.byo.length) {
+    items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
+  }
+  for (const model of options.byo) {
+    add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", byoVendorLabel(model.vendor)), "byo");
+  }
+  for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
+  return items;
+}
+function activeModelKey(selection) {
+  return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
+}
+function filterModelItems(items, labels, query, category) {
+  const needle = query.trim().toLowerCase();
+  return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
+}
+function modelInUse(selection, items, labels, effective) {
+  const resolve = (model) => {
+    const item = items.find((entry) => entry.key === `model:${model}`);
+    if (item) return { name: item.label, detail: item.detail };
+    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
+  };
+  if (selection.mode === "model") return resolve(selection.model);
+  if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
+  if (effective) return resolve(effective);
+  return { name: labels.autoLabel, detail: labels.autoDetail };
+}
+
 // src/chatDiagnostics.ts
+function classifyModelFunding(model, surface) {
+  if (!model) return "auto";
+  if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) return "evermind";
+  const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
+  if (byo?.vendor) return `byo:${byo.vendor}`;
+  if ((surface?.data ?? []).some((m) => m.id === model)) return "plan";
+  return "premium";
+}
 function fmtProject(id, name) {
   if (id == null) return "none";
   return name ? `${name} (#${id})` : `#${id}`;
+}
+var METER_LABEL = {
+  ai_tokens: "AI tokens",
+  ingestion: "Data ingested",
+  error_events: "Error events",
+  outbound_fetches: "Web fetches",
+  cloud_runs: "Cloud runs"
+};
+function fmtMeterValue(value, unit) {
+  if (value < 0) return "\u221E";
+  if (unit !== "bytes") return value.toLocaleString("en-US");
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = value / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
+}
+function fmtMeter(m) {
+  const label = METER_LABEL[m.key] ?? m.key;
+  if (m.unlimited) return `${label}: ${fmtMeterValue(m.used, m.unit)} used (unlimited)`;
+  return `${label}: ${fmtMeterValue(m.used, m.unit)} / ${fmtMeterValue(m.limit, m.unit)} (${m.percentUsed}%) \xB7 ${fmtMeterValue(m.remaining, m.unit)} left`;
+}
+function tokenMeter(a) {
+  return (a?.meters ?? []).find((m) => m.key === "ai_tokens");
+}
+function allowanceState(meter) {
+  if (!meter || meter.unlimited) return "ok";
+  if (meter.remaining <= 0) return "exhausted";
+  return meter.percentUsed >= 80 ? "warn" : "ok";
 }
 function diagnosticsSignals(d) {
   const out = [];
@@ -2641,17 +3944,98 @@ function diagnosticsSignals(d) {
   if ((d.agents?.length ?? 0) === 0) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
+  const tools = d.tools;
+  if (tools && !tools.loading) {
+    if (tools.error) {
+      out.push(
+        `\u26A0\uFE0F The MCP tool catalog FAILED to load (${tools.error}), so the Brain has ${tools.count} tools and cannot fetch project data. Turns will say "I don't have that data" or announce a tool call and stop \u2014 with 0 tool calls in the trace. This is a wiring fault, not a model fault.`
+      );
+    } else if (tools.count === 0) {
+      out.push(
+        '\u26A0\uFE0F The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data \u2014 every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.'
+      );
+    }
+  }
+  const acct = d.account;
+  const tokens = tokenMeter(acct);
+  if (acct) {
+    const free = acct.plan === "free";
+    const noCard = acct.billingStatus === "none" || acct.billingStatus == null;
+    if (free && noCard) {
+      out.push(
+        "\u2139\uFE0F Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool \u2014 none of this is a fault. Adding a card (or connecting your own provider account) lifts all three."
+      );
+    } else if (free) {
+      out.push("\u2139\uFE0F Free plan \u2014 premium/frontier models are not entitled and the monthly token allowance is the free tier's.");
+    }
+    if (acct.billingStatus === "past_due") {
+      out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
+    }
+    const tokenState = allowanceState(tokens);
+    if (tokens && tokenState === "exhausted") {
+      out.push(
+        `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens.used.toLocaleString("en-US")} / ${tokens.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
+      );
+    } else if (tokens && tokenState === "warn") {
+      out.push(
+        `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
+      );
+    }
+    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
+      out.push(
+        `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
+      );
+    }
+    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+      out.push("\u2139\uFE0F No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.");
+    }
+  }
   return out;
 }
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
+  if (d.versions && (d.versions.ui || d.versions.api)) {
+    lines.push(
+      `- Versions: UI ${d.versions.ui ?? "unknown"} \xB7 API ${d.versions.api ?? "unknown"}`
+    );
+  }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
     lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
   }
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
+  const acct = d.account;
+  if (acct) {
+    lines.push(
+      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}`
+    );
+    lines.push(
+      `- Model: ${acct.model ?? "auto (gateway routes per turn)"}${acct.modelFunding ? ` \xB7 funded by ${acct.modelFunding}` : ""}${acct.planModelCount != null ? ` \xB7 ${acct.planModelCount} models in plan pool` : ""} \xB7 BYO accounts: ${acct.byoProviders?.length ? acct.byoProviders.join(", ") : "none"}`
+    );
+    const meters = acct.meters ?? [];
+    if (meters.length) {
+      lines.push(`- Usage this period${acct.periodStart ? ` (since ${acct.periodStart}` : ""}${acct.resetsAt ? `${acct.periodStart ? ", " : " ("}resets ${acct.resetsAt})` : acct.periodStart ? ")" : ""}:`);
+      for (const m of meters) lines.push(`  - ${fmtMeter(m)}`);
+    } else {
+      lines.push("- Usage this period: not available (consumption snapshot unavailable)");
+    }
+    if (acct.extensionVersion || acct.baseUrl) {
+      lines.push(`- Client: ${acct.extensionVersion ? `v${acct.extensionVersion}` : "unknown version"}${acct.baseUrl ? ` \u2192 ${acct.baseUrl}` : ""}`);
+    }
+  } else {
+    lines.push("- Plan / usage: not gathered (account snapshot unavailable \u2014 signed out, or the consumption endpoint failed)");
+  }
+  const tools = d.tools;
+  if (tools) {
+    const advertised = Math.min(tools.count, DEFAULT_TOOL_LIMIT);
+    lines.push(
+      `- Tools available to the model: ${tools.count} registered` + (tools.count > advertised ? ` \xB7 up to ${advertised} advertised per turn (relevance-selected)` : "") + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+    );
+  } else {
+    lines.push('- Tools available to the model: not gathered (this surface did not report its tool registry \u2014 a zero here is invisible, so treat any "announced a tool call and stopped" turn as unexplained)');
+  }
   const ev = d.evermind;
   if (ev) {
     lines.push(
@@ -2688,27 +4072,53 @@ function formatChatDiagnostics(d) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ADDRESSED_TO_META_KEY,
+  API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY,
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  BrainRequestError,
+  CHAT_MODES,
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE,
+  DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
+  MODEL_CATEGORIES,
+  NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
+  PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
+  RESTING_CHAT_MODE,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,
+  TOOL_ROUTER_DESCRIBE,
+  TOOL_ROUTER_FIND,
+  TOOL_ROUTER_INVOKE,
+  XmlToolCallFilter,
   accountUsedInTrace,
   activeMentionToken,
+  activeModelKey,
+  allowanceState,
+  announcesUntakenAction,
   attachEvermindLearn,
+  brainRequestError,
   buildBrainTriageReport,
+  buildModelItems,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  byoVendorLabel,
+  catalogToolNamesMentionedIn,
+  chatConversationDirective,
+  chatErrorAction,
+  chatModeDirective,
+  chatWorkDirective,
   chatWorkLinkingDirective,
+  claimsMissingToolData,
+  classifyModelFunding,
   clearRunError,
   codeChangeFile,
   computeBrainDiagnostics,
@@ -2716,44 +4126,85 @@ function formatChatDiagnostics(d) {
   consolidationMetadata,
   countReconciledMemories,
   deriveChatTitle,
+  describeTool,
+  detectAnnouncedButUnmadeToolCall,
+  detectUnbackedTicketClaim,
+  detectUnbackedWriteClaim,
+  effortProfile,
+  extractXmlToolCalls,
+  fetchApiVersionVia,
+  fetchMcpToolEntries,
   filterMentionCandidates,
+  filterModelItems,
+  findTools,
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
   formatEvermindLearnStep,
   formatEvermindMemoryBlock,
   getGlobalRunState,
+  getLastResolvedModel,
+  getMcpToolStatus,
   getRunSnapshot,
   getRunTrace,
+  handleRouterCall,
+  isChatMode,
   isCodeChangeTool,
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
+  isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isRouterTool,
   isRunning,
   isStepMessage,
   isTicketRecordingTool,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
+  mcpActionsFrom,
   mentionRecipient,
+  modelCategoryLabel,
+  modelFailoversInTrace,
+  modelInUse,
   modelsUsedInTrace,
+  narratedUnadvertisedInTrace,
+  nextFallbackModel,
+  normalizeChatMode,
   parseByoUnresolved,
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
+  parseStepMessage,
+  perMillionUsd,
+  premiumCostLabel,
   prepareImageDataUrl,
+  reasoningForRun,
+  resetApiVersionCache,
+  resetBrainRunStore,
   resolveRecipient,
   resolveRunConfirm,
+  routerToolSpecs,
   runBrainLoop,
   savePendingPrompt,
   scopeToConsolidation,
+  selectToolsForTurn,
+  setLastResolvedModel,
+  setMcpToolStatus,
+  stallRecoveriesInTrace,
+  stallUnrecoveredInTrace,
   startRun,
+  stepSig,
   stopRun,
   streamChatCompletion,
   subscribeRun,
   subscribeRunStore,
+  subscribeToChatMessages,
   takePendingPrompt,
+  toolExposureInTrace,
+  toolNamesMentionedIn,
+  toolSpecsFor,
+  traceWithPersistedSteps,
   useBrainActions,
   useBrainChats,
   useBrainConfig,

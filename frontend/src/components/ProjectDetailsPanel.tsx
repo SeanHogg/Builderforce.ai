@@ -125,7 +125,7 @@ const panelDrawerStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -284,7 +284,7 @@ export function ProjectDetailsPanel({
                   fontWeight: 600,
                   textTransform: 'uppercase',
                   padding: '4px 8px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   background: project.status === 'active' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
                   color: 'var(--text-secondary)',
                 }}
@@ -305,7 +305,7 @@ export function ProjectDetailsPanel({
                     alignItems: 'center',
                     justifyContent: 'center',
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-base)',
                     color: 'var(--text-secondary)',
                     cursor: 'pointer',
@@ -339,7 +339,7 @@ export function ProjectDetailsPanel({
                 alignItems: 'center',
                 justifyContent: 'center',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-base)',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
@@ -449,7 +449,7 @@ export function ProjectDetailsPanel({
                       alignItems: 'center',
                       justifyContent: 'center',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
+                      borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-base)',
                       color: 'var(--text-secondary)',
                       cursor: 'pointer',
@@ -475,7 +475,7 @@ export function ProjectDetailsPanel({
                         padding: '8px 10px',
                         fontSize: 13,
                         border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                       }}
@@ -491,8 +491,8 @@ export function ProjectDetailsPanel({
                         width: '100%',
                         padding: '8px 10px',
                         fontSize: 13,
-                        border: `1px solid ${keyStatus === 'taken' ? 'var(--error-text, #e55)' : keyStatus === 'available' ? 'var(--success, #4c4)' : 'var(--border-subtle)'}`,
-                        borderRadius: 8,
+                        border: `1px solid ${keyStatus === 'taken' ? 'var(--error-text)' : keyStatus === 'available' ? 'var(--success)' : 'var(--border-subtle)'}`,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                       }}
@@ -501,10 +501,10 @@ export function ProjectDetailsPanel({
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('checking')}</div>
                     )}
                     {keyStatus === 'available' && (
-                      <div style={{ fontSize: 11, color: 'var(--success, #4c4)', marginTop: 4 }}>{t('keyAvailable')}</div>
+                      <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4 }}>{t('keyAvailable')}</div>
                     )}
                     {keyStatus === 'taken' && (
-                      <div style={{ fontSize: 11, color: 'var(--error-text, #e55)', marginTop: 4 }}>{t('keyTaken')}</div>
+                      <div style={{ fontSize: 11, color: 'var(--error-text)', marginTop: 4 }}>{t('keyTaken')}</div>
                     )}
                   </div>
                   <div style={{ marginBottom: 10 }}>
@@ -518,7 +518,7 @@ export function ProjectDetailsPanel({
                         padding: '8px 10px',
                         fontSize: 13,
                         border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                       }}
@@ -540,7 +540,7 @@ export function ProjectDetailsPanel({
                         padding: '8px 10px',
                         fontSize: 13,
                         border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                         colorScheme: 'light dark',
@@ -560,7 +560,7 @@ export function ProjectDetailsPanel({
                         padding: '8px 10px',
                         fontSize: 13,
                         border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                         resize: 'vertical',
@@ -568,7 +568,7 @@ export function ProjectDetailsPanel({
                     />
                   </div>
                   {saveError && (
-                    <div style={{ fontSize: 12, color: 'var(--error-text, #e55)', marginBottom: 8, padding: '6px 10px', background: 'rgba(230,80,80,0.08)', borderRadius: 6, border: '1px solid rgba(230,80,80,0.2)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--error-text)', marginBottom: 8, padding: '6px 10px', background: 'rgba(230,80,80,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(230,80,80,0.2)' }}>
                       {saveError}
                     </div>
                   )}
@@ -581,9 +581,9 @@ export function ProjectDetailsPanel({
                         fontSize: 13,
                         fontWeight: 600,
                         background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                        color: '#fff',
+                        color: 'var(--text-on-accent)',
                         border: 'none',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         cursor: (saving || keyStatus === 'taken' || keyStatus === 'checking') ? 'not-allowed' : 'pointer',
                         opacity: (saving || keyStatus === 'taken' || keyStatus === 'checking') ? 0.6 : 1,
                       }}
@@ -599,7 +599,7 @@ export function ProjectDetailsPanel({
                         background: 'var(--bg-deep)',
                         color: 'var(--text-secondary)',
                         border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         cursor: 'pointer',
                       }}
                     >
@@ -698,7 +698,7 @@ export function ProjectDetailsPanel({
                       background: 'var(--surface-interactive)',
                       color: 'var(--text-primary)',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                     }}
                   >
@@ -714,7 +714,7 @@ export function ProjectDetailsPanel({
                       background: 'var(--surface-interactive)',
                       color: 'var(--text-primary)',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                     }}
                   >
@@ -730,7 +730,7 @@ export function ProjectDetailsPanel({
                       background: 'var(--surface-interactive)',
                       color: 'var(--text-primary)',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                     }}
                   >
@@ -742,14 +742,14 @@ export function ProjectDetailsPanel({
                 </div>
               </div>
 
-              {/* Open in the full IDE workspace. */}
+              {/* Open the project's Builder workspace on Canvas. */}
               <div style={cardStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   {t('workspaceDesc')}
                 </p>
-                <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
-                  {t('openInIde')} →
+                <Link href={`/create/build/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
+                  {t('openInBuilder')} →
                 </Link>
               </div>
             </div>

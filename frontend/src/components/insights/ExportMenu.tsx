@@ -4,15 +4,16 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { empInsightsApi, downloadExport, type ExportDataset, type ExportFormat } from '@/lib/empInsightsApi';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 const DATASETS: ExportDataset[] = ['dora', 'finance', 'allocation', 'benchmarking'];
 
 const btnStyle: React.CSSProperties = {
-  padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.82rem', cursor: 'pointer', fontWeight: 600,
 };
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 
@@ -24,13 +25,14 @@ const selectStyle: React.CSSProperties = {
  */
 export function ExportMenu({ days = 30 }: { days?: number }) {
   const t = useTranslations('insights.emp');
+  const { currentProjectId } = useProjectScope();
   const [dataset, setDataset] = useState<ExportDataset>('dora');
   const [busy, setBusy] = useState(false);
 
   const run = async (format: ExportFormat) => {
     setBusy(true);
     try {
-      const text = await empInsightsApi.exportDataset(dataset, format, days);
+      const text = await empInsightsApi.exportDataset(dataset, format, days, currentProjectId);
       downloadExport(text, dataset, format);
     } finally {
       setBusy(false);

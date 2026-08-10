@@ -10,15 +10,21 @@ import { fileURLToPath } from "node:url";
 
 const watch = process.argv.includes("--watch");
 const production = process.argv.includes("--production");
+// The headless harness: the scenario replayer + the live probe, bundled as a Node CLI
+// so the extension's chat can be exercised without packaging or installing a VSIX.
+// Built to a SEPARATE entry point (never shipped in the .vsix — see .vscodeignore).
+const harness = process.argv.includes("--harness");
 
 // Clean stale per-file output from the old tsc build so out/ holds only the bundle.
-fs.rmSync("out", { recursive: true, force: true });
+// Skipped for the harness build, which must not wipe an existing extension bundle.
+if (!harness) fs.rmSync("out", { recursive: true, force: true });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // The shared `@builderforce/agent-tools` contract is consumed as SOURCE (no dist —
 // mirrors how `api` resolves it via tsconfig paths), so the editor surface runs the
 // SAME tool definitions as the cloud. Bundle it from its TS entry…
 const agentToolsRoot = path.resolve(here, "../../packages/agent-tools/src");
+const creationCanvasContract = path.resolve(here, "../../packages/creation-canvas-contract/src/index.ts");
 
 /** …and rewrite its NodeNext `./x.js` relative imports to the real `./x.ts` source
  *  (esbuild won't map .js→.ts on its own). Scoped to that package so nothing else
@@ -35,20 +41,36 @@ const agentToolsTsResolve = {
 };
 
 /** @type {import('esbuild').BuildOptions} */
-const options = {
-  entryPoints: ["src/extension.ts"],
-  bundle: true,
-  outfile: "out/extension.js",
-  platform: "node",
-  format: "cjs",
-  target: "node20",
-  external: ["vscode"],
-  alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts") },
-  plugins: [agentToolsTsResolve],
-  sourcemap: !production,
-  minify: production,
-  logLevel: "info",
-};
+const options = harness
+  ? {
+      entryPoints: ["harness/cli.ts"],
+      bundle: true,
+      outfile: "out/harness.cjs",
+      platform: "node",
+      format: "cjs",
+      target: "node20",
+      // The harness never runs inside the editor, so `vscode` must not even be
+      // reachable — anything that reaches for it belongs on the extension side.
+      external: ["vscode", "react", "react-dom"],
+      alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"), "@builderforce/creation-canvas-contract": creationCanvasContract },
+      plugins: [agentToolsTsResolve],
+      sourcemap: true,
+      logLevel: "warning",
+    }
+  : {
+      entryPoints: ["src/extension.ts"],
+      bundle: true,
+      outfile: "out/extension.js",
+      platform: "node",
+      format: "cjs",
+      target: "node20",
+      external: ["vscode"],
+      alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"), "@builderforce/creation-canvas-contract": creationCanvasContract },
+      plugins: [agentToolsTsResolve],
+      sourcemap: !production,
+      minify: production,
+      logLevel: "info",
+    };
 
 if (watch) {
   const ctx = await esbuild.context(options);

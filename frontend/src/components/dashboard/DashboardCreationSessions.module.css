@@ -1,0 +1,278 @@
+.launcher {
+  padding: 4px 0 0;
+}
+
+.launcherHeader {
+  margin-bottom: 18px;
+}
+
+.launcherHeader h2 {
+  margin: 3px 0 0;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+}
+
+.launcherHeader p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.eyebrow {
+  color: var(--coral-bright);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.creationPaths {
+  display: grid;
+  grid-template-columns: minmax(0, 2.15fr) minmax(300px, .85fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.creationPath {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+}
+
+.templatePath {
+  border-color: color-mix(in srgb, var(--coral-bright) 28%, var(--border-subtle));
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--coral-bright) 10%, transparent), transparent 45%),
+    color-mix(in srgb, var(--surface-raised) 88%, transparent);
+}
+
+.pathHeader {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+
+.pathHeader h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.pathHeader p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.step {
+  display: grid;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--coral-bright) 42%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--coral-bright) 10%, transparent);
+  color: var(--coral-bright);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.typeCard,
+.templateCard,
+.blankButton {
+  font: inherit;
+}
+
+.typeCard {
+  display: flex;
+  min-width: 0;
+  min-height: 142px;
+  padding: 13px;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.typeIcon,
+.templateIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface-sunken));
+  font-size: 20px;
+}
+
+.cardCopy {
+  display: block;
+  min-width: 0;
+}
+
+.cardCopy strong {
+  display: block;
+  margin-top: 9px;
+  font-size: 13px;
+}
+
+.cardCopy > span {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cardAction {
+  display: flex;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 9px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.cardAction b,
+.templateAction b {
+  color: var(--coral-bright);
+  font-size: 15px;
+}
+
+.templateGrid {
+  display: grid;
+  gap: 9px;
+}
+
+.templateCard {
+  display: grid;
+  min-width: 0;
+  min-height: 120px;
+  padding: 14px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 0 11px;
+  align-items: start;
+  text-align: left;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.templateCard .cardCopy strong {
+  margin-top: 1px;
+  font-size: 13px;
+}
+
+.templateCard .cardCopy > span {
+  -webkit-line-clamp: 3;
+}
+
+.templateAction {
+  display: flex;
+  margin-top: 9px;
+  grid-column: 2;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--coral-bright);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.blankButton {
+  display: flex;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.blankButton b {
+  margin-right: 4px;
+  color: var(--coral-bright);
+}
+
+.quotaWarning {
+  margin: 12px 0 0;
+  color: var(--warning-text, var(--warning));
+  font-size: 12px;
+}
+
+.typeCard:hover:not(:disabled),
+.templateCard:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--coral-bright) 58%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--coral-bright));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
+  transform: translateY(-2px);
+}
+
+.blankButton:hover:not(:disabled) {
+  border-color: var(--coral-bright);
+  color: var(--text-primary);
+}
+
+.typeCard:focus-visible,
+.templateCard:focus-visible,
+.blankButton:focus-visible {
+  outline: 2px solid var(--coral-bright);
+  outline-offset: 2px;
+}
+
+.typeCard:disabled,
+.templateCard:disabled,
+.blankButton:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .creationPaths { grid-template-columns: 1fr; }
+  .templateGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .launcherHeader h2 { font-size: 19px; }
+  .creationPath { padding: 14px; }
+  .typeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .templateGrid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 430px) {
+  .typeGrid { grid-template-columns: 1fr; }
+  .typeCard { min-height: 126px; }
+}

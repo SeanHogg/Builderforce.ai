@@ -10,6 +10,7 @@
  * Self-gating: renders nothing when the profile carries no signal, so callers can
  * drop it in unconditionally.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePsychometricCatalog } from '@/lib/usePsychometricCatalog';
@@ -53,10 +54,10 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
     <span
       key={label}
       style={{
-        fontSize: 11,
+        fontSize: 'var(--font-size-eyebrow)',
         fontWeight: 600,
         padding: '2px 8px',
-        borderRadius: 9999,
+        borderRadius: 'var(--radius-full)',
         background: 'var(--surface-2)',
         color: 'var(--text-strong)',
         border: '1px solid var(--border)',
@@ -69,11 +70,11 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
   return (
     <section
       aria-label={t('title')}
-      style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--surface)' }}
+      style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14, background: 'var(--surface)' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: notable.length ? 12 : 0, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 16 }} aria-hidden>🧠</span>
-        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-strong)' }}>{t('title')}</div>
+        <span style={{ fontSize: 'var(--font-size-card-title)' }} aria-hidden><Icon source="🧠" size="1em" /></span>
+        <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('title')}</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {enne && chip(`${t('enneagram')} ${enne.type} · ${enne.name}`)}
           {profile?.mbti && chip(`${t('mbti')} ${profile.mbti}`)}
@@ -89,11 +90,11 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
             const descriptor = value >= HI ? d?.high : value <= LO ? d?.low : undefined;
             return (
               <div key={id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 12, marginBottom: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 'var(--font-size-small)', marginBottom: 3 }}>
                   <span style={{ fontWeight: 600, color: 'var(--text-strong)' }} title={d?.description}>
                     {name}
                   </span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {t(band)}{descriptor ? ` · ${descriptor}` : ''}
                   </span>
                 </div>
@@ -105,9 +106,9 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-label={name}
-                  style={{ height: 6, borderRadius: 9999, background: 'var(--surface-2)', overflow: 'hidden' }}
+                  style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', overflow: 'hidden' }}
                 >
-                  <div style={{ width: `${value}%`, height: '100%', background: 'var(--accent, #6366f1)', borderRadius: 9999 }} />
+                  <div style={{ width: `${value}%`, height: '100%', background: 'var(--accent)', borderRadius: 'var(--radius-full)' }} />
                 </div>
               </div>
             );

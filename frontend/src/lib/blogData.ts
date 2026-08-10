@@ -53,6 +53,26 @@ import multiPartyChat from '@/content/blog/multi-party-team-chat-humans-and-agen
 import vsCodeCommandCenter from '@/content/blog/vs-code-command-center-for-your-agentic-workforce.md';
 import cobitGovernance from '@/content/blog/cobit-governance-readiness-for-agentic-it.md';
 import psychometricPersonas from '@/content/blog/ai-agent-personality-psychometric-personas.md';
+import incidentManagement from '@/content/blog/incident-management-on-call-and-war-rooms.md';
+import roleAccountability from '@/content/blog/role-gated-accountability-proof-of-participation.md';
+import rfpResponse from '@/content/blog/automated-rfp-response-from-your-codebase.md';
+import memoryFirst from '@/content/blog/memory-first-inference-skip-the-llm.md';
+import localFirstWebgpu from '@/content/blog/local-first-ai-webgpu-in-the-browser.md';
+import creationCanvasBeyondChat from '@/content/blog/creation-canvas-beyond-chat.md';
+import feedbackToMockups from '@/content/blog/customer-feedback-to-ten-mockups.md';
+import multiplayerCanvas from '@/content/blog/multiplayer-creation-canvas-web-vscode.md';
+import projectComparisonRoadmap from '@/content/blog/compare-projects-and-build-an-executive-roadmap.md';
+import evermindCanvas from '@/content/blog/build-and-train-evermind-on-the-creation-canvas.md';
+import createBeforeSignup from '@/content/blog/create-before-you-sign-up.md';
+import brainCanvasOperator from '@/content/blog/brain-operates-the-creation-canvas.md';
+import liveDataStories from '@/content/blog/live-data-stories-on-the-creation-canvas.md';
+import designBuildDebug from '@/content/blog/design-build-debug-one-spatial-workspace.md';
+import visualTeamRituals from '@/content/blog/visual-team-rituals-humans-and-agents.md';
+import canvasReuseVersioning from '@/content/blog/creation-canvas-templates-frames-branches-checkpoints.md';
+import creationObjectRegistry from '@/content/blog/forty-eight-live-objects-one-creation-canvas.md';
+import llmInteractiveCourse from '@/content/blog/learn-how-to-build-an-llm-interactive-course.md';
+import whatsNewAlwaysOnCanvas from '@/content/blog/whats-new-always-on-canvas-workspace.md';
+import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-functionality-guide.md';
 
 export interface BlogPost {
   slug: string;
@@ -115,6 +135,21 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('whats-new-always-on-canvas-workspace', whatsNewAlwaysOnCanvas),
+  buildPost('creation-canvas-functionality-guide', creationCanvasFunctionalityGuide),
+  buildPost('learn-how-to-build-an-llm-interactive-course', llmInteractiveCourse),
+  buildPost('create-before-you-sign-up', createBeforeSignup),
+  buildPost('brain-operates-the-creation-canvas', brainCanvasOperator),
+  buildPost('live-data-stories-on-the-creation-canvas', liveDataStories),
+  buildPost('design-build-debug-one-spatial-workspace', designBuildDebug),
+  buildPost('visual-team-rituals-humans-and-agents', visualTeamRituals),
+  buildPost('creation-canvas-templates-frames-branches-checkpoints', canvasReuseVersioning),
+  buildPost('forty-eight-live-objects-one-creation-canvas', creationObjectRegistry),
+  buildPost('creation-canvas-beyond-chat', creationCanvasBeyondChat),
+  buildPost('customer-feedback-to-ten-mockups', feedbackToMockups),
+  buildPost('multiplayer-creation-canvas-web-vscode', multiplayerCanvas),
+  buildPost('compare-projects-and-build-an-executive-roadmap', projectComparisonRoadmap),
+  buildPost('build-and-train-evermind-on-the-creation-canvas', evermindCanvas),
   buildPost('getting-started-with-ai-agents', gettingStarted),
   buildPost('webgpu-lora-explained', webgpuLora),
   buildPost('multi-agent-orchestration', multiAgent),
@@ -160,6 +195,11 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('vs-code-command-center-for-your-agentic-workforce', vsCodeCommandCenter),
   buildPost('cobit-governance-readiness-for-agentic-it', cobitGovernance),
   buildPost('ai-agent-personality-psychometric-personas', psychometricPersonas),
+  buildPost('incident-management-on-call-and-war-rooms', incidentManagement),
+  buildPost('role-gated-accountability-proof-of-participation', roleAccountability),
+  buildPost('automated-rfp-response-from-your-codebase', rfpResponse),
+  buildPost('memory-first-inference-skip-the-llm', memoryFirst),
+  buildPost('local-first-ai-webgpu-in-the-browser', localFirstWebgpu),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

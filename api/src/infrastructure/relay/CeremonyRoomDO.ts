@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * CeremonyRoomDO — a live multiplayer relay for a standup/planning "ceremony"
  * (the round-table surface). One DO instance per room, keyed `ceremony:<projectId>`
@@ -48,7 +49,9 @@ export class CeremonyRoomDO implements DurableObject {
         try {
           const body = await request.text();
           if (body) frame = body;
-        } catch { /* keep default */ }
+        } catch (error) { /* keep default */ 
+          reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+        }
         this.broadcast(frame, null);
         return new Response(null, { status: 204 });
       }
@@ -68,7 +71,9 @@ export class CeremonyRoomDO implements DurableObject {
     server.addEventListener('close', () => this.onClose(peer));
     server.addEventListener('error', () => this.onClose(peer));
 
-    try { server.send(JSON.stringify({ type: 'hello', id })); } catch { /* ignore */ }
+    try { server.send(JSON.stringify({ type: 'hello', id })); } catch (error) { /* ignore */ 
+      reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -89,7 +94,9 @@ export class CeremonyRoomDO implements DurableObject {
       // Send the joiner the current roster, then announce them to everyone else.
       try {
         peer.ws.send(JSON.stringify({ type: 'roster', peers: this.roster() }));
-      } catch { /* ignore */ }
+      } catch (error) { /* ignore */ 
+        reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "onMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      }
       this.broadcast(
         JSON.stringify({ type: 'presence', action: 'join', peer: this.publicPeer(peer) }),
         peer.ws,

@@ -16,9 +16,11 @@
  * switching sources back and forth never re-pulls.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
 import type { ImportedRepoFile } from '@/lib/builderforceApi';
 
 const MAX_ROWS = 300;
@@ -89,15 +91,15 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
           {sources.length > 1 && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
               {t('source')}
-              <select
+              <Select
                 value={source?.id ?? ''}
                 onChange={(e) => setSourceId(e.target.value)}
-                style={{ padding: '7px 9px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
               >
                 {sources.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           <input
@@ -107,14 +109,14 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('searchPlaceholder')}
             aria-label={t('searchPlaceholder')}
-            style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
+            style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
           />
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 6 }}>
           {loading && <div style={{ padding: 16, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>{t('loading')}</div>}
           {!loading && error && (
-            <div role="alert" style={{ margin: 8, padding: '8px 10px', fontSize: 13, borderRadius: 8, background: 'var(--error-bg)', color: 'var(--error-text)' }}>{error}</div>
+            <div role="alert" style={{ margin: 8, padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', color: 'var(--error-text)' }}>{error}</div>
           )}
           {!loading && !error && filtered.length === 0 && (
             <div style={{ padding: 16, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>{t('empty')}</div>
@@ -128,14 +130,14 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
               title={f.path}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                padding: '7px 9px', border: 'none', borderRadius: 8, background: 'transparent',
+                padding: '7px 9px', border: 'none', borderRadius: 'var(--radius-md)', background: 'transparent',
                 color: 'var(--text-primary)', fontSize: 13, textAlign: 'left',
                 cursor: attaching ? 'wait' : 'pointer', fontFamily: 'var(--font-mono, monospace)',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              <span aria-hidden style={{ flexShrink: 0 }}>📄</span>
+              <span aria-hidden style={{ flexShrink: 0 }}><Icon source="📄" size="1em" /></span>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
             </button>
           ))}

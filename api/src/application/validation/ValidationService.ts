@@ -37,6 +37,21 @@ export interface ReviewGapInput {
   detail?: string | null;
   /** Optional priority override (default HIGH — a gap in shipped work is urgent-ish). */
   priority?: TaskPriority;
+  /**
+   * Repo-relative file the gap is about, and the line it starts at.
+   *
+   * Optional and frequently absent — plenty of real gaps ("no tests were added",
+   * "the PRD's third requirement is unimplemented") are about the ABSENCE of code
+   * and have nowhere to point. Gaps that DO carry a location are published as
+   * inline comments on the pull request, anchored to that line, so the reviewer
+   * sees the finding against the code rather than in a separate list; gaps
+   * without one are published in the review body instead. Neither is degraded —
+   * they are different kinds of finding.
+   *
+   * See application/validation/publishReviewToPr.ts.
+   */
+  path?: string | null;
+  line?: number | null;
 }
 
 export interface RecordReviewInput {
@@ -93,10 +108,15 @@ export class ValidationService {
     // 1. Mint a GAP task per gap, tied back to the reviewed item.
     const gapTaskIds: number[] = [];
     for (const gap of gaps) {
+      // Carry the location into the GAP task's description: whoever picks the gap
+      // up needs to know where it is, and the ticket is the only place they will
+      // look. `path:line` matches the convention githubAlerts.ts already uses for
+      // a finding location.
+      const where = gap.path ? `\n\nLocation: \`${gap.path}${gap.line ? `:${gap.line}` : ''}\`` : '';
       const created = await this.tasks.createTask({
         projectId: owned.projectId,
         title: String(gap.title).trim().slice(0, 500),
-        description: gap.detail ? String(gap.detail) : `Gap found reviewing ${'#' + input.taskId}.`,
+        description: (gap.detail ? String(gap.detail) : `Gap found reviewing ${'#' + input.taskId}.`) + where,
         priority: gap.priority ?? TaskPriority.HIGH,
         taskType: TaskType.GAP,
         gapOriginTaskId: input.taskId,

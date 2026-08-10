@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * projectMemory — the ONE shared "answer from memory, skip the LLM" capability.
  *
@@ -22,12 +23,14 @@
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { resolveEvermindTargets } from './projectEvermind';
+import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
 import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
+import { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText, isServableText } from './textCoherence';
 
-/** An Evermind reply shorter than this isn't a real answer — fall through to the LLM.
- *  Mirrors the cloud/BrainService threshold so every surface adopts Evermind identically. */
-export const EVERMIND_ANSWER_MIN_CHARS = 20;
+// Re-exported from the shared, zero-dep coherence module so existing importers keep
+// resolving these from projectMemory — one home for "is this a real, coherent answer"
+// across every surface (DRY).
+export { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText };
 
 /** Where a memory-first answer came from — drives the provenance chip the surfaces render. */
 export type MemoryAnswerSource = 'qa-cache' | 'evermind';
@@ -50,6 +53,21 @@ export interface ResolveMemoryDeps {
    * (Q&A cache still applies).
    */
   runEvermind?: (ref: string, question: string) => Promise<string | null>;
+  /**
+   * Whether the CALLING RUN has tools available. Default `true` (safe), which BARS
+   * the Evermind leg.
+   *
+   * The Evermind SSM has no function-calling (see the `evermind` vendor's
+   * `supportsTools: false`), so it can only answer from what it has already learned —
+   * never from live data and never by DOING anything. Letting it short-circuit a
+   * tool-capable run meant a request like "list the backlog and fix the code" (or even
+   * "what project is this chat on?") was answered from stale weights while the tools
+   * that could actually answer it were never called. The Q&A cache leg is unaffected:
+   * it replays an answer a real model already produced.
+   *
+   * Pass `false` only for a genuinely tool-less caller.
+   */
+  toolsAvailable?: boolean;
 }
 
 /** Normalize a question so trivial vari(spacing/case/punctuation) hit the same cache row. */
@@ -82,8 +100,12 @@ export function qaCacheKey(question: string): string {
  * Resolve an answer from memory WITHOUT calling a paid LLM, or null when memory can't
  * confidently answer (caller then runs the normal loop). Order:
  *   1. Exact-repeat Q&A cache (deterministic key match) — zero model cost.
- *   2. Evermind-first — only when the project opted in (`inferenceEnabled`, version ≥ 1)
- *      AND the SSM returns a substantive reply.
+ *   2. Evermind-first — only when the CALLER HAS NO TOOLS (the SSM cannot call any, so
+ *      it must not pre-empt a run that could fetch the real answer), the project opted
+ *      in (`inferenceEnabled`, version ≥ 1), AND the SSM returns a substantive reply.
+ *      Exactly ONE head is consulted: this project's own, or the container's when this
+ *      project is an IDE build with none of its own. A sibling build's Evermind never
+ *      answers for it.
  */
 export async function resolveMemoryAnswer(
   env: Env,
@@ -102,16 +124,45 @@ export async function resolveMemoryAnswer(
     return { text: cached.trim(), source: 'qa-cache' };
   }
 
-  // 2) Evermind-first (opt-in). A project can target MANY Everminds (its own head + the
-  // IDE builds grouped under it); try each inference-enabled, seeded one in order and
-  // adopt the FIRST substantive reply. Same resolver every surface uses.
-  if (deps.runEvermind) {
-    const targets = (await resolveEvermindTargets(env, db, tenantId, projectId).catch(() => []))
-      .filter((h) => h.inferenceEnabled && h.version >= 1 && h.ref);
-    for (const head of targets) {
-      const text = await deps.runEvermind(head.ref as string, q).catch(() => null);
-      if (text && text.trim().length >= EVERMIND_ANSWER_MIN_CHARS) {
-        return { text: text.trim(), source: 'evermind', evermindVersion: head.version, evermindProjectId: head.projectId };
+  // 2) Evermind-first (opt-in), from the chat's OWN head only.
+  //
+  // This deliberately does NOT fan out over `resolveEvermindTargets`. That resolver
+  // returns the project PLUS the storage projects of every IDE build grouped under it —
+  // the right set for a LEARNING fan-out (a run's lessons belong to the whole group),
+  // but the wrong one for ANSWERING: it let a chat bound to project A be answered by
+  // sibling build B's head, including while A's own head reported inference OFF. That
+  // reads as a flat contradiction in the diagnostics ("why did an Evermind answer when
+  // mine is off?") and silently attributes B's knowledge to A.
+  //
+  // The one head consulted is the EFFECTIVE head — the project's own, or the container's
+  // when this project is an IDE build that deliberately has none of its own (the same
+  // read-inheritance the console and head endpoint use). Siblings are never consulted.
+  //
+  // Barred outright when the caller has tools: the SSM cannot call one, so answering
+  // from it would strand a request whose answer lives behind a tool call. Defaults to
+  // barred when the caller says nothing (see `toolsAvailable`).
+  if (deps.runEvermind && deps.toolsAvailable === false) {
+    const ownerId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId).catch(() => projectId);
+    const head = await getProjectEvermindHead(env, db, tenantId, ownerId).catch(() => null);
+    if (head?.inferenceEnabled && head.version >= 1 && head.ref) {
+      const text = await deps.runEvermind(head.ref, q).catch(() => null);
+      // Adopt only a SUBSTANTIVE and COHERENT reply. An under-trained head emits
+      // fluent-looking gibberish that clears the length bar; the coherence gate
+      // rejects it so we fall through to the LLM (a garbled reply IS a miss) rather
+      // than answering the user in garbage. The question is passed as context so a
+      // jargon-dense but legitimate answer isn't mis-accused.
+      const coherent = isServableText(text, { context: q }).coherent;
+      // Feed the outcome to the head's quarantine counter: a run that produced text
+      // but failed the coherence bar counts as a failure; N in a row auto-disables
+      // inference on that head so it stops serving (and wasting a call). A null text
+      // is a transport miss (not the model's fault) → don't penalise it.
+      if (text != null) {
+        await recordEvermindServeOutcome(env, db, tenantId, head.projectId, coherent).catch((error) => { /* best-effort */ 
+          reportCaughtError(error, { source: "application/llm/projectMemory.ts", operation: "resolveMemoryAnswer" });
+        });
+      }
+      if (coherent) {
+        return { text: (text as string).trim(), source: 'evermind', evermindVersion: head.version, evermindProjectId: head.projectId };
       }
     }
   }
@@ -135,8 +186,12 @@ export async function cacheProjectAnswer(
 ): Promise<void> {
   const q = (question ?? '').trim();
   const a = (answer ?? '').trim();
-  if (!q || a.length < EVERMIND_ANSWER_MIN_CHARS || !Number.isInteger(projectId) || projectId <= 0) return;
-  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch(() => {
+  // Never cache garbage: an incoherent answer must not be replayed O(1) on the next
+  // repeat (it would pin the gibberish permanently under the Q&A key).
+  if (!q || !isServableText(a, { context: q }).coherent || !Number.isInteger(projectId) || projectId <= 0) return;
+  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch((error) => {
     /* best-effort — caching never breaks a reply */
+  
+    reportCaughtError(error, { source: "application/llm/projectMemory.ts", operation: "cacheProjectAnswer" });
   });
 }

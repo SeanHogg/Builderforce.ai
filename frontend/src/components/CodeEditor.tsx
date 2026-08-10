@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
@@ -12,7 +13,7 @@ function EditorLoading() {
   const t = useTranslations('codeEditor');
   return (
     <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
-      <div className="text-center"><div className="text-4xl mb-4">📝</div><p className="text-sm">{t('loading')}</p></div>
+      <div className="text-center"><div className="text-4xl mb-4"><Icon source="📝" size="1em" /></div><p className="text-sm">{t('loading')}</p></div>
     </div>
   );
 }
@@ -108,7 +109,7 @@ export function CodeEditor({ filePath, content, onChange, ydoc, modelNamespace }
     return (
       <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
         <div className="text-center">
-          <div className="text-4xl mb-4">📝</div>
+          <div className="text-4xl mb-4"><Icon source="📝" size="1em" /></div>
           <p>{t('selectFile')}</p>
         </div>
       </div>

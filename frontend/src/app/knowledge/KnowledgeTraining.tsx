@@ -9,9 +9,9 @@ import { badge } from './KnowledgeClient';
 
 function stateColor(state: string): React.CSSProperties {
   if (state === 'completed' || state === 'acknowledged')
-    return { background: 'var(--success-bg, #0f3d2e)', color: 'var(--success-text, #4ade80)' };
-  if (state === 'overdue') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' };
-  return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' };
+    return { background: 'var(--success-bg)', color: 'var(--success-text)' };
+  if (state === 'overdue') return { background: 'var(--error-bg)', color: 'var(--error-text, var(--error))' };
+  return { background: 'var(--warning-bg)', color: 'var(--warning-text, var(--amber-bright))' };
 }
 
 /**
@@ -37,7 +37,7 @@ export function MyTrainingSection() {
   return (
     <section>
       <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>{t('myTraining')}</h2>
-      {!loadedMine && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>}
+      {!loadedMine && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}
       <div style={{ display: 'grid', gap: 8 }}>
         {mine.map((item) => (
           <Link
@@ -49,9 +49,9 @@ export function MyTrainingSection() {
               alignItems: 'center',
               gap: 12,
               padding: '12px 16px',
-              borderRadius: 10,
-              border: '1px solid var(--border, #333)',
-              background: 'var(--surface, #1a1a1a)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
               textDecoration: 'none',
               color: 'inherit',
             }}
@@ -59,7 +59,7 @@ export function MyTrainingSection() {
             <div>
               <div style={{ fontWeight: 600 }}>{item.title}</div>
               {item.dueAt && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {t('due')}: {new Date(item.dueAt).toLocaleDateString()}
                 </div>
               )}
@@ -101,7 +101,7 @@ function ComplianceAudit() {
   return (
     <section>
       <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>{t('complianceAudit')}</h2>
-      {!loaded && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>}
+      {!loaded && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}
       {loaded && data && (
         <>
           <div style={{ display: 'flex', gap: 24, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -111,12 +111,12 @@ function ComplianceAudit() {
             <Stat label={t('overdue')} value={String(data.totals.overdue)} danger={data.totals.overdue > 0} />
           </div>
           {data.documents.length === 0 ? (
-            <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('noComplianceDocs')}</div>
+            <div style={{ color: 'var(--text-muted)' }}>{t('noComplianceDocs')}</div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
-                  <tr style={{ textAlign: 'left', color: 'var(--text-muted, #9ca3af)' }}>
+                  <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
                     <th style={th}>{t('document')}</th>
                     <th style={th}>{t('percentComplete')}</th>
                     <th style={th}>{t('acknowledged')}</th>
@@ -126,21 +126,21 @@ function ComplianceAudit() {
                 </thead>
                 <tbody>
                   {data.documents.map((d) => (
-                    <tr key={d.documentId} style={{ borderTop: '1px solid var(--border, #333)' }}>
+                    <tr key={d.documentId} style={{ borderTop: '1px solid var(--border)' }}>
                       <td style={td}>
-                        <Link href={`/knowledge/${d.documentId}`} style={{ color: 'var(--accent, #60a5fa)' }}>
+                        <Link href={`/knowledge/${d.documentId}`} style={{ color: 'var(--accent, var(--info))' }}>
                           {d.title}
                         </Link>
                       </td>
                       <td style={td}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 80, height: 6, borderRadius: 3, background: 'var(--surface-2, #222)' }}>
+                          <div style={{ width: 80, height: 6, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)' }}>
                             <div
                               style={{
                                 width: `${d.percent}%`,
                                 height: '100%',
-                                borderRadius: 3,
-                                background: d.percent >= 100 ? 'var(--success-text, #4ade80)' : 'var(--accent, #2563eb)',
+                                borderRadius: 'var(--radius-sm)',
+                                background: d.percent >= 100 ? 'var(--success-text)' : 'var(--accent)',
                               }}
                             />
                           </div>
@@ -149,7 +149,7 @@ function ComplianceAudit() {
                       </td>
                       <td style={td}>{d.acknowledged}</td>
                       <td style={td}>{d.pending}</td>
-                      <td style={{ ...td, color: d.overdue > 0 ? 'var(--error-text, #f87171)' : undefined }}>{d.overdue}</td>
+                      <td style={{ ...td, color: d.overdue > 0 ? 'var(--error-text, var(--error))' : undefined }}>{d.overdue}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,14 +167,14 @@ export function Stat({ label, value, danger }: { label: string; value: string; d
     <div
       style={{
         padding: '12px 18px',
-        borderRadius: 10,
-        border: '1px solid var(--border, #333)',
-        background: 'var(--surface, #1a1a1a)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface)',
         minWidth: 110,
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--error-text, #f87171)' : undefined }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--error-text, var(--error))' : undefined }}>{value}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</div>
     </div>
   );
 }

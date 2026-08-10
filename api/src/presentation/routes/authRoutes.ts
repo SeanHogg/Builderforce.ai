@@ -1,8 +1,13 @@
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
-import type { HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { credentialSecret } from '../../application/integrations/credentialCrypto';
+import { sendWelcomeEmail, sendAccountTypeSelectedEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints, rememberUserLocale } from '../../application/email/emailLocaleResolver';
+import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
@@ -19,7 +24,10 @@ import {
   users,
   tenantApiKeys,
   tenantMembers,
+  salesAssociateSettings,
+  salesReferrals,
 } from '../../infrastructure/database/schema';
+import { notify } from '../../application/notifications/notify';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
@@ -37,7 +45,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
-import { checkTermsAcceptance } from '../middleware/termsEnforcement';
+import { checkTermsAcceptance, invalidateAcceptedTermsVersion } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
@@ -48,6 +56,32 @@ import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfi
 function parsePsychometric(raw: string | null | undefined): unknown {
   if (!raw) return null;
   try { return JSON.parse(raw) as unknown; } catch { return null; }
+}
+
+/** Resumable setup-wizard progress, recorded by STEP ID (see migration 0343). */
+export interface OnboardingProgress {
+  track: 'builder' | 'hired';
+  completed: string[];
+  activeStep: string | null;
+}
+
+const ONBOARDING_TRACKS = ['builder', 'hired'] as const;
+
+/** Parse + validate stored progress; anything malformed degrades to null so a bad
+ *  row can never break the wizard (it just restarts at step 1). */
+export function parseOnboardingProgress(raw: string | null | undefined): OnboardingProgress | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<OnboardingProgress>;
+    if (!ONBOARDING_TRACKS.includes(v.track as (typeof ONBOARDING_TRACKS)[number])) return null;
+    return {
+      track: v.track as OnboardingProgress['track'],
+      completed: Array.isArray(v.completed) ? v.completed.filter((s): s is string => typeof s === 'string').slice(0, 32) : [],
+      activeStep: typeof v.activeStep === 'string' ? v.activeStep : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 type TokenPayload = {
@@ -207,7 +241,7 @@ async function persistToken(
 
 async function assertMfa(
   db: Db,
-  envSecret: string,
+  env: Env,
   user: typeof users.$inferSelect,
   code?: string,
   recoveryCode?: string,
@@ -215,7 +249,9 @@ async function assertMfa(
   if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
 
   if (code) {
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, envSecret);
+    // M2: read under the dedicated credential secret, JWT_SECRET as legacy fallback
+    // (versioned dual-read) so pre-migration MFA rows still decrypt.
+    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
     const validTotp = await verifyTotpCode(secret, code);
     if (validTotp) return true;
   }
@@ -395,8 +431,10 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.post('/privacy-requests', async (c) => {
     const body = await c.req.json<{
       email?: string;
-      requestType?: 'ccpa' | 'gdpr';
+      requestType?: 'ccpa' | 'gdpr' | 'access' | 'correction' | 'deletion' | 'portability' | 'restriction' | 'objection' | 'opt_out' | 'appeal' | 'automated_decision_review';
       details?: string;
+      jurisdiction?: string;
+      parentRequestId?: number;
     }>();
 
     const rawEmail = body.email ?? '';
@@ -405,7 +443,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'Valid email is required' }, 400);
     }
 
-    const requestType = body.requestType === 'gdpr' ? 'gdpr' : 'ccpa';
+    const allowedTypes = new Set(['ccpa', 'gdpr', 'access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review'] as const);
+    const requestType = allowedTypes.has(body.requestType as never) ? body.requestType! : 'access';
     const details = body.details?.trim() || null;
 
     const [user] = await db
@@ -421,6 +460,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email,
         requestType,
         details,
+        jurisdiction: body.jurisdiction?.trim().slice(0, 32) || null,
+        parentRequestId: Number.isInteger(body.parentRequestId) ? body.parentRequestId : null,
+        dueAt: new Date(Date.now() + 45 * 86_400_000),
       })
       .returning({ id: privacyRequests.id });
 
@@ -444,13 +486,57 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.get('/legal/terms/status', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const terms = await getActiveLegalDoc(db, 'terms');
-    const status = await checkTermsAcceptance(db, userId);
+    const status = await checkTermsAcceptance(db, userId, c.env);
     return c.json({
       requiredVersion: status.requiredVersion ?? terms.version,
       acceptedVersion: status.acceptedVersion,
       needsAcceptance: status.needsAcceptance,
       terms,
     });
+  });
+
+  // GET /api/auth/me/privacy-export — machine-readable, authenticated access and
+  // portability bundle. Workspace content remains exportable from its owning UI;
+  // this bundle covers the person's identity, memberships, legal record, and DSRs.
+  router.get('/me/privacy-export', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const [account] = await db.select({ id: users.id, email: users.email, username: users.username, displayName: users.displayName, accountType: users.accountType, locale: users.locale, createdAt: users.createdAt, updatedAt: users.updatedAt }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!account) return c.json({ error: 'User not found' }, 404);
+    const [memberships, legalAcceptances, requests] = await Promise.all([
+      db.select({ ...getTableColumns(tenantMembers), tenantId: tenantMembers.tenantId }).from(tenantMembers).where(eq(tenantMembers.userId, userId)),
+      db.select().from(userLegalAcceptances).where(eq(userLegalAcceptances.userId, userId)),
+      db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)),
+    ]);
+    c.header('Content-Disposition', `attachment; filename="builderforce-privacy-export-${userId}.json"`);
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, memberships, legalAcceptances, privacyRequests: requests });
+  });
+
+  // Authenticated request channel for deletion, correction, objection, appeal,
+  // portability, or human review. Identity is already verified by the WebJWT.
+  router.post('/me/privacy-requests', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ requestType?: string; details?: string; jurisdiction?: string; parentRequestId?: number }>().catch(() => ({} as { requestType?: string; details?: string; jurisdiction?: string; parentRequestId?: number }));
+    const supported = ['access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review'] as const;
+    if (!supported.includes(body.requestType as typeof supported[number])) return c.json({ error: 'Unsupported privacy request type' }, 400);
+    const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!account) return c.json({ error: 'User not found' }, 404);
+    const isDeletion = body.requestType === 'deletion';
+    const [created] = await db.insert(privacyRequests).values({
+      userId, email: account.email, requestType: body.requestType as typeof supported[number],
+      details: body.details?.trim() || null, jurisdiction: body.jurisdiction?.trim().slice(0, 32) || null,
+      parentRequestId: Number.isInteger(body.parentRequestId) ? body.parentRequestId : null,
+      status: body.requestType === 'appeal' ? 'appealed' : 'processing', verifiedAt: new Date(),
+      dueAt: new Date(Date.now() + 45 * 86_400_000),
+      processorDeletionStatus: isDeletion ? { state: 'queued', providers: 'derived from tenant integrations and subprocessor register' } : null,
+      backupDisposition: isDeletion ? 'Queued for live-system deletion; encrypted backups age out under the retention schedule and are not returned to production except disaster recovery.' : null,
+    }).returning({ id: privacyRequests.id, status: privacyRequests.status, dueAt: privacyRequests.dueAt });
+    return c.json({ ok: true, request: created }, 201);
+  });
+
+  router.get('/me/privacy-requests', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    return c.json({ requests: await db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)).orderBy(desc(privacyRequests.createdAt)) });
   });
 
   // POST /api/auth/legal/terms/accept (requires WebJWT)
@@ -478,6 +564,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           updatedAt: sql`now()`,
         },
       });
+
+    // The auth middlewares serve this from the read-through cache, so the accept
+    // MUST invalidate it — otherwise the user keeps getting 428 until the TTL
+    // lapses, on the one screen that is supposed to unblock them.
+    await invalidateAcceptedTermsVersion(c.env, userId);
 
     return c.json({
       acceptedVersion: terms.version,
@@ -538,7 +629,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       userCode,
       userId,
       tenantId: body.tenantId,
-      envSecret: c.env.JWT_SECRET,
+      envSecret: credentialSecret(c.env),
     });
     if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
     return c.json({ ok: true, decision: 'approve' });
@@ -560,7 +651,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.post('/device/token', async (c) => {
     const body = await c.req.json<{ device_code?: string }>();
     if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
-    const res = await deviceAuth.poll(body.device_code, c.env.JWT_SECRET);
+    const res = await deviceAuth.poll(body.device_code, credentialSecret(c.env), c.env.JWT_SECRET);
     switch (res.state) {
       case 'approved':
         return c.json({ access_key: res.accessKey, tenant_id: res.tenantId, token_type: 'bearer' }, 200);
@@ -627,6 +718,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId: row.createdByUserId,
       tenantId: row.tenantId,
+      clientSurface: 'vscode',
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });
@@ -646,16 +738,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       agreeToTerms?: boolean;
       accountType?: string;
       anonId?: string;
+      referralCode?: string;
+      ageAttested?: boolean;
     }>();
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
     // Optional landing anon-id — threaded through so the verification path can carry it.
     const anonId = typeof body.anonId === 'string' && body.anonId.trim() ? body.anonId.trim() : undefined;
-    // 'freelancer' = restricted gig account for hire; anything else = standard.
-    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
+    // Dedicated shells: freelancer = gig account; sales = referral/sales associate.
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : body.accountType === 'sales' ? 'sales' : 'standard';
     if (body.agreeToTerms !== true) {
       return c.json({ error: 'You must accept the Terms of Use and Privacy Policy' }, 400);
+    }
+    if (body.ageAttested !== true) {
+      return c.json({ error: 'BuilderForce accounts require confirmation that you are at least 18 years old' }, 400);
     }
 
     const email = body.email.toLowerCase().trim();
@@ -703,15 +800,32 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         // The register form is an explicit role choice, so mark it selected now —
         // the onboarding gate must never re-prompt a password signup.
         accountTypeSelectedAt: sql`now()`,
+        // Capture the language THIS signup is happening in (NEXT_LOCALE cookie, then
+        // Accept-Language) so the very first email — the verification code, sent a
+        // few lines below — is already in it. Null when the request gives no usable
+        // hint; the resolver then falls back per its documented chain.
+        locale: localeFromHeaders(headerHints(c.req)),
       })
       .returning();
 
     if (!created) return c.json({ error: 'Failed to create user' }, 500);
 
+    const referralCode = typeof body.referralCode === 'string' ? body.referralCode.trim().toUpperCase().slice(0, 32) : '';
+    if (referralCode) {
+      const [associate] = await db.select({ ownerUserId: salesAssociateSettings.ownerUserId, notifyOnSignup: salesAssociateSettings.notifyOnSignup, salesCode: salesAssociateSettings.salesCode })
+        .from(salesAssociateSettings).where(or(eq(salesAssociateSettings.referralCode, referralCode), eq(salesAssociateSettings.salesCode, referralCode))).limit(1);
+      if (associate && associate.ownerUserId !== created.id) {
+        await db.insert(salesReferrals).values({ associateUserId: associate.ownerUserId, referredUserId: created.id, attributionType: referralCode === associate.salesCode ? 'sales' : 'referral' }).onConflictDoNothing();
+      }
+    }
+
     await db.insert(userLegalAcceptances).values([
       { userId: created.id, documentType: 'terms', version: termsDoc.version },
       { userId: created.id, documentType: 'privacy', version: privacyDoc.version },
     ]);
+    // Registration accepts terms implicitly — drop any cached "not accepted" so
+    // the very first authenticated call after signup isn't gated with a 428.
+    await invalidateAcceptedTermsVersion(c.env, created.id);
 
     // A freelancer gets a for-hire profile stub immediately (private + unpublished
     // until they fill it in) and is auto-provisioned a hired.video job-seeker
@@ -725,11 +839,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
     // on `verificationRequired` and calls /web/register/verify to obtain a session.
-    await issueVerificationCode(db, c.env, created, { force: true, anonId });
+    const issue = await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
 
     return c.json({
       verificationRequired: true,
       email: created.email,
+      emailDeliveryFailed: issue.deliveryFailed === true,
     }, 201);
   });
 
@@ -772,6 +887,40 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         .update(users)
         .set({ emailVerifiedAt: sql`now()`, updatedAt: sql`now()` })
         .where(eq(users.id, user.id));
+
+      // First successful verification is when a password signup becomes a real
+      // account — the welcome goes here, not at the (still-unverified) insert.
+      // Guarded by the `!user.emailVerifiedAt` branch, so a re-submit can't
+      // send it twice. Fire-and-forget: mail failure must not fail the session.
+      // The role was chosen on the register form, so the welcome carries the
+      // role-specific next steps directly — no follow-up account-type email.
+      // `stored: user.locale` skips the resolver's lookup: the row is already in
+      // hand, and it was captured at register time from this same browser.
+      void sendTransactionalEmail(
+        c.env,
+        db,
+        user.email,
+        ({ locale }) => sendWelcomeEmail(
+          c.env,
+          user.email,
+          user.displayName ?? user.username ?? '',
+          resolveAppBaseUrl(c.env),
+          user.accountType === 'freelancer' ? 'freelancer' : 'standard',
+          locale,
+        ),
+        { storedLocale: user.locale, headers: headerHints(c.req) },
+      );
+    }
+
+    // Count and announce only verified signups. This intentionally also runs on
+    // an idempotent verification retry, recovering if a prior request committed
+    // email verification but stopped before stamping the referral notification.
+    const [verifiedReferral] = await db.update(salesReferrals).set({ signupNotifiedAt: new Date() })
+      .where(and(eq(salesReferrals.referredUserId, user.id), isNull(salesReferrals.signupNotifiedAt))).returning({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId });
+    if (verifiedReferral) {
+      const [associate] = await db.select({ enabled: salesAssociateSettings.notifyOnSignup }).from(salesAssociateSettings)
+        .where(eq(salesAssociateSettings.ownerUserId, verifiedReferral.associateUserId)).limit(1);
+      if (associate?.enabled !== false) void notify(db, c.env, { userId: verifiedReferral.associateUserId, kind: 'sales.referral_signup', title: 'A referred user signed up', body: `${user.displayName || user.email} verified their Builderforce account.`, ref: '/sales' });
     }
 
     const expiresIn = body.trustDevice === true ? 30 * 86_400 : 86_400;
@@ -780,7 +929,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         sub: user.id,
         email: user.email,
         username: user.username ?? '',
-        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
+        act: user.accountType === 'standard' ? undefined : user.accountType,
         mfa: false,
         amr: ['pwd', 'email'],
       },
@@ -813,7 +962,10 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (email) {
       const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
       if (user && !user.emailVerifiedAt && !user.isSuspended) {
-        const res = await issueVerificationCode(db, c.env, user);
+        const res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+        if (res.deliveryFailed) {
+          return c.json({ ok: false, error: 'Verification email could not be sent. Please try again.' }, 503);
+        }
         if (!res.sent && res.cooldownSeconds) {
           return c.json({ ok: true, cooldownSeconds: res.cooldownSeconds });
         }
@@ -852,8 +1004,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // (cooldown-guarded) and route the client into the same code-entry step instead
     // of issuing a session. Keeps a half-finished fake signup from ever logging in.
     if (!user.emailVerifiedAt) {
-      await issueVerificationCode(db, c.env, user);
-      return c.json({ verificationRequired: true, email: user.email }, 403);
+      const issue = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+      return c.json({ verificationRequired: true, email: user.email, emailDeliveryFailed: issue.deliveryFailed === true }, 403);
     }
 
     if (user.mfaEnabled) {
@@ -887,7 +1039,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
-        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
+        act: user.accountType === 'standard' ? undefined : user.accountType,
         mfa: false,
         amr: ['pwd'],
       },
@@ -944,7 +1096,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'MFA is not enabled for this account' }, 400);
     }
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const superadmin = canUseSuperAdmin(user);
@@ -954,7 +1106,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
-        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
+        act: user.accountType === 'standard' ? undefined : user.accountType,
         mfa: true,
         amr: ['pwd', 'mfa'],
       },
@@ -989,7 +1141,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, onboardingProgress: users.onboardingProgress, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -998,6 +1150,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         ...user,
         mfaEnabled: full?.mfaEnabled ?? false,
         onboardingCompletedAt: full?.onboardingCompletedAt ?? null,
+        // Which setup steps are already done — lets the wizard resume instead of
+        // restarting at step 1 (0343).
+        onboardingProgress: parseOnboardingProgress(full?.onboardingProgress),
         psychometric: parsePsychometric(full?.psychometric),
         // Account type + whether the user has explicitly chosen it (Build vs
         // Hired). The onboarding gate forces the choice when not yet selected.
@@ -1015,11 +1170,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   // shell churn); returns the current account unchanged in that case.
   router.post('/me/account-type', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ accountType?: string }>().catch(() => ({} as { accountType?: string }));
-    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
+    const body = await c.req.json<{ accountType?: string; ageAttested?: boolean }>().catch(() => ({} as { accountType?: string; ageAttested?: boolean }));
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : body.accountType === 'sales' ? 'sales' : 'standard';
+    if (body.ageAttested !== true) return c.json({ error: 'BuilderForce accounts require confirmation that you are at least 18 years old' }, 400);
 
     const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!existing) return c.json({ error: 'User not found' }, 404);
+
+    // The locale-capture point for OAuth / magic-link accounts. Their signup was a
+    // cross-site redirect where the app's locale header and NEXT_LOCALE cookie are
+    // unavailable, so `users.locale` is usually still NULL here. This is the first
+    // request that comes from the APP itself (and therefore carries
+    // X-Builderforce-Locale), and it happens before the account-type email is sent
+    // a few lines below — so that mail is already in the right language.
+    // Non-destructive: it only fills an empty locale, never overwrites a choice.
+    await rememberUserLocale(c.env, db, userId, headerHints(c.req)).catch(() => null);
 
     // Already chosen — return as-is so the client can just advance.
     if (existing.accountTypeSelectedAt) {
@@ -1044,6 +1209,24 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await provisionFreelancer(c, row);
     }
 
+    // The role-specific next steps. Only reachable past the idempotency guard
+    // above, so the choice — and this email — happen exactly once per account.
+    // Fire-and-forget: mail must not fail the role selection.
+    void sendTransactionalEmail(
+      c.env,
+      db,
+      row.email,
+      ({ locale }) => sendAccountTypeSelectedEmail(
+        c.env,
+        row.email,
+        row.displayName ?? row.username ?? '',
+        resolveAppBaseUrl(c.env),
+        accountType === 'sales' ? 'standard' : accountType,
+        locale,
+      ),
+      { storedLocale: row.locale, headers: headerHints(c.req) },
+    );
+
     return c.json({ user: toUserResponse(row) });
   });
 
@@ -1055,12 +1238,13 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   // identically.
   router.patch('/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ psychometric?: unknown }>().catch(() => ({} as { psychometric?: unknown }));
+    const body = await c.req.json<{ psychometric?: unknown; displayName?: string }>().catch(() => ({} as { psychometric?: unknown; displayName?: string }));
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.psychometric !== undefined) {
       updates.psychometric = body.psychometric === null ? null : sanitizePsychometricProfile(body.psychometric);
     }
+    if (body.displayName !== undefined) updates.displayName = body.displayName.trim().slice(0, 120) || null;
 
     const [row] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
     if (!row) return c.json({ error: 'User not found' }, 404);
@@ -1071,6 +1255,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await Promise.all(memberships.map((m) => invalidateCached(c.env, assigneeProfilesCacheKey(m.tenantId))));
     }
     return c.json({ user: toUserResponse(row) });
+  });
+
+  // PUT /api/auth/me/onboarding/progress — records which setup steps are done, so
+  // a user who closes the wizard mid-way resumes where they left off (0343).
+  // Idempotent full-state write; validated so a malformed body can't poison the row.
+  router.put('/me/onboarding/progress', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<Partial<OnboardingProgress>>().catch(() => ({} as Partial<OnboardingProgress>));
+    const progress = parseOnboardingProgress(JSON.stringify(body));
+    if (!progress) return c.json({ error: 'Invalid onboarding progress' }, 400);
+    await db
+      .update(users)
+      .set({ onboardingProgress: JSON.stringify(progress), updatedAt: sql`now()` })
+      .where(eq(users.id, userId));
+    return c.json({ progress });
   });
 
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent
@@ -1129,7 +1328,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
     const keyHash = await hashSecret(body.apiKey);
     const [agentHost] = await db
-      .select()
+      .select({ ...getTableColumns(agentHosts), tenantId: agentHosts.tenantId })
       .from(agentHosts)
       .where(eq(agentHosts.apiKeyHash, keyHash))
       .limit(1);
@@ -1212,7 +1411,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
 
     const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db
@@ -1260,11 +1459,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
     }
 
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, c.env.JWT_SECRET);
+    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
     const valid = await verifyTotpCode(secret, body.code);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
-    const encryptedSecret = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const recoveryCodes = generateRecoveryCodes(10);
 
     await replaceRecoveryCodes(db, user.id, recoveryCodes);
@@ -1303,7 +1502,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ enabled: false });
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
@@ -1340,7 +1539,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const recoveryCodes = generateRecoveryCodes(10);
@@ -1369,7 +1568,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       ? await db
         .select({
           sessionId: authTokens.sessionId,
-          activeCount: sql<number>`COUNT(*)`,
+          activeCount: sql<number>`COUNT(COALESCE(${authTokens.tenantId}, 0))`,
         })
         .from(authTokens)
         .where(
@@ -1425,7 +1624,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           eq(authTokens.sessionId, sessionId),
           isNull(authTokens.revokedAt),
         ),
-      );
+      )
+      .returning({ tenantId: authTokens.tenantId });
 
     return c.json({ ok: true });
   });
@@ -1456,7 +1656,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           ne(authTokens.sessionId, currentSessionId),
           isNull(authTokens.revokedAt),
         ),
-      );
+      )
+      .returning({ tenantId: authTokens.tenantId });
 
     return c.json({ ok: true });
   });
@@ -1501,7 +1702,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.jti, jti), eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.jti, jti), eq(authTokens.userId, userId), isNull(authTokens.revokedAt)))
+      .returning({ tenantId: authTokens.tenantId });
 
     return c.json({ ok: true });
   });

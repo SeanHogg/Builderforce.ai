@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../domain/shared/hash';
 /**
  * The canonical error-event spec — Builderforce's own product-quality wire format.
  *
@@ -76,8 +77,14 @@ function topFrameKey(stack: NormalizedErrorEvent['stack']): string {
  * Strip the volatile parts of a message so two occurrences of the same bug group
  * together: drop quoted literals, hex/uuids, and standalone numbers (object ids,
  * timestamps, addresses) that differ event-to-event but not bug-to-bug.
+ *
+ * Exported because "same cause, different counters" is not a Quality-pillar problem
+ * — it is the general one. The ticket lifecycle ledger groups repeated RUN failures
+ * with this exact function so 134 dispatches that all died on
+ * `allowance reached (30/25 …)` collapse to ONE line, and so the two subsystems can
+ * never drift into two different definitions of "the same error".
  */
-function normalizeMessage(message: string): string {
+export function normalizeErrorMessage(message: string): string {
   return message
     .replace(/0x[0-9a-f]+/gi, '0x?')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>')
@@ -89,11 +96,6 @@ function normalizeMessage(message: string): string {
 }
 
 /** SHA-256 hex of a string (Web Crypto — Worker-compatible). */
-async function sha256Hex(value: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 /**
  * Stable grouping fingerprint for an event. Honors an explicit `fingerprint` when
  * the source supplied one (e.g. Sentry issue id); otherwise derives a stable hash
@@ -101,7 +103,7 @@ async function sha256Hex(value: string): Promise<string> {
  */
 export async function computeFingerprint(e: NormalizedErrorEvent): Promise<string> {
   if (e.fingerprint && e.fingerprint.trim()) return e.fingerprint.trim().slice(0, 128);
-  const basis = `${e.type}|${normalizeMessage(e.message)}|${topFrameKey(e.stack)}`;
+  const basis = `${e.type}|${normalizeErrorMessage(e.message)}|${topFrameKey(e.stack)}`;
   return sha256Hex(basis);
 }
 

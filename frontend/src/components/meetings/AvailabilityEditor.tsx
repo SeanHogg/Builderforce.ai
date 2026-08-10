@@ -95,7 +95,7 @@ export function AvailabilityEditor({
     } finally { setBusy(false); }
   }, [windows, timezone, onSaved]);
 
-  const field: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 6, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' };
+  const field: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' };
 
   return (
     <SlideOutPanel
@@ -142,8 +142,8 @@ export function AvailabilityEditor({
 
         {error && <div style={{ fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>{t('cancel')}</button>
-          <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}>{t('save')}</button>
+          <button type="button" onClick={onClose} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>{t('cancel')}</button>
+          <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}>{t('save')}</button>
         </div>
       </div>
     </SlideOutPanel>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -12,6 +13,8 @@ interface EmailVerificationStepProps {
   onVerified: () => void | Promise<void>;
   /** Optional "use a different email" escape hatch (e.g. back to the register form). */
   onChangeEmail?: () => void;
+  /** Account creation succeeded, but the provider rejected the initial send. */
+  initialDeliveryFailed?: boolean;
 }
 
 /**
@@ -20,14 +23,14 @@ interface EmailVerificationStepProps {
  * verifies via AuthContext, resends via the API, and handles the "keep me signed in
  * for 30 days" device-trust option. Fully localized + theme/responsive.
  */
-export default function EmailVerificationStep({ email, onVerified, onChangeEmail }: EmailVerificationStepProps) {
+export default function EmailVerificationStep({ email, onVerified, onChangeEmail, initialDeliveryFailed = false }: EmailVerificationStepProps) {
   const t = useTranslations('emailVerify');
   const { verifyEmail } = useAuth();
 
   const [code, setCode] = useState('');
   const [trustDevice, setTrustDevice] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialDeliveryFailed ? t('errDelivery') : null);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
 
@@ -68,7 +71,7 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
         setResent(true);
       }
     } catch {
-      setError(t('errGeneric'));
+      setError(t('errDelivery'));
     } finally {
       setResending(false);
     }
@@ -79,7 +82,7 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
     background: 'var(--bg-elevated)',
     color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     padding: '14px',
     fontSize: '1.4rem',
     letterSpacing: '0.5em',
@@ -94,13 +97,13 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
     <div style={{
       background: 'var(--surface-card)',
       border: '1px solid var(--border-subtle)',
-      borderRadius: 20,
+      borderRadius: 'var(--radius-xl)',
       padding: '32px 28px',
       backdropFilter: 'blur(12px)',
       boxShadow: '0 16px 48px var(--shadow-coral-soft)',
     }}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: '2rem', marginBottom: 8 }} aria-hidden>✉️</div>
+        <div style={{ fontSize: '2rem', marginBottom: 8 }} aria-hidden><Icon source="✉️" size="1em" /></div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
           {t('title')}
         </h2>
@@ -148,7 +151,7 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
         </label>
 
         {error && (
-          <div style={{ background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border, rgba(239,68,68,0.4))', color: 'var(--error-text, #f87171)', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
+          <div style={{ background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border, rgba(239,68,68,0.4))', color: 'var(--error-text, var(--error))', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: '0.875rem' }}>
             {error}
           </div>
         )}
@@ -164,7 +167,7 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
           style={{
             width: '100%',
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-            color: '#fff', border: 'none', borderRadius: 12, padding: '13px',
+            color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', padding: '13px',
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem',
             cursor: isLoading ? 'wait' : 'pointer',
             opacity: (isLoading || code.length < 6) ? 0.5 : 1,

@@ -1,0 +1,10 @@
+# Tables whose payload columns match at >= 0.55 IDF-weighted Jaccard (PRD 20 §4).
+# Regenerate: node scripts/check-signature-duplication.mjs --update
+agent_host_skill_assignments = tenant_skill_assignments
+board_type_mappings = import_type_mappings
+drive_connections = mailbox_connections
+initiatives = portfolios
+kanban_template_lane_requirements = swimlane_requirements
+marketing_tool_runs = tool_runs
+platform_modules = tenant_custom_roles
+project_manager_configs = tenant_manager_defaults

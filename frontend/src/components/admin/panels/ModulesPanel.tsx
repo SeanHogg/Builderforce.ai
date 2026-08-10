@@ -110,7 +110,7 @@ export default function ModulesPanel() {
                 <button
                   type="button"
                   className="admin-tab"
-                  style={{ padding: '3px 10px', fontSize: 12, color: '#ef4444' }}
+                  style={{ padding: '3px 10px', fontSize: 12, color: 'var(--error-text)' }}
                   onClick={async () => {
                     if (!(await confirm(t('modules.confirmDelete', { name: m.name })))) return;
                     setError('');

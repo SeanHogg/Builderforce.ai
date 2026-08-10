@@ -16,6 +16,14 @@ import {
   parseByoUnresolved,
   deriveChatTitle,
   DEFAULT_CHAT_TITLE,
+  effortProfile,
+  isEffort,
+  reasoningForRun,
+  classifyModelFunding,
+  getMcpToolStatus,
+  fetchApiVersionVia,
+  nextFallbackModel,
+  type Effort,
   type BrainConfig,
   type BrainChat,
   type DirectedRecipient,
@@ -28,11 +36,20 @@ import {
 import { authedFetch } from './authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
-  useMentionAutocomplete,
+  useMentionAutocomplete, ChatErrorBanner,
+  PromptPanel, PromptOptionsMenu,
+  PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   type BrainTimelineLabels,
+  DEFAULT_PROMPT_OPTIONS_LABELS,
+  type ChatModelSelection,
+  type ModelChoiceLabels,
+  type PromptOptionsLabels,
 } from '@seanhogg/builderforce-brain-ui';
+import { loadComposerModels, invalidateModelSurface, type ComposerModelSurface } from './modelOptions';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
+import { adoptChatProject } from './adoptChatProject';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
+import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import {
   getToken,
   getEditorContext,
@@ -68,6 +85,27 @@ function makeT(labels: LabelBundle) {
  * per chat across reloads.
  */
 const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
+
+/**
+ * Composer run-shaping switches, persisted GLOBALLY (not per chat — they are a
+ * working preference, like a keyboard layout, not a property of a conversation)
+ * so they survive a webview reload.
+ */
+const EFFORT_KEY = 'bf_brain_effort';
+const THINKING_KEY = 'bf_brain_thinking';
+
+/**
+ * The ONE guarded localStorage accessor pair for the composer's persisted
+ * switches. `localStorage` can throw in a webview (storage partitioned/blocked),
+ * so every read/write is wrapped here rather than repeating a try/catch per
+ * switch — the memory toggle, effort, and thinking all go through these.
+ */
+function readStored(key: string): string | null {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+function writeStored(key: string, value: string): void {
+  try { window.localStorage.setItem(key, value); } catch { /* storage blocked */ }
+}
 
 /**
  * Best-effort decode of the tenant JWT's claims for the diagnostics dump — the api
@@ -122,9 +160,6 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
   };
 }
 
-/** How hard the model should work on the next turn — surfaced in the `/` menu. */
-type Effort = 'quick' | 'balanced' | 'thorough';
-
 /** A persisted Brain trace row as returned by GET /api/brain/chats/:id/trace. */
 interface PersistedTraceRow {
   turnSeq: number | null;
@@ -159,31 +194,100 @@ function persistedToTraceEvent(row: PersistedTraceRow): BrainTraceEvent {
 }
 
 /**
- * Turn the composer's Effort / Thinking / Browse-the-web toggles into extra
- * system-prompt directives. These ride the SAME `extraSystem` channel the web
- * Brain uses, so a toggle actually changes how the next turn runs (no hidden
- * model params needed). 'balanced' is the neutral default and adds nothing.
+ * Turn the composer's Effort / Browse-the-web toggles into extra system-prompt
+ * directives, riding the same `extraSystem` channel the web Brain uses.
+ *
+ * The Effort nudge comes from the SHARED effort table (`effortProfile`) that also
+ * decides this run's `max_tokens` and reasoning level, so the prose and the real
+ * params can never disagree. 'balanced' contributes nothing (the neutral default).
+ *
+ * Thinking is deliberately NOT here any more. It used to be a "reason step by
+ * step" sentence — pure theatre, since nothing on the wire changed. It is now a
+ * real, structured `reasoning.level` request field (see `reasoningForRun`), so the
+ * prose version was removed rather than left as a second, weaker mechanism.
  */
-function buildComposerDirectives(o: { effort: Effort; thinking: boolean; web: boolean }): string {
+function buildComposerDirectives(o: { effort: Effort; web: boolean }): string {
   const parts: string[] = [];
-  if (o.effort === 'quick')
-    parts.push('Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more.');
-  if (o.effort === 'thorough')
-    parts.push('Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete.');
-  if (o.thinking)
-    parts.push('Reason step by step before answering: work the problem through and lay out your plan before you act.');
+  const { directive } = effortProfile(o.effort);
+  if (directive) parts.push(directive);
   if (o.web)
     parts.push('You may browse the web: when a question needs current or external information, use the `web.fetch` tool to read the relevant URL(s) rather than relying on memory, and cite the sources you use.');
   return parts.join('\n\n');
+}
+
+/**
+ * One line describing what an Effort level ACTUALLY does, built from the shared
+ * effort table so the copy can never claim a budget the request doesn't send.
+ * The thinking budget is only mentioned when the Thinking toggle is on — that is
+ * the only case in which it is spent.
+ */
+function effortDesc(
+  level: Effort,
+  thinking: boolean,
+  t: (key: string, fallback: string) => string,
+): string {
+  const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
+  const base = t(`app.effortDesc.${level}`, EFFORT_DESC_FALLBACK[level])
+    .replace('{answer}', maxTokens.toLocaleString());
+  if (!thinking) return base;
+  return `${base} ${t('app.effortDescThinking', '+ {thinking} thinking tokens.')
+    .replace('{thinking}', thinkingBudgetTokens.toLocaleString())}`;
+}
+
+/** English fallbacks for the effort descriptions (localized via the host bundle). */
+const EFFORT_DESC_FALLBACK: Record<Effort, string> = {
+  quick: 'Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.',
+  balanced: 'The default — normal depth. Up to {answer} answer tokens.',
+  thorough: 'Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.',
+};
+
+/**
+ * The `/` menu's copy: its own chrome from the host's label bundle, and the model
+ * rows' copy from `init.modelLabels` — the SAME object the host's `Change model`
+ * QuickPick renders from, so the two pickers cannot describe a row differently.
+ * The menu itself is the shared control (`PromptOptionsMenu`), identical to the
+ * web composer's.
+ */
+function promptMenuLabels(
+  t: (key: string, fallback: string) => string,
+  modelLabels: ModelChoiceLabels | undefined,
+): PromptOptionsLabels {
+  return {
+    ...DEFAULT_PROMPT_OPTIONS_LABELS,
+    ...(modelLabels ?? {}),
+    options: t('app.options', 'Options'),
+    effort: t('app.effort', 'Effort'),
+    effortQuick: t('app.effortQuick', 'Quick'),
+    effortBalanced: t('app.effortBalanced', 'Balanced'),
+    effortThorough: t('app.effortThorough', 'Thorough'),
+    thinking: t('app.thinking', 'Thinking'),
+    on: t('app.on', 'On'),
+    off: t('app.off', 'Off'),
+    memory: t('app.memory', 'Memory'),
+    conversation: t('app.conversation', 'Conversation'),
+    consolidate: t('app.consolidate', 'Consolidate'),
+    consolidating: t('app.consolidating', 'Consolidating…'),
+    consolidateHint: t('app.consolidateHint', 'Summarize this chat into a compact context the rest of the conversation builds on'),
+    fork: t('app.fork', 'Fork'),
+    forking: t('app.forking', 'Forking…'),
+    forkHint: t('app.forkHint', 'Summarize this chat and continue in a new one from that summary'),
+    sessionUnavailable: t('app.sessionUnavailable', 'Available once this chat has a few messages and no run in flight'),
+    model: t('app.model', 'Model'),
+    modelInUse: t('app.modelInUse', 'Model in use'),
+    searchModels: t('app.searchModels', 'Search models…'),
+    filterModels: t('app.filterModels', 'Filter models'),
+    chooseModel: t('app.pickModel', 'Change model'),
+    noModels: t('app.noModels', 'No matching models'),
+    all: t('app.all', 'All'),
+    modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
+    accountSettings: t('app.accountSettings', 'Account settings'),
+  };
 }
 
 /* Toolbar glyphs — inline SVG so they render crisply in the editor's light AND
    dark themes (they inherit currentColor) with no icon-font dependency. */
 const IconPlus = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-);
-const IconSlash = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10.25 3 5.75 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
 );
 const IconMic = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="6" y="2" width="4" height="7.5" rx="2" fill="currentColor" /><path d="M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
@@ -193,18 +297,6 @@ const IconSend = () => (
 );
 const IconBolt = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" /></svg>
-);
-/* Consolidate = collapse the conversation inward into a compact summary. */
-const IconConsolidate = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
-/* Fork = branch the conversation into a new one (git-branch glyph). */
-const IconFork = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5" fill="currentColor" /><circle cx="4" cy="12.5" r="1.5" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /><path d="M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
-/* Memory = brain glyph for the per-chat project-Evermind recall/learn switch. */
-const IconBrain = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2.5a2 2 0 0 0-2 2 2 2 0 0 0-1 3.5 2 2 0 0 0 1 3.5 2 2 0 0 0 2 2V2.5zM10 2.5a2 2 0 0 1 2 2 2 2 0 0 1 1 3.5 2 2 0 0 1-1 3.5 2 2 0 0 1-2 2V2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /><path d="M8 2.5v11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" /></svg>
 );
 /* Rename = pencil glyph for editing the selected chat's title. */
 const IconRename = () => (
@@ -259,14 +351,27 @@ function PopoverMenu({
   );
 }
 
-/** One row in a {@link PopoverMenu}. `active` shows a trailing check. */
-function MenuItem({ icon, label, hint, active, onClick }: {
-  icon: React.ReactNode; label: string; hint?: string; active?: boolean; onClick: () => void;
+/**
+ * One row in a {@link PopoverMenu}. `active` shows a trailing check. `desc` adds a
+ * second, muted line explaining what the row actually DOES — the Effort levels and
+ * the Thinking toggle use it, because "Quick / Balanced / Thorough" on their own
+ * told the user nothing about the real effect (answer budget, thinking budget).
+ */
+function MenuItem({ icon, label, desc, hint, active, onClick }: {
+  icon: React.ReactNode; label: string; desc?: string; hint?: string; active?: boolean; onClick: () => void;
 }) {
   return (
-    <button type="button" role="menuitem" className={`bf-menu__item${active ? ' is-active' : ''}`} onClick={onClick}>
+    <button
+      type="button"
+      role="menuitem"
+      className={`bf-menu__item${active ? ' is-active' : ''}${desc ? ' bf-menu__item--stacked' : ''}`}
+      onClick={onClick}
+    >
       <span className="bf-menu__ico" aria-hidden="true">{icon}</span>
-      <span className="bf-menu__lbl">{label}</span>
+      <span className="bf-menu__lbl">
+        {label}
+        {desc != null && <span className="bf-menu__desc">{desc}</span>}
+      </span>
       {hint != null && <span className="bf-menu__hint">{hint}</span>}
       <span className="bf-menu__check" aria-hidden="true">{active ? '✓' : ''}</span>
     </button>
@@ -305,7 +410,10 @@ export function App() {
 
   useEffect(() => {
     const offInit = onInit(setInit);
-    const offToken = onTokenChange(() => force((n) => n + 1));
+    // A re-mint can be a different tenant (sign-out/in, workspace switch), and model
+    // entitlements are per tenant — drop the cached surface so the `/` menu never
+    // offers the previous tenant's models.
+    const offToken = onTokenChange(() => { invalidateModelSurface(); force((n) => n + 1); });
     return () => { offInit(); offToken(); };
   }, []);
 
@@ -427,10 +535,24 @@ function Chat({ init }: { init: InitData }) {
   const [consolidating, setConsolidating] = useState(false);
   const [forking, setForking] = useState(false);
   // Composer run-shaping toggles (the `/` menu + the `+` menu's web option).
-  // They compile into `extraSystem` directives, so a toggle changes how the next
-  // turn actually runs. 'balanced' is the neutral default.
-  const [effort, setEffort] = useState<Effort>('balanced');
-  const [thinking, setThinking] = useState(false);
+  // Effort and Thinking are REAL request params — effort sets `max_tokens` and, with
+  // Thinking on, the `reasoning.level` intensity; effort also still contributes its
+  // system-prompt nudge. Both persist globally across webview reloads (same guarded
+  // storage helpers the per-chat memory switch uses). 'balanced' + thinking-off is the
+  // neutral default and yields a request identical to having no controls at all.
+  const [effort, setEffortState] = useState<Effort>(() => {
+    const stored = readStored(EFFORT_KEY);
+    return isEffort(stored) ? stored : 'balanced';
+  });
+  const setEffort = useCallback((next: Effort) => {
+    setEffortState(next);
+    writeStored(EFFORT_KEY, next);
+  }, []);
+  const [thinking, setThinkingState] = useState(() => readStored(THINKING_KEY) === '1');
+  const setThinking = useCallback((next: boolean) => {
+    setThinkingState(next);
+    writeStored(THINKING_KEY, next ? '1' : '0');
+  }, []);
   const [webBrowsing, setWebBrowsing] = useState(false);
   // The per-turn LIMBIC/affective block for the CURRENT turn — fetched from the host
   // (which calls the gateway's affective endpoint with the user's personality) on each
@@ -558,6 +680,15 @@ function Chat({ init }: { init: InitData }) {
   // chat falls back to the sidebar's active project it will be scoped to on first send.
   // Names resolve from the host's projectId→name map, falling back to the sidebar name.
   const activeChat = useMemo(() => chatOptions.find((c) => c.id === chatId) ?? null, [chatOptions, chatId]);
+  // Tell the host which conversation this panel is showing. With
+  // `builderforce.sessionTabs: perSession` the host binds its TAB to that chat —
+  // naming the tab after the conversation and tracking its live status — and a
+  // brand-new chat (no server id until first send) re-keys its tab here once created.
+  // Title is left undefined rather than blanked while the chat is still loading.
+  const sessionTitle = activeChat?.title ?? (chatId == null ? t('app.newChat', 'New chat') : undefined);
+  useEffect(() => {
+    post('session.meta', { chatId: chatId ?? undefined, title: sessionTitle });
+  }, [chatId, sessionTitle]);
   const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
   const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
     if (associatedProjectId == null) return null;
@@ -595,10 +726,60 @@ function Chat({ init }: { init: InitData }) {
   // participant; before the first send it falls back to the STATIC personality block
   // (host-fetched once per session). '' (a no-op) when the user has no profile.
   const extraSystem = useMemo(
-    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
+    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
       .filter(Boolean)
       .join('\n\n'),
-    [projectDirective, editorDirective, effort, thinking, webBrowsing, turnLimbic, init.personalityBlock],
+    [projectDirective, editorDirective, effort, webBrowsing, turnLimbic, init.personalityBlock],
+  );
+
+  // The REAL request params behind the `/` menu. `maxTokens` is a universal param so
+  // the client owns it; `reasoning` is deliberately vendor-NEUTRAL intent (the gateway
+  // maps it to Anthropic `thinking` / OpenAI `reasoning_effort` against the model it
+  // actually resolves — the client often can't know it, since the picker's default is
+  // "auto"). Memoized so a keystroke doesn't hand the run builder a fresh object.
+  const effortMaxTokens = effortProfile(effort).maxTokens;
+  const reasoning = useMemo(() => reasoningForRun({ effort, thinking }), [effort, thinking]);
+
+  // Which models this tenant may run, which one is in force, and WHO PAYS for it —
+  // everything the `/` menu needs to both SHOW and CHANGE the model without leaving
+  // the panel. A BYO tenant connects their own provider key precisely so their turns
+  // stop drawing on the plan, so the funding line rides every row. Cached per base
+  // URL (see modelOptions.ts); any failure degrades to "auto only". The labels are
+  // keyed on the host's bundle, not on `t` (rebuilt every render), so the fetch below
+  // re-runs on a new init frame rather than on every keystroke.
+  const promptLabels = useMemo(() => promptMenuLabels(makeT(init.labels), init.modelLabels), [init.labels, init.modelLabels]);
+  const [modelChoices, setModelChoices] = useState<ComposerModelSurface | null>(null);
+  const costLine = promptLabels.paidCostDetail;
+  useEffect(() => {
+    let cancelled = false;
+    loadComposerModels(apiReq, init.baseUrl, { paidCostDetail: costLine })
+      .then((r) => { if (!cancelled) setModelChoices(r); })
+      .catch(() => { /* best-effort — the menu falls back to Auto */ });
+    return () => { cancelled = true; };
+  }, [apiReq, init.baseUrl, costLine]);
+  const modelSurface = modelChoices?.surface ?? null;
+
+  // The user's CHOICE, reconstructed from what the host resolved: a strict pin, the
+  // BYO pool, or auto (in which case `init.model` is whatever auto landed on — the
+  // configured default or the project's Evermind pin — and the menu names it).
+  const modelSelection = useMemo<ChatModelSelection>(
+    () => (init.modelStrict && init.model
+      ? { mode: 'model', model: init.model }
+      : init.routingMode === 'byo_pool' ? { mode: 'byo_pool' } : { mode: 'auto' }),
+    [init.model, init.modelStrict, init.routingMode],
+  );
+  // Changing the model is host state (it drives BOTH editor chat surfaces and
+  // survives this panel), so the pick crosses the bridge; the host re-posts `init`
+  // and the menu re-renders from it.
+  const chooseModel = useCallback((selection: ChatModelSelection) => {
+    post('model.set', selection.mode === 'model' ? { mode: 'model', model: selection.model } : { mode: selection.mode });
+  }, []);
+
+  // Tool-call failover: hand the run loop the SHARED selector over the surface above,
+  // so "which model next" is decided in one place for every host rather than here.
+  const pickFallbackModel = useCallback(
+    (tried: readonly string[]) => nextFallbackModel(modelSurface, tried),
+    [modelSurface],
   );
 
   // Project-Evermind memory hooks: recall the chat's project learnings before
@@ -616,17 +797,29 @@ function Chat({ init }: { init: InitData }) {
   // a resolved project and the open chat is project-less, adopt it onto the chat so its
   // turns actually train the project's Evermind and the panel's claim becomes true.
   // One-shot per chat (guarded), best-effort — a failure just leaves it unscoped.
+  //
+  // The chat's project is read with `getChat`, NOT looked up in `chats`. That list is
+  // fetched with `?projectId=<active>`, and the server filters it as
+  // `brain_chats.project_id = <active>` — which EXCLUDES a project-less chat. So a
+  // project-LESS chat is never in the list, `chats.find` came back undefined, and the
+  // effect bailed on `!chat` — meaning this self-heal could never fire for exactly the
+  // chats it exists to heal. (Reported on chat #85: the IDE had BuilderForce.AI
+  // selected and Evermind showed "connected", while every turn reported
+  // "isn't attached to a project".) The Sessions tree filters client-side, so a chat
+  // absent from this list is still openable — the two must not be conflated.
   const adoptedProjectRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const pid = init.project?.id;
     if (chatId == null || pid == null || adoptedProjectRef.current.has(chatId)) return;
-    const chat = chats.find((c) => c.id === chatId);
-    if (!chat || chat.projectId != null) return;
     adoptedProjectRef.current.add(chatId);
-    void persistence.updateChat(chatId, { projectId: pid })
-      .then(() => reloadChats())
-      .catch(() => { adoptedProjectRef.current.delete(chatId); });
-  }, [chatId, chats, init.project?.id, persistence, reloadChats]);
+    // The decision lives in `adoptChatProject` (unit-tested); this effect only supplies
+    // the ids and reacts to the outcome.
+    void adoptChatProject(persistence, chatId, pid).then((outcome) => {
+      if (outcome === 'adopted') reloadChats();
+      // Let a transient read/write failure be retried the next time it is opened.
+      else if (outcome === 'failed') adoptedProjectRef.current.delete(chatId);
+    });
+  }, [chatId, init.project?.id, persistence, reloadChats]);
 
   const evermind = useMemo(() => {
     if (evermindProjectId == null) return undefined;
@@ -638,10 +831,14 @@ function Chat({ init }: { init: InitData }) {
           body: JSON.stringify({ query }),
         }).catch(() => null),
       // Memory-first: BEFORE the paid model, ask the project's own memory (exact-repeat
-      // Q&A cache, then its Evermind SSM). A substantive hit short-circuits the LLM.
-      answer: (query: string) =>
-        req<{ answer: { text: string; source: 'qa-cache' | 'evermind'; evermindVersion?: number } | null }>(
-          `/api/projects/${evermindProjectId}/answer?query=${encodeURIComponent(query)}`,
+      // Q&A cache, then — only for a TOOL-LESS run — its Evermind SSM). A substantive hit
+      // short-circuits the LLM. `tools=0` is what unlocks the SSM leg: it has no
+      // tool-calling, so on a run that CAN call tools the server serves cache hits only,
+      // rather than answering a live question ("which tickets are in the backlog?") from
+      // stale weights while the tools that could answer it go uncalled.
+      answer: (query: string, opts: { toolsAvailable: boolean }) =>
+        req<{ answer: { text: string; source: 'qa-cache' | 'evermind'; evermindVersion?: number; evermindProjectId?: number } | null }>(
+          `/api/projects/${evermindProjectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`,
         ).then((r) => r?.answer ?? null).catch(() => null),
       // Remember a fresh (question → answer) so the next exact repeat is free.
       cacheAnswer: (query: string, answer: string) => {
@@ -661,15 +858,13 @@ function Chat({ init }: { init: InitData }) {
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   useEffect(() => {
     if (chatId == null) { setMemoryEnabled(true); return; }
-    try {
-      const v = window.localStorage.getItem(MEMORY_KEY(chatId));
-      setMemoryEnabled(v == null ? true : v !== '0');
-    } catch { setMemoryEnabled(true); }
+    const v = readStored(MEMORY_KEY(chatId));
+    setMemoryEnabled(v == null ? true : v !== '0');
   }, [chatId]);
   const toggleMemory = useCallback((on: boolean) => {
     setMemoryEnabled(on);
     if (chatId == null) return;
-    try { window.localStorage.setItem(MEMORY_KEY(chatId), on ? '1' : '0'); } catch { /* storage blocked */ }
+    writeStored(MEMORY_KEY(chatId), on ? '1' : '0');
   }, [chatId]);
   // Gate the recall hook on the per-chat switch — off ⇒ no recall this chat.
   const gatedEvermind = memoryEnabled ? evermind : undefined;
@@ -683,6 +878,14 @@ function Chat({ init }: { init: InitData }) {
     // code without recording one.
     projectId: evermindProjectId,
     model: init.model,
+    modelStrict: init.modelStrict,
+    routingMode: init.routingMode ?? 'auto',
+    // When a model burns its stall budget describing tool calls it never makes, the
+    // run switches models itself instead of stranding the user with a promise. Reads
+    // the model surface already loaded for the picker — no extra fetch.
+    pickFallbackModel: init.modelStrict ? undefined : pickFallbackModel,
+    maxTokens: effortMaxTokens,
+    reasoning,
     extraSystem,
     toolSpecs,
     runTool,
@@ -1013,10 +1216,30 @@ function Chat({ init }: { init: InitData }) {
     void conv.send(answer, { addressedTo: recipient });
   }, [conv, recipient]);
 
-  // An expired/invalid session surfaces as a 401 whose body mentions the token.
-  // We offer an explicit "Reconnect" affordance for it (re-exchange the token),
-  // on top of the always-available dismiss.
-  const isAuthError = /invalid or expired token|unauthor/i.test(conv.error);
+  // The question this chat is BLOCKED on, if any. A long transcript buries the
+  // agent's card, so it is restated at the composer (and the session shows ❓ on its
+  // tab + Sessions row) — one shared predicate, so banner and card never disagree.
+  const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
+  const askLabels = useMemo(
+    () => ({
+      askSubmit: t('tl.askSubmit', 'Send'),
+      askAnswered: t('tl.askAnswered', 'Answered'),
+      askPending: t('app.askPending', 'Answer needed'),
+      askJumpTo: t('app.askJumpTo', 'Show in conversation'),
+    }),
+    [init.labels],
+  );
+  const revealQuestion = useCallback(() => {
+    if (!pendingQuestion) return;
+    document
+      .getElementById(askUserAnchorId(pendingQuestion.messageId))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [pendingQuestion]);
+
+  // What the user can DO about a failed turn (reconnect an expired session, upgrade
+  // a plan, add a card) is decided ONCE from the gateway's structured error — see
+  // `chatErrorAction` — and rendered by <ChatErrorBanner>, which owns its own
+  // actions. Nothing here pattern-matches error prose.
   const reconnect = useCallback(() => {
     void refreshToken();
     conv.clearError();
@@ -1058,7 +1281,7 @@ function Chat({ init }: { init: InitData }) {
   const copyTranscript = useCallback(async () => {
     const pid = associatedProjectId;
     const claims = decodeTokenClaims(getToken());
-    const [agents, tickets, evermind] = await Promise.all([
+    const [agents, tickets, evermind, consumption, apiVersion] = await Promise.all([
       chatId != null ? ticketAdapter.listAgents(chatId).catch(() => []) : Promise.resolve([]),
       chatId != null ? ticketAdapter.listTickets(chatId).catch(() => []) : Promise.resolve([]),
       pid != null
@@ -1066,6 +1289,16 @@ function Chat({ init }: { init: InitData }) {
             `/api/projects/${pid}/evermind/contributions`,
           ).catch(() => null)
         : Promise.resolve(null),
+      // Plan + month-to-date quota. Open to any tenant-scoped JWT (no role gate), so a
+      // brand-new free member can produce a report that states their own tier and
+      // allowance instead of one that looks like an unexplained capability failure.
+      // Shared read-through cache — the same snapshot the footer's PlanBadge shows,
+      // so the report and the chip can't disagree (and it's usually already loaded).
+      fetchPlanSnapshot(apiReq),
+      // Which BUILD produced this capture. `/health` is public; it rides the gateway
+      // base so the version reported is the one THIS webview is actually talking to.
+      // Session-cached + coalesced in the shared helper.
+      fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
     ]);
     // The learn-gate outcome for the most recent assistant turn (the persistence adapter
     // attaches it from the server's send-messages response).
@@ -1094,6 +1327,35 @@ function Chat({ init }: { init: InitData }) {
       lastLearn,
       agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
       tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+      // WHO the user is to the platform: tier, whether a card is on file, what is left
+      // of each allowance, and what the plan actually entitles them to model-wise. The
+      // model surface is already loaded for the picker — reused, not refetched.
+      account: {
+        plan: consumption?.plan.effective ?? null,
+        billingStatus: consumption?.plan.billingStatus ?? null,
+        periodStart: consumption?.period.start ?? null,
+        resetsAt: consumption?.period.resetsAt ?? null,
+        meters: consumption?.meters ?? [],
+        model: init.model ?? null,
+        modelFunding: modelSurface ? classifyModelFunding(init.model, modelSurface) : null,
+        canUsePremiumModels: modelSurface?.canUsePremiumModels,
+        planModelCount: modelSurface?.data?.length,
+        byoProviders: modelSurface?.byo?.providers ?? [],
+        extensionVersion: init.extensionVersion ?? null,
+        baseUrl: init.baseUrl ?? null,
+      },
+      // What the model could actually CALL. Without this a tool-less Brain — one that
+      // announces "I'll call the tool…" and then stops, with 0 tool calls in the trace
+      // — is indistinguishable from a model that simply chose not to act. The COUNT is
+      // the live registry the conversation runs on (`toolSpecs`, navigation + the MCP
+      // catalog together); the catalog status explains a zero.
+      tools: (() => {
+        const mcp = getMcpToolStatus();
+        return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
+      })(),
+      // Which build produced this capture — without it a dump taken just before a
+      // deploy is indistinguishable from one taken after, so a fixed bug reads unfixed.
+      versions: { ui: init.extensionVersion ?? null, api: apiVersion },
     };
     post('copy', {
       text: buildTranscript({
@@ -1110,7 +1372,7 @@ function Chat({ init }: { init: InitData }) {
     });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
-  }, [conv.messages, conv.trace, conv.error, init.model, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
+  }, [conv.messages, conv.trace, conv.error, init.model, init.extensionVersion, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the
@@ -1341,26 +1603,22 @@ function Chat({ init }: { init: InitData }) {
         </div>
       )}
 
-      {conv.error && (
-        <div className="bf-error" role="alert">
-          <span className="bf-error__msg">{conv.error}</span>
-          <div className="bf-error__actions">
-            {isAuthError && (
-              <button className="bf-btn bf-btn--primary" onClick={reconnect}>
-                {t('app.reconnect', 'Reconnect')}
-              </button>
-            )}
-            <button
-              className="bf-btn bf-btn--icon"
-              onClick={conv.clearError}
-              title={t('app.dismiss', 'Dismiss')}
-              aria-label={t('app.dismiss', 'Dismiss')}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      <ChatErrorBanner
+        className="bf-error"
+        error={conv.error}
+        action={conv.errorAction}
+        onReconnect={reconnect}
+        onUpgrade={() => { invalidatePlanSnapshot(); openUpgrade('pricing'); }}
+        onValidateCard={() => { invalidatePlanSnapshot(); openUpgrade('billing'); }}
+        onDismiss={conv.clearError}
+        labels={{
+          reconnect: t('app.reconnect', 'Reconnect'),
+          upgrade: t('app.upgrade', 'Upgrade'),
+          upgradeToPlan: t('app.upgradeToPlan', 'Upgrade to {plan}'),
+          addCard: t('app.addCard', 'Add a card'),
+          dismiss: t('app.dismiss', 'Dismiss'),
+        }}
+      />
 
       {conv.pendingConfirm && (
         <div className="bf-confirm">
@@ -1386,14 +1644,24 @@ function Chat({ init }: { init: InitData }) {
         </div>
       )}
 
-      <div
-        className={`bf-composer${dragOver ? ' bf-composer--drag' : ''}${(inputFocused || input.trim().length > 0) ? ' bf-composer--active' : ''}`}
-        style={{ position: 'relative' }}
+      {pendingQuestion && (
+        <PendingQuestionBanner
+          payload={pendingQuestion.payload}
+          labels={askLabels}
+          onAnswer={answerQuestion}
+          onReveal={revealQuestion}
+        />
+      )}
+
+      <PromptPanel
+        className="bf-composer"
+        active={inputFocused || input.trim().length > 0}
+        dragging={dragOver}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files); }}
-      >
-        {mention.popup}
+        overlay={mention.popup}
+        status={(conv.pendingAttachments.length > 0 || messageQueue.length > 0) ? <>
         {conv.pendingAttachments.length > 0 && (
           <div className="bf-attachments">
             {conv.pendingAttachments.map((a) => (
@@ -1419,7 +1687,8 @@ function Chat({ init }: { init: InitData }) {
             ))}
           </div>
         )}
-        <textarea
+        </> : undefined}
+        input={<textarea
           ref={inputRef}
           className="bf-input"
           rows={2}
@@ -1437,8 +1706,8 @@ function Chat({ init }: { init: InitData }) {
             if (mention.onKeyDown(e)) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
           }}
-        />
-        <div className="bf-composer__actions">
+        />}
+        actions={<div className="bf-composer__actions">
           <input
             ref={fileInputRef}
             type="file"
@@ -1517,27 +1786,52 @@ function Chat({ init }: { init: InitData }) {
             )}
           </PopoverMenu>
 
-          {/* / : effort, thinking, and account settings. */}
-          <PopoverMenu align="left" title={t('app.options', 'Options')} trigger={<IconSlash />}>
-            {(close) => (
-              <>
-                <div className="bf-menu__group">{t('app.effort', 'Effort')}</div>
-                <MenuItem icon="🏃" label={t('app.effortQuick', 'Quick')} active={effort === 'quick'} onClick={() => setEffort('quick')} />
-                <MenuItem icon="⚖️" label={t('app.effortBalanced', 'Balanced')} active={effort === 'balanced'} onClick={() => setEffort('balanced')} />
-                <MenuItem icon="🎯" label={t('app.effortThorough', 'Thorough')} active={effort === 'thorough'} onClick={() => setEffort('thorough')} />
-                <div className="bf-menu__sep" />
-                <MenuItem
-                  icon="💭"
-                  label={t('app.thinking', 'Thinking')}
-                  hint={thinking ? t('app.on', 'On') : t('app.off', 'Off')}
-                  active={thinking}
-                  onClick={() => setThinking((v) => !v)}
-                />
-                <div className="bf-menu__sep" />
-                <MenuItem icon="⚙" label={t('app.accountSettings', 'Account settings')} onClick={() => { close(); post('settings'); }} />
-              </>
-            )}
-          </PopoverMenu>
+          {/* / : effort, thinking, WHICH MODEL IS RUNNING (and switching it), and
+              account settings. The SHARED control — the same component the web
+              composer renders — so the editor can't drift from it, and so model
+              choice lives in the panel instead of a chip that punted to a QuickPick.
+              Every row states its REAL effect (answer budget, thinking budget, who
+              pays) — the levels used to be bare adjectives that changed nothing but
+              prose, which is exactly why users couldn't tell what they did. */}
+          <PromptOptionsMenu
+            labels={promptLabels}
+            memory={{
+              enabled: memoryEnabled,
+              onChange: toggleMemory,
+              describe: (on) => (on
+                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
+                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')),
+              // No project Evermind behind this chat ⇒ the switch would gate nothing.
+              // It still shows, and says so, rather than vanishing from the menu.
+              unavailableReason: evermindProjectId == null
+                ? t('app.memoryUnavailable', 'This chat has no project memory to recall from — link it to a project first')
+                : undefined,
+            }}
+            session={chatId != null ? {
+              canConsolidate,
+              consolidating,
+              forking,
+              onConsolidate: consolidate,
+              onFork: fork,
+            } : undefined}
+            effort={effort}
+            onEffortChange={setEffort}
+            describeEffort={(level) => effortDesc(level, thinking, t)}
+            thinking={thinking}
+            onThinkingChange={setThinking}
+            describeThinking={(on) => (on
+              ? t('app.thinkingOnDesc', 'The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.')
+                  .replace('{budget}', effortProfile(effort).thinkingBudgetTokens.toLocaleString())
+              : t('app.thinkingOffDesc', 'Off — the model answers directly. Turn on for a reasoning pass before the answer.'))}
+            model={modelChoices ? {
+              selection: modelSelection,
+              options: modelChoices.options,
+              onChange: chooseModel,
+              effective: init.model,
+              canChoose: modelChoices.canChooseModel,
+            } : undefined}
+            onAccountSettings={() => post('settings')}
+          />
 
           {/* Auto mode = auto-approve tool actions (same gate as the confirm dialog). */}
           <button
@@ -1551,66 +1845,19 @@ function Chat({ init }: { init: InitData }) {
             <span>{t('app.autoMode', 'Auto mode')}</span>
           </button>
 
-          {/* Consolidate: compress the chat into a summary marker the rest of the
-              conversation builds on. Fork: branch that summary into a new chat. */}
-          <button
-            type="button"
-            className="bf-toggle"
-            title={t('app.consolidateHint', 'Summarize this chat into a compact context the rest of the conversation builds on')}
-            aria-label={t('app.consolidate', 'Consolidate')}
-            disabled={!canConsolidate || consolidating}
-            onClick={consolidate}
-          >
-            <IconConsolidate />
-            <span>{consolidating ? t('app.consolidating', 'Consolidating…') : t('app.consolidate', 'Consolidate')}</span>
-          </button>
-          <button
-            type="button"
-            className="bf-toggle"
-            title={t('app.forkHint', 'Summarize this chat and continue in a new one from that summary')}
-            aria-label={t('app.fork', 'Fork')}
-            disabled={!canConsolidate || forking}
-            onClick={fork}
-          >
-            <IconFork />
-            <span>{forking ? t('app.forking', 'Forking…') : t('app.fork', 'Fork')}</span>
-          </button>
-
           <div className="bf-header__spacer" />
 
-          {/* Per-chat memory switch — when off, this chat neither recalls from nor
-              contributes back to the project's Evermind (web BrainPanel parity).
-              Only shown when there's a project Evermind to gate. */}
-          {evermindProjectId != null && (
-            <button
-              type="button"
-              className={`bf-toggle${memoryEnabled ? ' is-on' : ''}`}
-              title={memoryEnabled
-                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
-                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')}
-              aria-label={t('app.memory', 'Memory')}
-              aria-pressed={memoryEnabled}
-              onClick={() => toggleMemory(!memoryEnabled)}
-            >
-              <IconBrain />
-              <span>{t('app.memory', 'Memory')}</span>
-            </button>
-          )}
+          {/* Account tier, always visible: which plan is funding this chat and (on a
+              metered plan) what allowance is left. Click opens the web app to change
+              it. It lives here rather than in the header because it belongs with the
+              other "what will this turn cost / who runs it" chips (Evermind posture,
+              the model in force). Self-gating — renders nothing until it knows the
+              plan. */}
+          <PlanBadge apiReq={apiReq} t={t} />
 
           {/* Evermind posture for the active project — parity with the web Brain
               composer. Self-gates (renders nothing until a seeded Evermind). */}
           <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
-
-          {init.model && (
-            <button
-              type="button"
-              className="bf-model bf-model--btn"
-              title={t('app.pickModel', 'Change model')}
-              onClick={() => post('pickModel')}
-            >
-              {init.model}
-            </button>
-          )}
 
           {/* Speech-to-text — only where the runtime supports it, and never while a
               run is streaming (the composer is otherwise showing Stop). */}
@@ -1659,8 +1906,8 @@ function Chat({ init }: { init: InitData }) {
               <IconSend />
             </button>
           )}
-        </div>
-      </div>
+        </div>}
+      />
     </div>
   );
 }

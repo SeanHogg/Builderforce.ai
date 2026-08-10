@@ -1,18 +1,27 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.7.60",
+  "version": "2026.7.210",
   "private": true,
   "scripts": {
+    "postinstall": "node ../scripts/ensure-linked-deps.mjs",
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
+    "prebuild": "node scripts/copy-ort-runtime.mjs",
     "build": "next build",
-    "cf-build": "npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
+    "cf-build": "pnpm exec next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
     "cf-deploy": "npm run cf-build && npx wrangler deploy --no-bundle",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck:native": "tsgo --noEmit"
+    "check:api-transport": "node scripts/check-api-transport.mjs",
+    "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:architecture": "node scripts/check-frontend-architecture.mjs",
+    "check:edge-runtime": "node scripts/check-edge-runtime.mjs",
+    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && npm run check:edge-runtime && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
+    "typecheck:native": "tsgo --noEmit",
+    "type-check": "tsgo --noEmit && tsc --noEmit",
+    "check:design-scale": "node scripts/check-design-scale.mjs",
+    "check:destinations": "node scripts/check-destinations.mjs"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",
@@ -23,7 +32,7 @@
     "@seanhogg/builderforce-brain-ui": "link:../packages/brain-ui",
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
     "@seanhogg/builderforce-memory": "^2026.7.11",
-    "@seanhogg/builderforce-memory-engine": "^2026.7.11",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.14",
     "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/builderforce-sdk": "link:../sdk",
     "@seanhogg/builderforce-studio": "link:../studio",
@@ -45,7 +54,7 @@
     "mp4-muxer": "^5.2.2",
     "next": "15.5.2",
     "next-intl": "^4.13.0",
-    "onnxruntime-web": "^1.21.0",
+    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
@@ -83,7 +92,8 @@
     "overrides": {
       "d3-array": "^3.2.4",
       "d3-shape": "^3.2.0",
-      "d3-path": "^3.1.0"
+      "d3-path": "^3.1.0",
+      "sharp": "0.35.3"
     }
   }
 }

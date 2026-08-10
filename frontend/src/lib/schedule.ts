@@ -26,8 +26,8 @@ export interface ItemSchedule {
 /** Color tokens per deadline status, reused by both views for a single legend. */
 export const DEADLINE_COLORS: Record<DeadlineStatus, string> = {
   overdue: 'var(--coral-bright)',
-  soon: '#e0a93f',
-  upcoming: '#3f8fe0',
+  soon: 'var(--warning)',
+  upcoming: 'var(--coral-bright)',
   none: 'var(--text-muted)',
 };
 

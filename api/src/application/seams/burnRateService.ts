@@ -1,107 +1,74 @@
 /**
- * BI burn-rate pull (BuilderForce → host, spec 05 §4.1).
+ * Tenant-local burn/runway reader.
  *
- * BuilderForce PULLS the Segment's current monthly burn + runway from the host's
- * BI endpoint so cost-aware planning (cost-per-point, runway-aware sprint caps)
- * has real numbers. This is the reverse direction from the other seams: the
- * token presenting `read:bi.burn` is ISSUED BY THE HOST and stored here as BI
- * config — it is not a BuilderForce-issued tenant key.
- *
- * Everything degrades gracefully: missing config, a timeout, a non-200, or a
- * malformed body all return `{ available: false }` so callers fall back to
- * manual burn input rather than failing the request.
+ * BurnRateOS used to own these metrics and Builderforce called it over HTTP.
+ * Consolidation moved derived finance series into kernel `metric_facts`; this
+ * service now reads that owner directly. No host URL, token, fetch, or fallback
+ * network path is permitted here.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { tenants, segments } from '../../infrastructure/database/schema';
+import { metricFacts } from '../../infrastructure/database/schema';
+
+const BURN_KEYS = ['finance.burn', 'finance.monthly_burn'] as const;
+const RUNWAY_KEY = 'finance.runway_months';
 
 export interface BurnRate {
   available: boolean;
   monthlyBurn?: number;
   runwayMonths?: number;
-  /** 'host' when pulled live; absent when unavailable. */
-  source?: 'host';
-  /** Machine-readable reason when unavailable (for logs / UI hints). */
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
-}
-
-interface HostBiConfig {
-  baseUrl: string;
-  token: string;
-}
-
-const FETCH_TIMEOUT_MS = 5_000;
-
-function readHostBi(settingsRaw: string | null | undefined): HostBiConfig | null {
-  if (!settingsRaw) return null;
-  try {
-    const parsed = JSON.parse(settingsRaw) as { hostBi?: { baseUrl?: unknown; token?: unknown } };
-    const baseUrl = parsed.hostBi?.baseUrl;
-    const token = parsed.hostBi?.token;
-    if (typeof baseUrl === 'string' && /^https:\/\//.test(baseUrl) && typeof token === 'string' && token) {
-      return { baseUrl: baseUrl.replace(/\/+$/, ''), token };
-    }
-  } catch { /* fall through */ }
-  return null;
-}
-
-function toFiniteNumber(v: unknown): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  source?: 'builderforce';
+  asOf?: string;
+  reason?: 'no_data';
 }
 
 export interface FetchBurnRateArgs {
   tenantId: number;
   segmentId: string;
-  /** Injectable for tests; defaults to global fetch. */
-  fetchImpl?: typeof fetch;
 }
 
-/**
- * Fetch the Segment's burn/runway from the host BI endpoint. Never throws —
- * returns `{ available: false, reason }` on any failure.
- */
+/** Return the newest locally-computed value for each finance metric. */
 export async function fetchBurnRate(db: Db, args: FetchBurnRateArgs): Promise<BurnRate> {
-  const doFetch = args.fetchImpl ?? fetch;
+  const rows = await db
+    .select({
+      metric: metricFacts.metric,
+      value: metricFacts.value,
+      bucketAt: metricFacts.bucketAt,
+      computedAt: metricFacts.computedAt,
+    })
+    .from(metricFacts)
+    .where(and(
+      eq(metricFacts.tenantId, args.tenantId),
+      inArray(metricFacts.metric, [...BURN_KEYS, RUNWAY_KEY]),
+      // Consolidated facts may be tenant-wide (empty dimension key) or scoped
+      // to a segment. Never read a fact explicitly scoped to another segment.
+      or(
+        eq(metricFacts.dimensionKey, ''),
+        eq(metricFacts.dimensionKey, `segment:${args.segmentId}`),
+      ),
+    ))
+    .orderBy(desc(metricFacts.bucketAt), desc(metricFacts.computedAt))
+    .limit(24);
 
-  const [tenant] = await db
-    .select({ settings: tenants.settings })
-    .from(tenants)
-    .where(eq(tenants.id, args.tenantId))
-    .limit(1);
-  const config = readHostBi(tenant?.settings);
-  if (!config) return { available: false, reason: 'not_configured' };
-
-  // The host keys burn by its own company id (our segment's externalCompanyId).
-  const [segment] = await db
-    .select({ externalAccountId: segments.externalAccountId, externalCompanyId: segments.externalCompanyId })
-    .from(segments)
-    .where(eq(segments.id, args.segmentId))
-    .limit(1);
-  const companyId = segment?.externalCompanyId;
-  if (!companyId) return { available: false, reason: 'no_company' };
-
-  const qs = new URLSearchParams({ companyId });
-  if (segment?.externalAccountId) qs.set('accountId', segment.externalAccountId);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await doFetch(`${config.baseUrl}/api/bi/burn-rate?${qs.toString()}`, {
-      headers: { Authorization: `Bearer ${config.token}` },
-      signal: controller.signal,
-    });
-    if (!res.ok) return { available: false, reason: 'unreachable' };
-    const body = (await res.json()) as Record<string, unknown>;
-    const monthlyBurn = toFiniteNumber(body.monthlyBurn);
-    const runwayMonths = toFiniteNumber(body.runwayMonths);
-    if (monthlyBurn === undefined && runwayMonths === undefined) {
-      return { available: false, reason: 'bad_response' };
-    }
-    return { available: true, source: 'host', monthlyBurn, runwayMonths };
-  } catch {
-    return { available: false, reason: 'unreachable' };
-  } finally {
-    clearTimeout(timer);
+  let monthlyBurn: number | undefined;
+  let runwayMonths: number | undefined;
+  let newest: Date | undefined;
+  for (const row of rows) {
+    const value = Number(row.value);
+    if (!Number.isFinite(value)) continue;
+    if (monthlyBurn === undefined && BURN_KEYS.includes(row.metric as typeof BURN_KEYS[number])) monthlyBurn = value;
+    if (runwayMonths === undefined && row.metric === RUNWAY_KEY) runwayMonths = value;
+    const at = row.computedAt ?? row.bucketAt;
+    if (!newest || at > newest) newest = at;
   }
+
+  if (monthlyBurn === undefined && runwayMonths === undefined) return { available: false, reason: 'no_data' };
+  return {
+    available: true,
+    source: 'builderforce',
+    ...(monthlyBurn === undefined ? {} : { monthlyBurn }),
+    ...(runwayMonths === undefined ? {} : { runwayMonths }),
+    ...(newest ? { asOf: newest.toISOString() } : {}),
+  };
 }

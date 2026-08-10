@@ -50,7 +50,7 @@ export function MoveToBoardControl({
         padding: '4px 8px',
         fontSize: 13,
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         background: 'var(--bg-deep)',
         color: 'var(--text-primary)',
         cursor: disabled ? 'not-allowed' : 'pointer',

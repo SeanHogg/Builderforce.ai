@@ -1,24 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { loadAgentPerfRollup } from './workforceRoutes';
 
-type SqlClient = Parameters<typeof loadAgentPerfRollup>[0];
+type Db = Parameters<typeof loadAgentPerfRollup>[0];
 
 /**
  * Locks the gap [1247] owner-only perf rollup math: success rate over terminal
  * runs, latency rounding, rating averaging, and the null cases when there is no
- * telemetry/feedback. The three SQL reads (perf / hires / feedback) are stubbed by
- * a tagged-template that returns canned rows in call order, so this exercises the
- * reduction logic without a live DB.
+ * telemetry/feedback. The three reads (perf / hires / feedback) are stubbed by a
+ * minimal Drizzle fake that returns canned rows in call order, so this exercises
+ * the reduction logic without a live DB.
+ *
+ * Every rollup read uses the Drizzle query builder:
+ *   db.select(…).from(t).where(…)[.orderBy(…).limit(n)] -> rows
+ * The builder chain is a single self-returning thenable, so it resolves off the
+ * same call-ordered queue no matter which terminal method the query ends on.
  */
-function mockSql(responses: unknown[][]): SqlClient {
+function mockDb(responses: unknown[][]): Db {
   let i = 0;
-  const fn = ((..._args: unknown[]) => Promise.resolve(responses[i++] ?? [])) as unknown as SqlClient;
-  return fn;
+  const take = () => Promise.resolve(responses[i++] ?? []);
+  const chain: Record<string, unknown> = {};
+  chain.from = () => chain;
+  chain.where = () => chain;
+  chain.orderBy = () => chain;
+  chain.limit = () => chain;
+  chain.then = (onOk: (v: unknown) => unknown, onErr?: (e: unknown) => unknown) => take().then(onOk, onErr);
+  return { select: () => chain } as unknown as Db;
 }
 
 describe('loadAgentPerfRollup', () => {
   it('computes success rate, latency, and rating averages', async () => {
-    const sql = mockSql([
+    const sql = mockDb([
       [{ total_runs: 10, completed_runs: 7, failed_runs: 3, avg_latency_ms: 4200.6 }],
       [{ hired_tenants: 4 }],
       [
@@ -42,7 +53,7 @@ describe('loadAgentPerfRollup', () => {
   });
 
   it('returns null metrics when there are no terminal runs or feedback', async () => {
-    const sql = mockSql([
+    const sql = mockDb([
       [{ total_runs: 0, completed_runs: 0, failed_runs: 0, avg_latency_ms: null }],
       [{ hired_tenants: 0 }],
       [],

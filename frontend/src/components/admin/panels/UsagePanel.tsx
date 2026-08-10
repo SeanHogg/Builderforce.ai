@@ -24,6 +24,7 @@ import {
 import { Select } from '@/components/Select';
 import { llmChat } from '@/lib/builderforceApi';
 import { errText, fmtDateTime, fmtNum, AdminError, AdminLoading } from '../adminShared';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 export default function UsagePanel() {
   const t = useTranslations('admin');
@@ -42,7 +43,8 @@ export default function UsagePanel() {
   const [usageAiPrompt, setUsageAiPrompt] = useState('');
   const [usageAiLoading, setUsageAiLoading] = useState(false);
   const [usageAiError, setUsageAiError] = useState('');
-  const [usageAiCopied, setUsageAiCopied] = useState(false);
+  // 2000ms confirmation (the hook's default), owned by the shared hook.
+  const usageAiCopy = useCopyToClipboard();
 
   const setErrorMsg = setError;
 
@@ -141,7 +143,8 @@ export default function UsagePanel() {
     if (!llmUsage) return;
     setUsageAiLoading(true);
     setUsageAiError('');
-    setUsageAiCopied(false);
+    // No copy-state reset here any more: the shared hook clears its own `copied` flag
+    // on a timer, so re-running the analysis no longer has to do it by hand.
     try {
       // Pull the real catalog so the AI can't invent model ids and we can
       // verify "already at position 0" claims. Each entry now carries `vendor`
@@ -418,13 +421,9 @@ export default function UsagePanel() {
 
   const copyUsageAiPrompt = async () => {
     if (!usageAiPrompt) return;
-    try {
-      await navigator.clipboard.writeText(usageAiPrompt);
-      setUsageAiCopied(true);
-      setTimeout(() => setUsageAiCopied(false), 2000);
-    } catch (e) {
-      setUsageAiError(e instanceof Error ? e.message : String(e));
-    }
+    // The old catch surfaced the raw DOMException text; the shared write reports
+    // failure as `false`, so the user now gets a localized message instead.
+    if (!await usageAiCopy.copy(usageAiPrompt)) setUsageAiError(t('common.copyFailed'));
   };
 
   if (loading && !llmUsage) return <AdminLoading />;
@@ -453,7 +452,7 @@ export default function UsagePanel() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="health-label">{t('usage.claudePromptLabel')}</div>
                 <button type="button" className="btn-ghost" onClick={copyUsageAiPrompt}>
-                  {usageAiCopied ? `✓ ${t('common.copied')}` : t('common.copy')}
+                  {usageAiCopy.copied ? `✓ ${t('common.copied')}` : t('common.copy')}
                 </button>
               </div>
               <textarea
@@ -465,10 +464,10 @@ export default function UsagePanel() {
                   fontFamily: 'var(--font-mono, monospace)',
                   fontSize: 12,
                   padding: 12,
-                  background: 'var(--bg-secondary, #0b0b0b)',
+                  background: 'var(--bg-surface)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   resize: 'vertical',
                 }}
               />
@@ -509,7 +508,7 @@ export default function UsagePanel() {
                         minWidth: 8,
                         height: `${Math.max(4, h)}%`,
                         background: 'var(--accent)',
-                        borderRadius: 4,
+                        borderRadius: 'var(--radius-sm)',
                       }}
                     />
                   );
@@ -532,9 +531,9 @@ export default function UsagePanel() {
                   const running = !!vendorHealthRunning[v.vendor];
                   const probeErr = vendorHealthError[v.vendor];
                   const statusColor: Record<string, string> = {
-                    ok: 'var(--success-text, #16a34a)',
-                    degraded: 'var(--warning-text, #d97706)',
-                    down: 'var(--error-text, #dc2626)',
+                    ok: 'var(--success-text)',
+                    degraded: 'var(--warning-text)',
+                    down: 'var(--error-text)',
                     unconfigured: 'var(--text-muted)',
                   };
                   return (
@@ -625,7 +624,7 @@ export default function UsagePanel() {
                       const prevVendor = i > 0 ? byModelSorted[i - 1].vendor : null;
                       const isVendorBreak = m.vendor !== prevVendor;
                       return (
-                        <tr key={m.model} style={isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : undefined}>
+                        <tr key={m.model} style={isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle)' } : undefined}>
                           <td style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-muted)' }}>{isVendorBreak ? m.vendor : ''}</td>
                           <td>{m.model}</td>
                           <td style={{ textAlign: 'right' }}>{fmtNum(m.requests)}</td>
@@ -686,8 +685,8 @@ export default function UsagePanel() {
                         <tr
                           key={`${f.model}-${f.errorCode}-${i}`}
                           style={{
-                            ...(f.errorCode === 429 ? { background: 'var(--error-bg, #fee2e2)' } : {}),
-                            ...(isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : {}),
+                            ...(f.errorCode === 429 ? { background: 'var(--error-bg)' } : {}),
+                            ...(isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle)' } : {}),
                           }}
                           title={f.errorCode === 429 ? t('usage.rateLimitTooltip') : undefined}
                         >

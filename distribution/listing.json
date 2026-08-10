@@ -1,0 +1,27 @@
+{
+  "$comment": "Canonical listing copy for Builderforce. Every marketplace wants the same few strings in a slightly different shape, so they are written ONCE here and stamped into each channel's payload by distribution/build.mjs. Edit this file, run `node distribution/build.mjs`, commit the result — never hand-edit a generated payload.",
+  "name": "builderforce",
+  "title": "Builderforce",
+  "website": "https://builderforce.ai",
+  "repository": "https://github.com/SeanHogg/Builderforce.ai",
+  "icon": "https://www.google.com/s2/favicons?domain=builderforce.ai&sz=64",
+  "category": "productivity",
+  "tags": [
+    "agents",
+    "project-management",
+    "kanban",
+    "okr",
+    "devops",
+    "remote"
+  ],
+  "tagline": "Supervise AI agents like a team, from wherever you already work.",
+  "shortDescription": "Run tickets, boards, OKRs and cloud coding agents in your Builderforce workspace",
+  "longDescription": "Run your Builderforce workspace from any MCP client: create and move tickets, drive boards and swimlanes, read and update portfolios, initiatives and OKRs, dispatch cloud coding agents, and query executions — plus every connector and external MCP server your tenant has connected.",
+  "mcp": {
+    "endpoint": "https://api.builderforce.ai/mcp",
+    "transport": "streamable-http",
+    "docs": "https://builderforce.ai/docs/gateway/mcp",
+    "authHeader": "Authorization",
+    "authDescription": "Bearer <your Builderforce tenant API key>. Create one at https://builderforce.ai/settings/api-keys — the key's tenant is the scope of every tool call."
+  }
+}

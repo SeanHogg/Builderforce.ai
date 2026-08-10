@@ -26,7 +26,7 @@ describe('isPaidOverflowModel', () => {
   });
 
   it('does NOT flag plan-pool models or null/undefined', () => {
-    expect(isPaidOverflowModel('anthropic/claude-sonnet-4.6')).toBe(false);
+    expect(isPaidOverflowModel('anthropic/claude-sonnet-5')).toBe(false);
     expect(isPaidOverflowModel('meta-llama/llama-3.3-70b-instruct:free')).toBe(false);
     expect(isPaidOverflowModel(null)).toBe(false);
     expect(isPaidOverflowModel(undefined)).toBe(false);

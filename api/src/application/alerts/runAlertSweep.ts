@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Alert sweep — the scheduled evaluator for user-defined threshold alert rules.
  *
@@ -149,7 +150,7 @@ export async function runAlertSweep(env: Env): Promise<void> {
           notifyEmail: rule.notifyEmail,
         });
       } catch (err) {
-        console.error(`[cron:alerts] notify failed alert=${rule.id}`, err);
+        reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: `[cron:alerts] notify failed alert=${rule.id}`, details: err } });
       }
 
       await db.insert(alertEvents).values({
@@ -166,7 +167,7 @@ export async function runAlertSweep(env: Env): Promise<void> {
 
       await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(eq(alerts.id, rule.id));
     } catch (err) {
-      console.error(`[cron:alerts] alert=${rule.id} tenant=${rule.tenantId} failed`, err);
+      reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: `[cron:alerts] alert=${rule.id} tenant=${rule.tenantId} failed`, details: err } });
     }
   }
 }

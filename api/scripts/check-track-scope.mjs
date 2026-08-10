@@ -23,6 +23,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { matchesAny } from './track-globs.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const repoRoot = resolve(here, '../..');
@@ -40,36 +41,6 @@ function git(args) {
     return '';
   }
 }
-
-// ── glob → RegExp ────────────────────────────────────────────────────────────
-// `**` = any segments, `*` = within one segment, `?` = one char. Every other char
-// is literal — crucially `[` `]` are literal (Next.js route dirs marketplace/[slug]).
-function globToRegExp(glob) {
-  let re = '';
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i];
-    if (c === '*') {
-      if (glob[i + 1] === '*') {
-        i++;
-        if (glob[i + 1] === '/') {
-          i++;
-          re += '(?:.*/)?';
-        } else {
-          re += '.*';
-        }
-      } else {
-        re += '[^/]*';
-      }
-    } else if (c === '?') {
-      re += '[^/]';
-    } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return new RegExp('^' + re + '$');
-}
-
-const matchesAny = (file, globs) => globs.some((g) => globToRegExp(g).test(file));
 
 // ── load manifest ────────────────────────────────────────────────────────────
 if (!existsSync(manifestFile)) {

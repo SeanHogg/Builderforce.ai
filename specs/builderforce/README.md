@@ -133,6 +133,51 @@
     codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
     same backend, separate clients.
 
+15. **[15 — PRD: RFP / RFQ Response](./15-prd-rfp-response.md)**
+    Adds grounded, co-branded pre-sales proposal generation: portfolio matching, diagnostics freshness,
+    CTO/Product Owner personas, cost and margin modeling, delivery plans, risks, dependencies, and
+    self-contained proposal export. It composes existing project, diagnostics, agent, and finance
+    primitives rather than introducing a disconnected proposal workflow.
+
+16. **[16 — PRD: Insights Answer Engine](./16-prd-insights-answer-engine.md)**
+    Turns vague leadership questions into safe, composed visual answers using the existing metric and
+    widget registries. Adds deterministic answer templates, an out-of-box Executive dashboard, delivery
+    risk and RCA visual primitives, and one shared answer path for Insights and the Brain.
+
+17. **[17 — PRD: Creation Sessions and the Infinite Canvas](./17-prd-creation-canvas-sessions.md)**
+    Recasts chat as a durable, tenant-owned Creation Session and unifies Brain Storm, Workflows,
+    IDE/Builder, websites, data, models, voice, projects, workforce, and application widgets on one
+    multiplayer canvas. Projects become optional live context and delivery destinations; `/dashboard`
+    defaults to visual Create-session cards; onboarding starts in a guided session; generated roadmaps,
+    feature mockups, tasks, and agent delivery stay in the same creative context; the web and VSIX share
+    one canvas engine and command contract.
+
+18. **[18 — PRD: hired.video Port](./18-prd-hired-video-port.md)**
+    Absorbs hired.video, contributing the **Recruiter** and **HR** agents. Read PRD 19 §2 first —
+    that register governs both.
+
+19. **[19 — PRD: BurnRateOS Consolidation](./19-prd-burnrateos-consolidation.md)**
+    Absorbs burnrateos.com, completing the AI C-suite (**CEO, CFO, CRO, CMO, CPO, CISO**) and the
+    eight product domains they own. §2 is the capability ownership register and governs PRD 18 too.
+    **What arrives.**
+
+20. **[20 — PRD: The Consolidated Data Model](./20-prd-consolidated-data-model.md)**
+    1,206 → **387** tables: a 25-table kernel owned by no domain, plus fifteen domains each owned by
+    one seat. The schema, the API on it, and the generated DDL. **What the data is.**
+
+21. **[21 — PRD: The Unified Experience](./21-prd-unified-experience.md)** ← **start here for any UI work**
+    Consolidates 19 and 20 on the experience axis. **The canvas is the product**: sessions in the
+    left panel, the C-suite as draggable **teammates in the footer**, every other destination a
+    **panel over a board that never unmounts**. Carries the complete, implementable **design system**
+    — every token in both themes, the type scale, the metric scales, the component contracts and the
+    ten rules an implementing agent must follow. **Where any of it appears, and to whom.**
+
+22. **[22 — PRD: Browser Performance, Domain Execution, and Codebase Health](./22-prd-browser-performance-domain-execution-analysis.md)**
+    Defines browser delivery, worker, WebNN/WebGPU/WASM and PWA/storage policy, then consolidates the
+    repository-wide LOC/DDD/clone/complexity audit, current cleanup status, backend-speed workstreams,
+    ratchets and falsifiable acceptance criteria. **Where work executes, who owns it, and how the
+    implementation stays understandable and fast.**
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

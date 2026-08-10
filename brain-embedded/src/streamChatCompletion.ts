@@ -21,6 +21,8 @@
  */
 
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
+import { brainRequestError } from './chatError';
+import type { ReasoningIntent } from './effort';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 export interface BrainTransport {
@@ -100,13 +102,71 @@ export interface StreamHandlers {
   onDone?(finishReason: string | null): void;
 }
 
+/**
+ * Caller-supplied provenance for a completion, forwarded to the gateway as the
+ * request body's `metadata` object. Every field is optional; the server treats a
+ * missing `chatId` as "not chat traffic" and records nothing.
+ */
+export interface CompletionMetadata {
+  /** The Brain chat this completion is serving — the audit emit's switch. */
+  chatId?: number;
+  /** The chat's project, when it has one (scopes the audit row). */
+  projectId?: number;
+  /** Stable identifier of the answering agent. Defaults server-side to `brain-default`. */
+  agentRef?: string;
+  /** Display name of the answering agent. Defaults server-side to `Brain`. */
+  agentName?: string;
+  /** One user submit. Reused by every model iteration in that submit so guest
+   * metering charges the user action once, not once per tool-loop completion. */
+  guestTurnId?: string;
+  /** Original text the user submitted. Internal specialist/tool prompts retain
+   * this value so the gateway can verify the turn even when their prompts differ. */
+  guestTurnInput?: string;
+  /**
+   * The conversation's MODE (0409) — `chat` or `work`. Carried so the usage row this
+   * completion produces records WHICH KIND of turn spent the tokens. Without it,
+   * spend can only be attributed to a chat id, and "what does execution actually
+   * cost us versus conversation" has no answer.
+   */
+  mode?: string;
+}
+
 export interface StreamChatOptions {
   messages: ChatCompletionMessage[];
   tools?: BrainToolSpec[];
   tool_choice?: 'auto' | 'none';
   model?: string;
+  /** Hard-pin {@link model}. Used by an explicit user pick so validation cannot
+   * silently succeed on a gateway substitute. */
+  modelStrict?: boolean;
+  /** `auto` lets the gateway choose across every entitled route; `byo_pool`
+   * constrains the turn to the tenant's ordered connected-account cascade. */
+  routingMode?: 'auto' | 'byo_pool';
   temperature?: number;
   maxTokens?: number;
+  /**
+   * Vendor-neutral reasoning INTENT for this completion. Emitted on the wire as
+   * `reasoning: { level }` and mapped SERVER-side against the model the gateway
+   * actually resolved (`reasoningParamsForModel`), which knows which families
+   * accept Anthropic `thinking` vs OpenAI `reasoning_effort` and drops it for the
+   * rest. The client must never emit a vendor param itself: the model is often
+   * `auto`, and an Anthropic-only `thinking` sent to an OpenAI-compatible coder
+   * 400s the run. Omit (or `{ level: 'off' }`) to leave the body unchanged.
+   */
+  reasoning?: ReasoningIntent;
+  /**
+   * Caller identity for this completion, emitted verbatim as the wire body's
+   * `metadata` object. The gateway reads it in `recordBrainChatModelActivity`
+   * (`api/src/presentation/routes/llmRoutes.ts`) to write the audit-log row that
+   * names WHICH MODEL served this turn — the default-agent twin of the addressed
+   * agent's `BrainService.agentReply` emit. `chatId` is the key that switches the
+   * emit on; without it the server no-ops.
+   *
+   * Only populated fields should be set: an EMPTY object (or `undefined`) omits
+   * the `metadata` key from the body entirely, so anonymous/unsaved runs stay
+   * byte-identical to a pre-feature request (same discipline as `reasoning`).
+   */
+  metadata?: CompletionMetadata;
   signal?: AbortSignal;
   /** Auth + endpoint. Injected by BrainProvider; callers via the hook never set this directly. */
   transport: BrainTransport;
@@ -183,15 +243,17 @@ interface DeltaToolCall {
   function?: { name?: string; arguments?: string };
 }
 
-/** Minimal default error mapper used when the transport doesn't supply one. */
+/**
+ * Default error mapper used when the transport doesn't supply one.
+ *
+ * Keeps the gateway's STRUCTURED entitlement fields (`code`/`reason`/`unlock`/
+ * `requiredPlan`) alongside the human sentence — a 402 "needs a validated card"
+ * has to reach the UI as something the user can act on, not just prose. See
+ * {@link chatErrorAction}.
+ */
 async function defaultMapError(res: Response): Promise<Error> {
-  const body = (await res.json().catch(() => ({}))) as { error?: unknown; message?: unknown };
-  const msg =
-    (typeof body.error === 'string' && body.error) ||
-    (typeof body.message === 'string' && body.message) ||
-    res.statusText ||
-    `Request failed (${res.status})`;
-  return new Error(msg);
+  const body = await res.json().catch(() => ({}));
+  return brainRequestError(res.status, body, res.statusText);
 }
 
 /**
@@ -208,7 +270,6 @@ export async function streamChatCompletion(
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const body: Record<string, unknown> = {
-    model: opts.model ?? transport.defaultModel ?? 'openai/gpt-4o-mini',
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
@@ -217,9 +278,38 @@ export async function streamChatCompletion(
     // Providers that ignore it simply omit usage — the parse below is tolerant.
     stream_options: { include_usage: true },
   };
+  // MODEL IS OPTIONAL — omitted means "gateway, choose for me".
+  //
+  // This used to fall back to a hardcoded `openai/gpt-4o-mini`, which is a PAID
+  // OpenRouter model: an unpinned free-plan user was silently pinned to the
+  // premium tier and every turn died on a 402 ("…require a validated card on
+  // file") — a plan they never chose, refusing a model they never picked. With
+  // the key absent the gateway routes the request through the plan's own pool
+  // (free tenants → the free BuilderForce/coder models), which is what an
+  // unpinned chat has always meant on every other surface.
+  const model = opts.model ?? transport.defaultModel;
+  if (model) body.model = model;
+  if (model && opts.modelStrict) body.strict = true;
+  if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';
+  }
+  // Reasoning intent only when actually asked for: `off`/absent omits the key so
+  // the body is byte-identical to a pre-feature request (and an older gateway that
+  // doesn't know the field never sees it).
+  if (opts.reasoning && opts.reasoning.level !== 'off') {
+    body.reasoning = { level: opts.reasoning.level };
+  }
+  // Caller provenance for the gateway's audit emit. Same "omit when empty"
+  // discipline as `reasoning`: undefined-valued fields are dropped, and a
+  // metadata object with nothing left in it never reaches the wire — so an
+  // anonymous/unsaved run's body is byte-identical to a pre-feature request.
+  if (opts.metadata) {
+    const meta = Object.fromEntries(
+      Object.entries(opts.metadata).filter(([, v]) => v !== undefined && v !== null),
+    );
+    if (Object.keys(meta).length > 0) body.metadata = meta;
   }
 
   const doFetch = transport.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
@@ -375,10 +465,14 @@ export async function streamChatCompletion(
     }
   }
 
+  // Stream ended without an explicit `[DONE]` frame (the provider closed the body).
+  // Same result shape as the `[DONE]` path above — `providerCap` was missing here,
+  // so a BYO usage cap hit on such a stream never reached the "manage your keys"
+  // banner.
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

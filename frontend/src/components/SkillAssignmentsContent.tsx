@@ -7,6 +7,7 @@ import {
   type ArtifactAssignment,
 } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
+import { Icon } from '@/components/ui/Icon';
 
 export interface SkillAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
@@ -103,9 +104,9 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
             fontSize: 12,
             fontWeight: 600,
             background: 'var(--coral-bright)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
           }}
         >
@@ -113,7 +114,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
         </button>
       </div>
 
-      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
@@ -128,7 +129,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
               padding: '8px 10px',
               fontSize: 13,
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-deep)',
               color: 'var(--text-primary)',
             }}
@@ -146,10 +147,10 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
                   padding: '8px 12px',
                   background: 'var(--bg-base)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{s.emoji ?? '✨'}</span>
+                <span style={{ flexShrink: 0 }}><Icon source={s.emoji ?? 'sparkles'} size={16} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{s.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.description}</div>
@@ -162,9 +163,9 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
                     fontSize: 11,
                     fontWeight: 600,
                     background: 'var(--coral-bright)',
-                    color: '#fff',
+                    color: 'var(--text-on-accent)',
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     flexShrink: 0,
                   }}
@@ -195,10 +196,10 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
                   padding: '8px 12px',
                   background: 'var(--bg-base)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{emoji}</span>
+                <span style={{ flexShrink: 0 }}><Icon source={emoji} size={16} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Assigned {new Date(a.assignedAt).toLocaleDateString()}</div>
@@ -211,9 +212,9 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
                     fontSize: 11,
                     fontWeight: 600,
                     background: 'rgba(239,68,68,0.1)',
-                    color: '#ef4444',
+                    color: 'var(--error-text)',
                     border: '1px solid rgba(239,68,68,0.3)',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     flexShrink: 0,
                   }}

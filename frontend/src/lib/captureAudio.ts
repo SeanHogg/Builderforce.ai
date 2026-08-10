@@ -8,6 +8,8 @@
  * it. Browser-only (guards `window`); returns the studio engine's PcmAudio shape.
  */
 
+import { acquireUserMedia, isUserMediaSupported, stopStream } from './mediaCapture';
+
 export interface PcmAudio {
   samples: Float32Array;
   sampleRate: number;
@@ -51,14 +53,16 @@ export class MicRecorder {
   static get supported(): boolean {
     return (
       typeof window !== 'undefined' &&
-      typeof navigator !== 'undefined' &&
-      Boolean(navigator.mediaDevices?.getUserMedia) &&
+      isUserMediaSupported() &&
       typeof MediaRecorder !== 'undefined'
     );
   }
 
   async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Acquisition (and its error classification) belongs to `mediaCapture`; this
+    // class is a SINK — one of three, beside the live-session broadcast and the
+    // canvas screen recorder.
+    this.stream = await acquireUserMedia({ audio: true });
     this.chunks = [];
     this.recorder = new MediaRecorder(this.stream);
     this.recorder.ondataavailable = (e) => {
@@ -76,7 +80,7 @@ export class MicRecorder {
     });
     rec.stop();
     const blob = await done;
-    this.stream?.getTracks().forEach((t) => t.stop());
+    stopStream(this.stream);
     this.stream = null;
     this.recorder = null;
     return decodeToPcm(blob);

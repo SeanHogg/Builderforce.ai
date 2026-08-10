@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Knowledge Management — SOPs, processes & documents (migration 0227).
  *
@@ -556,7 +557,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         summary: `Published "${doc.title}" v${nextVersion}`,
         metadata: { versionNumber: nextVersion, changeNote: body.changeNote?.trim() || null },
       });
-    })().catch(() => {}));
+    })().catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/knowledgeRoutes.ts", operation: "createKnowledgeRoutes" });
+    }));
     return c.json(await loadDoc(tenantId, id));
   });
 
@@ -1060,8 +1063,8 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   // buyer's tenant as a fresh document. Browse reads are cached behind a global
   // version token (cross-tenant) bumped on every listing write. PAID listings
   // require a recorded purchase (POST /checkout) before install; free listings
-  // install directly. On the default self-hosted config (PAYMENT_PROVIDER=manual)
-  // checkout records the purchase immediately; hosted card settlement is pending.
+  // install directly. One-off Stripe settlement for paid listings is not wired yet,
+  // so /checkout reports `requiresConfig` and no purchase is ever recorded.
   // =====================================================================
   const LISTING_VISIBILITIES = ['private', 'tenant', 'public'] as const;
   // Tag parsing + the market version token are shared with the PUBLIC
@@ -1146,10 +1149,11 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ---- CHECKOUT A PAID LISTING (records a purchase that unlocks install) ----
-  // Free listings need no checkout. On the default self-hosted config
-  // (PAYMENT_PROVIDER=manual) a purchase is recorded immediately; hosted card
-  // providers (stripe/helcim) require the one-off settlement wiring that is not
-  // yet configured, so they return 501 rather than silently granting the item.
+  // Free listings need no checkout. PAID listings need one-off Stripe settlement
+  // (Checkout in `payment` mode), which is not wired yet — so this reports
+  // `requiresConfig` and never records a purchase. It previously recorded one
+  // immediately whenever PAYMENT_PROVIDER was unset, which handed paid listings out
+  // for free on every deploy that hadn't configured payments.
   router.post('/listings/:listingId/checkout', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
@@ -1164,17 +1168,8 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
     if (existing) return c.json({ purchased: true });
 
-    const provider = ((c.env as Env).PAYMENT_PROVIDER ?? 'manual').toLowerCase();
-    if (provider === 'manual') {
-      await db
-        .insert(knowledgeListingPurchases)
-        .values({ listingId, tenantId, purchasedBy: userId, priceCents: listing.priceCents, provider: 'manual' })
-        .onConflictDoNothing();
-      return c.json({ purchased: true });
-    }
-    // Hosted card providers need one-off checkout + settlement wiring that is not
-    // yet configured. Return a handled result (not an error) so the client shows a
-    // clear message rather than granting a paid item for free.
+    // Return a handled result (not an error) so the client shows a clear message
+    // rather than granting a paid item for free.
     return c.json({ requiresConfig: true });
   });
 

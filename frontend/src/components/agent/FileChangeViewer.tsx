@@ -74,7 +74,7 @@ export function FileChangeViewer({ taskId, path, height = 420 }: FileChangeViewe
 
   return (
     <ChunkErrorBoundary compact>
-      <div style={{ height, border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ height, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         <MonacoDiffEditor
           height="100%"
           language={getLanguage(path)}

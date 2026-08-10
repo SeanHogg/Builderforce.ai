@@ -12,14 +12,14 @@ export default function NotFoundContent() {
         justifyContent: 'center', textAlign: 'center', gap: 12, padding: '48px 20px',
       }}
     >
-      <div style={{ fontSize: 56, fontWeight: 800, color: 'var(--text-strong)', lineHeight: 1 }}>404</div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>{t('title')}</h1>
-      <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 460, margin: 0 }}>{t('message')}</p>
+      <div style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-strong)', lineHeight: 1 }}>404</div>
+      <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>{t('title')}</h1>
+      <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', maxWidth: 460, margin: 0 }}>{t('message')}</p>
       <Link
         href="/"
         style={{
-          marginTop: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 10,
-          background: 'var(--accent)', color: '#fff', textDecoration: 'none',
+          marginTop: 8, padding: '10px 20px', fontSize: 'var(--font-size-small)', fontWeight: 700, borderRadius: 'var(--radius-lg)',
+          background: 'var(--accent)', color: 'var(--text-on-accent)', textDecoration: 'none',
         }}
       >
         {t('home')}

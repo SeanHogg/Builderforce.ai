@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -17,13 +18,13 @@ import {
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const btn = (primary = false): React.CSSProperties => ({
-  fontSize: 12, padding: '5px 11px', borderRadius: 8, cursor: 'pointer',
+  fontSize: 12, padding: '5px 11px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   border: '1px solid var(--border-subtle)',
-  background: primary ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
-  color: primary ? '#fff' : 'var(--text-secondary)',
+  background: primary ? 'var(--accent)' : 'var(--bg-base)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 export function ContributorConsolidation() {
   const t = useTranslations('contributorMerge');
@@ -95,7 +96,7 @@ export function ContributorConsolidation() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {/* Suggested duplicates */}
       <div style={cardStyle}>
@@ -122,7 +123,7 @@ export function ContributorConsolidation() {
                   style={{ ...btn(), textAlign: 'left' }}
                   title={t('keepThisTitle')}
                 >
-                  {t('keep')} <b>{survivor.displayName}</b>{survivor.userId ? ' 🔗' : ''}
+                  {t('keep')} <b>{survivor.displayName}</b>{survivor.userId ? <Icon source="🔗" size="1em" /> : ''}
                 </button>
               ))}
             </div>
@@ -233,7 +234,7 @@ export function ContributorConsolidation() {
 }
 
 const selectStyle: React.CSSProperties = {
-  fontSize: 13, padding: '5px 8px', borderRadius: 8,
+  fontSize: 13, padding: '5px 8px', borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
   maxWidth: 260,
 };

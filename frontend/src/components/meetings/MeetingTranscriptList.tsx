@@ -26,7 +26,7 @@ export function MeetingTranscriptList({
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
             {t('minutesTitle')}
           </div>
-          <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--surface-card)', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-lg)', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)' }}>
             <DocumentMarkdown content={summary} />
           </div>
         </div>
@@ -42,10 +42,10 @@ export function MeetingTranscriptList({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {segments.map((s) => (
               <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: s.speakerKind === 'agent' ? 'var(--violet-bright, #a78bfa)' : 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: s.speakerKind === 'agent' ? 'var(--violet-bright, var(--violet-bright))' : 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   {s.speakerName}
                   {s.speakerKind === 'agent' && (
-                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--bg-deep)', background: 'var(--violet-bright, #a78bfa)', padding: '1px 5px', borderRadius: 5 }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--bg-deep)', background: 'var(--violet-bright, var(--violet-bright))', padding: '1px 5px', borderRadius: 'var(--radius-sm)' }}>
                       {t('agent')}
                     </span>
                   )}

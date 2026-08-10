@@ -15,7 +15,7 @@ import { TeamChatButton } from '@/components/brain/TeamChatButton';
 
 function KindBadge({ label }: { label: string }) {
   return (
-    <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}>
+    <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}>
       {label}
     </span>
   );
@@ -102,7 +102,7 @@ export default function MeetingsContent({
   }
 
   const btn = (primary = false): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-md)', cursor: 'pointer',
     background: primary ? 'var(--coral-bright)' : 'var(--bg-deep)',
     color: primary ? 'var(--bg-deep)' : 'var(--text-secondary)',
     border: `1px solid ${primary ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
@@ -111,7 +111,7 @@ export default function MeetingsContent({
   function MeetingCard({ detail, isLive }: { detail: MeetingDetail; isLive: boolean }) {
     const m = detail.meeting;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', borderRadius: 12, background: 'var(--surface-card)', border: `1px solid ${isLive ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', borderRadius: 'var(--radius-lg)', background: 'var(--surface-card)', border: `1px solid ${isLive ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{m.title}</span>
@@ -151,7 +151,7 @@ export default function MeetingsContent({
       </div>
 
       {toast && (
-        <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: 13 }}>{toast}</div>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: 13 }}>{toast}</div>
       )}
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -162,7 +162,7 @@ export default function MeetingsContent({
             {loading ? (
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
             ) : live.length === 0 && upcoming.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px', background: 'var(--surface-card)', border: '1px dashed var(--border-subtle)', borderRadius: 12 }}>{t('noMeetings')}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px', background: 'var(--surface-card)', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>{t('noMeetings')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {live.map((d) => <MeetingCard key={d.meeting.id} detail={d} isLive />)}
@@ -176,12 +176,12 @@ export default function MeetingsContent({
               <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', margin: '0 0 10px' }}>{t('pastMeetings')}</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {past.map((d) => (
-                  <div key={d.meeting.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+                  <div key={d.meeting.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderRadius: 'var(--radius-lg)', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{d.meeting.title}</span>
                         <KindBadge label={t(`kind_${d.meeting.kind}`)} />
-                        {d.meeting.summary && <span style={{ fontSize: 11, color: 'var(--emerald-bright, #34d399)' }}>{t('minutesAvailable')}</span>}
+                        {d.meeting.summary && <span style={{ fontSize: 11, color: 'var(--emerald-bright, var(--emerald-bright))' }}>{t('minutesAvailable')}</span>}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{whenLabel(d.meeting.endedAt ?? d.meeting.scheduledAt)}</div>
                     </div>
@@ -202,7 +202,7 @@ export default function MeetingsContent({
                     href={e.htmlLink}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', textDecoration: 'none', flexWrap: 'wrap' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderRadius: 'var(--radius-lg)', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', textDecoration: 'none', flexWrap: 'wrap' }}
                   >
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{e.title}</div>

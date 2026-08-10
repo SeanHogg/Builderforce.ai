@@ -6,8 +6,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 // Types
 // ---------------------------------------------------------------------------
 
-export type PricingModel = 'flat_fee' | 'consumption';
-export type ArtifactType = 'skill' | 'persona' | 'content' | 'agent';
+export type PricingModel = 'flat_fee' | 'consumption' | 'subscription';
+export type ArtifactType = 'skill' | 'persona' | 'content' | 'agent' | 'service';
 
 export interface CartItem {
   id: string;              // unique key: `${type}:${slug}`
@@ -19,6 +19,12 @@ export interface CartItem {
   priceUnit?: string;      // e.g. "per 1K tokens" for consumption
   emoji?: string;
   image?: string;
+  setupFee?: number;
+  checkoutKind?: 'business_phone' | 'plan_subscription';
+  targetPlan?: 'pro' | 'teams';
+  billingCycle?: 'monthly' | 'yearly';
+  seats?: number;
+  discountCode?: string;
 }
 
 interface CartContextValue {
@@ -46,7 +52,10 @@ function loadCart(): CartItem[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(CART_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as CartItem[]) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((item): item is CartItem =>
+      item != null && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.price === 'number'
+    ) : [];
   } catch {
     return [];
   }
@@ -68,7 +77,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback((item: CartItem) => {
     setItems((prev) => {
-      if (prev.some((i) => i.id === item.id)) return prev; // no duplicates
+      if (prev.some((i) => i.id === item.id)) {
+        return prev.map((existing) => existing.id === item.id ? item : existing);
+      }
       return [...prev, item];
     });
     setIsOpen(true);

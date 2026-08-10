@@ -26,6 +26,7 @@ import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { usd, pct, score2, int } from '../format';
+import { ProviderConsumptionBreakdown } from '../AiInsightSummaries';
 
 /** One shared, deduped read of the AI-Impact collector per (window). */
 function useAiImpact(days: number) {
@@ -91,8 +92,8 @@ function PrevScoreCard({ days }: WidgetCardProps) {
 
 type UsageMetric = 'activeUsers' | 'runs' | 'tokens' | 'cost';
 const segBtn = (active: boolean): React.CSSProperties => ({
-  padding: '4px 9px', borderRadius: 7, border: '1px solid var(--border-subtle)',
-  background: active ? 'var(--coral-bright)' : 'var(--bg-base)', color: active ? '#fff' : 'var(--text-secondary)',
+  padding: '4px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
+  background: active ? 'var(--coral-bright)' : 'var(--bg-base)', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
   fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer',
 });
 
@@ -225,6 +226,16 @@ function ShareTrendCard({ days }: WidgetCardProps) {
   );
 }
 
+/** Consumption per connected integration / platform key. Renders the SAME
+ *  breakdown the AI-Impact summary card shows — one component, one rule for how
+ *  BYO spend is presented. */
+function ByIntegrationCard({ days }: WidgetCardProps) {
+  const { data, state, t } = useImpact(days);
+  if (!data) return state;
+  if (data.consumption.providers.length === 0) return <Muted>{t('aiImpact.noUsage')}</Muted>;
+  return <ProviderConsumptionBreakdown providers={data.consumption.providers} />;
+}
+
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 export const AI_IMPACT_WIDGETS: WidgetDef[] = [
@@ -237,5 +248,6 @@ export const AI_IMPACT_WIDGETS: WidgetDef[] = [
   { id: 'ai-impact.model-share', group: 'aiImpact', titleKey: 'aiModelShare', capability: CAP, size: 'md', Card: ModelShareCard, drill: DRILL },
   { id: 'ai-impact.merge-rate', group: 'aiImpact', titleKey: 'aiMergeRate', capability: CAP, size: 'md', Card: MergeRateCard, drill: DRILL },
   { id: 'ai-impact.comparison', group: 'aiImpact', titleKey: 'aiComparison', capability: CAP, size: 'lg', Card: ComparisonCard, drill: DRILL },
+  { id: 'ai-impact.by-integration', group: 'aiImpact', titleKey: 'aiByIntegration', capability: CAP, size: 'md', Card: ByIntegrationCard, drill: DRILL },
   { id: 'ai-impact.share-trend', group: 'aiImpact', titleKey: 'aiShareTrend', capability: CAP, size: 'md', Card: ShareTrendCard, drill: DRILL },
 ];

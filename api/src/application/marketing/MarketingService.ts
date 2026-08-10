@@ -3,6 +3,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { marketingSessions, marketingToolRuns } from '../../infrastructure/database/schema';
+import { GUEST_SESSIONS_CACHE_KEY, visitorStandingCacheKey } from './marketingCacheKeys';
 import { diagnosticName } from '../tools/ToolService';
 import type { ToolResult } from '../tools/toolTypes';
 
@@ -145,12 +146,22 @@ export class MarketingService {
   /**
    * Close the funnel: stamp the session converted with the now-authenticated user.
    * No-op if the visitor id is unknown or already converted. Idempotent.
+   *
+   * Converting also moves the visitor from `guest` to `registered` for broadcast
+   * targeting, so their cached standing has to go with it — otherwise a "sign up
+   * free" banner keeps greeting somebody who just did, for as long as the entry
+   * lives. The console page is dropped for the same reason: conversion is the
+   * number it exists to report.
    */
   async markConverted(env: Env, visitorId: string, userId: string): Promise<void> {
     await this.db
       .update(marketingSessions)
       .set({ converted: true, convertedUserId: userId, convertedAt: sql`now()` })
       .where(and(eq(marketingSessions.visitorId, visitorId), eq(marketingSessions.converted, false)));
-    await invalidateCached(env, sessionKey(visitorId));
+    await Promise.all([
+      invalidateCached(env, sessionKey(visitorId)),
+      invalidateCached(env, visitorStandingCacheKey(visitorId)),
+      invalidateCached(env, GUEST_SESSIONS_CACHE_KEY),
+    ]);
   }
 }

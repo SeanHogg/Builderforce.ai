@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -270,14 +271,14 @@ export default function PersonasPage() {
 
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
-      builtin: { label: t('sourceBuiltin'), color: 'var(--accent,#6366f1)' },
-      agenthub: { label: t('sourceAgenthub'), color: '#22c55e' },
-      'project-local': { label: t('sourceProject'), color: '#f59e0b' },
-      'user-global': { label: t('sourceUser'), color: '#06b6d4' },
-      'agentlink-assigned': { label: t('sourceAssigned'), color: '#ec4899' },
+      builtin: { label: t('sourceBuiltin'), color: 'var(--accent)' },
+      agenthub: { label: t('sourceAgenthub'), color: 'var(--success-text)' },
+      'project-local': { label: t('sourceProject'), color: 'var(--warning-text)' },
+      'user-global': { label: t('sourceUser'), color: 'var(--cyan-bright)' },
+      'agentlink-assigned': { label: t('sourceAssigned'), color: 'var(--pink-bright)' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
-    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
   };
 
   return (
@@ -295,7 +296,7 @@ export default function PersonasPage() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>
+        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
@@ -322,14 +323,14 @@ export default function PersonasPage() {
           <PersonaAssignmentsContent scope="tenant" scopeId={tenantNum} />
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🔗</div>
+            <div className="empty-state-icon"><Icon source="🔗" size="1em" /></div>
             <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
       ) : tab === 'my-personas' ? (
         userPersonas.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🎭</div>
+            <div className="empty-state-icon"><Icon source="🎭" size="1em" /></div>
             <div className="empty-state-title">{t('noCustomTitle')}</div>
             <div className="empty-state-sub">{t('noCustomSub')}</div>
             <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newPersonaShort')}</button>
@@ -342,7 +343,7 @@ export default function PersonasPage() {
                 <div style={{ padding: p.image ? 12 : 0 }}>
                   <div className="card-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 20 }}>🎭</span>
+                      <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
                       <div>
                         <div className="card-title">{p.name}</div>
                         <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
@@ -381,7 +382,7 @@ export default function PersonasPage() {
                 {userPersonas.map((p) => (
                   <tr key={p.id} style={trStyle}>
                     <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      <span style={{ marginRight: 6 }}>🎭</span>{p.name}
+                      <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
                       {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>{t('shared')}</span>}
                     </td>
                     <td style={tdMutedStyle}>{p.description || '—'}</td>
@@ -425,12 +426,12 @@ export default function PersonasPage() {
                 const installed = installedSlugs.has(p.name);
                 const isOpen = expanded === p.name;
                 return (
-                  <div key={p.name} className="card" style={{ overflow: 'hidden', borderColor: isOpen ? 'var(--accent,#6366f1)' : undefined }}>
+                  <div key={p.name} className="card" style={{ overflow: 'hidden', borderColor: isOpen ? 'var(--accent)' : undefined }}>
                     {p.image && <div style={{ width: '100%', height: 100, background: `url('${p.image}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
                     <div style={{ padding: p.image ? 12 : 0 }} onClick={() => setExpanded(isOpen ? null : p.name)}>
                       <div className="card-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 20 }}>🎭</span>
+                          <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
                           <div>
                             <div className="card-title">{p.name}</div>
                             <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
@@ -442,22 +443,22 @@ export default function PersonasPage() {
                       </div>
                       {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                        <span title={t('installsTitle')}>⬇️ {stat.installs}</span>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
+                        <span title={t('installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                         {p.author && <span>{t('byAuthor', { author: p.author })}</span>}
                       </div>
                       {isOpen && (
                         <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 10 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('voiceLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.voice}</div>
                             </div>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('perspectiveLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.perspective}</div>
                             </div>
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('decisionStyleLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.decisionStyle}</div>
                             </div>
@@ -466,7 +467,7 @@ export default function PersonasPage() {
                             <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{t('capabilitiesLabel')}</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{p.capabilities.map((c) => <span key={c} className="badge badge-gray">{c}</span>)}</div>
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{p.outputPrefix}</code></div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 'var(--radius-sm)', fontSize: 11 }}>{p.outputPrefix}</code></div>
                         </div>
                       )}
                     </div>
@@ -507,7 +508,7 @@ export default function PersonasPage() {
                     return (
                       <tr key={p.name} style={trStyle}>
                         <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          <span style={{ marginRight: 6 }}>🎭</span>{p.name}
+                          <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
                         </td>
                         <td style={tdMutedStyle}>{p.description || '—'}</td>
                         <td style={tdMutedStyle}>
@@ -517,8 +518,8 @@ export default function PersonasPage() {
                           </div>
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                          <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
+                          <span style={{ marginLeft: 10, fontSize: 11 }}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

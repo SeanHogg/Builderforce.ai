@@ -10,6 +10,8 @@ import {
   workflowStatusTool,
   gitHistoryTool,
   askHumanTool,
+  connectorsListTool,
+  connectorCallTool,
 } from "../builderforce/tools/index.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { resolvePluginTools } from "../plugins/tools.js";
@@ -200,6 +202,11 @@ export function createBuilderForceAgentsTools(options?: BuilderForceAgentsToolsO
     projectKnowledgeTool,
     saveSessionHandoffTool,
     askHumanTool,
+    // Reach the tenant's connected external systems. Two generic tools rather than
+    // one per action, so the prompt cost stays flat as the catalog grows — see
+    // builderforce/tools/connector-tools.ts.
+    connectorsListTool,
+    connectorCallTool,
     createOrchestrateTool({
       agentSessionKey: options?.agentSessionKey,
       agentChannel: options?.agentChannel,

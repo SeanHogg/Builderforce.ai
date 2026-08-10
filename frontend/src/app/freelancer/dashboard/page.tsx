@@ -13,6 +13,8 @@ import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { RateClientButton } from '@/components/freelance/RateClientButton';
 import { useAvailableForHire } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
+import { useOnboardingPrompt } from '@/lib/onboarding';
+import { OnboardingStepper } from '@/components/OnboardingStepper';
 import {
   listMyEngagements, listMyTimecards, listMyInvoices, getTodayActivity,
   type Engagement, type Timecard, type Invoice,
@@ -25,8 +27,8 @@ const money = (cents: number, cur = 'USD') => `${cur} ${(cents / 100).toFixed(2)
 const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
 
 const ENGAGEMENT_TONE: Record<Engagement['status'], string> = {
-  invited: 'var(--warning-text, #b45309)',
-  interviewing: 'var(--cyan-bright, #00e5cc)',
+  invited: 'var(--warning-text)',
+  interviewing: 'var(--cyan-bright, var(--cyan-bright))',
   active: 'rgba(34,197,94,0.9)',
   declined: 'var(--text-muted)',
   terminated: 'var(--text-muted)',
@@ -34,10 +36,10 @@ const ENGAGEMENT_TONE: Record<Engagement['status'], string> = {
 
 const TIMECARD_TONE: Record<Timecard['status'], string> = {
   draft: 'var(--text-muted)',
-  submitted: 'var(--cyan-bright, #00e5cc)',
+  submitted: 'var(--cyan-bright, var(--cyan-bright))',
   approved: 'rgba(34,197,94,0.9)',
-  rejected: 'var(--danger, #dc2626)',
-  paid: 'var(--coral-bright, #f4726e)',
+  rejected: 'var(--danger)',
+  paid: 'var(--coral-bright)',
 };
 
 /**
@@ -53,8 +55,11 @@ export default function FreelancerDashboardPage() {
   const t = useTranslations('freelancerDashboard');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, webToken } = useAuth();
   const forHire = useAvailableForHire();
+  // A hired account never reaches /dashboard (the shell blocks it), so this is
+  // where its setup wizard lives — same shared decision, hired step track.
+  const onboarding = useOnboardingPrompt();
 
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [timecards, setTimecards] = useState<Timecard[]>([]);
@@ -122,7 +127,7 @@ export default function FreelancerDashboardPage() {
           <p style={{ fontSize: 14, margin: '0 0 18px' }}>{t('optIn.body')}</p>
           <Link
             href="/settings"
-            style={{ display: 'inline-block', padding: '10px 18px', borderRadius: 8, background: 'var(--coral-bright)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}
+            style={{ display: 'inline-block', padding: '10px 18px', borderRadius: 'var(--radius-md)', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}
           >
             {t('optIn.cta')}
           </Link>
@@ -133,6 +138,14 @@ export default function FreelancerDashboardPage() {
 
   return (
     <PageContainer style={{ padding: 0 }}>
+      {onboarding.show && webToken && (
+        <OnboardingStepper
+          webToken={webToken}
+          initialProgress={onboarding.progress}
+          onComplete={onboarding.complete}
+          onDismiss={onboarding.dismiss}
+        />
+      )}
       <main style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
           <div>
@@ -152,7 +165,7 @@ export default function FreelancerDashboardPage() {
               series={engagementSeries}
               delta={buildInsightDelta(engagementSeries, true)}
               href="/marketplace?category=gigs"
-              color="var(--coral-bright, #f4726e)"
+              color="var(--coral-bright)"
             />
             <InsightStat
               label={t('metric.billableHours')}
@@ -161,7 +174,7 @@ export default function FreelancerDashboardPage() {
               series={hoursSeries}
               delta={buildInsightDelta(hoursSeries, true)}
               href="/freelancer/timecard"
-              color="var(--cyan-bright, #00e5cc)"
+              color="var(--cyan-bright, var(--cyan-bright))"
             />
             <InsightStat
               label={t('metric.paidEarnings')}
@@ -274,7 +287,7 @@ export default function FreelancerDashboardPage() {
 
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-  border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)',
 };
 
 const badgeStyle: React.CSSProperties = {
@@ -283,9 +296,9 @@ const badgeStyle: React.CSSProperties = {
 
 function EmptyState({ message, ctaHref, ctaLabel }: { message: string; ctaHref: string; ctaLabel: string }) {
   return (
-    <div style={{ border: '1px dashed var(--border-subtle)', borderRadius: 12, padding: '28px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+    <div style={{ border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '28px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
       <p style={{ margin: '0 0 12px', fontSize: 14 }}>{message}</p>
-      <Link href={ctaHref} style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 8, background: 'var(--coral-bright)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+      <Link href={ctaHref} style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 'var(--radius-md)', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
         {ctaLabel}
       </Link>
     </div>

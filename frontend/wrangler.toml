@@ -23,9 +23,6 @@ custom_domain = true
 pattern = "www.builderforce.ai"
 custom_domain = true
 
-[vars]
-NEXT_PUBLIC_WORKER_URL = "https://worker.builderforce.ai"
-
 [observability.logs]
 enabled = true
 invocation_logs = true

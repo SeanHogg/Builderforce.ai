@@ -15,16 +15,38 @@
 # the `link:../studio` and `link:../sdk` placeholders. Actual content is
 # bind-mounted at runtime by docker-compose.
 
-FROM node:20-bookworm-slim AS deps
+FROM node:22-bookworm-slim AS deps
 WORKDIR /repo
-# Stub package.json for the link: targets so pnpm install succeeds before the
-# real source is bind-mounted. Stubs are replaced at runtime by the host bind
-# mounts under /repo/sdk, /repo/studio, /repo/studio-embedded. Written as
-# separate single-line RUNs so Dockerfile linters don't misparse the JSON.
-RUN mkdir -p /repo/sdk /repo/studio /repo/studio-embedded
-RUN printf '%s' '{"name":"@seanhogg/builderforce-sdk","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' > /repo/sdk/package.json
-RUN printf '%s' '{"name":"@seanhogg/builderforce-studio","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' > /repo/studio/package.json
-RUN printf '%s' '{"name":"@seanhogg/builderforce-studio-embedded","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' > /repo/studio-embedded/package.json
+# Stub package.json for EVERY `link:` target in frontend/package.json so pnpm
+# install succeeds before the real source is bind-mounted. Stubs are replaced at
+# runtime by the host bind mounts docker-compose provides. Keep this list in sync
+# with the `link:` specifiers in frontend/package.json — a target with no stub
+# fails the install outright. Package names are not derivable from the directory
+# (builderforce-embedded publishes as @seanhogg/builderforce-embedded), so each
+# entry is an explicit dir=name pair.
+RUN set -eu; \
+    for pair in \
+      "sdk=@seanhogg/builderforce-sdk" \
+      "studio=@seanhogg/builderforce-studio" \
+      "studio-embedded=@seanhogg/builderforce-studio-embedded" \
+      "brain-embedded=@seanhogg/builderforce-brain-embedded" \
+      "packages/brain-ui=@seanhogg/builderforce-brain-ui" \
+      "builderforce-embedded=@seanhogg/builderforce-embedded" \
+      "voice=@seanhogg/builderforce-voice" \
+    ; do \
+      dir="/repo/${pair%%=*}"; name="${pair#*=}"; \
+      mkdir -p "$dir"; \
+      printf '{"name":"%s","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' "$name" > "$dir/package.json"; \
+    done
+# frontend's postinstall is `node ../scripts/ensure-linked-deps.mjs`; without the
+# script on disk the install dies with MODULE_NOT_FOUND before it can finish.
+COPY scripts/ /repo/scripts/
+# frontend/tsconfig.json maps @builderforce/creation-canvas-contract to
+# ../packages/creation-canvas-contract/src — a path alias, not an npm dependency,
+# so nothing installs it. CreationCanvas.tsx imports it, and without the source
+# every route reaching that component fails to compile with "Module not found".
+# In the deps stage so both the dev and production targets inherit it.
+COPY packages/creation-canvas-contract /repo/packages/creation-canvas-contract
 WORKDIR /repo/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
@@ -37,7 +59,10 @@ COPY frontend/ ./
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
-CMD ["pnpm", "dev", "--", "--hostname", "0.0.0.0"]
+# No `--` separator: pnpm 10 forwards it verbatim, so `next dev` sees it as a
+# positional and reads the NEXT argument as the project directory — "Invalid
+# project directory provided, no such directory: /repo/frontend/--hostname".
+CMD ["pnpm", "dev", "--hostname", "0.0.0.0"]
 
 FROM deps AS production
 WORKDIR /repo/frontend
@@ -46,4 +71,5 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm exec next build
 EXPOSE 3000
-CMD ["pnpm", "exec", "next", "start", "--", "--hostname", "0.0.0.0"]
+# Same `--` trap as the dev stage above.
+CMD ["pnpm", "exec", "next", "start", "--hostname", "0.0.0.0"]

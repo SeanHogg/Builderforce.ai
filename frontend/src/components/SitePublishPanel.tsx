@@ -7,8 +7,12 @@
  * `onBuild` callback supplied by the IDE (it owns the file contents + the
  * WebContainer). This panel owns the subdomain UI, the upload, and the result.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
+import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
+import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 
 interface SitePublishPanelProps {
   projectId: number;
@@ -39,6 +43,7 @@ function formatBytes(n: number): string {
 type Phase = 'idle' | 'building' | 'uploading' | 'done' | 'error';
 
 export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublishPanelProps) {
+  const t = useTranslations('ide');
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [subdomain, setSubdomain] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -60,7 +65,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
 
   const handlePublish = useCallback(async () => {
     const slug = slugify(subdomain);
-    if (!slug) { setError('Enter a valid subdomain (letters, numbers, hyphens).'); return; }
+    if (!slug) { setError(t('publish.invalidSubdomain')); return; }
     setError('');
     setPhase('building');
     try {
@@ -80,10 +85,10 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       });
       setPhase('done');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Publish failed');
+      setError(e instanceof Error ? e.message : t('publish.failed'));
       setPhase('error');
     }
-  }, [subdomain, onBuild, projectId]);
+  }, [subdomain, onBuild, projectId, t]);
 
   const busy = phase === 'building' || phase === 'uploading';
   // Mirrors HOSTING_APEX (api/src/application/ide/siteHosting.ts) — display only;
@@ -93,14 +98,14 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, color: 'var(--text-primary)', fontSize: 14 }}>
       <div>
-        <div style={{ fontWeight: 600, fontSize: 15 }}>🚀 Publish to the web</div>
+        <div style={{ fontWeight: 600, fontSize: 15 }}><Icon source="🚀" size="1em" /> {t('publish.title')}</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12.5, marginTop: 2 }}>
-          Build this app and host it at a subdomain. Static hosting — your app runs in the browser.
+          {t('publish.description')}
         </div>
       </div>
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Subdomain</span>
+        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('publish.subdomain')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input
             value={subdomain}
@@ -109,7 +114,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
             placeholder="my-app"
             spellCheck={false}
             style={{
-              flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8,
+              flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--chat-input-border)', background: 'var(--chat-input-bg)',
               color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-mono, monospace)',
             }}
@@ -123,36 +128,45 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
         onClick={handlePublish}
         disabled={busy || !loaded}
         style={{
-          padding: '10px 14px', borderRadius: 8, border: 'none', cursor: busy ? 'wait' : 'pointer',
-          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--surface-coral, #e2654a)',
-          color: '#fff', fontWeight: 600, fontSize: 14,
+          padding: '10px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: busy ? 'wait' : 'pointer',
+          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--coral-bright)',
+          color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 14,
         }}
       >
-        {phase === 'building' ? 'Building…' : phase === 'uploading' ? 'Uploading…' : site ? 'Re-publish' : 'Publish'}
+        {phase === 'building' ? t('publish.building') : phase === 'uploading' ? t('publish.uploading') : site ? t('publish.republish') : t('publish.publish')}
       </button>
 
       {error && (
-        <div style={{ color: 'var(--text-error, #c0392b)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
+        <div style={{ color: 'var(--error-text)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
       )}
 
       {site && phase !== 'building' && phase !== 'uploading' && (
         <div style={{ borderTop: '1px solid var(--chat-input-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-            {phase === 'done' ? 'Published ✓' : 'Live site'}
+            {phase === 'done' ? t('publish.published') : t('publish.liveSite')}
           </div>
-          <a href={site.url} target="_blank" rel="noreferrer" style={{ color: 'var(--surface-coral, #e2654a)', fontWeight: 600, wordBreak: 'break-all' }}>
+          <a href={site.url} target="_blank" rel="noreferrer" style={{ color: 'var(--coral-bright)', fontWeight: 600, wordBreak: 'break-all' }}>
             {site.url}
           </a>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-            {site.assetCount} files · {formatBytes(site.totalBytes)}
+            {t('publish.fileCount', { count: site.assetCount })} · {formatBytes(site.totalBytes)}
             {' · '}
             {/* Path form works today, before the wildcard DNS/route is wired. */}
             <a href={site.pathUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>
-              preview
+              {t('publish.preview')}
             </a>
           </div>
         </div>
       )}
+
+      {/* The CI half: same site, built by GitHub instead of the browser. */}
+      <GitHubDeployPanel projectId={projectId} subdomain={site?.subdomain ?? undefined} />
+
+      {/* Everything that happens AFTER the deploy. Each panel gates itself on
+          there being a published site, so no condition is duplicated here. */}
+      <SiteDomainPanel projectId={projectId} />
+      <SiteFormsPanel projectId={projectId} />
+      <SiteTrafficPanel projectId={projectId} />
     </div>
   );
 }

@@ -12,10 +12,9 @@
  * per window), render only their body (the WidgetCard chrome supplies frame +
  * title + pin), and drill back into the matching Delivery slide-out panel.
  *
- * Mirrors aiImpactWidgets.tsx exactly. The delivery cards use the tenant-wide,
- * window-keyed delivery collectors (lifecycle + derived sprint velocity) since a
- * dashboard widget only receives the shared `days` window — not a picked
- * deliverable — which is also what the lens shows tenant-wide.
+ * Mirrors aiImpactWidgets.tsx exactly. The delivery cards use the global project
+ * selection plus the shared `days` window, matching the Delivery hub and its
+ * drill-down panels.
  */
 
 import { useTranslations } from 'next-intl';
@@ -33,20 +32,24 @@ import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetr
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { hrs, pct } from '../format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 // ── Shared, deduped collector reads (one request per source × window) ──────────
 
 /** One shared read of the DORA four-keys collector per window. */
 function useDora(days: number) {
-  return useSharedSource<DoraInsights>(`dora:${days}`, () => insightsApi.dora(days));
+  const { currentProjectId } = useProjectScope();
+  return useSharedSource<DoraInsights>(`dora:${days}:p:${currentProjectId ?? 0}`, () => insightsApi.dora(days, currentProjectId));
 }
 /** One shared read of the life-cycle (cycle time) collector per window. */
 function useLifecycle(days: number) {
-  return useSharedSource<LifecycleInsights>(`lifecycle:${days}`, () => insightsApi.lifecycle(days));
+  const { currentProjectId } = useProjectScope();
+  return useSharedSource<LifecycleInsights>(`lifecycle:${days}:p:${currentProjectId ?? 0}`, () => insightsApi.lifecycle(days, currentProjectId));
 }
-/** One shared read of the derived sprint-velocity collector (tenant-wide). */
+/** One shared read of the derived sprint-velocity collector per project/window. */
 function useVelocity(days: number) {
-  return useSharedSource<VelocityInsights>(`velocity:${days}`, () => agileMetricsApi.derivedVelocity());
+  const { currentProjectId } = useProjectScope();
+  return useSharedSource<VelocityInsights>(`velocity:${days}:p:${currentProjectId ?? 0}`, () => agileMetricsApi.derivedVelocity(currentProjectId));
 }
 
 // Both lenses live behind the same Delivery hub slide-out.
@@ -58,7 +61,7 @@ const CAP_DORA = 'insights.delivery' as const;
 
 const TIER_ORDER = ['elite', 'high', 'medium', 'low'] as const;
 type TierKey = (typeof TIER_ORDER)[number];
-const TIER_COLOR: Record<TierKey, string> = { elite: '#15803d', high: '#22c55e', medium: '#f59e0b', low: '#ef4444' };
+const TIER_COLOR: Record<TierKey, string> = { elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: 'var(--error)' };
 const PHASE_ORDER: LifecyclePhase[] = ['refinement', 'work', 'review', 'deploy'];
 
 // DORA tier classification (index 0=Elite … 3=Low) — same thresholds as DoraLens.
@@ -163,8 +166,8 @@ function ChangeOutcomesCard({ days }: WidgetCardProps) {
       centerLabel={t('dora.cfr')}
       formatValue={() => ''}
       segments={[
-        { key: 'failed', label: t('dora.failed'), value: cfr, color: '#ef4444' },
-        { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: '#22c55e' },
+        { key: 'failed', label: t('dora.failed'), value: cfr, color: 'var(--error-text)' },
+        { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: 'var(--success-text)' },
       ]}
     />
   );
@@ -196,7 +199,7 @@ function LifecycleTrendCard({ days }: WidgetCardProps) {
   return (
     <TrendChart
       labels={data.trend.map((p) => p.period)}
-      series={[{ key: 'lifecycle', label: t('deliv.lifecycle.trendSeries'), values: data.trend.map((p) => p.avgLifecycleHours / 24), color: '#7c5cff' }]}
+      series={[{ key: 'lifecycle', label: t('deliv.lifecycle.trendSeries'), values: data.trend.map((p) => p.avgLifecycleHours / 24), color: 'var(--purple-bright)' }]}
       formatValue={(v) => `${v.toFixed(0)}d`}
       area
       ariaLabel={t('deliv.lifecycle.trendAria')}
@@ -269,7 +272,7 @@ function SprintTableCard({ days }: WidgetCardProps) {
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 export const DELIVERY_WIDGETS: WidgetDef[] = [
-  // Delivery (cycle time + velocity, tenant-wide window-keyed collectors)
+  // Delivery (cycle time + velocity, project/window-keyed collectors)
   { id: 'delivery.cycle-time', group: 'delivery', titleKey: 'delivCycleTime', capability: CAP_DELIVERY, size: 'sm', Card: CycleTimeCard, drill: DRILL_DELIVERY },
   { id: 'delivery.velocity', group: 'delivery', titleKey: 'delivVelocity', capability: CAP_DELIVERY, size: 'sm', Card: VelocityCard, drill: DRILL_DELIVERY },
   { id: 'delivery.estimation', group: 'delivery', titleKey: 'delivEstimation', capability: CAP_DELIVERY, size: 'sm', Card: EstimationCard, drill: DRILL_DELIVERY },

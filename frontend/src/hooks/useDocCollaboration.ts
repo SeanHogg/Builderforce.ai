@@ -197,7 +197,7 @@ export function useDocCollaboration(docId: string, opts: Options): DocCollaborat
         const s = state as Partial<CollabPeer>;
         if (!s.userId || seen.has(s.userId)) continue;
         seen.add(s.userId);
-        list.push({ userId: s.userId, name: s.name ?? 'Teammate', color: s.color ?? '#888' });
+        list.push({ userId: s.userId, name: s.name ?? 'Teammate', color: s.color ?? 'var(--text-muted)' });
       }
       setPeers(list);
     };

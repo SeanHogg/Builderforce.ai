@@ -112,6 +112,7 @@ export class TaskRepository implements ITaskRepository {
         githubPrNumber:    plain.githubPrNumber ?? undefined,
         startDate:         plain.startDate ?? undefined,
         dueDate:           plain.dueDate ?? undefined,
+        decompositionSource: plain.decompositionSource ?? undefined,
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
       })
@@ -161,8 +162,12 @@ export class TaskRepository implements ITaskRepository {
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
         githubPrNumber:    plain.githubPrNumber ?? undefined,
-        startDate:         plain.startDate ?? undefined,
-        dueDate:           plain.dueDate ?? undefined,
+        // Authoritative (real null) so UN-SCHEDULING actually clears the column —
+        // `undefined` is omitted from the SET clause, which left a cleared date
+        // stubbornly persisted (the same class of bug as the assignee columns above).
+        startDate:         plain.startDate ?? null,
+        dueDate:           plain.dueDate ?? null,
+        decompositionSource: plain.decompositionSource ?? null,
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
         updatedAt:         plain.updatedAt,
@@ -258,6 +263,7 @@ function toDomain(row: Row): Task {
     githubPrNumber:    row.githubPrNumber ?? null,
     startDate:         row.startDate ?? null,
     dueDate:           row.dueDate ?? null,
+    decompositionSource: row.decompositionSource ?? null,
     persona:           row.persona ?? null,
     archived:          row.archived,
     createdAt:         row.createdAt,

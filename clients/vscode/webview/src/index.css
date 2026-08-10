@@ -97,6 +97,73 @@ body {
   color: var(--vscode-badge-foreground, #fff);
 }
 
+/*
+ * Account-tier chip in the chat header. Colour (tone) is set inline from the
+ * plan state — free / free-exhausted / paid — using the same --bf-* editor theme
+ * tokens as everything else, so it reads correctly in light and dark themes.
+ * Narrow panels are the norm here, so the allowance readout is the first thing
+ * to drop and the chip itself never forces the header to overflow.
+ */
+/* The account-tier chip. It rides the composer footer next to the model and
+   Evermind chips, so its pill matches their height rather than the (smaller)
+   header metrics it was originally sized for. */
+.bf-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bf-plan-badge:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.bf-plan-badge:focus-visible {
+  outline: 1px solid var(--bf-border-strong);
+  outline-offset: 1px;
+}
+
+/* The allowance readout is supporting detail: lower contrast, and the first
+   thing to go when the panel is too narrow to hold the whole footer row. */
+.bf-plan-badge__meter {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bf-plan-badge__cta {
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.bf-plan-badge__cta::before {
+  content: '·';
+  margin-right: 5px;
+  opacity: 0.6;
+}
+
+@media (max-width: 340px) {
+  .bf-plan-badge__meter,
+  .bf-plan-badge__cta {
+    display: none;
+  }
+}
+
 .bf-header__spacer {
   flex: 1 1 auto;
 }
@@ -116,6 +183,17 @@ body {
   border: 1px solid var(--bf-border);
   background: var(--vscode-dropdown-background, var(--bf-surface));
   color: var(--vscode-dropdown-foreground, var(--bf-text));
+}
+
+/* Native <option> rows are painted by the OS/webview and do NOT inherit the
+   <select>'s background — they only pick up `color`, so a themed select ends up
+   drawing light text on a default light popup (unreadable). Every option needs
+   its OWN opaque bg/fg pair; the Canvas/CanvasText system colors are the
+   guaranteed-legible fallback and follow the OS light/dark setting. Applies to
+   every native select in the webview, not just .bf-select. */
+select option {
+  background: var(--vscode-dropdown-background, Canvas);
+  color: var(--vscode-dropdown-foreground, CanvasText);
 }
 
 /* Inline chat-title editor — same footprint as the select it replaces, but the
@@ -267,11 +345,12 @@ body {
 
 .bf-composer {
   flex: 0 0 auto;
-  border-top: 1px solid var(--bf-border);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  margin: 8px 10px;
+  --prompt-panel-bg: var(--vscode-input-background);
+  --prompt-panel-border: var(--vscode-input-border, var(--bf-border));
+  --prompt-panel-active-border: var(--bf-accent);
+  --prompt-panel-active-ring: 0 0 0 1px var(--bf-accent);
+  --prompt-panel-shadow: none;
 }
 
 .bf-composer--drag {
@@ -282,13 +361,9 @@ body {
 /* When the user is focused in / has typed into the composer, highlight the
    whole section in BuilderForce blue. Clears back to the normal border when
    the input is empty and unfocused. */
-.bf-composer--active {
-  border-top-color: var(--bf-accent);
-}
-
 .bf-composer--active .bf-input {
-  border-color: var(--bf-accent);
-  box-shadow: 0 0 0 1px var(--bf-accent);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .bf-attachments {
@@ -363,10 +438,10 @@ body {
   font-family: inherit;
   font-size: 13px;
   color: var(--vscode-input-foreground);
-  background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, var(--bf-border));
-  border-radius: 8px;
-  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 6px 4px;
 }
 
 .bf-input:focus {
@@ -378,34 +453,11 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .bf-composer__actions {
   flex-wrap: wrap;
-}
-
-.bf-model {
-  font-size: 11px;
-  color: var(--bf-text-muted);
-  font-family: var(--bf-font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-}
-
-/* Model chip as a button (opens the model picker). Inherits .bf-model sizing. */
-.bf-model--btn {
-  border: 1px solid var(--bf-border);
-  background: transparent;
-  border-radius: 999px;
-  padding: 2px 9px;
-  cursor: pointer;
-}
-
-.bf-model--btn:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
-  color: var(--bf-text);
 }
 
 /* Square icon button used across the composer toolbar (+, /, mic, send). */
@@ -562,6 +614,10 @@ body {
   position: absolute;
   bottom: calc(100% + 6px);
   min-width: 210px;
+  /* Descriptive menu rows need room to breathe, but the panel can be as narrow as
+     ~300px — never let the popover push the composer into a horizontal scroll. */
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
   z-index: 20;
   padding: 5px;
   border-radius: 10px;
@@ -605,6 +661,55 @@ body {
 .bf-menu__lbl {
   flex: 1 1 auto;
   white-space: nowrap;
+}
+
+/* A row carrying an explanatory `desc` stacks label-over-description and lets both
+   wrap. Colours come from theme vars, so it reads in the editor's light AND dark
+   themes without a second rule. */
+.bf-menu__item--stacked {
+  align-items: flex-start;
+}
+
+.bf-menu__item--stacked .bf-menu__lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.bf-menu__desc {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--bf-text-muted);
+  white-space: normal;
+}
+
+/* On hover the row inverts to the menu's selection colours — keep the description
+   legible against it rather than leaving it at the dimmer resting muted tone. */
+.bf-menu__item:hover .bf-menu__desc {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* A read-only informational row (e.g. "which model is in force"): same metrics as a
+   menu item so the list stays aligned, but not interactive. */
+.bf-menu__info {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 9px 7px;
+  font-size: 12px;
+  color: inherit;
+}
+
+.bf-menu__info .bf-menu__lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .bf-menu__hint {

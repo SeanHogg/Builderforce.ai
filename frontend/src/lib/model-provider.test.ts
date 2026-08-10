@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   MambaModelProvider,
   ExternalLLMProvider,
+  PromptApiModelProvider,
+  CascadingModelProvider,
+  createInferenceProvider,
+  hasPromptApi,
+  type ModelProvider,
 } from './model-provider';
 
 // ---------------------------------------------------------------------------
@@ -19,7 +24,8 @@ vi.mock('./api', () => ({
 import { sendAIMessage } from './api';
 const mockSendAIMessage = sendAIMessage as ReturnType<typeof vi.fn>;
 
-import { WebGPUTrainer, type TrainingStep, type WebGPUTrainerOptions } from './webgpu-trainer';
+import { WebGPUTrainer, type BrowserLoRAArtifact, type TrainingStep, type WebGPUTrainerOptions } from './webgpu-trainer';
+import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 
 // ---------------------------------------------------------------------------
 // MambaModelProvider
@@ -78,6 +84,12 @@ describe('MambaModelProvider', () => {
     const realLosses = [2.31, 1.74, 1.12];
     const trainSpy = vi.fn().mockResolvedValue(realLosses);
     (provider as any)._ready = true;
+    // A ready provider holds the full tokenizer + model + trainer triad. Stub all
+    // three: `ensureModelForCorpus` only short-circuits when every one is present,
+    // and otherwise falls through to building a real engine model (which throws
+    // in jsdom, where there is no WebGPU).
+    (provider as any).tokenizer = { vocabSize: 256 };
+    (provider as any).model = {};
     (provider as any).trainer = { train: trainSpy };
 
     const epochCb = vi.fn();
@@ -214,14 +226,218 @@ describe('ExternalLLMProvider', () => {
 });
 
 // ---------------------------------------------------------------------------
-// WebGPUTrainer — real engine wiring (no synthetic loss / no fake fallback)
+// PromptApiModelProvider — Chrome built-in (Gemini Nano)
 // ---------------------------------------------------------------------------
 
-describe('WebGPUTrainer (real engine wiring)', () => {
+function readableOf(chunks: string[]): ReadableStream<string> {
+  return new ReadableStream<string>({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(c);
+      controller.close();
+    },
+  });
+}
+
+function installFakePromptApi(overrides: Record<string, unknown> = {}) {
+  const session = {
+    prompt: vi.fn().mockResolvedValue('full answer'),
+    promptStreaming: vi.fn(() => readableOf(['Hel', 'lo', ' world'])),
+    clone: vi.fn(),
+    destroy: vi.fn(),
+    inputUsage: 5,
+    inputQuota: 100,
+    ...overrides,
+  };
+  const factory = {
+    availability: vi.fn().mockResolvedValue('available'),
+    create: vi.fn().mockResolvedValue(session),
+  };
+  (globalThis as unknown as { LanguageModel?: unknown }).LanguageModel = factory;
+  return { session, factory };
+}
+
+function removeFakePromptApi() {
+  delete (globalThis as unknown as { LanguageModel?: unknown }).LanguageModel;
+}
+
+describe('PromptApiModelProvider', () => {
+  afterEach(() => {
+    removeFakePromptApi();
+    vi.restoreAllMocks();
+  });
+
+  it('has correct identity properties', () => {
+    const p = new PromptApiModelProvider();
+    expect(p.id).toBe('prompt-api');
+    expect(p.isLocal).toBe(true);
+  });
+
+  it('hasPromptApi() reflects the global surface', () => {
+    expect(hasPromptApi()).toBe(false);
+    installFakePromptApi();
+    expect(hasPromptApi()).toBe(true);
+  });
+
+  it('is not ready and records a reason when the Prompt API is absent', async () => {
+    const p = new PromptApiModelProvider();
+    await p.init();
+    expect(p.isReady()).toBe(false);
+    expect(p.failureReason()).toMatch(/not available/i);
+  });
+
+  it('becomes ready and passes the system prompt to create()', async () => {
+    const { factory } = installFakePromptApi();
+    const p = new PromptApiModelProvider({ systemPrompt: 'Be concise.' });
+    await p.init();
+    expect(p.isReady()).toBe(true);
+    const createArg = factory.create.mock.calls[0][0];
+    expect(createArg.initialPrompts).toEqual([{ role: 'system', content: 'Be concise.' }]);
+  });
+
+  it('is not ready when the model is unavailable on-device', async () => {
+    const { factory } = installFakePromptApi();
+    factory.availability.mockResolvedValue('unavailable');
+    const p = new PromptApiModelProvider();
+    await p.init();
+    expect(p.isReady()).toBe(false);
+  });
+
+  it('stream() emits real per-token deltas and returns the full text', async () => {
+    installFakePromptApi();
+    const p = new PromptApiModelProvider();
+    await p.init();
+    const tokens: string[] = [];
+    const full = await p.stream('hi', undefined, (t) => tokens.push(t));
+    expect(tokens).toEqual(['Hel', 'lo', ' world']);
+    expect(full).toBe('Hello world');
+  });
+
+  it('stream() normalises cumulative-style chunks to deltas', async () => {
+    installFakePromptApi({
+      promptStreaming: vi.fn(() => readableOf(['Hel', 'Hello', 'Hello world'])),
+    });
+    const p = new PromptApiModelProvider();
+    await p.init();
+    const tokens: string[] = [];
+    const full = await p.stream('hi', undefined, (t) => tokens.push(t));
+    expect(tokens).toEqual(['Hel', 'lo', ' world']);
+    expect(full).toBe('Hello world');
+  });
+
+  it('tokenBudget() surfaces the session usage/quota', async () => {
+    installFakePromptApi();
+    const p = new PromptApiModelProvider();
+    await p.init();
+    expect(p.tokenBudget()).toEqual({ used: 5, quota: 100 });
+  });
+
+  it('dispose() destroys the session', async () => {
+    const { session } = installFakePromptApi();
+    const p = new PromptApiModelProvider();
+    await p.init();
+    p.dispose();
+    expect(session.destroy).toHaveBeenCalledOnce();
+    expect(p.isReady()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CascadingModelProvider — progressive-enhancement chain
+// ---------------------------------------------------------------------------
+
+function stubProvider(id: string, ready: boolean, opts: Partial<ModelProvider> & { answer?: string; throws?: boolean } = {}): ModelProvider {
+  return {
+    id,
+    name: id,
+    isLocal: opts.isLocal ?? true,
+    isReady: () => ready,
+    init: vi.fn().mockResolvedValue(undefined),
+    generate: vi.fn(async () => {
+      if (opts.throws) throw new Error(`${id} failed`);
+      return opts.answer ?? `${id}:answer`;
+    }),
+    stream: vi.fn(async (_i, _c, onToken?: (t: string) => void) => {
+      if (opts.throws) throw new Error(`${id} failed`);
+      onToken?.(opts.answer ?? `${id}:answer`);
+      return opts.answer ?? `${id}:answer`;
+    }),
+    dispose: vi.fn(),
+  };
+}
+
+describe('CascadingModelProvider', () => {
+  it('routes to the highest-priority ready tier', async () => {
+    const t1 = stubProvider('tier1', true, { answer: 'from-1' });
+    const t2 = stubProvider('tier2', true, { answer: 'from-2' });
+    const cascade = new CascadingModelProvider([t1, t2]);
+    await cascade.init();
+    expect(await cascade.generate('x')).toBe('from-1');
+    expect(cascade.active().id).toBe('tier1');
+  });
+
+  it('skips not-ready tiers and picks the first ready one', async () => {
+    const t1 = stubProvider('tier1', false);
+    const t2 = stubProvider('tier2', true, { answer: 'from-2' });
+    const cascade = new CascadingModelProvider([t1, t2]);
+    await cascade.init();
+    expect(await cascade.generate('x')).toBe('from-2');
+    expect(t1.generate).not.toHaveBeenCalled();
+  });
+
+  it('falls through to the next ready tier when the active one throws', async () => {
+    const t1 = stubProvider('tier1', true, { throws: true });
+    const t2 = stubProvider('tier2', true, { answer: 'rescued' });
+    const cascade = new CascadingModelProvider([t1, t2]);
+    await cascade.init();
+    expect(await cascade.generate('x')).toBe('rescued');
+  });
+
+  it('init() tolerates a tier whose init() rejects', async () => {
+    const bad = stubProvider('bad', false);
+    (bad.init as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('boom'));
+    const good = stubProvider('good', true, { answer: 'ok' });
+    const cascade = new CascadingModelProvider([bad, good]);
+    await expect(cascade.init()).resolves.toBeUndefined();
+    expect(await cascade.generate('x')).toBe('ok');
+  });
+
+  it('isLocal reflects the active backend', async () => {
+    const local = stubProvider('local', false, { isLocal: true });
+    const cloud = stubProvider('cloud', true, { isLocal: false });
+    const cascade = new CascadingModelProvider([local, cloud]);
+    await cascade.init();
+    expect(cascade.isLocal).toBe(false);
+  });
+});
+
+describe('createInferenceProvider', () => {
+  afterEach(removeFakePromptApi);
+
+  it('always includes a cloud fallback tier', async () => {
+    const cascade = createInferenceProvider({ projectId: 'p1' });
+    await cascade.init();
+    // With no Prompt API and no local model, the only (and active) tier is cloud.
+    expect(cascade.active().id).toBe('external-llm');
+    expect(cascade.isReady()).toBe(true);
+  });
+
+  it('prepends the Prompt API tier when the browser exposes it', async () => {
+    installFakePromptApi();
+    const cascade = createInferenceProvider({ projectId: 'p1', systemPrompt: 'Hi' });
+    await cascade.init();
+    expect(cascade.active().id).toBe('prompt-api');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser LoRA — real frozen-base adapter training and portable artifacts
+// ---------------------------------------------------------------------------
+
+describe('WebGPUTrainer (exact browser LoRA)', () => {
   function makeTrainer(overrides: Partial<WebGPUTrainerOptions> = {}) {
     const logs: string[] = [];
     const trainer = new WebGPUTrainer({
-      modelId: 'gpt-neox-20m',
+      modelId: 'evermind-browser-test',
       workerUrl: 'http://localhost',
       projectId: 'proj-1',
       onLog: (m) => logs.push(m),
@@ -234,11 +450,10 @@ describe('WebGPUTrainer (real engine wiring)', () => {
     return { trainer, logs };
   }
 
-  it('init() surfaces a REAL error when WebGPU/engine is unavailable (no fake fallback)', async () => {
-    // jsdom has no navigator.gpu, so the underlying MambaModelProvider never
-    // becomes ready — init must throw rather than silently simulate.
-    const { trainer } = makeTrainer();
-    await expect(trainer.init()).rejects.toThrow(/WebGPU training engine unavailable/i);
+  it('initialises the exact CPU path when WebGPU is unavailable', async () => {
+    const { trainer, logs } = makeTrainer();
+    await expect(trainer.init()).resolves.toBeUndefined();
+    expect(logs.join('\n')).toMatch(/exact-gradient browser LoRA/i);
   });
 
   it('train() refuses to run before a successful init() (no synthetic loop)', async () => {
@@ -258,54 +473,48 @@ describe('WebGPUTrainer (real engine wiring)', () => {
     ).rejects.toThrow(/not initialised/i);
   });
 
-  it('drives the REAL MambaModelProvider.train + exportTrainedWeights (real loss + real weights)', async () => {
-    const { trainer, logs } = makeTrainer({ jobId: 'job-1' });
-
-    const realLosses = [2.2, 1.5];
-    const realWeights = new ArrayBuffer(256);
-    const fakeProvider = {
-      isReady: () => true,
-      train: vi.fn().mockImplementation(
-        async (_corpus: string, opts: { onEpochEnd?: (e: number, l: number) => void }) => {
-          realLosses.forEach((l, i) => opts.onEpochEnd?.(i + 1, l));
-          return realLosses;
-        },
-      ),
-      exportTrainedWeights: vi.fn().mockResolvedValue(realWeights),
-      dispose: vi.fn(),
-    };
-
-    const steps: TrainingStep[] = [];
-    (trainer as any).options.onStep = (s: TrainingStep) => steps.push(s);
-
-    // Inject a ready provider (simulating a successful init on a real GPU).
-    (trainer as any).provider = fakeProvider;
-
-    const { uploadArtifact } = await import('./api');
-    (uploadArtifact as ReturnType<typeof vi.fn>).mockResolvedValue({ r2Key: 'adapters/real.bin' });
-
+  it('trains real LoRA matrices locally and emits a valid safetensors adapter without network calls', async () => {
+    const artifacts: BrowserLoRAArtifact[] = [];
     let completedKey = '';
-    (trainer as any).options.onComplete = (k: string) => { completedKey = k; };
-
+    const steps: TrainingStep[] = [];
+    const { trainer } = makeTrainer({
+      dataMode: 'local-only',
+      modelConfig: { dModel: 8, numLayers: 1, hiddenDim: 16, numExperts: 2, topK: 1 },
+      onStep: (step) => steps.push(step),
+      onArtifact: (artifact) => artifacts.push(artifact),
+      onComplete: (key) => { completedKey = key; },
+    });
+    await trainer.init();
     await trainer.train(
       {
-        epochs: 2,
-        batchSize: 4,
-        learningRate: 3e-4,
+        epochs: 1,
+        batchSize: 1,
+        learningRate: 1e-3,
         gradientAccumulationSteps: 1,
         precision: 'float16',
-        loraConfig: { rank: 8, alpha: 16, targetModules: ['q_proj'] },
+        loraConfig: { rank: 2, alpha: 4, targetModules: ['embed_tokens'] },
       },
-      ['real training text'],
+      ['hello browser adapter', 'hello private training'],
     );
 
-    // Real trainer was driven, real losses surfaced as steps.
-    expect(fakeProvider.train).toHaveBeenCalledOnce();
-    expect(steps.map((s) => s.loss)).toEqual(realLosses);
-    // Real serialised weights were uploaded (not placeholder bytes).
-    expect(fakeProvider.exportTrainedWeights).toHaveBeenCalledOnce();
-    expect(uploadArtifact).toHaveBeenCalledWith('job-1', realWeights);
-    expect(completedKey).toBe('adapters/real.bin');
+    expect(steps).toHaveLength(1);
+    expect(Number.isFinite(steps[0]!.loss)).toBe(true);
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]!.filename).toMatch(/\.safetensors$/);
+    const view = new DataView(artifacts[0]!.bytes);
+    const headerLength = Number(view.getBigUint64(0, true));
+    const header = JSON.parse(new TextDecoder().decode(new Uint8Array(artifacts[0]!.bytes, 8, headerLength)));
+    expect(header.__metadata__.peft_type).toBe('LORA');
+    expect(header['base_model.model.embed_tokens.lora_A.weight'].shape).toEqual([2, 8]);
+    expect(header['base_model.model.embed_tokens.lora_B.weight'].shape[1]).toBe(2);
+    const runtimePackage = EvermindModelPackage.fromBlob(artifacts[0]!.evermindPackage);
+    expect(runtimePackage.validate()).toEqual({ ok: true, errors: [] });
+    expect(runtimePackage.loadLM().config.vocabSize).toBe(Object.keys(artifacts[0]!.tokenizer.vocab).length);
+    const api = await import('./api');
+    expect(api.downloadDataset).not.toHaveBeenCalled();
+    expect(api.uploadArtifact).not.toHaveBeenCalled();
+    expect(api.updateTrainingJob).not.toHaveBeenCalled();
+    expect(completedKey).toMatch(/^local:\/\//);
   });
 
   it('source contains no synthetic Math.exp / Math.random loss generation', async () => {

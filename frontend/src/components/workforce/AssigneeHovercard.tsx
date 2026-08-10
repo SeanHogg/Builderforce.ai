@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
@@ -121,7 +122,7 @@ export default function AssigneeHovercard({
         }}
       >
         {children}
-        <span aria-hidden style={{ fontSize: 10, opacity: 0.65, flexShrink: 0 }}>🧠</span>
+        <span aria-hidden style={{ fontSize: 10, opacity: 0.65, flexShrink: 0 }}><Icon source="🧠" size="1em" /></span>
       </span>
 
       {mounted && open && coords && createPortal(

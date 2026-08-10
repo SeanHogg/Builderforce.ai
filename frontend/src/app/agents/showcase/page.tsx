@@ -44,7 +44,7 @@ export default function ShowcasePage() {
         </div>
       </section>
       <p className="cc-more">
-        Looking for more? <a href="/docs/start/showcase">More examples in our docs</a>.
+        Looking for more? <Link href="/docs/start/showcase">More examples in our docs</Link>.
       </p>
       <style>{`
         .cc-page {
@@ -59,7 +59,7 @@ export default function ShowcasePage() {
         .cc-page-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(2rem, 5vw, 3rem);
+          font-size: var(--font-size-page-title);
           margin: 0;
           color: var(--text-primary);
         }
@@ -73,12 +73,12 @@ export default function ShowcasePage() {
           padding: 40px 24px;
           text-align: center;
           border: 1px solid var(--border-subtle);
-          border-radius: 18px;
+          border-radius: var(--radius-xl);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
         }
         .cc-cta-card h2 {
           font-family: var(--font-display);
-          font-size: 1.4rem;
+          font-size: var(--font-size-section);
           margin: 0 0 8px;
         }
         .cc-cta-card p {
@@ -93,7 +93,7 @@ export default function ShowcasePage() {
         }
         .cc-btn {
           padding: 12px 22px;
-          border-radius: 11px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: var(--text-primary);
           background: var(--surface-interactive, rgba(136,146,176,0.08));
@@ -109,7 +109,7 @@ export default function ShowcasePage() {
           text-align: center;
           color: var(--text-secondary);
           margin-top: 32px;
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
         }
         .cc-more a {
           color: var(--coral-bright);

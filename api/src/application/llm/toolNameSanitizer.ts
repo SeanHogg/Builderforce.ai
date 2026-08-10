@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Bidirectional tool-call sanitizer — the SINGLE place the gateway makes
  * OpenAI-shape tool calls safe for strict vendors. It normalizes two fields
@@ -33,17 +34,81 @@ import { parseSseDataLine } from './sseFrames';
 const DOT_SENTINEL    = '__DOT__';
 const ESCAPE_SENTINEL = '__DOT_ESC__';
 
-const VALID_TOOL_CALL_ID = /^[a-zA-Z0-9_-]+$/;
+/**
+ * The charset every strict vendor agrees on for a tool name. Anthropic validates
+ * `^[a-zA-Z0-9_-]+$`; OpenAI-shaped vendors validate `^[a-zA-Z0-9_.-]+$` (dots
+ * allowed). We target the STRICTER set so one sanitized name is valid everywhere
+ * and the cascade can fail over mid-conversation without re-encoding history.
+ */
+const VALID_TOOL_NAME_CHAR = /[a-zA-Z0-9_-]/;
 
+/** A single non-dot invalid character, escaped reversibly: `__U`+4 hex+`__`. */
+const UNI_SENTINEL_RE = /__U([0-9A-F]{4})__/g;
+/** Fixed width of one `__Uxxxx__` token — used by the streaming boundary logic. */
+const UNI_SENTINEL_LEN = 9;
+
+/**
+ * Make a tool name safe for the strictest vendor, REVERSIBLY.
+ *
+ * Dots keep their historical `__DOT__` sentinel (tenant apps namespace tools as
+ * `governance.snapshot`, and in-flight conversations already carry that encoding).
+ * EVERY OTHER invalid character — space, backtick, brace, slash, colon, non-ASCII —
+ * becomes `__Uxxxx__`.
+ *
+ * The non-dot half was missing, and this module's own header already promised it:
+ * a name carrying anything but a dot went to the vendor verbatim and was rejected
+ * with `` `name` must match ^[a-zA-Z0-9_.-]+$ `` — a hard 400 that terminates the
+ * cascade (a request_error is classified as the caller's bug, so no failover), so
+ * one badly-named tool killed the whole run. Names round-trip back to the caller,
+ * which is why this escapes rather than replaces: the caller must still receive the
+ * name it registered.
+ */
 export function sanitizeToolName(name: string): string {
-  // Escape any pre-existing sentinel first, then replace dots.
-  return name.replace(new RegExp(DOT_SENTINEL, 'g'), ESCAPE_SENTINEL).replace(/\./g, DOT_SENTINEL);
+  // Escape any pre-existing sentinel first so the round-trip is lossless — BOTH
+  // families. A literal `__U0041__` in the caller's name is already valid charset,
+  // so it would sail through the encoder below and then be DECODED to `A` on the
+  // way back. Encoding its `U` as its own escape defuses it: restore's unicode pass
+  // turns `____U0055__0041__` back into `__U0041__` and does not rescan its output.
+  const escaped = name
+    .replace(new RegExp(DOT_SENTINEL, 'g'), ESCAPE_SENTINEL)
+    .replace(UNI_SENTINEL_RE, '____U0055__$1__');
+  let out = '';
+  for (const ch of escaped) {
+    if (ch === '.') { out += DOT_SENTINEL; continue; }
+    if (VALID_TOOL_NAME_CHAR.test(ch)) { out += ch; continue; }
+    // Code points beyond the BMP need both surrogate halves encoded; iterating the
+    // string by code point and re-splitting keeps each token a fixed 9 chars.
+    for (let i = 0; i < ch.length; i++) {
+      out += `__U${ch.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}__`;
+    }
+  }
+  return out;
 }
 
 export function restoreToolName(name: string): string {
-  // Restore in reverse order of escape.
-  return name.replace(new RegExp(DOT_SENTINEL, 'g'), '.').replace(new RegExp(ESCAPE_SENTINEL, 'g'), DOT_SENTINEL);
+  // Restore in reverse order of escape: unicode tokens, then dots, then the
+  // escaped-sentinel form (so a literal `__DOT__` in the original survives).
+  return name
+    .replace(UNI_SENTINEL_RE, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(new RegExp(DOT_SENTINEL, 'g'), '.')
+    .replace(new RegExp(ESCAPE_SENTINEL, 'g'), DOT_SENTINEL);
 }
+
+/**
+ * A PARTICIPANT name (`messages[].name` on a user/assistant/system turn) made safe
+ * for the same strict vendors.
+ *
+ * Deliberately NOT the reversible encoding above: a participant name is a cosmetic
+ * label the model reads, never an identifier the caller looks work up by, so
+ * `Sean's Coder` must reach the vendor as `Sean_s_Coder` — readable — rather than
+ * as `Sean__U0027__s__U0020__Coder`. It is never restored on the response path
+ * because vendors do not echo it back.
+ */
+export function sanitizeParticipantName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+const VALID_TOOL_CALL_ID = /^[a-zA-Z0-9_-]+$/;
 
 /**
  * Rewrite a tool-call id to the `^[a-zA-Z0-9_-]+$` charset. PURE and deterministic
@@ -131,6 +196,14 @@ export function sanitizeRequestToolCalls(body: Record<string, unknown>): Record<
       if (m.role === 'tool') {
         if (typeof m.name === 'string') next.name = sanitizeToolName(m.name);
         if (typeof m.tool_call_id === 'string') next.tool_call_id = sanitizeToolCallId(m.tool_call_id);
+      } else if (typeof m.name === 'string') {
+        // A PARTICIPANT name on a user/assistant/system turn. OpenAI allows `name`
+        // on any message and multi-agent callers set it to a display name, but the
+        // strict vendors validate it against the same charset as a tool name — so an
+        // unsanitized `Ada (reviewer)` 400s the request with `param: "name"` and, as
+        // a request_error, terminates the cascade instead of failing over. Cosmetic,
+        // so it is rewritten rather than escaped (see sanitizeParticipantName).
+        next.name = sanitizeParticipantName(m.name);
       }
       return next;
     });
@@ -157,18 +230,40 @@ interface ToolCallDelta {
 }
 
 /**
+ * True when `s` could still GROW into a complete `__Uxxxx__` token — i.e. it is a
+ * proper prefix of one. The unicode escape is variable in content but fixed in
+ * shape, so this is a prefix test over `__U` + up to 4 hex digits + `__`.
+ */
+function isPartialUniSentinel(s: string): boolean {
+  return /^(_|__|__U|__U[0-9A-F]{1,4}|__U[0-9A-F]{4}_)$/.test(s);
+}
+
+/** A complete, unambiguous escape token ending the accumulated name. */
+const COMPLETE_SENTINEL_TAIL = /(__DOT__|__DOT_ESC__|__U[0-9A-F]{4}__)$/;
+
+/**
  * Length of the longest suffix of `s` that is a *proper* prefix of a sentinel
- * (could still grow into a `.` or an escaped sentinel as more bytes arrive).
- * A complete sentinel is NOT unsafe — it restores deterministically — so we
- * only hold back genuinely incomplete trailing sentinels.
+ * (could still grow into a `.`, an escaped sentinel, or an escaped character as
+ * more bytes arrive). A complete sentinel is NOT unsafe — it restores
+ * deterministically — so we only hold back genuinely incomplete trailing sentinels.
+ *
+ * All three encodings share the leading `__`, so a trailing `__` is ambiguous
+ * between them and must always be held back until the next fragment disambiguates.
  */
 function unsafeSuffixLen(s: string): number {
+  // A COMPLETE token at the end is already unambiguous — no further byte can extend
+  // it into a different one (the three forms diverge before their final `__`). This
+  // check must come first: the trailing `__` of a finished `__DOT__` is itself a
+  // proper prefix of an unescaped `__Uxxxx__`, so the scan below would hold it back
+  // and commit the raw `__DOT` to the caller.
+  if (COMPLETE_SENTINEL_TAIL.test(s)) return 0;
   // Longest sentinel governs how far back we must look.
-  const max = Math.min(s.length, ESCAPE_SENTINEL.length - 1);
+  const max = Math.min(s.length, Math.max(ESCAPE_SENTINEL.length, UNI_SENTINEL_LEN) - 1);
   for (let len = max; len > 0; len--) {
     const suffix = s.slice(s.length - len);
     if (DOT_SENTINEL.startsWith(suffix) && suffix !== DOT_SENTINEL) return len;
     if (ESCAPE_SENTINEL.startsWith(suffix) && suffix !== ESCAPE_SENTINEL) return len;
+    if (isPartialUniSentinel(suffix)) return len;
   }
   return 0;
 }
@@ -267,7 +362,9 @@ export function restoreStreamToolNames(source: ReadableStream<Uint8Array>): Read
     },
   });
 
-  source.pipeTo(writable).catch(() => { /* stream may be cancelled by client */ });
+  source.pipeTo(writable).catch((error) => { /* stream may be cancelled by client */ 
+    reportCaughtError(error, { source: "application/llm/toolNameSanitizer.ts", operation: "restoreStreamToolNames" });
+  });
   return readable;
 }
 

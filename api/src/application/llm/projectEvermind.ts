@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Project Evermind registry + R2 layout — the per-project, self-learning model.
  *
@@ -38,6 +39,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
+import type { TeacherSkipReason } from './evermindTeacher';
+import type { EvermindCoherenceAssessment } from './evermindRuntime';
 
 /** R2 key prefix under which per-project Evermind model versions live. */
 export const PROJECT_EVERMIND_ROOT = 'evermind/project';
@@ -68,6 +71,15 @@ export interface ProjectEvermindHead {
   lastLearnedAt: string | null;
   /** Immutable ref usable by {@link loadEvermindModel}; null when unseeded. */
   ref: string | null;
+  /**
+   * ISO timestamp at which the head was AUTO-QUARANTINED — inference was force-disabled
+   * because it produced incoherent output on {@link QUARANTINE_FAILURE_STREAK} consecutive
+   * serves. null = never quarantined (or cleared by a manual re-enable). See
+   * {@link recordEvermindServeOutcome}.
+   */
+  quarantinedAt: string | null;
+  /** Human-readable reason the head was quarantined (shown in the console). null when not. */
+  quarantineReason: string | null;
 }
 
 /** Stable base path for a project's model versions. */
@@ -115,7 +127,7 @@ export async function getProjectEvermindHead(
         .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
         .limit(1);
       if (!row || row.version <= 0) {
-        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, lastLearnedAt: row?.lastLearnedAt?.toISOString() ?? null, ref: null };
+        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, lastLearnedAt: row?.lastLearnedAt?.toISOString() ?? null, ref: null, quarantinedAt: row?.quarantinedAt?.toISOString() ?? null, quarantineReason: row?.quarantineReason ?? null };
       }
       return {
         tenantId,
@@ -128,10 +140,53 @@ export async function getProjectEvermindHead(
         teacherModel: row.teacherModel ?? null,
         lastLearnedAt: row.lastLearnedAt?.toISOString() ?? null,
         ref: projectEvermindRef(tenantId, projectId, row.version),
+        quarantinedAt: row.quarantinedAt?.toISOString() ?? null,
+        quarantineReason: row.quarantineReason ?? null,
       };
     },
     { kvTtlSeconds: 60 },
   );
+}
+
+/**
+ * Resolve the project whose Evermind a READ surface bound to `projectId` should show.
+ *
+ * An IDE build opens at its hidden `is_ide_storage` project row, but only
+ * `evermind`/`llm`-modality builds ever get their own `project_evermind` row — every
+ * other modality (video, voice, designer, finetune) inherits the Evermind of the
+ * PARENT container project it was created under. Reading the storage id verbatim
+ * therefore reported "Not set up" for a project that plainly has one.
+ *
+ * Precedence: a build's OWN seeded Evermind wins (so per-build Everminds keep working);
+ * otherwise fall back to the container project. A non-IDE project resolves to itself.
+ *
+ * Read-path only — {@link resolveEvermindTargets} and the WRITE/fan-out paths keep
+ * exact-id semantics so a contribution never silently lands on the wrong project.
+ */
+export async function resolveEffectiveEvermindProjectId(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<number> {
+  if (!Number.isInteger(projectId) || projectId <= 0) return projectId;
+  const own = await getProjectEvermindHead(env, db, tenantId, projectId);
+  if (own.version > 0) return projectId;
+  const containerId = await getOrSetCached(
+    env,
+    `evermind:container-of:${tenantId}:${projectId}`,
+    async () => {
+      const [row] = await db
+        .select({ cid: ideProjects.containerProjectId })
+        .from(ideProjects)
+        .where(and(eq(ideProjects.tenantId, tenantId), eq(ideProjects.storageProjectId, projectId)))
+        .limit(1);
+      // `0` is the "no container" sentinel — getOrSetCached can't cache `undefined`.
+      return Number.isInteger(row?.cid) && (row!.cid as number) > 0 ? (row!.cid as number) : 0;
+    },
+    { kvTtlSeconds: 60 },
+  );
+  return containerId > 0 ? containerId : projectId;
 }
 
 /**
@@ -213,7 +268,9 @@ export async function contributeTextToProjectEverminds(
   const targets = (await resolveEvermindTargets(env, db, tenantId, projectId)).filter(isLiveLearnTarget);
   await Promise.all(
     targets.map((h) =>
-      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt).catch(() => { /* per-target best-effort */ }),
+      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt).catch((error) => { /* per-target best-effort */ 
+        reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "contributeTextToProjectEverminds" });
+      }),
     ),
   );
   return targets.map((h) => ({ projectId: h.projectId, ref: h.ref, version: h.version, name: h.name }));
@@ -287,6 +344,71 @@ export async function seedProjectEvermind(
       .values({ tenantId, projectId, name, version: 1, mode: 'connected', contributions: 0 })
       .onConflictDoNothing({ target: [projectEvermind.tenantId, projectEvermind.projectId] });
   }
+
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  return getProjectEvermindHead(env, db, tenantId, projectId);
+}
+
+/**
+ * REPLACE a project's Evermind weights with a fresh base, as a NEW version.
+ *
+ * {@link seedProjectEvermind} deliberately refuses to clobber an existing head (seeding
+ * twice must not destroy a trained model), which left exactly one situation with no
+ * remedy in the product: a head that trained itself into gibberish. It could be
+ * quarantined but never repaired — "retrain or re-seed" was an operator action with no
+ * door in the UI or the API. This is that door.
+ *
+ * It writes the new bytes at `version + 1` rather than overwriting v1, because every
+ * ref is immutable and cached per-isolate by ref: reusing a version would leave live
+ * isolates serving the OLD weights from memo. Advancing preserves the audit trail too —
+ * the bad version's artifacts stay in R2 for post-mortem.
+ *
+ * Inference is left OFF and quarantine bookkeeping cleared: a fresh base has never
+ * passed a coherence probe, so it must be re-promoted deliberately (through the same
+ * benchmark gate as any other enable). Learning history (the coordinator's ring) is
+ * untouched — the knowledge is not the problem, the weights are.
+ */
+export async function reseedProjectEvermind(
+  env: Env,
+  db: Db,
+  store: ArtifactWriteStore,
+  params: {
+    tenantId: number;
+    projectId: number;
+    name?: string;
+    modelBlob: ArrayBuffer;
+    tokenizer: { vocab: Record<string, number>; merges: string[] };
+  },
+): Promise<ProjectEvermindHead> {
+  const { tenantId, projectId } = params;
+  const existing = await getProjectEvermindHead(env, db, tenantId, projectId);
+  // Never seeded → this is an ordinary seed; reuse the one seeding implementation.
+  if (existing.version < 1) {
+    return seedProjectEvermind(env, db, store, params);
+  }
+
+  const nextVersion = existing.version + 1;
+  await putProjectEvermindVersion(store, tenantId, projectId, nextVersion, params.modelBlob, params.tokenizer);
+
+  await db
+    .update(projectEvermind)
+    .set({
+      version: nextVersion,
+      ...(params.name?.trim() ? { name: params.name.trim() } : {}),
+      // A replaced base has proven nothing yet — it must re-earn the right to serve.
+      inferenceEnabled: false,
+      serveFailureStreak: 0,
+      quarantinedAt: null,
+      quarantineReason: null,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(projectEvermind.tenantId, tenantId),
+      eq(projectEvermind.projectId, projectId),
+      // Forward-only, same guard as a merge: a concurrent merge that already advanced
+      // past us wins rather than being rolled back.
+      sql`${projectEvermind.version} < ${nextVersion}`,
+    ));
 
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return getProjectEvermindHead(env, db, tenantId, projectId);
@@ -373,8 +495,10 @@ export async function provisionDefaultProjectEvermind(
   try {
     if (!env.UPLOADS) return; // no artifact storage → nothing to seed
     await ensureProjectEvermindSeeded(env, db, env.UPLOADS, tenantId, projectId, name);
-  } catch {
+  } catch (error) {
     /* best-effort: project creation must succeed even if seeding fails */
+  
+    reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "provisionDefaultProjectEvermind" });
   }
 }
 
@@ -463,19 +587,139 @@ export async function resolveProjectInferenceModel(
   return `evermind/${head.ref}`;
 }
 
-/** Toggle the opt-in inference consumer flag. Bumps the head cache. */
+/** After this many CONSECUTIVE incoherent serves, a head auto-quarantines: inference
+ *  is force-disabled so it stops answering users in gibberish (and wasting an SSM call
+ *  every turn). A single bad turn is noise; a streak is a broken head. */
+export const QUARANTINE_FAILURE_STREAK = 3;
+
+/** Outcome of a benchmark-gated enable attempt. `ok:false` carries WHY so the route
+ *  (and UI) can tell the operator the head isn't fit to serve yet. */
+export type SetInferenceResult =
+  | { ok: true; inferenceEnabled: boolean }
+  | { ok: false; reason: 'not_ready'; readiness: EvermindServeReadiness };
+
+/** A head's fitness-to-serve verdict from generating probe samples and scoring them.
+ *  Structurally the runtime's assessment — aliased (not re-declared) so the probe
+ *  samples' failure reasons reach the UI without the two shapes drifting. */
+export type EvermindServeReadiness = EvermindCoherenceAssessment;
+
+/**
+ * Toggle the opt-in inference consumer flag. Bumps the head cache.
+ *
+ * ENABLING is BENCHMARK-GATED: when `assessReadiness` is provided (the route wires
+ * it from the R2 store), a head may only be promoted to serve if it passes the
+ * coherence probe — this is the fix for "a degraded head got marked inference-enabled
+ * and answered users in gibberish". A ready head (or an enable with no assessor, e.g.
+ * tests) is promoted AND its quarantine state is cleared (fresh start). DISABLING is
+ * always allowed and also clears quarantine bookkeeping.
+ */
 export async function setProjectEvermindInference(
   env: Env,
   db: Db,
   tenantId: number,
   projectId: number,
   enabled: boolean,
+  opts?: { assessReadiness?: (ref: string) => Promise<EvermindServeReadiness> },
+): Promise<SetInferenceResult> {
+  if (enabled && opts?.assessReadiness) {
+    const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+    if (head.ref) {
+      const readiness = await opts.assessReadiness(head.ref);
+      if (!readiness.ready) return { ok: false, reason: 'not_ready', readiness };
+    }
+  }
+  await db
+    .update(projectEvermind)
+    .set(
+      enabled
+        // Promote to serve AND wipe the quarantine slate (streak + flags) so a
+        // re-enabled head starts clean.
+        ? { inferenceEnabled: true, serveFailureStreak: 0, quarantinedAt: null, quarantineReason: null, updatedAt: new Date() }
+        : { inferenceEnabled: false, serveFailureStreak: 0, quarantinedAt: null, quarantineReason: null, updatedAt: new Date() },
+    )
+    .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  return { ok: true, inferenceEnabled: enabled };
+}
+
+/**
+ * Record the coherence outcome of ONE Evermind serve, driving auto-quarantine. A
+ * coherent serve resets the failure streak; an incoherent one increments it, and
+ * once it reaches {@link QUARANTINE_FAILURE_STREAK} the head is force-disabled
+ * (`inferenceEnabled=false`) with a reason, so a broken head stops serving instead
+ * of emitting gibberish every turn. Best-effort and self-contained: never throws,
+ * so it can sit on the serve path. Only writes when there is a change to persist
+ * (a coherent serve on an already-zero streak is a no-op — no hot-path write).
+ */
+export async function recordEvermindServeOutcome(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  coherent: boolean,
+): Promise<void> {
+  if (!Number.isInteger(projectId) || projectId <= 0) return;
+  const where = and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId));
+
+  if (coherent) {
+    // Reset the streak — but only if it's non-zero, so the happy path stays write-free.
+    const updated = await db
+      .update(projectEvermind)
+      .set({ serveFailureStreak: 0 })
+      .where(and(where, sql`${projectEvermind.serveFailureStreak} <> 0`))
+      .returning({ id: projectEvermind.id })
+      .catch(() => [] as Array<{ id: string }>);
+    if (updated.length > 0) await bumpCacheVersion(env, versionKey(tenantId, projectId));
+    return;
+  }
+
+  // Incoherent: atomically bump the streak and read the new value.
+  const [row] = await db
+    .update(projectEvermind)
+    .set({ serveFailureStreak: sql`${projectEvermind.serveFailureStreak} + 1` })
+    .where(where)
+    .returning({ streak: projectEvermind.serveFailureStreak })
+    .catch(() => [] as Array<{ streak: number }>);
+  if (!row) return;
+
+  if (row.streak >= QUARANTINE_FAILURE_STREAK) {
+    await quarantineProjectEvermind(
+      env, db, tenantId, projectId,
+      `Auto-quarantined after ${row.streak} consecutive incoherent replies — the model is producing gibberish. Retrain/re-seed and re-enable, or set a frontier teacher.`,
+    );
+  }
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+}
+
+/**
+ * Force a head OUT of service: disable inference and stamp the operator-facing reason.
+ * The ONE place quarantine is written, shared by both detectors — the serve-path
+ * failure streak ({@link recordEvermindServeOutcome}) and the post-merge fitness
+ * re-benchmark in the learning coordinator — so "how a head is taken out of service"
+ * cannot drift between them. Best-effort: never throws (it sits on background paths).
+ */
+export async function quarantineProjectEvermind(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  reason: string,
 ): Promise<void> {
   await db
     .update(projectEvermind)
-    .set({ inferenceEnabled: enabled, updatedAt: new Date() })
-    .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+    .set({
+      inferenceEnabled: false,
+      quarantinedAt: new Date(),
+      quarantineReason: reason,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
+    .catch((error) => { /* best-effort */ 
+      reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "quarantineProjectEvermind" });
+    });
+  await bumpCacheVersion(env, versionKey(tenantId, projectId)).catch((error) => { /* best-effort */ 
+    reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "quarantineProjectEvermind" });
+  });
 }
 
 /**
@@ -589,8 +833,23 @@ export interface ProjectEvermindRecentEntry {
   version: number;
   at: number;
   weight: number;
+  /** True when this contribution's weights were fitted into the merge — i.e. it moved
+   *  the neocortex. Absent on rows written before the flag existed (all of which were
+   *  fitted), so read it as `fitted !== false`. */
+  fitted?: boolean;
   prompt?: string;
+  /** Absent when a pinned teacher failed on a teach-a-task — see `skipReason`. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen, so a broken teacher is visible in the console. */
+  skipReason?: TeacherSkipReason;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The pinned teacher model that failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
 }
 
 /** One measured training run the coordinator recorded (mirrors the DO's TrainingPoint).
@@ -786,6 +1045,11 @@ export interface ProjectEvermindContributions {
   eval: ProjectEvermindEvalPoint | null;
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
+  /** ISO timestamp this head auto-quarantined after a streak of incoherent serves
+   *  (null when healthy) — the console renders a badge + reason off it. */
+  quarantinedAt: string | null;
+  /** The probe-failure reason behind `quarantinedAt` (null when healthy). */
+  quarantineReason: string | null;
 }
 
 /**
@@ -822,6 +1086,8 @@ export async function getProjectEvermindContributions(
         training: activity.training,
         eval: activity.eval,
         affect: computeProjectAffect(activity.recent, restProfile),
+        quarantinedAt: head.quarantinedAt,
+        quarantineReason: head.quarantineReason,
       };
     },
     { kvTtlSeconds: 10 },
@@ -1014,11 +1280,146 @@ export async function flushProjectEvermind(
   tenantId: number,
   projectId: number,
 ): Promise<LearnDispatchResult> {
+  return dispatchCoordinator(env, tenantId, projectId, '/flush');
+}
+
+/**
+ * The ONE way this module talks to a project's coordinator: resolve the stub, POST,
+ * parse. Every maintenance door (flush / reindex / discard-pending / forget) rides it,
+ * so "what happens when the binding is unset" is answered in exactly one place.
+ */
+async function dispatchCoordinator(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  path: string,
+  body?: Record<string, unknown>,
+): Promise<LearnDispatchResult> {
   const stub = coordinatorStub(env, tenantId, projectId);
   if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
-  const res = await stub.fetch('https://coordinator/flush', { method: 'POST' });
-  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { ok: res.ok, status: res.status, body };
+  const res = await stub.fetch(`https://coordinator${path}`, {
+    method: 'POST',
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
+  const parsed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: res.ok, status: res.status, body: parsed };
+}
+
+/**
+ * Recompute every learned memory's recall embedding against the CURRENT head. Memories
+ * are embedded at merge time with the model as it was then, while recall embeds the
+ * QUERY with today's model — so recall quality decays silently as the head learns.
+ * This is the "reindex" the console exposes.
+ */
+export async function reindexProjectEvermindRecall(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+): Promise<LearnDispatchResult> {
+  return dispatchCoordinator(env, tenantId, projectId, '/reindex');
+}
+
+/** Drop queued-but-unmerged contributions (a bad import/teach batch) without touching
+ *  anything already learned. */
+export async function discardProjectEvermindPending(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+): Promise<LearnDispatchResult> {
+  return dispatchCoordinator(env, tenantId, projectId, '/discard-pending');
+}
+
+/** Remove specific learned memories from the recall ring so they can no longer be
+ *  recalled or used to ground a reply. Used by the knowledge analyzer's repair pass. */
+export async function forgetProjectEvermindMemories(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  ids: number[],
+): Promise<LearnDispatchResult> {
+  if (ids.length === 0) return { ok: true, status: 200, body: { forgotten: 0 } };
+  return dispatchCoordinator(env, tenantId, projectId, '/forget', { ids });
+}
+
+/** One raw memory to fold into the model — the `key` is echoed back so the caller
+ *  (the VS Code importer) knows exactly which snapshot entries were absorbed and can
+ *  safely compact THOSE to stubs. `text` is the fact body; `prompt` its optional cue. */
+export interface MemoryExtractEntry {
+  key: string;
+  text: string;
+  prompt?: string;
+  weight?: number;
+}
+
+/** Outcome of an extract-memories run: which keys were absorbed (queued for learning),
+ *  which were skipped and why, and the merged version after a single closing flush — so
+ *  the caller only compacts entries the model has actually taken in. */
+export interface MemoryExtractResult {
+  /** Keys accepted into the learn queue — the safe-to-compact set. */
+  absorbed: string[];
+  /** Keys the coordinator rejected (too short / dispatch failure), with a reason. */
+  skipped: Array<{ key: string; reason: string }>;
+  /** Contributions merged by the closing flush. */
+  merged: number;
+  /** The model version after the flush (the version stamped into each stub). */
+  version: number;
+}
+
+/** Hard cap on entries folded per request — bounds the batch (and the serialized
+ *  coordinator calls behind it) so one import can't wedge the DO. */
+export const MEMORY_EXTRACT_MAX_ENTRIES = 500;
+
+/**
+ * Fold a batch of raw memories into ONE project Evermind, then flush once so the
+ * knowledge is actually merged (not just queued) before the caller compacts the
+ * source. This is the server half of the VS Code Evermind console's "Import from
+ * builderforce-memory" action: the editor reads the local memory snapshot and POSTs
+ * the entries here; each is enqueued via {@link dispatchProjectEvermindLearnText}
+ * (the same producer door "Teach" uses), and a single closing {@link flushProjectEvermind}
+ * merges them. Only a SEEDED + CONNECTED Evermind can learn — an unseeded/frozen target
+ * is rejected up-front so the UI explains rather than silently absorbing nothing.
+ */
+export async function extractMemoriesToEvermind(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  entries: MemoryExtractEntry[],
+): Promise<{ ok: true; result: MemoryExtractResult } | { ok: false; status: number; error: string }> {
+  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+  if (head.version < 1) return { ok: false, status: 400, error: 'this project’s Evermind is not set up yet — enable it before importing memories' };
+  if (head.mode !== 'connected') return { ok: false, status: 400, error: 'learning is frozen for this Evermind — set it to Connected before importing' };
+
+  const capped = entries.slice(0, MEMORY_EXTRACT_MAX_ENTRIES);
+  const absorbed: string[] = [];
+  const skipped: Array<{ key: string; reason: string }> = [];
+
+  // Serialized on purpose: the coordinator is a single DO that adapts each exemplar in
+  // its alarm, so firing these concurrently just contends on the same lock. One
+  // client→gateway round-trip carries the whole batch (the N+1 we avoid is on the WIRE).
+  for (const e of capped) {
+    const text = (e.text ?? '').trim();
+    if (text.length < 20) { skipped.push({ key: e.key, reason: 'too short (min 20 chars)' }); continue; }
+    const res = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, e.weight, e.prompt);
+    if (res.ok) { absorbed.push(e.key); continue; }
+    const err = res.body['error'];
+    skipped.push({ key: e.key, reason: typeof err === 'string' ? err : `dispatch failed (${res.status})` });
+  }
+
+  // Merge the queued contributions now so the caller compacts only truly-absorbed facts.
+  let merged = 0;
+  let version = head.version;
+  if (absorbed.length > 0) {
+    const flush = await flushProjectEvermind(env, tenantId, projectId);
+    if (flush.ok) {
+      const m = flush.body['merged'];
+      const v = flush.body['version'];
+      merged = typeof m === 'number' ? m : 0;
+      version = typeof v === 'number' ? v : head.version;
+    }
+  }
+
+  return { ok: true, result: { absorbed, skipped, merged, version } };
 }
 
 /** Set the learning mode (connected | offline-frozen). Bumps the head cache. */

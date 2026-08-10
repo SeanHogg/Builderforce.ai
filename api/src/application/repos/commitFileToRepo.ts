@@ -31,6 +31,27 @@ export type CommitFileResult =
   | { ok: true; branch: string; commitUrl: string | null; existed: boolean }
   | { ok: false; code: 'unsupported' | 'provider_error'; reason: string };
 
+export async function resolveRepoRefSha(input: Pick<CommitFileInput, 'provider' | 'host' | 'owner' | 'repo' | 'token'>, ref: string): Promise<string | null> {
+  try {
+    const apiBase = buildGitApiBaseUrl(input.provider, input.host);
+    const headers = { Authorization: `Bearer ${input.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-Agent/1.0' };
+    if (input.provider === 'github') {
+      const res = await fetch(`${apiBase}/repos/${input.owner}/${input.repo}/git/ref/heads/${encodeURIComponent(ref)}`, { headers });
+      return res.ok ? ((await res.json()) as { object?: { sha?: string } }).object?.sha ?? null : null;
+    }
+    if (input.provider === 'gitlab') {
+      const project = encodeURIComponent(`${input.owner}/${input.repo}`);
+      const res = await fetch(`${apiBase}/projects/${project}/repository/branches/${encodeURIComponent(ref)}`, { headers });
+      return res.ok ? ((await res.json()) as { commit?: { id?: string } }).commit?.id ?? null : null;
+    }
+    if (input.provider === 'bitbucket') {
+      const res = await fetch(`${apiBase}/repositories/${input.owner}/${input.repo}/refs/branches/${encodeURIComponent(ref)}`, { headers });
+      return res.ok ? ((await res.json()) as { target?: { hash?: string } }).target?.hash ?? null : null;
+    }
+    return null;
+  } catch { return null; }
+}
+
 /** UTF-8-safe base64 (Workers `btoa` is latin1-only). */
 function toBase64Utf8(str: string): string {
   const bytes = new TextEncoder().encode(str);

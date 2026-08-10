@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
@@ -46,7 +47,9 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
+    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/vscodeRoutes.ts", operation: "createVscodeRoutes" });
+    });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -64,6 +67,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId,
       tenantId,
+      clientSurface: 'vscode',
       userAgent: c.req.header('User-Agent') ?? null,
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });

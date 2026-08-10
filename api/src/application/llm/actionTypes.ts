@@ -17,6 +17,9 @@ export const ACTION_TYPES = [
   'docs',
   'devops_ci',
   'data_migration',
+  'analysis',
+  'provisioning',
+  'decision',
   'other',
 ] as const;
 
@@ -58,6 +61,9 @@ export function actionTypeLabel(t: ActionType): string {
     case 'docs': return 'Docs';
     case 'devops_ci': return 'DevOps / CI';
     case 'data_migration': return 'Data migration';
+    case 'analysis': return 'Analysis';
+    case 'provisioning': return 'Provisioning';
+    case 'decision': return 'Decision';
     case 'other': return 'Other';
   }
 }

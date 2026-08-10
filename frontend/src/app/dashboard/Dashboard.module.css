@@ -1,0 +1,24 @@
+/* The dashboard is a PAGE now, not a canvas node — `height:100%` was sizing this
+   to a fixed 230px node box and has no meaning in flow. */
+.promptWidget { display:grid; gap:12px; align-content:center; }
+.promptWidget > p { margin:0; color:var(--text-secondary); font-size:13px; line-height:1.5; text-align:center; }
+.promptWidget a,.warning a { color:var(--coral-bright); text-decoration:none; }
+.promptWidget > div { width:min(100%,760px); margin:0 auto; }
+.promptWidget .warning { color:var(--warning-text,var(--warning)); font-size:12px; }
+
+.workspaceWidget { min-width:0; }
+.workspaceWidget > nav { display:flex; gap:4px; margin-bottom:18px; overflow-x:auto; border-bottom:1px solid var(--border-subtle); scrollbar-width:none; }
+.workspaceWidget > nav::-webkit-scrollbar { display:none; }
+.workspaceWidget > nav button { flex:none; margin-bottom:-1px; padding:9px 14px; color:var(--text-secondary); background:none; border:0; border-bottom:2px solid transparent; font:600 13px/1.2 var(--font-sans); cursor:pointer; white-space:nowrap; }
+.workspaceWidget > nav button[data-active='true'] { color:var(--text-primary); border-bottom-color:var(--coral-bright); }
+.workspaceContent { min-width:0; }
+
+@media (max-width:760px) {
+  .promptWidget { align-content:start; }
+  .promptWidget > p { font-size:12px; text-align:left; }
+  .workspaceWidget > nav { position:sticky; z-index:2; top:0; margin:-12px -12px 12px; padding:0 8px; background:var(--bg-elevated); }
+  .workspaceWidget > nav button { padding:11px 10px; font-size:12px; }
+  .workspaceContent { overflow:hidden; }
+  .workspaceContent :global(.grid) { grid-template-columns:minmax(0,1fr); }
+  .workspaceContent :global(table) { min-width:680px; }
+}

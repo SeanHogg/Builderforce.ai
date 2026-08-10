@@ -17,11 +17,13 @@ vi.mock('./streamChatCompletion', () => ({
 let seq = 0;
 const persistence = {
   getMessages: vi.fn(async () => []),
+  subscribeMessages: vi.fn(() => () => {}),
   // Echo each sent message back with a fresh id, as the real API does.
   sendMessages: vi.fn(async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
     msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
   ),
   setMessageFeedback: vi.fn(async () => ({ ok: true })),
+  markChatRead: vi.fn(async () => ({ lastReadSeq: 0 })),
   upload: vi.fn(),
   uploadUrl: (key: string) => `https://x/${key}`,
 } as unknown as BrainPersistenceAdapter;
@@ -50,13 +52,101 @@ const TOOL = {
 beforeEach(() => {
   seq = 0;
   mockStream.mockReset();
-  vi.mocked(persistence.sendMessages).mockClear();
+  vi.mocked(persistence.getMessages).mockReset().mockResolvedValue([]);
+  vi.mocked(persistence.subscribeMessages!).mockReset().mockImplementation(() => () => {});
+  vi.mocked(persistence.markChatRead!).mockReset().mockResolvedValue({ lastReadSeq: 0 });
+  // Reset, not just clear: a test that installs a persistent `mockImplementation`
+  // (the learn-signal cases) would otherwise leak it into every test after it.
+  vi.mocked(persistence.sendMessages).mockReset().mockImplementation(
+    async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+      msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
+  );
   // The run engine is a module-level singleton keyed by chatId; reset it so a
   // chat's session-lived transcript doesn't leak between tests reusing chatId 1.
   resetBrainRunStore();
 });
 
 describe('useBrainConversation agent loop (injected transport + persistence)', () => {
+  it('streams durable messages appended by an assigned agent into the open chat', async () => {
+    let notifyChanged: (() => void) | undefined;
+    vi.mocked(persistence.subscribeMessages!).mockImplementation((_chatId, onChanged) => {
+      notifyChanged = onChanged;
+      return () => {};
+    });
+    const serverMessages: Array<{ id: number; role: string; content: string; metadata: string | null; seq: number; createdAt: string }> = [];
+    vi.mocked(persistence.getMessages).mockImplementation(async () => [...serverMessages]);
+    const { result: hook, unmount } = renderHook(
+      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(persistence.getMessages).toHaveBeenCalled());
+    serverMessages.push({
+      id: 9001,
+      role: 'assistant',
+      content: '▶️ **John Coder** started working on task #712.',
+      metadata: JSON.stringify({ runMilestone: '88:started', agentRef: 'john-coder' }),
+      seq: 1,
+      createdAt: '2026-07-13T00:30:00.000Z',
+    });
+    act(() => notifyChanged?.());
+
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toContain(
+      '▶️ **John Coder** started working on task #712.',
+    ));
+    unmount();
+  });
+
+  it('marks the OPEN chat read up to its newest seq (clears the unread badge on view)', async () => {
+    vi.mocked(persistence.getMessages).mockResolvedValue([
+      { id: 5, role: 'assistant', content: 'a', metadata: null, seq: 5, createdAt: '' },
+      { id: 9, role: 'assistant', content: '✅ finished', metadata: null, seq: 9, createdAt: '' },
+    ]);
+    const { unmount } = renderHook(
+      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(persistence.markChatRead).toHaveBeenCalledWith(41, 9));
+    unmount();
+  });
+
+  it('advances the read mark forward when a later milestone arrives, but never rewinds', async () => {
+    let notifyChanged: (() => void) | undefined;
+    vi.mocked(persistence.subscribeMessages!).mockImplementation((_chatId, onChanged) => {
+      notifyChanged = onChanged;
+      return () => {};
+    });
+    const server = [{ id: 3, role: 'assistant', content: 'a', metadata: null, seq: 3, createdAt: '' }];
+    vi.mocked(persistence.getMessages).mockImplementation(async () => [...server]);
+    const { unmount } = renderHook(
+      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(persistence.markChatRead).toHaveBeenLastCalledWith(41, 3));
+
+    // A new milestone lands (seq 7) → the mark advances to 7.
+    server.push({ id: 7, role: 'assistant', content: '✅', metadata: null, seq: 7, createdAt: '' });
+    act(() => notifyChanged?.());
+    await waitFor(() => expect(persistence.markChatRead).toHaveBeenLastCalledWith(41, 7));
+
+    // A redundant reload with no newer message must NOT re-mark (monotonic guard).
+    const callsAt7 = vi.mocked(persistence.markChatRead!).mock.calls.length;
+    act(() => notifyChanged?.());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(vi.mocked(persistence.markChatRead!).mock.calls.length).toBe(callsAt7);
+    unmount();
+  });
+
+  it('does not mark read when there is no open chat', async () => {
+    const { unmount } = renderHook(
+      () => useBrainConversation({ chatId: null, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(persistence.markChatRead).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('text-only reply: persists user + final assistant once, no tools', async () => {
     mockStream.mockResolvedValueOnce(result({ text: 'hello there' }));
     const { rerender, result: hook } = renderHook(
@@ -69,8 +159,10 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await act(async () => { await hook.current.send('hi'); });
 
     expect(mockStream).toHaveBeenCalledTimes(1);
-    // user + assistant persisted
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    // user + the durable `llm` turn step + assistant persisted. Each LLM turn now
+    // persists a compact diagnostics row (usage/finishReason — no transcript text)
+    // so a chat copied after a reload can still report its turns and tokens.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'hello there']);
     });
@@ -100,10 +192,10 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(toolMsg?.tool_call_id).toBe('c1');
     expect(toolMsg?.content).toContain('"ok":true');
 
-    // user + the durable tool STEP + final assistant persist. The tool step is now
-    // persisted (role:'tool') so it survives a reload, but it is NOT added to the live
-    // message list (recordAppended) and is excluded from the model seed.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
+    // user + 2 durable `llm` turn steps + the durable tool STEP + final assistant
+    // persist. Step rows (role:'tool') survive a reload but are NOT added to the live
+    // message list (recordAppended) and are excluded from the model seed.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(5);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']);
     });
@@ -167,7 +259,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       ]);
     });
     // user + 2 narrations + 2 durable tool steps + final answer.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(6);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(9);
   });
 
   it('persists nothing extra for a pure tool-call turn with no text', async () => {
@@ -185,7 +277,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     // Empty narration ⇒ NO narration bubble; user + the durable tool step + final
     // assistant persist (the empty-text turn still records its tool step durably).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(5);
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 
@@ -210,7 +302,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(runTool).toHaveBeenCalledTimes(25);
     // user + 25 durable tool steps persist; no final assistant text (the forced
     // closing turn was empty too, so no answer bubble).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(26);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(51);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
   });
 
@@ -236,7 +328,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(runTool).toHaveBeenCalledTimes(25);
     expect(hook.current.error).toBeFalsy();
     // user + 25 durable tool steps + the forced final answer persist.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(27);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(52);
     await waitFor(() =>
       expect(hook.current.messages.map((m) => m.content)).toEqual(['loop', 'Here is what I found so far, and what I could not finish.']),
     );
@@ -323,15 +415,16 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     // The server reports it contributed THIS turn to the project's Evermind — even
     // with NO client-side recall (the connected-but-empty case the old heuristic
     // false-negatived). The learn step must come from the server signal, not a guess.
-    const withLearn = (learn: { learned: boolean; version: number } | null) =>
+    // Keyed on ROLE, not call order: durable `llm`/tool STEP rows are persisted
+    // between the user and assistant writes, so a `mockImplementationOnce` chain
+    // would attach the signal to whichever call happened to land second.
+    vi.mocked(persistence.sendMessages).mockImplementation(
       async (_c: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
         msgs.map((m) => ({
           id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '',
-          ...(learn && m.role === 'assistant' ? { evermindLearn: learn } : {}),
-        }));
-    vi.mocked(persistence.sendMessages)
-      .mockImplementationOnce(withLearn(null))                          // user turn
-      .mockImplementationOnce(withLearn({ learned: true, version: 2 })); // assistant turn carries the signal
+          ...(m.role === 'assistant' ? { evermindLearn: { learned: true, version: 2 } } : {}),
+        })),
+    );
     mockStream.mockResolvedValueOnce(result({ text: 'a substantive answer that clears the teach floor with room to spare' }));
 
     const { result: hook } = renderHook(
@@ -354,7 +447,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
         id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '',
         ...(m.role === 'assistant' ? { evermindLearn: { learned: false, version: 0 } } : {}),
       }));
-    vi.mocked(persistence.sendMessages).mockImplementationOnce(noLearn).mockImplementationOnce(noLearn);
+    // Role-keyed (not call-order): durable step rows are persisted between the user
+    // and assistant writes, so a `mockImplementationOnce` chain would miss the turn.
+    vi.mocked(persistence.sendMessages).mockImplementation(noLearn);
     mockStream.mockResolvedValueOnce(result({ text: 'a plain answer on a non-project or unseeded chat' }));
 
     const { result: hook } = renderHook(

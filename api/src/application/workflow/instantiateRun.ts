@@ -46,6 +46,11 @@ export interface InstantiateRunParams {
   triggerPayload?: unknown;
   /** How the run was started — recorded on the trigger task input for tracing. */
   triggerSource?: string;
+  /** Reliability linkage: the incident/monitor whose event fired this run (or the
+   *  incident a manual runbook was launched from). Persisted on the `workflows` row
+   *  so the incident detail can list its runs. */
+  sourceIncidentId?: string | null;
+  sourceMonitorId?: string | null;
 }
 
 export type InstantiateRunResult =
@@ -114,6 +119,8 @@ export async function persistCompiledRun(
     segmentId: params.segmentId ?? null,
     projectId: params.projectId ?? null,
     workflowDefinitionId: params.definitionId ?? null,
+    sourceIncidentId: params.sourceIncidentId ?? null,
+    sourceMonitorId: params.sourceMonitorId ?? null,
     agentHostId: params.target.runtime === 'host' ? params.target.agentHostId! : null,
     runtime: params.target.runtime,
     cloudAgentRef: params.target.runtime === 'cloud' ? params.target.cloudAgentRef ?? null : null,

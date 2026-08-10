@@ -1337,7 +1337,7 @@ export function createPmVisionAuditWorkflow(target: string): WorkflowStep[] {
 }
 
 /**
- * Privacy & Data-Law Compliance Audit Workflow
+ * Compliance Audit Agent Workflow
  *
  * Architecture Advisor inventories personal data + data flows, Bug Analyzer
  * checks the code for privacy-law gaps (consent gating, unsubscribe, data export
@@ -1346,19 +1346,19 @@ export function createPmVisionAuditWorkflow(target: string): WorkflowStep[] {
  * scan with a content-level review.
  */
 export function createPrivacyAuditWorkflow(target: string): WorkflowStep[] {
-  const inventory = `Inventory the personal data and data flows for: ${target}. Identify what PII is collected, where it is stored, who it is shared with (subprocessors), and the legal basis for each.`;
-  const gaps = `Audit ${target} for GDPR / CCPA·CPRA / CAN-SPAM gaps: is analytics/marketing gated behind opt-in consent; is there a working unsubscribe + List-Unsubscribe + physical address; are there self-service data export (Art. 20) and erasure (Art. 17) endpoints that truly delete; is there a documented retention/purge routine. List concrete gaps.`;
+  const inventory = `Inventory the personal data, Customer Content, model calls, and data flows for: ${target}. Read the connected GitHub source, configuration, migrations, policies, and integration code. Identify each data category (including prompts, chats, ideas, source code, credentials, logs, billing, health/biometric/minor data), its source, purpose, legal basis, storage and backup location, retention/deletion path, model/provider recipient, subprocessor, and international transfer. Distinguish observed evidence, missing controls, and facts that cannot be verified from source.`;
+  const gaps = `Perform a jurisdiction-scoped compliance gap analysis of ${target}. Determine nexus, thresholds, controller/processor role, user ages, sensitive-data use, and whether consequential automated decisions occur before grading applicability. Cover: FTC Act, COPPA, CAN-SPAM and ADA/WCAG; comprehensive US state privacy laws and GPC/appeals; California 2026 risk/cybersecurity/ADMT rules; Washington/Connecticut/Nevada consumer-health and minor protections; Colorado 2027 ADMT/chatbot readiness; GDPR/ePrivacy/EU AI Act; UK GDPR/DPA/PECR; Canadian PIPEDA and Quebec Law 25; Brazil LGPD; and Australian APP/NDB duties. Validate behavior, not filenames: pre-consent tracker blocking, rights fulfillment across stores/processors/backups, retention jobs, unsubscribe/suppression, DPA/subprocessors/transfers, breach runbooks, AI disclosure/human review, age/minor safeguards, and accessible AI interactions. For every finding cite the jurisdiction/authority, exact repository evidence, applicability assumption, severity, and concrete remediation. Do not call the result certification or legal advice.`;
   return [
     { role: "architecture-advisor", task: inventory },
     { role: "bug-analyzer", task: gaps, dependsOn: [inventory] },
     {
       role: "documentation-agent",
-      task: `Draft or update the privacy policy, cookie policy, and DPA/subprocessor language for: ${target}, closing the gaps found. Ensure data-subject rights and retention windows are stated plainly.`,
+      task: `Draft or update the Terms, privacy/cookie notices, DPA, subprocessor notice, retention schedule, data inventory, impact-assessment templates, and accessibility statement for: ${target}, but only where repository evidence supports the claim. Flag company address, formation state, representative/DPO, provider regions, and other facts requiring owner or counsel confirmation instead of inventing them.`,
       dependsOn: [gaps],
     },
     {
       role: "code-reviewer",
-      task: `Review the privacy remediations for: ${target}. Verify consent actually gates trackers, export/erasure endpoints work end-to-end, and produce a compliance sign-off with residual risk.`,
+      task: `Review the compliance remediations for: ${target}. Test consent before network calls, GPC, unsubscribe/suppression, access/export/correction/deletion/appeal end-to-end, deletion propagation and retention, AI disclosure and human review, age/minor safeguards, accessibility, and policy-to-code truthfulness. Produce a jurisdiction matrix of pass/fail/unverified/not-applicable with evidence and residual risk; explicitly state that counsel must confirm applicability and launch readiness.`,
       dependsOn: [gaps],
     },
   ];

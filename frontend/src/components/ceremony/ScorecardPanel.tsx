@@ -9,7 +9,7 @@ import type { CeremonyMember } from './types';
 function Tile({ label, value, hint }: { label: string; value: string | number | null; hint?: string }) {
   const empty = value == null || value === '';
   return (
-    <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 12 }}>
+    <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 12 }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, color: empty ? 'var(--text-muted)' : 'var(--text-primary)', marginTop: 2 }}>
         {empty ? 'No data yet' : value}

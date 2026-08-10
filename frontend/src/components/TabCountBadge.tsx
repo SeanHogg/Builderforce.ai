@@ -12,7 +12,7 @@ export function TabCountBadge({ count }: { count: number | null | undefined }) {
         fontSize: 11,
         fontWeight: 600,
         padding: '1px 7px',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         background: 'var(--bg-elevated)',
         color: 'var(--text-muted)',
       }}

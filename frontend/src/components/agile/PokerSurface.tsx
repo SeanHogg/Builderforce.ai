@@ -57,7 +57,7 @@ export function PokerSurface() {
     return (
       <div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Planning Poker</div>
-        {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+        {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New session name" style={inp} />
           <button onClick={createSession} style={btn}>Start session</button>
@@ -66,10 +66,10 @@ export function PokerSurface() {
           {sessions.map((s) => (
             <button key={s.id} onClick={() => setSelected(s.id)} style={row}>
               <span style={{ fontWeight: 600 }}>{s.name}</span>
-              <span style={{ color: '#64748b', fontSize: 12 }}>{s.status}</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{s.status}</span>
             </button>
           ))}
-          {sessions.length === 0 && <div style={{ color: '#64748b' }}>No sessions yet.</div>}
+          {sessions.length === 0 && <div style={{ color: 'var(--text-secondary)' }}>No sessions yet.</div>}
         </div>
       </div>
     );
@@ -79,7 +79,7 @@ export function PokerSurface() {
     <div>
       <button onClick={() => setSelected(null)} style={link}>← Sessions</button>
       <div style={{ fontSize: 16, fontWeight: 600, margin: '8px 0' }}>{detail?.name ?? 'Loading…'}</div>
-      {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input value={storyTitle} onChange={(e) => setStoryTitle(e.target.value)} placeholder="Add a story" style={inp} />
         <button onClick={addStory} style={btn}>Add</button>
@@ -91,13 +91,13 @@ export function PokerSurface() {
             <div key={story.id} style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600 }}>{story.title}</span>
-                <span style={{ fontSize: 12, color: '#64748b' }}>{story.status}{story.finalEstimate ? ` · ${story.finalEstimate}` : ''}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{story.status}{story.finalEstimate ? ` · ${story.finalEstimate}` : ''}</span>
               </div>
               <div style={{ display: 'flex', gap: 6, margin: '10px 0', flexWrap: 'wrap' }}>
                 {DECK.map((v) => <button key={v} onClick={() => vote(story.id, v)} style={chip}>{v}</button>)}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, color: '#64748b' }}>{story.votes.length} vote(s):</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{story.votes.length} vote(s):</span>
                 {story.votes.map((v, i) => (
                   <span key={i} style={voteBadge}>{revealed ? (v.value ?? '?') : '•'}</span>
                 ))}
@@ -113,16 +113,16 @@ export function PokerSurface() {
             </div>
           );
         })}
-        {detail && detail.stories.length === 0 && <div style={{ color: '#64748b' }}>No stories yet.</div>}
+        {detail && detail.stories.length === 0 && <div style={{ color: 'var(--text-secondary)' }}>No stories yet.</div>}
       </div>
     </div>
   );
 }
 
-const inp: React.CSSProperties = { fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle, #e2e8f0)', background: 'var(--bg-base, #fff)', flex: 1 };
-const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-const link: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontSize: 13, padding: 0 };
-const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 8, background: 'var(--bg-base, #fff)', cursor: 'pointer', textAlign: 'left' };
-const card: React.CSSProperties = { border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 8, padding: 14 };
-const chip: React.CSSProperties = { minWidth: 34, padding: '6px 0', fontSize: 13, fontWeight: 600, border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 6, background: 'var(--bg-elevated, #f8fafc)', cursor: 'pointer' };
-const voteBadge: React.CSSProperties = { minWidth: 24, textAlign: 'center', padding: '2px 6px', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--bg-elevated, #f1f5f9)' };
+const inp: React.CSSProperties = { fontSize: 13, padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', flex: 1 };
+const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const link: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, padding: 0 };
+const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', cursor: 'pointer', textAlign: 'left' };
+const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 14 };
+const chip: React.CSSProperties = { minWidth: 34, padding: '6px 0', fontSize: 13, fontWeight: 600, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', cursor: 'pointer' };
+const voteBadge: React.CSSProperties = { minWidth: 24, textAlign: 'center', padding: '2px 6px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)' };

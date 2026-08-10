@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
+import type { LlmProvider, TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
 
 // Hoisted mocks — vi.mock must declare the spies via vi.hoisted so the
 // factory closures see them.
@@ -10,6 +11,15 @@ const mocks = vi.hoisted(() => ({
   signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
   llmProxyForPlan: vi.fn(),
+  resolveTenantLlmCredentials: vi.fn<() => Promise<TenantLlmCredentials>>(async () => ({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  })),
 }));
 
 vi.mock('../../infrastructure/auth/HashService', () => ({
@@ -20,7 +30,10 @@ vi.mock('../../infrastructure/auth/JwtService', () => ({
   verifyJwt: mocks.verifyJwt,
   signJwt: mocks.signJwt,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: mocks.buildDatabase,
+  buildTransactionalDatabase: (...args: unknown[]) => mocks.buildDatabase(...args),
+}));
 // Partial mock — keep every real LlmProxyService export (ChatCompletionRequest,
 // reorderPoolByShape, modelPoolForPlan, …) and override only the network call.
 vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
@@ -28,17 +41,110 @@ vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
   llmProxyForPlan: mocks.llmProxyForPlan,
 }));
 // Partial mock — keep the real provider-key exports and only stub the OAuth
-// resolver (it makes a raw neon() call the db mock doesn't cover) so the
-// completion path reaches proxyForCompletion.
+// resolver (its Drizzle read isn't covered by the db mock) so the completion
+// path reaches proxyForCompletion.
 vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
   resolveAnthropicOAuthToken: async () => null,
+  resolveTenantLlmCredentials: mocks.resolveTenantLlmCredentials,
 }));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
+// `byoModelsFor` lives in the application layer (byoModelRouting) so the model picker,
+// the credential probe and the daily sweep share ONE projection — an application-layer
+// probe importing it from a route module would have been a layering inversion.
+const { byoModelsFor } = await import('../../application/llm/byoModelRouting');
+const { vendorForModel } = await import('../../application/llm/vendors');
 const { sanitizeToolName, restoreToolName, sanitizeToolCallId, sanitizeRequestToolCalls, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');
+
+beforeEach(() => {
+  mocks.resolveTenantLlmCredentials.mockResolvedValue({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  });
+});
+
+/** A connected-provider row as `listTenantProviderKeys` returns it. */
+const connected = (provider: LlmProvider, authType: 'api_key' | 'oauth' = 'api_key') =>
+  ({ provider, authType, priority: null });
+
+describe('byoModelsFor', () => {
+  it('uses the bare direct-Anthropic ids, not the OpenRouter anthropic namespace', () => {
+    const models = byoModelsFor([connected('anthropic')]);
+    expect(models.map((m) => m.id)).toContain('claude-sonnet-5');
+    expect(models.some((m) => m.id.startsWith('anthropic/'))).toBe(false);
+    expect(models.every((m) => vendorForModel(m.id) === 'anthropic')).toBe(true);
+  });
+
+  it('projects bespoke and OpenAI-compatible providers onto tenant-keyed routes', () => {
+    const cases = [
+      { provider: 'google' as const, vendor: 'googleai', prefix: 'googleai/' },
+      { provider: 'openai' as const, vendor: 'openai', prefix: 'direct/openai/' },
+      { provider: 'meta' as const, vendor: 'meta', prefix: 'direct/meta/' },
+      { provider: 'kimi' as const, vendor: 'kimi-code', prefix: 'direct/kimi-code/' },
+      { provider: 'moonshot' as const, vendor: 'moonshot', prefix: 'direct/moonshot/' },
+      { provider: 'xai' as const, vendor: 'xai', prefix: 'direct/xai/' },
+    ];
+    for (const { provider, vendor, prefix } of cases) {
+      const models = byoModelsFor([connected(provider)]);
+      expect(models.length).toBeGreaterThan(0);
+      expect(models.every((m) => m.id.startsWith(prefix))).toBe(true);
+      expect(models.every((m) => vendorForModel(m.id) === vendor)).toBe(true);
+    }
+  });
+
+  it('a SUBSCRIPTION-connected provider lists its OAuth route, not the api-key one', () => {
+    // The tenant has no OpenAI/xAI api key — offering `direct/openai/…` would hand the
+    // picker (and the strict-pin gate) models their credential cannot dispatch.
+    const codex = byoModelsFor([connected('openai', 'oauth')]);
+    expect(codex.length).toBeGreaterThan(0);
+    expect(codex.every((m) => m.id.startsWith('openai-codex/'))).toBe(true);
+
+    const grok = byoModelsFor([connected('xai', 'oauth')]);
+    expect(grok.length).toBeGreaterThan(0);
+    expect(grok.every((m) => m.id.startsWith('xai-oauth/'))).toBe(true);
+  });
+
+  it('groups models in tenant provider-priority order', () => {
+    const models = byoModelsFor([
+      { ...connected('meta'), priority: 0 },
+      { ...connected('anthropic'), priority: 1 },
+    ]);
+    const firstAnthropic = models.findIndex((model) => model.vendor === 'anthropic');
+    const lastMeta = models.map((model) => model.vendor).lastIndexOf('meta');
+    expect(lastMeta).toBeGreaterThanOrEqual(0);
+    expect(firstAnthropic).toBeGreaterThan(lastMeta);
+  });
+
+  // A connected Kimi key has to be SELECTABLE, not merely dispatchable. Both pickers —
+  // the web ModelSelect and the VSIX gateway — render `byo.models` from this one
+  // projection, so a Kimi id missing here is a Kimi that cannot be chosen on either
+  // surface no matter how well the vendor routes.
+  it('offers a connected Kimi Code subscription as pinnable models', () => {
+    const models = byoModelsFor([connected('kimi')]);
+    expect(models.map((m) => m.id)).toContain('direct/kimi-code/kimi-for-coding');
+    // The probe leads with the all-members model, and the picker shows the same set.
+    expect(models[0]!.id).toBe('direct/kimi-code/kimi-for-coding');
+    expect(models.every((m) => m.vendor === 'kimi-code')).toBe(true);
+  });
+
+  it('keeps Kimi Code and Moonshot as separate selectable sets', () => {
+    // Non-interchangeable keys and different hosts. A tenant who connected only one
+    // must never be offered the other's models — pinning one would dispatch on a
+    // credential they do not have.
+    const kimiOnly = byoModelsFor([connected('kimi')]).map((m) => m.id);
+    const moonshotOnly = byoModelsFor([connected('moonshot')]).map((m) => m.id);
+    expect(kimiOnly.some((id) => id.startsWith('direct/moonshot/'))).toBe(false);
+    expect(moonshotOnly.some((id) => id.startsWith('direct/kimi-code/'))).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Tool-call sanitizer — one gateway-side pass that makes tool NAMES (reversible
@@ -228,6 +334,9 @@ function mockDb(opts: {
    *  day+month scan (sumTenantTextTokensDayAndMonth) used when a monthly cap is
    *  active. */
   usageRow?:  { used?: bigint | number | null; day?: number; month?: number };
+  /** Rows for the local-egress host lookup, which chains `.orderBy().limit()`.
+   *  Default `[]` — no runtime connected, so vendors call out directly. */
+  agentHostRows?: Array<{ id: number; connectedAt: Date | null; lastSeenAt: Date | null }>;
 }) {
   // Drizzle-style chainable selects: each terminal `.limit(1)` resolves
   // with `[row]`. Two distinct lookups happen in the bfk_* path: the key
@@ -246,6 +355,9 @@ function mockDb(opts: {
       // carry the creator's superadmin flag, so the chain must support leftJoin.
       const where = () => ({
         limit: () => Promise.resolve(queue.shift() ?? []),
+        // The online-agent-host lookup (local egress) orders before limiting, and
+        // reads its own canned rows rather than the key/tenant queue.
+        orderBy: () => ({ limit: () => Promise.resolve(opts.agentHostRows ?? []) }),
         then:  (resolve: (v: unknown) => unknown) =>
           resolve(usageRow !== undefined ? [usageRow] : []),
       });
@@ -387,6 +499,163 @@ const fakeExecutionCtx = {
   passThroughOnException: () => undefined,
 } as unknown as ExecutionContext;
 
+describe('POST /provider-keys/:provider/test', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { anthropic: 'sk-ant-test' },
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: {},
+      vendorPriority: ['anthropic'],
+    });
+  });
+
+  it('returns a handled 200 result when the upstream credential test fails', async () => {
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({ error: { message: 'invalid x-api-key' } }), { status: 401 }),
+      })),
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      status: 'failed',
+      code: 'provider_test_failed',
+      error: 'anthropic connection test failed: invalid x-api-key',
+      details: { provider: 'anthropic', model: 'claude-sonnet-5', upstreamStatus: 401 },
+    });
+  });
+
+  it('returns a handled 200 result when the configured credential is unusable', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: {},
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: { anthropic: 'revoked' },
+      vendorPriority: ['anthropic'],
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: false, status: 'revoked' });
+  });
+
+  // Kimi's hosted 403 is an EDGE rejection: the CDN refuses the Cloudflare Workers egress
+  // before the API validates the key. Telling the operator to replace a working key is the
+  // wrong instruction, so the copy branches on the transport's structured `edgeBlocked`
+  // verdict — not on an HTML tag surviving into a truncated 240-char detail string.
+  it('names the EDGE as the blocker on a Kimi hosted 403, and returns the redacted trace', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' },
+      configuredProviders: ['kimi'],
+      unresolvedReasons: {},
+      vendorPriority: ['kimi'],
+    });
+    const diagnostic = {
+      endpoint: 'https://api.kimi.com/coding/v1/chat/completions',
+      status: 403,
+      headers: { 'cf-ray': 'ray-1', server: 'cloudflare' },
+      edgeBlocked: true,
+      observedAt: '2026-08-02T10:00:00.000Z',
+    };
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response('<!doctype html><html>Forbidden</html>', { status: 403 }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code',
+        failovers: [{
+          model: 'direct/kimi-code/kimi-for-coding',
+          vendor: 'kimi-code',
+          code: 403,
+          // Deliberately WITHOUT an html tag: the old regex read this string, so a passing
+          // assertion here proves the copy now rides the structured flag instead.
+          detail: 'auth 403: Forbidden',
+          diagnostic,
+        }],
+      })),
+    });
+
+    const req = new Request('http://test.local/provider-keys/kimi/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; error: string; diagnostic?: typeof diagnostic & { traceId: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("Kimi's edge blocked the hosted Builderforce gateway");
+    // The evidence an operator attaches to the partnership submission.
+    expect(body.diagnostic).toMatchObject({ ...diagnostic, model: 'direct/kimi-code/kimi-for-coding' });
+    expect(body.diagnostic?.traceId).toMatch(/^llm-/);
+    // No runtime connected → the remedy is to connect one, since that is the route
+    // that actually works. Telling this operator to "use Kimi Code locally" is not an
+    // instruction about the product they are standing in.
+    expect(body.error).toContain('Connect a Builderforce runtime');
+  });
+
+  it('does NOT tell a tenant who already runs a runtime to connect one', async () => {
+    // Same edge 403, opposite remedy: the call was already made from their machine, so
+    // the problem is that machine's network — not a missing runtime and not the key.
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null, openaiCodexAuth: null, xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' }, configuredProviders: ['kimi'],
+      unresolvedReasons: {}, vendorPriority: ['kimi'],
+    });
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      agentHostRows: [{ id: 7, connectedAt: new Date(), lastSeenAt: new Date() }],
+    }));
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response('<html>Forbidden</html>', { status: 403 }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code',
+        failovers: [{
+          model: 'direct/kimi-code/kimi-for-coding', vendor: 'kimi-code', code: 403,
+          detail: 'auth 403: Forbidden',
+          diagnostic: {
+            endpoint: 'https://api.kimi.com/coding/v1/chat/completions', status: 403,
+            headers: {}, edgeBlocked: true, observedAt: '2026-08-02T10:00:00.000Z',
+          },
+        }],
+      })),
+    });
+
+    const req = new Request('http://test.local/provider-keys/kimi/test', {
+      method: 'POST', headers: { Authorization: 'Bearer bfk_test' },
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    const body = await res.json() as { error: string };
+
+    expect(body.error).toContain('your connected Builderforce runtime');
+    expect(body.error).not.toContain('Connect a Builderforce runtime');
+  });
+});
+
 describe('POST /v1/chat/completions strict-pin gate', () => {
   beforeEach(() => {
     mocks.hashSecret.mockReset();
@@ -429,6 +698,138 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     // in baseEnv). Proves the gate did not fire.
     expect(res.status).not.toBe(402);
     expect(res.status).toBe(503);
+  });
+
+  // Selecting Kimi in the VSIX or Cloud Chat sends a strict pin on `direct/kimi-code/…`.
+  // A Kimi Code subscription is billed by Kimi, not by us, so the "one bad model drains
+  // the free budget" reasoning behind the paid-plan gate does not apply — and if this
+  // 402'd, a FREE tenant could see Kimi in the picker and be refused on send, which is
+  // the worst of both worlds.
+  it('lets a FREE tenant pin their connected Kimi Code account', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null, openaiCodexAuth: null, xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' }, configuredProviders: ['kimi'],
+      unresolvedReasons: {}, vendorPriority: ['kimi'],
+    });
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code',
+        failovers: [],
+        retries: 0,
+      })),
+    });
+
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'direct/kimi-code/kimi-for-coding',
+        modelStrict: true,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(200);
+  });
+
+  it('does not claim "proxy not configured" to a tenant funding the turn themselves', async () => {
+    // The pre-flight 503 asks whether the request can be served AT ALL, not whether
+    // WE can serve it. It exempted OpenRouter connections but not direct BYO keys, so
+    // a tenant whose only connected account is Kimi could be told our proxy is
+    // unconfigured while holding a perfectly good key. `baseEnv` deliberately carries
+    // no OPENROUTER_API_KEY, which is exactly that situation.
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null, openaiCodexAuth: null, xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' }, configuredProviders: ['kimi'],
+      unresolvedReasons: {}, vendorPriority: ['kimi'],
+    });
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code', failovers: [], retries: 0,
+      })),
+    });
+
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'direct/kimi-code/kimi-for-coding',
+        modelStrict: true,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).not.toBe(503);
+    expect(res.status).toBe(200);
+  });
+
+  it('still 503s a tenant with NO credential of their own and no operator key', async () => {
+    // The exemption is "the tenant can self-fund", not "skip the check".
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null, openaiCodexAuth: null, xaiOAuthToken: null,
+      vendorKeys: {}, configuredProviders: [], unresolvedReasons: {}, vendorPriority: [],
+    });
+
+    const res = await buildApp().request(
+      strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(503);
+  });
+
+  it('still refuses a Kimi pin from a tenant who has NOT connected Kimi', async () => {
+    // The gate opens for a vendor the tenant's OWN credentials cover — not for the
+    // model id. Otherwise any free tenant could pin Kimi and route on operator keys.
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null, openaiCodexAuth: null, xaiOAuthToken: null,
+      vendorKeys: {}, configuredProviders: [], unresolvedReasons: {}, vendorPriority: [],
+    });
+
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'direct/kimi-code/kimi-for-coding',
+        modelStrict: true,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(402);
+    expect((await res.json() as { code?: string }).code).toBe('strict_pin_not_allowed');
   });
 
   it('allows paid tenant past the strict gate', async () => {
@@ -624,6 +1025,96 @@ describe('POST /v1/chat/completions monthly token cap', () => {
     const res = await buildApp().request(plainRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
     expect(res.status).not.toBe(429);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The unpinned free-plan turn — end to end through the real route.
+//
+// A free tenant's VSIX chat used to 402 on EVERY turn: the client filled in a
+// hardcoded `openai/gpt-4o-mini` whenever the user hadn't picked a model, and
+// that is a PAID OpenRouter model, so the premium gate refused a model the user
+// never chose ("Premium models … require a validated card on file"). The client
+// fix was to OMIT `model` entirely and let the gateway route the plan's pool.
+//
+// The pure-function half of that contract is covered in
+// LlmProxyService.unpinnedFreePlan.test.ts. THIS drives the actual Hono handler,
+// so the assertion is about the route's real gate order rather than a helper in
+// isolation — the closest thing to the live run short of credentials.
+// ---------------------------------------------------------------------------
+describe('POST /v1/chat/completions unpinned free-plan turn', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  /** A free tenant, comfortably under both token caps. */
+  function freeTenantDb() {
+    return mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { day: 100, month: 100 },
+    });
+  }
+
+  function chatRequest(body: Record<string, unknown>) {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_plain', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('does NOT 402 when the body carries no model at all', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // Past the premium gate AND the strict-pin gate (both 402) → stops only at
+    // the missing-OPENROUTER_API_KEY check.
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
+  });
+
+  it('REGRESSION: the same turn WITH the old hardcoded fallback is refused 402', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // This is the exact failure the user reported, reproduced through the route.
+    // If it ever stops being a 402 the client fix's rationale needs revisiting.
+    expect(res.status).toBe(402);
+    const body = await res.json() as { code?: string; unlock?: string; requiredPlan?: string };
+    expect(body.code).toBe('premium_model_not_allowed');
+    // A Free account is sent to billing/card setup, never an upgrade wall.
+    expect(body.unlock).toBe('validate_card');
+    expect(body.requiredPlan).toBe('free');
+  });
+
+  it('does not 402 an unpinned turn that also asks for tools (the IDE chat shape)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    // The VSIX always sends tools; that switches the gateway to the CODING pool,
+    // which is a different pool lookup and therefore worth its own assertion.
+    const res = await buildApp().request(
+      chatRequest({
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: {} } } }],
+      }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
   });
 });
 

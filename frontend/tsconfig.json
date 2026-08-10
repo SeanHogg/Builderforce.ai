@@ -24,7 +24,8 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ]
+      ],
+      "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"]
     },
     "target": "ES2017"
   },

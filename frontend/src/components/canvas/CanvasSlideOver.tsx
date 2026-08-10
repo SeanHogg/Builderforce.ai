@@ -38,8 +38,8 @@ export function CanvasSlideOver({ open, onClose, title, value, onChange, readOnl
           position: 'relative',
           width: 'min(880px, 92vw)',
           height: '100%',
-          background: 'var(--surface, #161616)',
-          borderLeft: '1px solid var(--border, #333)',
+          background: 'var(--surface)',
+          borderLeft: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '-12px 0 40px rgba(0,0,0,0.4)',
@@ -52,7 +52,7 @@ export function CanvasSlideOver({ open, onClose, title, value, onChange, readOnl
             justifyContent: 'space-between',
             gap: 12,
             padding: '12px 16px',
-            borderBottom: '1px solid var(--border, #333)',
+            borderBottom: '1px solid var(--border)',
           }}
         >
           <strong style={{ fontSize: 15 }}>{title}</strong>

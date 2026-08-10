@@ -27,6 +27,10 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
       // xterm CSS is loaded via a script tag or global stylesheet at runtime
 
       term = new XTerm({
+        // xterm renders to its OWN canvas from this plain JS object — it never
+        // reads our stylesheet, so a `var()` here resolves to nothing and the
+        // cursor disappears (which is what a token sweep had left it as). The
+        // terminal is deliberately dark in both themes, as terminals are.
         theme: {
           background: '#1a1a2e',
           foreground: '#e0e0e0',

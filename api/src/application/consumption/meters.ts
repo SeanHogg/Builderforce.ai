@@ -12,15 +12,18 @@
 
 import { eq } from 'drizzle-orm';
 import { tenants } from '../../infrastructure/database/schema';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { resolveAllFeatureEntitlements, type FeatureEntitlementSet } from '../tenant/featureEntitlements';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
-import { dailyTenantIngestionBytes } from '../ingestion/ingestionLedger';
+import { dailyTenantIngestionBytes, tenantIngestionBytesByProvider } from '../ingestion/ingestionLedger';
 import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
 import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
+import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs';
 export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs';
@@ -39,6 +42,9 @@ export interface MeterSnapshot {
   /** Month-to-date daily series (one entry per elapsed UTC day) for a sparkline.
    *  Omitted for meters that don't carry a daily trend. */
   trend?: number[];
+  /** Optional scoped totals beneath this meter (for example, ingestion bytes by
+   * integration provider; unattributed rows can remain only in the aggregate). */
+  breakdown?: Array<{ key: string; used: number }>;
 }
 
 const DAY_MS = 86_400_000;
@@ -64,6 +70,17 @@ export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
   plan: { effective: TenantPlan; billingStatus: TenantBillingStatus };
   meters: MeterSnapshot[];
+  /**
+   * Every plan feature resolved for this caller.
+   *
+   * Rides this snapshot rather than getting an endpoint of its own because the
+   * inputs are already here — effective plan, premium override, superadmin — and
+   * because the client surfaces that need it (navigation deciding which
+   * destinations to show locked) are the same ones already reading the meters.
+   * Without it a client can only see `plan.effective`, and turning that into a
+   * feature answer means a second evaluator on the client.
+   */
+  features: FeatureEntitlementSet;
 }
 
 /** Assemble one meter from a raw used/limit pair (-1 limit = unlimited). */
@@ -81,6 +98,34 @@ function makeMeter(key: MeterKey, unit: MeterUnit, used: number, limit: number, 
   };
 }
 
+/** Every meter's monthly allowance (-1 = unlimited). */
+export interface MeterLimits {
+  tokens: number;
+  ingestion: number;
+  errorEvents: number;
+  outboundFetches: number;
+  cloudRuns: number;
+}
+
+/**
+ * Resolve all five allowances from the SAME inputs the enforcement gates use.
+ * Pure, so the "what does this tenant actually get?" rule is testable without a
+ * database — and `isSuperadmin` cannot be dropped again without a test failing.
+ */
+export function resolveMeterLimits(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin: boolean;
+}): MeterLimits {
+  return {
+    tokens: resolveTokenLimits(input).monthlyLimit,
+    ingestion: resolveIngestionMonthlyBytes(input),
+    errorEvents: resolveErrorEventsMonthly(input),
+    outboundFetches: resolveOutboundFetchesMonthly(input),
+    cloudRuns: resolveCloudRunsMonthly(input),
+  };
+}
+
 /**
  * Build the full consumption snapshot for a tenant over the given calendar month.
  * One tenant read + each meter's window-sum, fanned out in parallel.
@@ -90,10 +135,16 @@ export async function buildConsumptionSnapshot(
   tenantId: number,
   monthStart: Date,
   monthEnd: Date,
+  env?: Env,
+  /** The signed-in principal, so a SUPERADMIN operating a tenant they are not a
+   *  member of sees the unlimited allowance the gate actually grants them. */
+  acting?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
 ): Promise<ConsumptionSnapshot> {
-  const [tokensDaily, ingestionDaily, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
+  const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+  const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
-    dailyTenantIngestionBytes(db, tenantId, monthStart),
+    dailyTenantIngestionBytes(ingestionDb, tenantId, monthStart),
+    tenantIngestionBytesByProvider(ingestionDb, tenantId, monthStart),
     dailyTenantErrorEvents(db, tenantId, monthStart),
     dailyTenantOutboundFetches(db, tenantId, monthStart),
     dailyTenantCloudRuns(db, tenantId, monthStart),
@@ -103,6 +154,7 @@ export async function buildConsumptionSnapshot(
         billingStatus: tenants.billingStatus,
         trialEndsAt: tenants.trialEndsAt,
         tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+        premiumOverride: tenants.premiumOverride,
       })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
@@ -118,11 +170,20 @@ export async function buildConsumptionSnapshot(
   });
   const override = tenantRow?.tokenDailyLimitOverride ?? null;
 
-  const { monthlyLimit: tokenLimit } = resolveTokenLimits({ effectivePlan, tokenDailyLimitOverride: override });
-  const ingestionLimit = resolveIngestionMonthlyBytes({ effectivePlan, tokenDailyLimitOverride: override });
-  const errorEventsLimit = resolveErrorEventsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
-  const outboundFetchesLimit = resolveOutboundFetchesMonthly({ effectivePlan, tokenDailyLimitOverride: override });
-  const cloudRunsLimit = resolveCloudRunsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
+  // A SUPERADMIN operator is never capped. Resolving limits here without that
+  // authority made this snapshot disagree with what is actually enforced: the
+  // operator was shown plain free-plan caps against real usage — "559,139,119 /
+  // 50,000 · 0 left" — while every turn sailed through the gate. The meter is the
+  // number members (and chat diagnostics) READ, so it resolves through the SAME
+  // rule the gate uses, acting principal included.
+  const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, acting, env);
+  const {
+    tokens: tokenLimit,
+    ingestion: ingestionLimit,
+    errorEvents: errorEventsLimit,
+    outboundFetches: outboundFetchesLimit,
+    cloudRuns: cloudRunsLimit,
+  } = resolveMeterLimits({ effectivePlan, tokenDailyLimitOverride: override, isSuperadmin });
 
   // Every meter comes back per-day; the month-to-date total is the day sum (one
   // grouped scan per meter does the work of the old single-total query) and the
@@ -136,10 +197,17 @@ export async function buildConsumptionSnapshot(
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
     plan: { effective: effectivePlan, billingStatus },
+    // Same three inputs the per-route gates use, fanned over the ONE pure
+    // evaluator — so a client can never disagree with what a route enforces.
+    features: resolveAllFeatureEntitlements({
+      effectivePlan,
+      premiumOverride: tenantRow?.premiumOverride ?? false,
+      isSuperadmin,
+    }),
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
       makeMeter('cloud_runs', 'runs', cloudRunsUsed, cloudRunsLimit, cloudRunsTrend),
-      makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend),
+      { ...makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend), breakdown: ingestionByProvider },
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
       makeMeter('outbound_fetches', 'fetches', outboundFetchesUsed, outboundFetchesLimit, outboundFetchesTrend),
     ],

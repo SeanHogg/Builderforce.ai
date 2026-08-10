@@ -14,6 +14,7 @@
  *                    'editorContext'{editorContext}, 'refresh'
  */
 
+import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '../../src/idePersona';
 
 export interface ToolSpecMsg {
@@ -58,6 +59,8 @@ export interface InitData {
   baseUrl: string;
   token: string | null;
   model?: string;
+  modelStrict?: boolean;
+  routingMode?: 'auto' | 'byo_pool';
   grounding?: string;
   signedIn: boolean;
   hasWorkspace: boolean;
@@ -68,7 +71,14 @@ export interface InitData {
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
    *  transport, one code path. */
-  view?: 'brain' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind';
+  view?: 'brain' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'canvas';
+  /** For `view: 'canvas'` — the durable Creation Session this panel is editing.
+   *  `webOrigin` builds shareable links: a webview's own origin is
+   *  `vscode-webview://…`, which is useless to whoever receives an invitation. */
+  session?: { id: string; title: string; webOrigin: string };
+  /** The editor's active colour theme, so the canvas picks the matching palette
+   *  (the board declares both itself; `light` is the opt-out). Re-sent on change. */
+  colorTheme?: 'light' | 'dark';
   /** The sidebar's active BuilderForce project — injected into the system prompt so
    *  the Brain scopes platform tools to it, and used to scope new chats. */
   project?: { id: number; name: string };
@@ -84,6 +94,10 @@ export interface InitData {
   tools: ToolSpecMsg[];
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
+  /** The MODEL ROWS' copy (categories, funding lines, Auto/Pool/Evermind naming),
+   *  shared verbatim with the host's `Change model` QuickPick so the two pickers
+   *  cannot word the same row differently. See `src/modelChoiceLabels.ts`. */
+  modelLabels?: ModelChoiceLabels;
   /**
    * The signed-in user's PERSONALITY-only directive block (from the gateway's
    * `/api/limbic/block`), so the chat's tone reflects the user. Injected into the
@@ -91,6 +105,9 @@ export interface InitData {
    * when the user has no profile — a no-op. Fetched once per session by the host.
    */
   personalityBlock?: string;
+  /** The installed extension's version, so a copied diagnostics report pins the exact
+   *  client build it came from (a stale VSIX is a routine cause of "already fixed" bugs). */
+  extensionVersion?: string;
 }
 
 interface VsCodeApi {

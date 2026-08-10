@@ -8,14 +8,14 @@ import type { CSSProperties, MouseEvent } from 'react';
  * means the chip represents a *configured* agent (no live run), shown neutral.
  */
 export const EXECUTION_STATUS_COLOR: Record<string, string> = {
-  completed: 'var(--success, #16a34a)',
-  failed: 'var(--danger, #dc2626)',
+  completed: 'var(--success)',
+  failed: 'var(--danger)',
   cancelled: 'var(--text-muted)',
   running: 'var(--coral-bright)',
   submitted: 'var(--coral-bright)',
   pending: 'var(--text-muted)',
   // Agent called ask_human and is waiting on a person — amber "needs attention".
-  paused: 'var(--warning, #d97706)',
+  paused: 'var(--warning)',
 };
 
 /** Statuses that mean an agent is currently working the task. */
@@ -64,7 +64,7 @@ export function AgentChip({ label, status, meta, title, onClick }: AgentChipProp
     gap: 5,
     maxWidth: '100%',
     padding: '2px 8px',
-    borderRadius: 999,
+    borderRadius: 'var(--radius-full)',
     fontSize: 10,
     fontWeight: 600,
     border: `1px solid ${active ? color : 'var(--border-subtle)'}`,

@@ -46,7 +46,7 @@ export function BacklogRail({
         flexDirection: 'column',
         gap: 8,
         padding: 12,
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         background: over ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
         border: `1px ${over ? 'dashed var(--coral-bright)' : 'solid var(--border-subtle)'}`,
         maxHeight: isMobile ? 260 : '100%',

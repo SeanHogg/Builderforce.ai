@@ -11,6 +11,21 @@ export interface BrainChat {
   projectId: number | null;
   /** Where the chat was created (e.g. 'brainstorm' | 'ide' | 'project'). */
   origin?: string;
+  /**
+   * What this chat is MAKING — a capability id from the host's registry
+   * ('document' | 'slides' | 'dataviz' | 'spreadsheet' | 'website' | 'design' |
+   * 'mobile' | 'animation' | 'game3d'). Shapes the system prompt and the export
+   * format. `null`/absent = no capability. Opaque here: the package stores and
+   * forwards it, the host owns the catalogue.
+   */
+  capability?: string | null;
+  /**
+   * What this chat is FOR — `'chat'` (a conversation: read, reason, answer) or
+   * `'work'` (an execution: create, staff and link the ticket, then dispatch an agent
+   * to run it). Migration 0409. Absent on a host/server that predates the column;
+   * {@link normalizeChatMode} resolves that to the default.
+   */
+  mode?: string | null;
   createdAt: string;
   updatedAt: string;
 }

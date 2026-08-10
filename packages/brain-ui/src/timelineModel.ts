@@ -9,7 +9,7 @@
  * verbatim across surfaces.
  */
 
-import { isStepMessage, type BrainMessage, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget } from '@seanhogg/builderforce-brain-embedded';
+import { isStepMessage, parseStepMessage, stepSig, type BrainMessage, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget, type PersistedStep } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TimelineImage {
   url: string;
@@ -106,27 +106,9 @@ export function buildTimeline(input: BuildTimelineInput): TimelineNode[] {
   return nodes;
 }
 
-/** A tool/memory step in the shape shared by a live `trace` event and a persisted
- *  `role:'tool'` step message — so ONE builder ({@link stepNode}) covers both. */
-interface StepLike {
-  category: string;
-  label: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  durationMs?: number;
-}
-
-/** Identity of a step across the live trace and its durable persisted copy: same
- *  category + label + client timestamp. Lets a step that exists in BOTH render once
- *  (dedup), while a prior run's step — present only in the messages — still shows. */
-function stepSig(category: string, label: string, tsIso: string | undefined): string {
-  return `${category}|${label}|${tsIso ?? ''}`;
-}
-
 /** Build the timeline node for a tool/memory step (shared by the trace and the
  *  persisted-message paths). Returns null for a category that isn't a step node. */
-function stepNode(step: StepLike, ts: number, key: string): TimelineNode | null {
+function stepNode(step: PersistedStep, ts: number, key: string): TimelineNode | null {
   switch (step.category) {
     case 'tool':
       return { key, kind: 'tool', ts, order: ORDER.tool, label: step.label, args: step.args, result: step.result, isError: !!step.isError, durationMs: step.durationMs };
@@ -148,22 +130,6 @@ function stepNode(step: StepLike, ts: number, key: string): TimelineNode | null 
     }
     default:
       return null;
-  }
-}
-
-/** Parse a persisted `role:'tool'` step message's metadata (`{ kind:'step', … }`)
- *  into a {@link StepLike} + its client timestamp, or null when it isn't a step. */
-function parseStepMessage(metadata: string | null): { step: StepLike; tsIso?: string } | null {
-  if (!metadata) return null;
-  try {
-    const m = JSON.parse(metadata) as { kind?: string; category?: string; label?: string; args?: unknown; result?: unknown; isError?: boolean; durationMs?: number; ts?: string };
-    if (m.kind !== 'step' || typeof m.category !== 'string') return null;
-    return {
-      step: { category: m.category, label: typeof m.label === 'string' ? m.label : m.category, args: m.args, result: m.result, isError: m.isError, durationMs: m.durationMs },
-      tsIso: typeof m.ts === 'string' ? m.ts : undefined,
-    };
-  } catch {
-    return null;
   }
 }
 

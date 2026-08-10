@@ -48,7 +48,7 @@ export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props
         padding: 12,
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         marginBottom: 12,
       }}
     >

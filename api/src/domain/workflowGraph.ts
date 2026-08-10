@@ -21,13 +21,15 @@ export type WorkflowNodeKind =
   | 'agent'      // run a configured agent (role + runtime + model)
   | 'llm'        // call an LLM platform (OpenAI/Anthropic/Gemini/…) via the gateway
   | 'mcp'        // invoke an MCP-server / SaaS integration tool
+  | 'connector'  // call one action on a connected integration (Twilio, Stripe, Slack…)
   | 'memory'     // read/write the SSM hippocampus memory
   | 'knowledge'  // ingest into / query a knowledge base
   | 'train'      // train an Evermind model (builderforce-memory engine) → hippocampus model
   | 'transform'  // ETL: map/shape the payload
   | 'filter'     // ETL: drop the payload unless a predicate holds
   | 'branch'     // ETL: conditional fan-out
-  | 'output';    // terminal: write artifact / notify / push to board
+  | 'output'     // terminal: write artifact / notify / push to board
+  | 'gmail';     // integration: send an email via the tenant's connected Gmail
 
 /** Reserved orchestrator roles for non-agent (in-process) node handlers.
  *  Agent nodes use their configured role instead. Kept here so the builder, the
@@ -36,6 +38,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   trigger:   'node:trigger',
   llm:       'node:llm',
   mcp:       'node:mcp',
+  connector: 'node:connector',
   memory:    'node:memory',
   knowledge: 'node:knowledge',
   train:     'node:train',
@@ -43,6 +46,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   filter:    'node:filter',
   branch:    'node:branch',
   output:    'node:output',
+  gmail:     'node:gmail',
 };
 
 export interface WorkflowDefNode {
@@ -167,6 +171,10 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return `LLM ${String(c.provider ?? 'openai')}${c.model ? `/${String(c.model)}` : ''}: ${String(c.prompt ?? node.label)}`;
     case 'mcp':
       return `${String(c.integration ?? node.label)} → ${String(c.operation ?? 'call')}`;
+    case 'connector':
+      // `action` is the authoring name, `actionKey` the runtime name — a node
+      // written against either runs, so the task text has to read either.
+      return `${String(c.connector ?? node.label)} → ${String(c.action ?? c.actionKey ?? 'call')}`;
     case 'memory':
       return `Memory ${String(c.op ?? 'recall')}: ${String(c.query ?? c.key ?? node.label)}`;
     case 'knowledge':

@@ -1,0 +1,144 @@
+/* The footer roster (PRD 21 §3.3) — the always-on seats beside the humans you
+   invited, in ONE chip shape, because to a session they are the same kind of
+   participant. Every value is a token: the bar is chrome in both themes. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle);
+  min-height: var(--control-lg);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* The chips scroll sideways rather than pushing the bar taller — the mobile
+   posture §8 promises ("the roster scrolls horizontally"). */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: grab;
+  white-space: nowrap;
+  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: var(--surface-interactive);
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Disable, never hide (§2.6 rule 7): a seat nothing is provisioned behind stays
+   on the bar, dimmed and inert, with its title explaining what would light it. */
+.chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  color: var(--text-muted);
+}
+
+.chip[data-dragging='true'] {
+  cursor: grabbing;
+  border-color: var(--border-accent);
+}
+
+.avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.initials {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  background: var(--surface-coral-soft);
+  color: var(--coral-bright);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* A human reads as a person, an agent as a machine — one chip shape, two tints,
+   so `kind` is legible without a second component. */
+.chip[data-kind='human'] .initials {
+  background: var(--surface-cyan-soft);
+  color: var(--cyan-bright);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  background: var(--success);
+}
+
+.dot[data-availability='busy'] { background: var(--warning); }
+.dot[data-availability='unprovisioned'] { background: var(--text-muted); }
+
+.invite {
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip { transition: none; }
+}
+
+/* Below the shell's narrow breakpoint the two groups stack, so neither the seats
+   nor the invited team is pushed off the edge at 360px. */
+@media (max-width: 640px) {
+  .bar {
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .group { width: 100%; }
+}

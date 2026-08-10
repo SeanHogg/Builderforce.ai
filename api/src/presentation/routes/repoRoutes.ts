@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Repo routes – /api/repos
  *
@@ -13,13 +14,15 @@
  * POST   /api/repos/pull-requests/:id/result           AgentHost callback: record PR number/url/status
  * POST   /api/repos/pull-requests/:id/merge            Approve & merge a recorded PR (in-product)
  * GET    /api/repos/projects/:projectId/pull-requests  List a project's pull requests
+ * GET    /api/repos/projects/:projectId/github-actions Agent-workflow presence per repo (surface readiness)
  *
  * Every query is tenant-scoped. The AGENT_HOST_RELAY dispatch mirrors runtimeRoutes.ts:
  *   env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId))).fetch(...)
  */
 import { Hono } from 'hono';
 import { and, eq, desc, sql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import {
   projectRepositories,
   pullRequests,
@@ -27,7 +30,7 @@ import {
 } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
@@ -37,13 +40,35 @@ import { githubStatusMessage } from '../../application/integrations/githubTestEr
 import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
 import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
+import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
+import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
+import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
 function reposCacheKey(tenantId: number, projectId: number): string {
   return `project-repos:${tenantId}:${projectId}`;
+}
+
+/**
+ * Bust everything keyed off a project's repo set: the repo list the picker and
+ * the Integrations tab read, plus the composed connection-status strip on the
+ * projects widget (and, when a specific repo changed, its live provider probe).
+ * One helper so a new repo write can never invalidate half the surfaces.
+ */
+async function invalidateRepoCaches(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  repoId?: string,
+): Promise<void> {
+  await Promise.all([
+    invalidateCached(env, reposCacheKey(tenantId, projectId)),
+    invalidateProjectConnections(env, tenantId, repoId),
+  ]);
 }
 
 type RepoHonoEnv = HonoEnv & {
@@ -208,7 +233,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       return c.json({ error: 'This repository is already added to the project' }, 409);
     }
 
-    await invalidateCached(c.env as Env, reposCacheKey(tenantId, projectId));
+    await invalidateRepoCaches(c.env as Env, tenantId, projectId, row.id);
     return c.json(row, 201);
   });
 
@@ -270,7 +295,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Repository not found' }, 404);
-    await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
+    await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, row.id);
     return c.json(row);
   });
 
@@ -305,7 +330,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .select()
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
-    await invalidateCached(c.env as Env, reposCacheKey(tenantId, target.projectId));
+    await invalidateRepoCaches(c.env as Env, tenantId, target.projectId, id);
     return c.json(row);
   });
 
@@ -335,6 +360,10 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       resolved.repo.repo,
       resolved.token,
     );
+    // An operator re-tests a repo precisely when they have just fixed (or broken)
+    // its access, so drop the cached probe: the projects widget's status strip
+    // re-reads the live verdict rather than showing the pre-fix one for a minute.
+    await invalidateProjectConnections(c.env as Env, tenantId, id);
     return c.json(result);
   });
 
@@ -356,7 +385,8 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // data-ingestion allowance (consumption meter). Graceful backpressure: repos
     // already imported stay fully usable; only fresh pulls stop until the month
     // resets or they upgrade. 402 carries the plan-limit body the client renders.
-    const gate = await enforceIngestionCap(db, tenantId);
+    const ingestionDb = buildTransactionalDatabase(c.env as Env);
+    const gate = await enforceIngestionCap(db, tenantId, ingestionDb, c.env as Env);
     if (!gate.allowed) {
       return c.json({
         error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
@@ -379,7 +409,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
 
     // Meter the bytes actually pulled (post-cap), attributed to the repo's project.
     const bytesIngested = result.files.reduce((sum, f) => sum + f.content.length, 0);
-    c.executionCtx.waitUntil(recordIngestion(db, {
+    c.executionCtx.waitUntil(recordIngestion(ingestionDb, {
       tenantId,
       projectId: resolved.repo.projectId ?? null,
       source: 'repo_import',
@@ -404,7 +434,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     await db
       .delete(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
-    if (row) await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
+    if (row) await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, id);
     return c.body(null, 204);
   });
 
@@ -517,7 +547,14 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   // POST /api/repos/pull-requests/:id/merge — Approve & merge a recorded PR from
   // the product. Server-side with the tenant's decrypted token; records who
   // approved (audit) and busts the cached detail.
-  router.post('/pull-requests/:id/merge', async (c) => {
+  //
+  // DEVELOPER+ — this writes to the tenant's real repository and closes the PR, so it
+  // sits at the same tier as every other route that spends or ships. It previously
+  // carried NO role gate at all (only `authMiddleware`), which meant any authenticated
+  // tenant member — including a VIEWER — could merge any PR in the tenant, while merely
+  // *running* the AI Manager required MANAGER. The UI-only affordance was the sole
+  // barrier, and an API caller walked straight past it.
+  router.post('/pull-requests/:id/merge', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
@@ -549,8 +586,119 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
         summary: `Merged ${pr?.number != null ? `PR #${pr.number}` : 'a pull request'}`,
         metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
       });
-    })().catch(() => {}));
+    })().catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/repoRoutes.ts", operation: "createRepoRoutes" });
+    }));
     return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
+  });
+
+  /**
+   * GET /api/repos/projects/:projectId/github-actions
+   *
+   * Is the GitHub Actions execution surface actually usable for this project?
+   *
+   * This exists because picking the surface used to be a guess: an agent could be
+   * set to `github_actions` for a project whose repo has no agent workflow, and
+   * the only feedback was a silent downgrade to the durable executor, explained in
+   * the run timeline AFTER the fact. Both the repo settings panel (per-repo
+   * "Enable / Enabled" state) and the agent surface picker (gate + warning) read
+   * this ONE endpoint, so the two can never disagree about what "enabled" means.
+   *
+   * `ready` mirrors dispatch's own question — dispatch resolves the task's default
+   * repo, so a project whose DEFAULT repo lacks the workflow is not ready even if
+   * some other linked repo has it.
+   *
+   * Cached: each repo's answer is the read-through-cached
+   * {@link githubActionsAvailable} (L1 Map + L2 KV, invalidated by
+   * `ensureAgentWorkflow` on write), so the picker can poll this freely without
+   * spending a GitHub subrequest per keystroke, and enabling the surface shows up
+   * immediately rather than after a TTL.
+   */
+  router.get('/projects/:projectId/github-actions', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
+
+    const rows = await db
+      .select({
+        id: projectRepositories.id,
+        provider: projectRepositories.provider,
+        owner: projectRepositories.owner,
+        repo: projectRepositories.repo,
+        isDefault: projectRepositories.isDefault,
+      })
+      .from(projectRepositories)
+      .where(and(eq(projectRepositories.projectId, projectId), eq(projectRepositories.tenantId, tenantId)));
+
+    const repositories = await Promise.all(rows.map(async (r) => ({
+      repoId: r.id,
+      // Only GitHub has Actions; a GitLab/Bitbucket repo is reported as
+      // unsupported rather than "not enabled", because there is nothing to enable.
+      supported: r.provider === 'github',
+      enabled: r.provider === 'github'
+        ? await githubActionsAvailable(c.env as Env, db, tenantId, r.id)
+        : false,
+      isDefault: r.isDefault,
+    })));
+
+    // No repo at all ⇒ not ready: dispatch has nothing to queue the workflow on.
+    const primary = repositories.find((r) => r.isDefault) ?? repositories[0];
+    return c.json({
+      ready: !!primary?.enabled,
+      workflowPath: AGENT_WORKFLOW_PATH,
+      repositories,
+    });
+  });
+
+  /**
+   * POST /api/repos/repositories/:id/github-actions/enable
+   *
+   * Commit the Builderforce agent workflow into this repo's default branch,
+   * which is what makes the `github_actions` execution surface selectable for
+   * agents working in this project. Without the workflow present, dispatch
+   * degrades to the durable executor and says so in the run timeline.
+   *
+   * The likely failure here is permissions, and it is worth stating plainly in
+   * the response: writing under `.github/workflows/` needs the `workflow` scope
+   * on a PAT (or `workflows: write` on the GitHub App installation), which is
+   * separate from ordinary contents write — a credential that pushes code fine
+   * will still be refused.
+   */
+  router.post('/repositories/:id/github-actions/enable', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+
+    const result = await ensureAgentWorkflow(c.env as Env, db, tenantId, id);
+    if (!result.ok) {
+      return c.json({ error: result.reason, code: result.code }, result.code === 'unsupported' ? 400 : 502);
+    }
+    return c.json({ ok: true, created: result.created, path: AGENT_WORKFLOW_PATH });
+  });
+
+  /**
+   * POST /api/repos/repositories/:id/security/backfill-alerts
+   *
+   * Pull every OPEN GitHub code-scanning and Dependabot alert for this repo and
+   * file them as security findings.
+   *
+   * The webhook path already ingests alerts as they are raised, so this exists
+   * for the two cases the webhook cannot cover: a repo connected AFTER alerts
+   * had already accumulated, and a repo where the webhook was never installed or
+   * silently stopped delivering — the same gap that makes pollPrCiStatus
+   * necessary for CI status.
+   *
+   * Idempotent: ingestion dedupes against open findings, so re-running it is
+   * safe and mints nothing the second time.
+   */
+  router.post('/repositories/:id/security/backfill-alerts', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+
+    const result = await ingestOpenAlertsForRepo(c.env as Env, db, tenantId, id);
+    if (!result.ok) {
+      return c.json({ error: result.reason, code: result.code }, result.code === 'forbidden' ? 403 : 502);
+    }
+    return c.json(result);
   });
 
   return router;

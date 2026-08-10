@@ -5,6 +5,7 @@
  * the request) and ingests through it; a project collector lands events straight
  * in its project, a tenant-level collector routes each event via its mapping rules:
  *   POST /events                       native canonical batch — Bearer bfq_… (or ?key=)
+ *   POST /product-report               BuilderForce.ai's own UI errors (anonymous)
  *   POST /otlp/v1/{logs,traces}        OTLP/HTTP (protobuf or JSON) — same key
  *   POST /webhooks/:collectorId/:provider  provider webhook — HMAC-verified per integration
  *
@@ -12,8 +13,8 @@
  */
 
 import { Hono } from 'hono';
-import { and, asc, eq } from 'drizzle-orm';
-import { errorCollectors, errorCollectorIntegrations, errorMappingRules } from '../../infrastructure/database/schema';
+import { and, asc, eq, sql } from 'drizzle-orm';
+import { errorCollectors, errorCollectorIntegrations, errorMappingRules, projects } from '../../infrastructure/database/schema';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { getErrorAdapter } from '../../application/quality/adapters';
@@ -48,6 +49,8 @@ async function resolveCollectorByKey(db: Db, key: string): Promise<CollectorRef 
 /** Mapping rules (priority asc) — only a tenant-level collector needs them. */
 async function loadRulesIfTenant(db: Db, collector: CollectorRef): Promise<MappingRule[]> {
   if (collector.projectId != null) return [];
+  // A collector-less source (id: null) has no collector to load mapping rules for.
+  if (collector.id == null) return [];
   return db
     .select({
       matchField: errorMappingRules.matchField, matchOp: errorMappingRules.matchOp,
@@ -67,6 +70,65 @@ async function ingestForCollector(db: Db, env: Env, collector: CollectorRef, eve
 
 export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  /**
+   * BuilderForce.ai's product reporter. Its destination is a product invariant,
+   * resolved here instead of accepted from the browser. This keeps the endpoint
+   * usable before sign-in and prevents reports from being routed to customer
+   * projects. An exact-name lookup is deliberate: fail closed if the canonical
+   * project is missing or duplicated rather than guessing a destination.
+   */
+  router.post('/product-report', async (c) => {
+    const declaredLength = Number(c.req.header('content-length') ?? 0);
+    if (declaredLength > 32_768) return c.json({ error: 'Report is too large' }, 413);
+
+    const rawBody = await c.req.text();
+    if (rawBody.length > 32_768) return c.json({ error: 'Report is too large' }, 413);
+    let body: Record<string, unknown>;
+    try { body = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 10_000) : '';
+    if (!message) return c.json({ error: 'message is required' }, 400);
+    const title = typeof body.title === 'string' ? body.title.trim().slice(0, 300) : '';
+    const source = body.source === 'api-client' ? 'api-client' : 'manual';
+    const level: NormalizedErrorEvent['level'] =
+      body.level === 'fatal' || body.level === 'warning' || body.level === 'info' ? body.level : 'error';
+
+    const matches = await db
+      .select({ id: projects.id, tenantId: projects.tenantId })
+      .from(projects)
+      .where(sql`lower(${projects.name}) = 'builderforce.ai'`)
+      .limit(2);
+    if (matches.length !== 1) return c.json({ error: 'Product error project is unavailable' }, 503);
+    const project = matches[0]!;
+
+    const event: NormalizedErrorEvent = {
+      type: source === 'manual' ? 'UserReportedError' : 'ApiError',
+      message: title ? `${title} — ${message}` : message,
+      level,
+      timestamp: new Date().toISOString(),
+      environment: source === 'manual' ? 'user-report' : 'product-ui',
+      source: 'native',
+      ...(typeof body.url === 'string' ? { url: body.url.slice(0, 2_048) } : {}),
+      tags: { reporter: source },
+      context: {
+        manual: source === 'manual',
+        ...(body.context && typeof body.context === 'object' && !Array.isArray(body.context)
+          ? body.context as Record<string, unknown>
+          : {}),
+      },
+    };
+    const collector: CollectorRef = {
+      id: null,
+      tenantId: project.tenantId,
+      projectId: project.id,
+      defaultProjectId: null,
+    };
+    const result = await ingestErrorEvents(db, c.env as Env, collector, [event]);
+    if (result.capExceeded) return c.json({ error: 'Monthly error event limit reached', ...result }, 429);
+    if (result.accepted !== 1) return c.json({ error: 'Could not record the report', ...result }, 422);
+    return c.json({ ok: true, ...result }, 202);
+  });
 
   /** Keyed native ingest (browser SDK + server/compiled code). */
   router.post('/events', async (c) => {

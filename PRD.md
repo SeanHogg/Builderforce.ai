@@ -1,28 +1,25 @@
-> **PRD** — drafted by John Coder ((V2) (Durable)) · task #616
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: MCP Tool — PR/Branch Diff Summary by Change Category
+# PRD: Guided (Interactive) and Bulk (Import) Input Modes
 
 ## Problem & Goal
 
-### Problem
+Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
 
-Agents operating on the MCP platform cannot programmatically distinguish a PR that delivers working implementation code from one that contains only documentation, configuration, or other non-code artifacts. When an agent evaluates task completion, it must manually enumerate and read individual files from the diff — a fragile, expensive, and unreliable heuristic. This gap caused task #615 to be marked 100% complete based on a doc-only PR.
-
-### Goal
-
-Expose a first-class MCP tool — `repos.pull_request_diff_summary` — that accepts a task identifier (or PR/branch reference) and returns a structured, categorized summary of every changed file, with line-count metrics and derived boolean signals. Agents and the board UI can consume this signal to gate completion status, enforce review policies, and surface accurate delivery visibility without hand-inspection.
+**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Consumer | Usage |
-|---|---|
-| **Autonomous agents** (primary) | Gate task completion; detect doc-only vs. code PRs automatically |
-| **Orchestrator / board logic** | Flag tasks where `docsOnly === true` despite a "Done" status |
-| **Human reviewers / tech leads** | Quick diff triage during code review without opening GitHub |
-| **CI/policy enforcement hooks** | Assert that a feature task includes at least one `source-code` file change before merge |
+| Role | Primary Mode | Context |
+|---|---|---|
+| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
+| Power User | Both | Switches between modes depending on task size |
+| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
+| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
+| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
 
 ---
 
@@ -30,152 +27,99 @@ Expose a first-class MCP tool — `repos.pull_request_diff_summary` — that acc
 
 ### In Scope
 
-- New MCP tool: `repos.pull_request_diff_summary`
-- Resolution of a `taskId` → PR/branch automatically (agents need not know the PR number)
-- Per-file classification into a fixed category taxonomy
-- Per-category aggregated line-count metrics (additions, deletions, net)
-- Top-level derived boolean signals (`codeChanged`, `docsOnly`, `testsChanged`, `configOnly`)
-- Support for both open and merged PRs; fall back to branch-vs-default-base diff when no PR exists
-- MCP tool-surface documentation so agents discover the tool via capability introspection
+- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
+- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
+- Unified data schema enforced across both modes
+- Pre-import preview and dry-run capability in Bulk Mode
+- Post-submission confirmation and summary for both modes
+- Error handling and recovery paths in both modes
+- Mode-selection entry point accessible from the primary action surface
 
 ### Out of Scope
 
-- Semantic analysis of file content (classification is path/extension-based only; see classification rules below)
-- Inline diff rendering or patch content
-- Comment or review thread summarization
-- Triggering any side-effects (read-only tool)
-- Changes to existing `executions.task_file_changes` schema (additive, not mutating)
-- UI surface changes beyond surfacing the signal that already exists in task cards (owned by #615)
+- Real-time streaming ingestion or webhook-based input
+- API-only bulk endpoints (covered separately in API PRD)
+- Automated scheduling or recurring imports
+- Machine-learning-assisted field suggestions beyond basic format validation
+- Editing or deleting records post-submission (covered by record management PRD)
 
 ---
 
 ## Functional Requirements
 
-### FR-1 Tool Identity & Invocation
+### FR-1 — Mode Selection
 
-| ID | Requirement |
-|---|---|
-| FR-1.1 | The tool MUST be registered under the namespace `repos` with the name `pull_request_diff_summary`. |
-| FR-1.2 | The tool MUST accept the following mutually-exclusive primary inputs (resolved in priority order): `taskId` (string), `prNumber` + `projectId` (integers), `branchName` + `projectId` (strings). |
-| FR-1.3 | When `taskId` is supplied, the tool MUST resolve the associated PR or branch automatically using the existing task→VCS linkage; it MUST NOT require the caller to supply `prNumber` or `projectId`. |
-| FR-1.4 | The tool MUST be listed in the MCP capability manifest with a human-readable description and parameter schema so agents discover it via `mcp.list_tools()` or equivalent introspection. |
+- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
+- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
+- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
 
-### FR-2 File Classification
+---
 
-| ID | Requirement |
-|---|---|
-| FR-2.1 | Every changed file MUST be assigned exactly one category from the following closed taxonomy: `source-code`, `test`, `docs`, `config`, `migration`, `asset`. |
-| FR-2.2 | Classification MUST be path/extension-based and follow the default rules in the table below. |
-| FR-2.3 | Classification rules MUST be overridable per-repository via an optional `.mcp-diff-categories.yml` config file at the repo root (same pattern as `.gitattributes`). |
-| FR-2.4 | When a file matches multiple rules, the most specific rule (longest path glob match) wins; ties resolve by taxonomy order as listed in FR-2.1 (test > source-code, etc.). |
+### FR-2 — Guided (Interactive) Mode
 
-**Default Classification Rules**
+- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
+- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
+- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
+- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
+- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
+- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
+- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
 
-| Category | Path / Extension Patterns |
-|---|---|
-| `test` | `**/*.test.*`, `**/*.spec.*`, `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/_test.*` |
-| `docs` | `**/*.md`, `**/*.mdx`, `**/*.rst`, `**/*.txt`, `**/docs/**`, `**/documentation/**`, `LICENSE*`, `CHANGELOG*` |
-| `migration` | `**/migrations/**`, `**/migrate/**`, `**/*.migration.*`, `**/*.sql` |
-| `config` | `**/*.json`, `**/*.yaml`, `**/*.yml`, `**/*.toml`, `**/*.ini`, `**/*.env*`, `**/.*rc`, `**/Makefile`, `**/Dockerfile*`, `**/*.config.*` |
-| `asset` | `**/*.png`, `**/*.jpg`, `**/*.svg`, `**/*.gif`, `**/*.ico`, `**/*.woff*`, `**/*.ttf` |
-| `source-code` | Everything else not matched above |
+---
 
-### FR-3 Response Payload
+### FR-3 — Bulk (Import) Mode
 
-The tool MUST return a JSON object conforming to the following structure:
+- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
+- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
+- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
+- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
+- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
+- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
+- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
+- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
+- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
+- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
 
-```jsonc
-{
-  // Resolution metadata
-  "taskId": "string | null",
-  "prNumber": "integer | null",
-  "projectId": "integer",
-  "branchName": "string",
-  "baseBranch": "string",
-  "prState": "open | merged | closed | branch-only",
+---
 
-  // Derived boolean signals — top-level for fast agent consumption
-  "codeChanged": "boolean",       // true if any source-code file has additions > 0
-  "testsChanged": "boolean",      // true if any test file changed
-  "docsOnly": "boolean",          // true iff codeChanged === false && at least one docs file changed
-  "configOnly": "boolean",        // true iff only config/asset files changed, no source-code or tests
+### FR-4 — Shared / Cross-Mode Requirements
 
-  // Per-category rollup
-  "summary": {
-    "<category>": {
-      "fileCount": "integer",
-      "additions": "integer",
-      "deletions": "integer",
-      "net": "integer"            // additions - deletions
-    }
-    // one entry per category that has at least one file; absent categories omitted
-  },
-
-  // Totals across all categories
-  "totals": {
-    "fileCount": "integer",
-    "additions": "integer",
-    "deletions": "integer",
-    "net": "integer"
-  },
-
-  // Per-file detail
-  "files": [
-    {
-      "path": "string",
-      "category": "source-code | test | docs | config | migration | asset",
-      "status": "added | modified | deleted | renamed | copied",
-      "additions": "integer",
-      "deletions": "integer",
-      "previousPath": "string | null"   // populated for renamed/copied files only
-    }
-  ]
-}
-```
-
-### FR-4 Error Handling
-
-| ID | Requirement |
-|---|---|
-| FR-4.1 | If `taskId` cannot be resolved to a PR or branch, the tool MUST return a structured error with code `TASK_NOT_LINKED` and a human-readable message. |
-| FR-4.2 | If the PR/branch does not exist or the agent lacks read permission, return error code `NOT_FOUND` or `FORBIDDEN` respectively. |
-| FR-4.3 | Binary files (images, compiled artifacts) with indeterminate line counts MUST be included in `files[]` with `additions: 0, deletions: 0` and classified normally. |
-| FR-4.4 | The tool MUST NOT throw unhandled exceptions; all error states MUST return the MCP standard error envelope. |
-
-### FR-5 Performance
-
-| ID | Requirement |
-|---|---|
-| FR-5.1 | Response MUST be returned within 5 seconds (p95) for PRs with fewer than 500 changed files. |
-| FR-5.2 | For PRs exceeding 500 files, the tool MAY truncate `files[]` at 500 entries (sorted by additions desc) and MUST set a top-level `"truncated": true` flag with `"totalFileCount"` reflecting the true count. |
-| FR-5.3 | Results MUST be cached per `(prNumber, headSha)` tuple with a TTL of 60 seconds to avoid redundant VCS API calls when multiple agents query the same PR. |
+- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
+- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
+- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
+- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
+- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criterion | Verified By |
+| ID | Criterion | Verification Method |
 |---|---|---|
-| AC-1 | Calling `repos.pull_request_diff_summary({ taskId: "<id>" })` returns a valid response without requiring `prNumber` or `projectId` from the caller. | Integration test with a linked task |
-| AC-2 | Response includes `summary` keyed by category, with correct `fileCount`, `additions`, `deletions`, `net` for each category present in the diff. | Unit test against a fixture diff with known file types |
-| AC-3 | `docsOnly` is `true` when every changed file is classified as `docs` or `asset`, and `false` when any `source-code` file is present. | Unit test with doc-only and mixed fixture diffs |
-| AC-4 | `codeChanged` is `true` when at least one `source-code` file has `additions > 0`. Deletions alone do not set `codeChanged`. | Unit test with delete-only source-code diff |
-| AC-5 | The tool appears in `mcp.list_tools()` output with a description, parameter schema, and example call. | Snapshot test of capability manifest |
-| AC-6 | Supplying an unlinked `taskId` returns error code `TASK_NOT_LINKED` with HTTP-equivalent status 422. | Integration test with an unlinked task fixture |
-| AC-7 | A renamed file appears once in `files[]` with `status: "renamed"` and `previousPath` populated, classified by its new path. | Unit test with a rename fixture |
-| AC-8 | A PR with 600 changed files returns `truncated: true`, `totalFileCount: 600`, and exactly 500 entries in `files[]`. | Unit test with a generated 600-file fixture |
-| AC-9 | Response time is under 5 seconds (p95) for a 499-file PR against the staging VCS backend. | Load test in CI |
-| AC-10 | A repository with a `.mcp-diff-categories.yml` override correctly reclassifies files per the custom rules. | Integration test with an override fixture repo |
+| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
+| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
+| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
+| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
+| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
+| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
+| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
+| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
+| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
+| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
+| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
+| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
+| AC-13 | Switching modes before submission retains mappable field data | E2E test |
+| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
 
 ---
 
 ## Out of Scope
 
-- **Patch / hunk content**: The tool returns metadata only; no raw diff text or inline code is returned.
-- **Semantic classification**: File purpose is not inferred from AST, imports, or content — only from path and extension.
-- **Mutations**: The tool is strictly read-only; it triggers no labels, comments, or status checks.
-- **`executions.task_file_changes` schema changes**: That endpoint is not modified; this is a net-new tool.
-- **UI rendering**: Board/card display of the signal is owned by task #615, not this PRD.
-- **Non-Git VCS**: Only Git-backed repositories are in scope for this iteration.
-- **Diff between arbitrary commits**: The tool only resolves via PR or branch-vs-base; freeform SHA-to-SHA diffing is a future extension.
-- **Notification or webhook delivery**: Signal is pull-only; no push/event integration in this iteration.
+- API-only or SDK-driven bulk ingestion endpoints
+- Webhook or event-stream based real-time input
+- Scheduled or recurring automated imports
+- Post-submission record editing (handled by record management module)
+- AI/ML-assisted auto-mapping or data enrichment
+- Mobile viewports below 768 px width
+- Multi-file batch uploads in a single import session
+- Localization / i18n beyond English in the initial release
