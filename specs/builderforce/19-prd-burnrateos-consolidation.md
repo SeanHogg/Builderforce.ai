@@ -72,16 +72,16 @@ or behavior was moved onto them.
 
 | Track | Destination evidence in Builderforce | Actual status and unported behavior |
 |---|---|---|
-| **B0 · Foundation** | Source map is complete; 0418–0433 create the consolidated targets; generic entity API and shared seat UI exist; password hashes use the same PBKDF2/SHA-256, 100k-iteration, `salt:hash` format in both products. | **Partial / cutover blocker.** No source-row ETL or reconciliation. The company invariant in §3.2 is not implemented as written: `companies.tenant_id` is mandatory, there is no `account_company_relationships` or project↔company junction, and the map flattens that source table to generic `relation`; generic relations cannot point from a tenant to a company because both ends require `objects` rows. No port of BurnRateOS account locks, login-attempt history, bot-block events, refresh sessions, or MFA-secret transformation. Existing sessions cannot survive the domain/JWT change. |
+| **B0 · Foundation** | Source map is complete; 0418–0433 create the consolidated targets; generic entity API and shared seat UI exist; password hashes use the same PBKDF2/SHA-256, 100k-iteration, `salt:hash` format in both products. The tenant/company planner now maps explicit account→tenant assignments onto existing `segments`, tenant `companies`, registered `objects` and `relations`, with strict ambiguity rejection and no DDL. | **Partial / production cutover blocker.** The mapping contract is implemented and tested, but no production account map, source-row ETL or reconciliation report has been run. No port of BurnRateOS account locks, login-attempt history, bot-block events, refresh sessions, or MFA-secret transformation. Existing sessions cannot survive the domain/JWT change. |
 | **B1 · CFO / BI** | Migration 0424 creates 20 finance targets; kernel ledger/settings/metrics can absorb balances and series. The legacy burn/runway seam now reads local tenant-scoped `metric_facts`; no Builderforce runtime calls BurnRateOS. | **Partial / production-data blocker: 0/20 finance target tables feature-reached.** The local seam closes the network dependency, not finance parity. Break-even, forecast assumptions/sensitivity/Monte Carlo, ARR projections, cohort retention, CAC/LTV/payback, expense classification, company P&L, Plaid sync, TCO, custom KPI formulas, scenario calculations and sprint financial impact still require production-use classification and, where retained, existing-owner behavior plus transformed rows. Builderforce FinOps is cloud/AI spend, not a replacement for company finance. |
 | **B2 · CEO / Investor** | Migration 0422 creates 12 investor/portfolio targets; kernel artifacts/revisions/shares can represent deck content and versions. | **Not ported: 0/12 target tables feature-reached.** No pitch-deck generator/version/share-view analytics flow, investor updates and approvals, investor reports/digests, board packages, data-room ACL/download flow, due-diligence workflow, portfolio health scoring, funding-history/valuation/exit models, or investor portal migration. Generic artifact and entity forms do not enforce these workflows. |
-| **B3 · CRO / CRM + VoIP** | Migration 0421 creates 20 revenue targets; existing Builderforce sales routes cover a simpler contact/pipeline; business-phone checkout and entitlement recording exist. | **Mostly not ported: 1/20 targets feature-reached (`business_phone_numbers`).** Contact provenance/edit logs, identity/source history, enrichment credits/providers, dedup/import, ICPs, sequences, conversion/quota analytics, communications ops and deal-risk logic are missing. Phone currently sells and records an entitlement; it does not implement SignalWire number search/provisioning, balance, call/SMS operations, voice agent, or port requests. Builderforce has no `SIGNALWIRE_*` configuration. |
-| **B4 · CMO / Growth** | Migration 0432 creates 47 targets; the pre-existing campaign/site/mailbox engines are valid merge owners. | **Mostly not ported: 2/47 targets feature-reached (`announcement_banners`, `email_otp_challenges`), neither proves the CMO workflows.** BurnRateOS heatmap capture/screenshots/analysis, nurture step execution/enrollment, lead-form lifecycle, landing/website block editor behavior, A/B allocation, NPS, referrals/affiliate settlement, email event parity, SEO manager/rank tracking, brand kit/content calendar, waitlist/community/podcast/video flows and public widgets are missing or registry-only. Web Push is wholly absent: no VAPID code/config, marketing subscriber/campaign/delivery service, `push-fanout` queue/DLQ, or `packages/push-pwa`. |
+| **B3 · CRO / CRM + VoIP** | Migration 0421 creates 20 revenue targets; existing Builderforce sales routes cover a simpler contact/pipeline; the Twilio connector remains the phone-action ceiling. | **CRM extraction remains production-driven: 1/20 targets feature-reached (`business_phone_numbers`).** Contact provenance/edit logs, identity/source history, enrichment credits/providers, dedup/import, ICPs, sequences, conversion/quota analytics, communications ops and deal-risk logic require active-use classification and transformed data where retained. The SignalWire hosted carrier product is intentionally retired: export call/SMS history, port or release active numbers, reconcile add-ons, and add no provider configuration or phone tables. |
+| **B4 · CMO / Growth** | Migration 0432 creates 47 targets; the pre-existing campaign/site/mailbox engines are valid merge owners. | **Mostly not extracted: 2/47 targets feature-reached (`announcement_banners`, `email_otp_challenges`), neither proves the CMO workflows.** Heatmaps, nurture execution, lead forms, landing blocks, A/B allocation, NPS, email parity, SEO, brand/content and public widgets require active-use classification. Affiliate administration and Web Push are intentionally retired; retain/export required history and consent, delete push tokens, and do not add VAPID, queue/DLQ or PWA runtime. |
 | **B5 · CPO / Product** | Builderforce PMO, product, feedback and validation owners exist; consolidated work/items/artifacts can represent several source models. Validation engagement reads are now local. | **Partial merge only.** Feature voting/adoption, scoring, product ideas/company workflows, release plans, public roadmap/deck, validation AI insights/scenarios, MVP scaffolding, entity version/sign-off/model-lock workflows still need domain-backed behavior and migrated source rows. |
 | **B6 · CTO / Agile** | Builderforce boards/tasks/sprints, poker/retro, ceremonies and shell session remain the correct owners. | **Core merge owner exists; retained source behavior/data is not migrated.** Missing cost-per-sprint/runway coupling, capacity and velocity parity, bottleneck/technical-debt/deployment rollups, cost calculation and source work/session data transformation. BurnRateOS `SessionRoom` is intentionally not ported as a second room; only active-session state that customers must retain is transformed/exported into the shell owner. Do not migrate duplicate Kanban/poker tables. |
 | **B7 · HR / Operational cadence** | Migration 0420 creates 22 people/HR targets; one `builtin_kind='hr'` teammate is provisioned; existing meetings/pulse owners remain. | **Not ported: 0/22 targets feature-reached.** Employee/employment/emergency contacts, headcount and hiring forecasts, goals/reviews/1:1/check-ins, weekly syncs, scorecards, ScratchPad pages/collaborators/transcripts/templates/attachments, bookings/calendar links and Slack workflows lack feature services. Booking targets in 0425 are registry-only. Recall.ai notetaker config and attachment-row/object migration are absent. |
 | **B8 · CISO / Governance** | Builderforce SOC/security/uptime owners exist; migration 0428 adds two identity/governance targets. | **Partial merge only: 0/2 new targets feature-reached.** BurnRateOS vendors, DPAs, PII inventory, compliance events, security training, DSR/suppression, terms agreement history, embed consent, public DSR, and uptime-monitor source data/alert behavior are not ported. The BurnRateOS 5-minute uptime sweep and support-chat behavior are not wired into Builderforce jobs. |
-| **B9 · Platform** | Migration 0425 creates 20 commerce targets; cart/order checkout integration is real; Builderforce has marketplace, billing, support, content and admin owners. | **Partial: 3/20 targets feature-reached (`carts`, `orders`, `order_line_items`).** Missing consultant onboarding/knowledge/earnings/settlement, affiliate/referral payout methods, booking settlement/webhooks, AI/enrichment-credit ledger transforms, templates/licenses, white-label agency/client data, support live-chat DO, coach marks/segments, guest claim continuity, waitlist/media/free-tools data, and system-admin parity. Cart/order support does not migrate existing BurnRateOS purchases or subscriptions. |
+| **B9 · Platform** | Migration 0425 creates 20 commerce targets; cart/order checkout integration is real; Builderforce has marketplace, billing, support, content and admin owners. | **Partial: 3/20 targets feature-reached (`carts`, `orders`, `order_line_items`).** Consultant settlement, booking webhooks, retained credit-value transforms, templates/licenses, white-label data, evidence-backed support chat, guest claim continuity and active media/free-tool state remain classification/ETL work. Affiliate administration is retired after history export and unsettled-payout reconciliation. Cart/order support still does not migrate existing BurnRateOS purchases or subscriptions. |
 
 ### C-suite Creation Canvas menu mapping — implemented 2026-08-10
 
@@ -208,9 +208,9 @@ state:
 | `NotificationRoom`, `SessionRoom`, `SupportChatRoom` | Duplicate notification/session DOs are retired in favor of Builderforce's relay/session owners. Active-state inventory, required state transform/export and the evidence-based support-chat decision are still missing. | **No duplicate runtime port; state cutover open** |
 | `0 3 * * *` daily churn/digest/coach batch | [`cronSweeps.ts`](../../api/src/cronSweeps.ts) has Builderforce sweeps, not the BurnRateOS batch. | **Not ported** |
 | `*/5 * * * *` uptime sweep | A Builderforce 5-minute trigger exists, but it does not read the BurnRateOS monitor store or port its alert service. | **Partial owner only** |
-| `push-fanout` + DLQ and `packages/push-pwa` | No VAPID/push implementation or queue binding exists in Builderforce. | **Not ported** |
+| `push-fanout` + DLQ and `packages/push-pwa` | Policy keeps Web Push retired; consent history is exported and legacy tokens are deleted. | **Intentionally retired; no runtime port** |
 | `burnrateos-attachments` R2 | Builderforce has other artifact storage, but no copy manifest, key rewrite, checksum, ACL, or legacy URL plan. | **Not migrated** |
-| Plaid, SignalWire, Recall.ai, Tavily | No corresponding Builderforce env contracts or provider implementations were found. | **Not ported** |
+| Plaid, SignalWire, Recall.ai, Tavily | Policy requires finance reconsent only for retained Plaid use, SignalWire number port/release, Recall artifact export, and Builderforce's existing search routing/Tavily reconsent. | **Disposition settled; customer/provider actions open** |
 | Stripe/Helcim commerce | Builderforce supports Stripe; BurnRateOS also supports Stripe/Helcim. No customer/subscription/order mapping or provider-webhook handoff exists. | **Cutover blocker** |
 | OAuth/connectors | Both products have provider integrations, but no encrypted-credential transform or callback/refresh-token handoff exists. | **Cutover blocker; expect re-consent where secrets cannot be moved safely** |
 
@@ -245,10 +245,11 @@ Before any redirect, implement and retain a reproducible manifest covering:
 All gates are mandatory for a **hard shutdown**. “Mapped in TSV,” “table exists,” and “opens in
 EntityBrowser” do not satisfy them.
 
-- [ ] **Decision gate:** settle §2 rows 4, 6 and 12 plus §5 pricing/push/provider decisions; record
-  the selected owners in this PRD.
-- [ ] **Tenancy gate:** implement and test the company graph/project-company contract or explicitly
-  revise §3.2 and migrate every affected workflow to the replacement semantics.
+- [x] **Decision gate:** §2 rows 4, 6 and 12 plus pricing, push and provider ownership are settled
+  in this PRD and enforced by the versioned cutover-policy manifest/CI check.
+- [x] **Tenancy mapping gate:** the strict account→tenant/company/project planner, row resolver and
+  read-only production audit are implemented and tested on existing shapes with no DDL. Supplying
+  the production identity account map and applying/reconciling its output remain Identity/Data work.
 - [ ] **Identity gate:** dry-run all users, collisions, memberships, roles and verified emails;
   login with an imported password; require fresh sessions; test OAuth-only and MFA users.
 - [ ] **Data gate:** run idempotent ETL against a production snapshot; publish per-table source,
@@ -288,7 +289,9 @@ cd api
 node scripts/check-model-coverage.mjs
 node scripts/check-table-adoption.mjs
 pnpm run check:no-burnrate-runtime
-pnpm run audit:burnrate-cutover -- --validate-only
+pnpm run check:burnrate-policy
+pnpm run audit:burnrate-cutover:validate
+pnpm run audit:burnrate-tenancy:validate
 ```
 
 With read-only production credentials, generate the immutable evidence report without changing
@@ -297,13 +300,20 @@ either database:
 ```powershell
 $env:BURNRATE_SOURCE_DATABASE_URL = '<read-only BurnRateOS PostgreSQL URL>'
 $env:NEON_DATABASE_URL = '<read-only Builderforce PostgreSQL URL>'
-pnpm run audit:burnrate-cutover -- --output .\burnrate-reconciliation.json --strict
+node scripts/audit-burnrate-cutover.mjs --output .\burnrate-reconciliation.json --strict
+node scripts/audit-burnrate-tenancy.mjs --account-map .\burnrate-account-tenants.json --output .\burnrate-tenancy.json --strict
 ```
 
 The audit inventories all 344 mapped BurnRateOS source tables and directly compares only the 114
 one-to-one `keep` candidates. Collapsed/session/derived rows are marked `transform_required`; the
 tool does not pretend row-count equality can validate a many-to-one extraction and performs no
 writes or DDL.
+
+The tenancy audit consumes the explicit account→tenant file produced by the identity dry run. It
+does not infer tenants from names, domains or email suffixes. It verifies source accounts, target
+tenants, active relationship authorization, unique company-only ownership and primary-company
+cardinality, then reports the existing/missing `segments` needed by the later ETL. Its output is
+also read-only and immutable (`flag: wx`).
 
 Expected at the audited baseline:
 
@@ -466,15 +476,15 @@ For each contested capability: who owns the surviving implementation, and what t
 | 1 | **HR / People agent** | — | HR agent (Career 360, coaching, org review) | CHRO persona + `ops.*` tools + Employee/Goal/Review/1:1 | **ONE `builtin_kind='hr'` agent** | BurnRateOS CHRO persona becomes that agent's persona; its `ops.headcount_plan.list` / `ops.hiring_forecast.list` become `hr.headcount_plan` |
 | 2 | **OKR / objectives** | `objectives`, `key_results`, `objective_links` (0268) | `people_strategic_objectives` (+outcomes, milestones) | `StrategicObjective`, `ObjectiveOutcome`, `ObjectiveMilestone` | **Builderforce 0268** | both map onto it; writes `invalidateProjectsList` ([[objectives-project-scope]]) |
 | 3 | **Campaign engine** | `campaignEngine.ts` (0412) | `CampaignService` + audiences/targeting | `MarketingCampaign`, `MarketingEmail`, `NurtureFlow` | **`campaignEngine.ts`** | both merge in; nurture-flow steps extend it |
-| 4 | **Affiliates / referrals** | none (0402 is sales-associate commissions) | `affiliates` (6 tables) | `AffiliatePartner/Referral/Payout/PayoutMethod`, `ReferralCode/Entry` | **pick ONE — recommend BurnRateOS** (payout methods + settlement are more complete) | the other is dropped, not ported |
+| 4 | **Affiliates / referrals** | none (0402 is sales-associate commissions) | `affiliates` (6 tables) | `AffiliatePartner/Referral/Payout/PayoutMethod`, `ReferralCode/Entry` | **RETIRE / EXPORT** — no affiliate administration product in Builderforce | export customer-readable history; reconcile unsettled obligations through the existing payout owner; add no referral tables |
 | 5 | **Bookings / scheduling** | none | `bookings` (6 tables) | `Booking*` (9 models incl. external calendar link, payout, webhooks) | **BurnRateOS** (richer) | hired's is dropped |
-| 6 | **Business phone / VoIP** | Twilio *connector* only | `phone` (5 tables, own provider) | SignalWire numbers, porting, balances, voice agent | **pick ONE — recommend BurnRateOS/SignalWire** (has porting + voice agent) | hired's is dropped; the Twilio connector stays for API-level calls |
+| 6 | **Business phone / VoIP** | Twilio *connector* only | `phone` (5 tables, own provider) | SignalWire numbers, porting, balances, voice agent | **Twilio connector is the ceiling; retire the hosted carrier product** | export call/SMS records; port or release every active number; reconcile phone add-ons; copy no SignalWire credential or phone tables |
 | 7 | **Support tickets + KB** | `support_tickets`, `prod_incidents` (0236), `knowledge_documents` (0227) | `help` mappings | `SupportTicket/Message`, `SupportArticle`, `SupportChatRoom` DO | **Builderforce 0236 + 0227** | BurnRateOS contributes the live support-chat DO |
 | 8 | **Poker / retros / ceremonies** | `poker_sessions`, `retrospectives` (0062), ceremonies | — | `PlanningPokerSession`, `Retrospective*`, `AgileEvent` | **Builderforce 0062** | BurnRateOS's are dropped |
 | 9 | **Kanban / sprints / stories** | boards, swimlanes, tasks, sprints | — | `KanbanBoard/Column`, `WorkItem`, `Sprint`, `Story`, `Epic`, `Initiative`, `UserStory`, `Task`, `Subtask` | **Builderforce** | BurnRateOS's hierarchy (Product→Initiative→Epic→Story→Task→Subtask) informs the epic-decomposition gap already in the register |
 | 10 | **SOC 2 controls** | `soc_controls`, `soc_evidence` | `compliance` (3) | `SocControl`, `SocEvidence`, `ComplianceEvent`, `SecurityVendor`, `PiiDataAsset`, `SecurityDpa` | **Builderforce** | BurnRateOS's vendor/DPA/PII-asset models extend it (net-new fields, same table) |
 | 11 | **Uptime / monitoring** | `uptime_samples` (0236), alerts, monitoring | — | `UptimeMonitor`, `UptimeCheck` | **Builderforce** | — |
-| 12 | **Blog / articles / content** | `/blog` + content-manager | `articles` (9 tables) | `BlogPost`, `MarketingContentItem`, `MarketingSeoPage` | **ONE content store** — recommend Builderforce knowledge + a `content_items` table | three-way merge; slugs preserved for SEO |
+| 12 | **Blog / articles / content** | `/blog` + content-manager | `articles` (9 tables) | `BlogPost`, `MarketingContentItem`, `MarketingSeoPage` | **Builderforce `knowledge_documents` + existing content-manager/public artifact routes** | transform retained published content; preserve canonical slugs and redirects; no `content_items` table |
 | 13 | **Surveys / pulse / NPS** | `pulse_surveys` (0317), devex surveys (0229) | — | `PulseCheck/Question/Response`, `NpsSurvey` | **Builderforce 0317** | NPS becomes a survey type |
 | 14 | **Billing / plans / invoices** | plans, `planFeatures.ts`, `featureGate.ts` | `billing` (9) | `BillingPlan`, `PlanFeature`, `Invoice`, `Order`, `Cart`, `PricingVersion` | **`planFeatures.ts` + `featureGate.ts`** ([[paid-plan-feature-gate]]) | BurnRateOS's cart/order/line-item model is net-new and lands *under* the one evaluator |
 | 15 | **Payouts** | env-gated stub | full ledger + tax reporting + Tremendous + Helcim | `MarketplacePayout`, `MarketplaceSellerBalance`, `AffiliatePayout` | **hired.video's** (most complete) | BurnRateOS settlement calls into it |
@@ -483,87 +493,46 @@ For each contested capability: who owns the surviving implementation, and what t
 | 18 | **Enrichment / dedup / import** | connectors | `enrichment`, `scraping` | `EnrichmentCache/Transaction`, `TenantEnrichmentCredits`, `Dedup`, `ImportJob/Row` | **BurnRateOS** (credit-metered) | hired's enrichment merges in |
 | 19 | **"Company" — three meanings, one table** | none | `companies` (8 tables — employer profiles a candidate browses, reviews) | `Company` + `CompanyDomain` + facets (`CompanyCRM`/`Billing`/`Support`/`Product`/`Marketing`) + `AccountCompanyRelationship` | **BurnRateOS's company graph** (§3.2) | hired.video's employer profiles are the SAME entity with no `OWNER` relationship to your tenant — they merge in as `kind` rows rather than becoming a third company concept. Resolves what looked like an unavoidable collision. |
 
-Rows 4, 6 and 12 are genuine either/or calls; the rest have an obvious owner. **All of them
-must be settled before the losing side's track is scheduled**, because the cost of discovering
-row 6 after both phone products have shipped is two migrations and a data merge.
+Rows 4, 6 and 12 were settled on 2026-08-10 by the selective IDEA → REAL policy. The executable
+decision manifest is
+[`burnrateCutoverPolicy.json`](../../api/src/application/migration/burnrateCutoverPolicy.json),
+and CI rejects an undecided entry or any policy that permits new tables.
 
 ---
 
 ## 3 · Foundation work (B0) — blocks every BurnRateOS track
 
-### 3.1 Prisma → Drizzle
+### 3.1 Selective source transformation — RESOLVED 2026-08-10
 
-404 models convert to Drizzle schema modules + numbered SQL migrations continuing from
-PRD 18's tail. Write it as a **codemod over `schema.prisma`**, not by hand: Prisma's DSL is
-regular enough to parse, and hand-conversion of 404 models will drift. Relations become
-explicit FK columns + Drizzle `relations()`; `@@map`/`@map` become the SQL names so existing
-data migrates without a rename. Runtime queries are already raw Neon tagged-template SQL, so
-they port with type changes only.
+There is no 404-model Prisma→Drizzle codemod. Production-used IDEA → REAL rows transform into
+existing Builderforce owners; retired capabilities are exported/erased under the cutover policy.
+A source model is evidence to classify and transform, not permission to emit DDL.
 
-### 3.2 Tenancy — RESOLVED 2026-08-07: company is a real axis, and BurnRateOS already built it
+### 3.2 Tenancy and company ownership — IMPLEMENTED 2026-08-10
 
-**Decision:** `accountId` → `tenant_id`; `companyId` → a first-class **company** axis; the
-tenant↔company relationship is many-to-many; a project associates with one or more companies.
-Company creation is a **CEO-agent** capability, not a settings form.
+No junction table is added. Builderforce already has every required shape:
 
-The proposal turned out to be already implemented upstream — this is an adoption, not a design.
-BurnRateOS shipped it in April 2026 as "company-graph v1":
+- an identity dry run supplies the explicit **BurnRateOS account id → Builderforce tenant id** map;
+- existing `segments` owns the unique `(tenant_id, external_account_id, external_company_id)`
+  coordinate and becomes the primary project/company scope;
+- existing tenant-scoped `companies` receives one copy per authorized tenant/company pair, with
+  source ids, relationship kinds and claim evidence preserved in `attrs`;
+- registered `objects` plus kernel `relations(kind='associated_with')` represent additional
+  project↔company associations. The primary OWNER company selects the project's `segment_id`.
 
-- **`account_company_relationships`** *is* the junction — `(accountId, companyId, kind)` unique,
-  with `kind ∈ OWNER | CUSTOMER | PROSPECT | INVESTOR_TARGET | PORTFOLIO_COMPANY | PARTNER |
-  COMPETITOR | VENDOR | OTHER`, an `isPrimary` flag (which replaced `Company.isDefault`), and a
-  full ownership-claim flow — `claimedByUserId`, `claimVerificationMethod`
-  (`DOMAIN_DNS_TXT | EMAIL_AT_DOMAIN | MANUAL_REVIEW`), DNS TXT token, and verification stamps.
-- **`Company.accountId` is deliberately nullable** — NULL is a global business-graph row nobody
-  has claimed (enriched from a data provider); non-NULL means a tenant runs it. That single
-  nullable column is what lets one table be both *the business you operate* and *a company in
-  your CRM / portfolio / investor pipeline*, discriminated by relationship `kind`.
-- `Company` already carries the operating facets a CEO agent would fill in: onboarding status,
-  `isDraft`, team size, funding round, available cash, monthly budget, team cost, monthly
-  revenue, business stage, industry, market focus, plus public profile fields. The schema
-  comments state these feed the pitch-deck AI and the market-research tool directly.
+[`burnrateTenantCompanyMapping.ts`](../../api/src/application/migration/burnrateTenantCompanyMapping.ts)
+implements the pure plan and row resolver. It does not guess ownership: account+company rows require
+an active relationship; company-only rows require exactly one active mapped OWNER; rows with neither
+coordinate are rejected unless their classifier explicitly permits platform-global data. Conflicting
+account maps, multiple primary companies, unknown relationship kinds, unauthorized project links and
+target company-name collisions are blockers. Unclaimed global companies are exported/retired rather
+than forcing a global directory or nullable tenant ownership into Builderforce.
 
-**`isDraft` matches a pattern Builderforce already has.** It is the silent pre-onboarding
-company auto-created so a user can reach the dashboard without declaring a business yet — the
-same idea as the auto-provisioned Default workspace + project ([[zero-setup-onboarding]]).
-Reconcile them rather than shipping both.
-
-#### The one invariant this decision forces — and it cannot be deferred
-
-**Every ported row must carry `tenant_id NOT NULL`, denormalized, in the same codemod.**
-
-Measured across the 404 models: **79** carry `accountId` + `companyId`, **51** carry `accountId`
-only, **112** carry neither (child rows scoped through a parent FK) — and **162 carry
-`companyId` with no `accountId` at all** (`Deal`, `KanbanBoard`, `Task`, `Epic`,
-`FinancialTransaction`, `PlanningPokerSession`, …). The tenancy service's docstring claims
-"every authenticated row is scoped by BOTH accountId and companyId"; the schema does not agree.
-
-For those 162, the owning tenant is derivable *only* through the junction — and the junction's
-`@@unique([accountId, companyId, kind])` permits two different accounts to each hold an `OWNER`
-row for the same company. So a `Deal`'s owning tenant is genuinely ambiguous at the schema
-level. Every Builderforce gate gates on tenant: `enforceTokenCaps` and the consumption meters
-([[consumption-meter-framework]]), the `activity_log` audit store
-([[unified-activity-audit-log]]), per-tenant derived-key connector credential decryption,
-`planFeatures.ts` / `featureGate.ts` ([[paid-plan-feature-gate]]), and the superadmin bypass
-([[superadmin-unlimited-dispatch-two-caps]]). None of them can run on a derived, possibly
-two-valued tenant.
-
-Fix is mechanical and belongs in the B0 codemod: stamp `tenant_id NOT NULL` on all 404,
-back-filled from the primary `OWNER` relationship at migration time, keeping `company_id` as the
-business axis beside it. Doing this later means a second migration the size of the first, plus
-rewriting every query written in between.
-
-With the invariant in place, **switching company never crosses an identity boundary** — it stays
-a filter inside one tenant, which is exactly how the navigation architecture's scope table
-already draws it. Many-to-many tenant↔company then means what it should: an agency and its
-client both *see* a company record, while every data row still has exactly one owner.
-
-#### Project ↔ company
-
-Many-to-many, using the `isPrimary` pattern already in the junction: **one primary company per
-project** for rollups and billing attribution, plus additional associations for visibility.
-Without a primary, `portfolioRollup.ts`, `lib/deliveryVerdict.ts` and `objective_links` all
-double-count a project shared by two companies.
+[`audit-burnrate-tenancy.mjs`](../../api/scripts/audit-burnrate-tenancy.mjs) validates the identity
+account map against both databases with read-only credentials and reports assignments, missing
+segments and every ambiguity. The planner and audit add no database table or migration. Running the
+production account map and applying the accepted ETL remain part of the Identity/Data gates, not an
+unresolved ownership design.
 
 ### 3.3 Valkey/Redis → `getOrSetCached`
 
@@ -594,7 +563,7 @@ Each track is **merge-first**: reconcile against the §2 owner, then port only w
 
 | Track | Scope | Net-new vs merge |
 |---|---|---|
-| **B0** | Foundation (§3) — Prisma→Drizzle codemod, tenancy decision, cache, auth, component-system baseline | all foundation |
+| **B0** | Foundation (§3) — selective transforms, implemented tenant/company mapping, cache, auth, component-system baseline | all retained foundation behavior/data |
 | **B1 · CFO / Business Intelligence** | Runway, burn, break-even, forecast scenarios + assumptions + sensitivity + Monte Carlo, ARR projections, cohort retention, CAC/LTV/payback, expenses + AI expense classification, Plaid sync, financial accounts/transactions/categories, TCO, custom KPIs + formulas + thresholds, what-if scenarios, dashboard widgets/layouts | **mostly net-new** — merges only with FinOps |
 | **B2 · CEO / Investor Intelligence** | Pitch decks + versions + share links + slide analytics + comments, investor profiles/updates/reports/approvals, portfolio companies, health scoring, funding rounds, data rooms, due diligence, deal flow, investor portal access | **net-new** |
 | **B3 · CRO / CRM + VoIP** | Contacts (+identifiers, sources, provenance, edit logs, experience/education/compensation), companies + CRM/billing/support/product/marketing facets, deals, pipelines, quota, conversion rates, sequences (`Ri*`), dedup, enrichment credits, **business phone** (numbers, porting, balances, voice agent) | merge pipeline/contacts; **VoIP net-new** (§2 row 6) |
@@ -637,29 +606,25 @@ remain the system of record; the BurnRateOS UI behavior is merged onto those sea
    creates companies. B0's codemod and the navigation architecture's scope rules are both
    unblocked. The one condition carried into B0: `tenant_id NOT NULL` denormalized onto all 404
    models in the same pass, because 162 of them carry `companyId` with no tenant column today.
-2. **Web push comes back.** Migration 0195 deleted Web Push from Builderforce and the standing
-   note is "never reintroduce VAPID" ([[push-removed-burnrateos]]) — precisely *because* push
-   lived in BurnRateOS. Consolidating BurnRateOS reverses that: `MarketingPushSubscriber/
-   Campaign/Delivery`, the `push-fanout` queue and `packages/push-pwa` all arrive with B4.
-   **This also settles an open question in the navigation architecture**, whose invite matrix
-   lists "installed PWA, not running → a true ring while the app is closed" as *blocked by
-   policy* for exactly this reason. So the question is no longer "revisit the VAPID rule to
-   enable one feature" — push is re-admitted anyway by this consolidation, and all that remains
-   is whether the live-session ring rides it. Either re-admit VAPID (and get the closed-app ring
-   nearly free), or drop BurnRateOS's push campaigns and lose a shipped marketing capability.
-   Not an engineering call.
-3. **Rows 4, 6 and 12 of §2** — affiliates, VoIP provider, content store. Each is a genuine
-   either/or between two working implementations.
-4. **AI credits vs token caps** (§2 row 17) — BurnRateOS sells credit packs (500/$4.99 →
-   50K/$299.99); Builderforce meters tokens against plan caps. One pricing model survives, and
-   that is a commercial decision that changes both products' pricing pages.
-5. **Two self-serve price points collide.** BurnRateOS Starter/Pro ($29/mo) vs Builderforce's
-   existing plans. Consolidation means one price list.
-6. **Neon tier.** PRD 18 already puts ~360 net-new tables against the Free tier; this PRD adds
-   up to ~400 more. The combined program does not fit a Free-tier budget.
-7. **Prisma dual schemas.** `schema.mysql.prisma` and `schema.neon.prisma` exist alongside
-   `schema.prisma`. Confirm Neon is the only live target before the codemod runs; a MySQL
-   deployment would change the conversion.
+2. ~~**Web push**~~ — **RESOLVED 2026-08-10:** stays retired. Do not reintroduce VAPID,
+   `push-fanout`, a DLQ or `packages/push-pwa`. Export consent history required for the customer
+   record, delete legacy push tokens at shutdown, and use existing email/in-app channels.
+3. ~~**Rows 4, 6 and 12 of §2**~~ — **RESOLVED 2026-08-10:** affiliate administration retires
+   after export/settlement; SignalWire hosted phone retires after history export and number
+   port/release; published content transforms into `knowledge_documents` and existing public
+   content routes with slugs/redirects preserved.
+4. ~~**AI credits vs token caps**~~ — **RESOLVED 2026-08-10:** Builderforce consumption meters,
+   plan features and kernel ledger are canonical. Valid customer value transforms to a meter/ledger
+   denomination or is refunded; no parallel credit balance survives.
+5. ~~**Two self-serve price points**~~ — **RESOLVED 2026-08-10:** Builderforce's published price
+   list and verified Stripe checkout/webhook path are canonical. No BurnRateOS plan is recreated.
+6. ~~**Provider ownership**~~ — **RESOLVED 2026-08-10:** Stripe is reconciled; retained connectors
+   are reauthorized through existing owners; Helcim/SignalWire/Recall/LinkedIn retire after their
+   named settlement/export actions. The complete credential and data dispositions are enforced by
+   [`burnrateCutoverPolicy.json`](../../api/src/application/migration/burnrateCutoverPolicy.json).
+7. ~~**Bulk schema/tier and Prisma dual-schema decisions**~~ — **RETIRED 2026-08-10:** selective
+   extraction emits no bulk BurnRateOS schema, so neither a 404-model codemod nor its table-count
+   capacity decision exists.
 
 ---
 
@@ -671,7 +636,7 @@ The two programs share T0/B0 foundation work and collide on §2. Interleave them
 |---|---|---|---|
 | 0 | T0 foundation | — | — |
 | 0.5 | — | — | **§2 register settled** (rows 1, 4, 6, 12 especially) + §5 ex. 1 answered |
-| 1 | T1 — Recruiter + résumé spine | B0 — Prisma→Drizzle codemod, tenancy, cache | B0 needs the §5.1 answer |
+| 1 | T1 — Recruiter + résumé spine | B0 — selective transforms, tenancy mapping, cache | B0 production identity/data audit |
 | 2 | T3 — HR agent + Career 360 + HRMS connectors | B7 — CHRO domain **into the same HR agent** | §2 row 1 |
 | 3 | T2 — ATS | B1 + B2 — CFO + CEO (highest net-new value) | independent |
 | 4 | T4 — Canvas runtimes (long-running, parallel throughout) | B3 + B4 — CRO + CMO | §2 rows 3, 6 |

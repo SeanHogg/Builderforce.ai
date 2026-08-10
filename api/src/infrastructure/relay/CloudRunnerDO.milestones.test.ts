@@ -45,7 +45,12 @@ vi.mock('../../application/runtime/cloudAgentEngine', () => ({
 vi.mock('../../application/artifact/capabilityContext', () => ({ loadPersonaSetpoints: vi.fn(async () => ({})) }));
 vi.mock('../../application/runtime/scoreRunOutcome', () => ({ scoreRunOutcome: vi.fn(async () => {}) }));
 vi.mock('../../application/runtime/executionSteering', () => ({ releasePendingSteers: vi.fn(async () => {}) }));
-vi.mock('../../application/runtime/cloudDispatch', () => ({ parseRoutingBias: () => null, parsePolicyGates: () => null }));
+vi.mock('../../application/runtime/cloudDispatch', () => ({
+  parseRoutingBias: () => null,
+  parsePolicyGates: () => null,
+  parseReviewRole: () => null,
+  parseLaneKey: () => null,
+}));
 vi.mock('@builderforce/agent-tools', () => ({ buildLimbicBlock: () => '' }));
 
 import { CloudRunnerDO } from './CloudRunnerDO';

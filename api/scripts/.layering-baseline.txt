@@ -22,7 +22,6 @@ presentation/routes/approvalRuleRoutes.ts
 presentation/routes/artifactAssignmentRoutes.ts
 presentation/routes/authRoutes.ts
 presentation/routes/benchmarkingRoutes.ts
-presentation/routes/biRoutes.ts
 presentation/routes/boardConnectionRoutes.ts
 presentation/routes/boardRoutes.ts
 presentation/routes/boardWebhookRoutes.ts

@@ -7865,3 +7865,29 @@ validate-only reports 344 source tables and 114 one-to-one keep targets; model c
 222 registry-only; no schema or migration files added. Production row reconciliation, user identity
 cutover, provider/storage/billing disposition, communications and redirect verification remain open
 in PRD 19, so this resolution is not evidence that `burnrateos.com` can be switched off yet.
+
+## RESOLVED 2026-08-10 - BurnRateOS product decisions and tenant/company mapping contract
+
+The six cutover decisions are settled in a versioned, CI-validated manifest with
+`newTablesAllowed:false`: affiliate administration retires after export/settlement; SignalWire's
+hosted phone product retires after history export and number port/release while the Twilio connector
+remains; published content transforms into existing `knowledge_documents`/content routes; Web Push
+stays retired; Builderforce pricing, feature gates, consumption meters and ledger remain canonical;
+and every provider is assigned a reconcile, reauthorize or retire action. Twelve named providers
+have explicit credential and data dispositions. No “pick one”, TBD or parallel product remains.
+
+Tenant/company ownership uses existing infrastructure only. The identity dry run supplies an
+explicit source-account→tenant map; existing `segments` owns the account/company coordinate;
+tenant-scoped `companies` preserves source relationship/claim evidence in `attrs`; registered
+`objects` and kernel `relations` hold project↔company associations, with the primary OWNER company
+selecting the project's segment. The pure planner and row resolver reject ambiguity instead of
+guessing: conflicting account maps, missing active relationships, company-only rows without exactly
+one mapped OWNER, multiple primary companies, unauthorized project links, invalid relationship kinds
+and target-name collisions are blockers. Unclaimed global companies are export/retirement records,
+not a reason to add nullable tenant ownership or a directory table.
+
+**Evidence:** `burnrateTenantCompanyMapping.test.ts` 6/6; API typecheck clean;
+`check:burnrate-policy` reports six capability and twelve provider decisions; cutover map/policy
+validate-only reports 344 source tables and 114 one-to-one targets; tenancy audit validate-only
+confirms the existing-shape/no-DDL contract. The production account map and ETL execution remain the
+Identity/Data gates and were not fabricated without read-only production credentials.
