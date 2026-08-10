@@ -8,6 +8,7 @@ import { runArchitectureAnalysis } from '@/lib/api';
 import { DiagnosticsResultsPanel } from '@/components/DiagnosticsResultsPanel';
 import type { ProjectScore, ToolSummary, SystemAuditSummary } from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
+import { StakeholderAlignmentPanel } from '@/components/stakeholder-alignment/StakeholderAlignmentPanel';
 
 /** The architecture analysis is just another diagnostic — a run-only one (it
  *  kicks off the repo analysis rather than navigating to the tool runner). */
@@ -141,6 +142,8 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
       {archMsg && (
         <div style={{ fontSize: 12, color: archState === 'error' ? 'var(--error)' : 'var(--success)' }}>{archMsg}</div>
       )}
+
+      <StakeholderAlignmentPanel projectId={projectId} />
 
       <div style={cardStyle}>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('runOther')}</div>

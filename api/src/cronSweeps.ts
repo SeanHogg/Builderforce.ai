@@ -60,6 +60,7 @@ import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runD
 import { buildScheduledReport } from './presentation/routes/reportRoutes';
 import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
 import { cronSweepEnabled } from './application/runtime/cronControls';
+import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -108,6 +109,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.newlyBroken > 0 || r.recovered > 0
         ? `newlyBroken=${r.newlyBroken} recovered=${r.recovered} emailed=${r.emailed}`
         : null;
+    },
+  },
+  {
+    key: 'stakeholder-digest',
+    cadence: 'daily',
+    description: 'Generate the stakeholder alignment digest for required approvers and informed parties.',
+    run: async ({ env }) => {
+      const result = await runStakeholderDigestSweep(buildDatabase(env));
+      return result.distributed > 0 ? `projects=${result.projects} distributed=${result.distributed}` : null;
     },
   },
   {
@@ -274,6 +284,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runApprovalExpirySweep(env, buildDatabase(env));
       return r.escalated > 0 ? `escalated=${r.escalated} tenants=${r.tenants}` : null;
+    },
+  },
+  {
+    key: 'stakeholder-escalations',
+    cadence: 'frequent',
+    description: 'Emit 24-hour/4-hour stakeholder escalation reminders and record SLA breaches.',
+    run: async ({ env }) => {
+      const result = await runStakeholderReminderSweep(buildDatabase(env));
+      return result.reminders > 0 ? `reminders=${result.reminders} breached=${result.breached}` : null;
     },
   },
   {

@@ -1032,7 +1032,12 @@ export const ticketParticipants = pgTable('ticket_participants', {
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uidx_ticket_participants_slot').on(t.taskId, t.stageKey, t.roleKey, t.responsibility, t.source),
+  // NULL stage keys are a real slot (the ticket-wide/default stage), not an
+  // invitation to create unlimited duplicates. PostgreSQL's ordinary UNIQUE
+  // semantics treat NULLs as distinct, so this must be NULLS NOT DISTINCT.
+  unique('uidx_ticket_participants_slot')
+    .on(t.taskId, t.stageKey, t.roleKey, t.responsibility, t.source)
+    .nullsNotDistinct(),
   index('idx_ticket_participants_task').on(t.taskId),
   index('idx_ticket_participants_tenant').on(t.tenantId),
   index('idx_ticket_participants_child').on(t.childTaskId),

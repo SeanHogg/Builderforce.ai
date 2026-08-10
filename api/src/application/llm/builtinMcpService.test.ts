@@ -27,13 +27,33 @@ vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskReposit
 import {
   listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID,
   CLOUD_AGENT_PLATFORM_TOOLS, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool,
-  CHAT_SCOPED_AGENT_TOOLS,
+  CHAT_SCOPED_AGENT_TOOLS, resolveReplayAuth,
 } from './builtinMcpService';
 
 const db = {} as never;
 const TENANT = 7;
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('route replay authentication', () => {
+  it('mints a machine token for a cloud agent instead of forwarding its launching user session', () => {
+    expect(resolveReplayAuth({ authToken: 'expired.user.jwt', agentRef: 'agent-ada' })).toEqual({
+      subject: 'agentHost:mcp',
+    });
+  });
+
+  it('mints a machine token for gateway-key and server-side callers', () => {
+    expect(resolveReplayAuth({ authToken: 'bfk_secret' })).toEqual({ subject: 'agentHost:mcp' });
+    expect(resolveReplayAuth({})).toEqual({ subject: 'agentHost:mcp' });
+  });
+
+  it('preserves a real human bearer so revocation and user permissions still apply', () => {
+    expect(resolveReplayAuth({ authToken: 'header.payload.signature' })).toEqual({
+      forwardToken: 'header.payload.signature',
+      subject: 'agentHost:mcp',
+    });
+  });
+});
 
 describe('cloud-agent curated platform tool subset', () => {
   const allToolIds = new Set(listBuiltinTools().map((t) => t.tool));
@@ -79,6 +99,24 @@ describe('cloud-agent curated platform tool subset', () => {
     expect(resolveCloudAgentPlatformTool('builtin_api_keys_create')).toBeUndefined();
     expect(resolveCloudAgentPlatformTool('builtin_tasks_delete')).toBeUndefined();
     expect(resolveCloudAgentPlatformTool('not_a_tool')).toBeUndefined();
+  });
+
+  it('exposes the Brain write-back tool only when the runtime has an originating chat', () => {
+    expect(cloudAgentPlatformToolSchemas().some((s) => s.function.name === 'builtin_chats_post_to_brain')).toBe(false);
+    expect(resolveCloudAgentPlatformTool('builtin_chats_post_to_brain')).toBeUndefined();
+
+    const schema = cloudAgentPlatformToolSchemas(42).find((s) => s.function.name === 'builtin_chats_post_to_brain');
+    expect(schema?.function.parameters.required).toEqual(['content']);
+    expect(schema?.function.parameters.properties).not.toHaveProperty('chatId');
+    expect(resolveCloudAgentPlatformTool('builtin_chats_post_to_brain', 42)).toBe('chats.post_to_brain');
+  });
+
+  it('lets a manager agent remove a specific bad manifest slot without granting broad task deletion', () => {
+    expect(CLOUD_AGENT_PLATFORM_TOOLS).toContain('kanban.remove_participant');
+    const schema = cloudAgentPlatformToolSchemas().find((entry) =>
+      entry.function.name === 'builtin_kanban_remove_participant');
+    expect(schema?.function.parameters.required).toEqual(['taskId', 'participantId']);
+    expect(CLOUD_AGENT_PLATFORM_TOOLS).not.toContain('tasks.delete');
   });
 });
 
@@ -285,6 +323,45 @@ describe('callBuiltinTool', () => {
     expect(taskSvc.getTask).toHaveBeenCalledWith(9);
     expect(projectSvc.getProject).toHaveBeenCalledWith(4, TENANT); // ownership guard
     expect(taskSvc.updateTask).toHaveBeenCalled();
+  });
+
+  it('tasks.get includes implementer activity and stale-delivery evidence', async () => {
+    taskSvc.getTask.mockResolvedValue({ projectId: 4, toPlain: () => ({ id: 9, projectId: 4, status: 'in_review' }) });
+    projectSvc.getProject.mockResolvedValue({ id: 4 });
+    const queryRows = [
+      [{ id: 12, agentRef: 'ada', payload: JSON.stringify({ actAsRole: 'product-manager' }), status: 'completed', produced: true, createdAt: new Date('2026-08-10T10:00:00Z'), completedAt: new Date('2026-08-10T11:00:00Z'), total: 1 }],
+      [{ executionId: 12, path: 'PRD.md' }],
+      [],
+      [{ id: 'pr-1' }],
+    ];
+    let query = 0;
+    const activityDb = {
+      select: vi.fn(() => {
+        const rows = queryRows[query++] ?? [];
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        chain.from = self;
+        chain.innerJoin = self;
+        chain.where = self;
+        chain.orderBy = self;
+        chain.limit = async () => rows;
+        chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(rows).then(resolve);
+        return chain;
+      }),
+    } as never;
+
+    const result = await callBuiltinTool(activityDb, { tenantId: TENANT, tool: 'tasks.get', arguments: { id: 9 } });
+
+    expect(result).toMatchObject({
+      id: 9,
+      activity: {
+        executionsCount: 1,
+        lastExecutionAgentRef: 'ada',
+        lastExecutionRole: 'product-manager',
+        lastCoderRunProducedCode: false,
+        staleImplementation: true,
+      },
+    });
   });
 
   it('throws on an unknown tool', async () => {

@@ -32,6 +32,7 @@ import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { BrainService } from '../../application/brain/BrainService';
 import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
@@ -410,6 +411,16 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // calling the API directly.
   router.post('/:id/run-now', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
+    const body: { chatId?: unknown } = await c.req.json<{ chatId?: unknown }>().catch(() => ({}));
+    const chatId = typeof body.chatId === 'number' && Number.isSafeInteger(body.chatId) && body.chatId > 0
+      ? body.chatId
+      : undefined;
+    if (chatId != null) {
+      const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+      if (!userId || !(await new BrainService(db).canAccess(chatId, c.get('tenantId'), userId))) {
+        return c.json({ error: 'Originating Brain chat not found' }, 404);
+      }
+    }
     const row = await loadTenantTask(id, c.get('tenantId'));
     if (!row) return c.json({ error: 'Task not found' }, 404);
     const evaln = await evaluateTaskAutoRun(db, runtimeService, {
@@ -434,11 +445,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       const reason: AutoRunReason = evaln.reason === 'will_run' ? 'no_agent' : evaln.reason;
       return c.json({ error: 'No agent is configured to run this ticket. Assign a cloud agent (or staff this lane), then try again.', reason }, 400);
     }
-    const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string } = {
+    const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string; chatId?: number } = {
       cloudAgentRef: evaln.candidate.agentRef,
       laneKey:       row.status,
     };
     if (evaln.candidate.model) payloadObj.model = evaln.candidate.model;
+    if (chatId != null) payloadObj.chatId = chatId;
     const executionId = await dispatchCloudRunForTask(
       c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
       {

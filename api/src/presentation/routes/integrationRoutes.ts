@@ -30,6 +30,7 @@ import {
   testProviderCredential,
   validateProviderCredentials,
 } from '../../application/integrations/providerTests';
+import { getMissingIntegrationRecommendations } from '../../application/integrations/integrationGapRecommendations';
 
 /**
  * Credential providers accepted by this endpoint come from ONE registry
@@ -169,6 +170,27 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   router.get('/catalog', (c) => {
     c.header('Cache-Control', 'public, max-age=300');
     return c.json({ providers: connectableCatalog() });
+  });
+
+  // GET /api/integrations/recommendations?projectId=<n>
+  // Live comparison of the connectable catalog with enabled tenant/project
+  // credentials. Registered before /:id so "recommendations" is never parsed as
+  // a credential UUID.
+  router.get('/recommendations', manager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rawProjectId = c.req.query('projectId');
+    const projectId = rawProjectId == null ? undefined : Number(rawProjectId);
+    if (projectId != null && (!Number.isInteger(projectId) || projectId <= 0)) {
+      return c.json({ error: 'projectId must be a positive integer' }, 400);
+    }
+    if (projectId != null) {
+      const [project] = await db.select({ id: projects.id }).from(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+      if (!project) return c.json({ error: 'projectId not found in this workspace' }, 404);
+    }
+
+    const recommendations = await getMissingIntegrationRecommendations(db, tenantId, projectId);
+    return c.json({ recommendations, total: recommendations.length });
   });
 
   // GET /api/integrations/:id  (returns masked secrets → MANAGER only)

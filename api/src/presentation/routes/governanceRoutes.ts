@@ -44,6 +44,7 @@ import {
 } from '../../application/governance/policyPackService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { createStakeholderAlignmentRoutes } from './stakeholderAlignmentRoutes';
 
 const CONTROL_STATUSES = ['not_started', 'in_progress', 'ready', 'out_of_scope'] as const;
 type ControlStatus = (typeof CONTROL_STATUSES)[number];
@@ -289,6 +290,7 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
 
   // Every other tracker is the same segment-scoped CRUD — one factory, mounted N times.
   mountTrackers(router, db, TRACKERS);
+  router.route('/stakeholder-alignment', createStakeholderAlignmentRoutes(db));
 
   return router;
 }

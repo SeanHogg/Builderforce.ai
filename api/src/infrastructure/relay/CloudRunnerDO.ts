@@ -19,7 +19,7 @@ import { executions } from '../database/schema';
 import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import { buildLimbicBlock, type LimbicState, type AgentExecParams } from '@builderforce/agent-tools';
-import { parseRoutingBias, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey } from '../../application/runtime/cloudDispatch';
+import { parseRoutingBias, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
@@ -187,6 +187,7 @@ export class CloudRunnerDO implements DurableObject {
       const requiredSignoff = reviewRole
         ? { roleKey: reviewRole, ...(reviewLane ? { laneKey: reviewLane } : {}) }
         : undefined;
+      const originatingChatId = parseOriginatingChatId(cursor.payload);
       const result = await runCloudToolLoop(
         this.env, this.db, cursor.executionId, cursor.tenantId,
         { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
@@ -194,7 +195,7 @@ export class CloudRunnerDO implements DurableObject {
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
         () => this.isAlreadyConcluded(cursor.executionId),
         cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(requiredSignoff ? { requiredSignoff } : {}), ...(dynamicSystem ? { dynamicSystem } : {}), ...(cursor.execParams ? { execParams: cursor.execParams } : {}) },
+        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(originatingChatId != null ? { originatingChatId } : {}), ...(requiredSignoff ? { requiredSignoff } : {}), ...(dynamicSystem ? { dynamicSystem } : {}), ...(cursor.execParams ? { execParams: cursor.execParams } : {}) },
       );
 
       // V3: evolve affect from this tick's outcome (amygdala) toward setpoints

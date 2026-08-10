@@ -60,7 +60,7 @@ import {
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
 } from '@builderforce/agent-tools';
 import { resolveWebSearchBacking, type ResolvedWebSearchBacking } from './webSearchCredential';
-import { parseRemediation, parseFollowUp, parseRoleInstruction, parseCloudAgentRef, parseModel } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseRoleInstruction, parseCloudAgentRef, parseModel, parseOriginatingChatId } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
@@ -903,6 +903,8 @@ interface ContainerRunContext {
   cloudAgentRef?: string;
   agentLabel: string;
   model?: string;
+  /** Brain chat that launched this run; authoritatively parsed from the execution payload. */
+  originatingChatId?: number;
   /** The tenant's LLM routing, resolved once at context build (and cached with it)
    *  so per-op `llm` calls pick the plan's pool/key without a per-call plan query. */
   effectivePlan: EffectivePlan;
@@ -937,6 +939,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
     if (agent.active === false) return null;
     const payloadModel = parseModel(exec.payload ?? undefined);
+    const originatingChatId = parseOriginatingChatId(exec.payload);
     const routing = await resolveCloudRouting(env, exec.tenantId);
     // Compile the persona/agent personality exec levers ONCE per run (cache-backed
     // persona bodies), so the container's per-step `llm` op applies the same
@@ -962,6 +965,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
       taskTitle: task.title, taskDescription: task.description,
       cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
       model: payloadModel ?? agent.baseModel,
+      ...(originatingChatId != null ? { originatingChatId } : {}),
       effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
       premiumEntitled: routing.premiumEntitled,
       execParams,
@@ -1137,14 +1141,14 @@ export async function handleContainerOp(
   if (op === 'platform_tool') {
     const name = typeof args.name === 'string' ? args.name : '';
     const toolArgs = args.arguments && typeof args.arguments === 'object' ? (args.arguments as Record<string, unknown>) : {};
-    const platformTool = resolveCloudAgentPlatformTool(name);
+    const platformTool = resolveCloudAgentPlatformTool(name, ctx.originatingChatId);
     if (!platformTool) return { status: 200, body: { ok: false, error: `unknown or disallowed platform tool '${name}'` } };
     const tStart = Date.now();
     let result: Record<string, unknown>;
     try {
       const data = await callBuiltinTool(db, {
         tenantId, tool: platformTool,
-        arguments: { projectId, ...toolArgs },
+        arguments: { projectId, ...toolArgs, ...(ctx.originatingChatId != null ? { chatId: ctx.originatingChatId } : {}) },
         env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
         role: TenantRole.MANAGER,
       });
@@ -1306,7 +1310,7 @@ export async function handleContainerOp(
     // Repo/shell tools + the curated platform subset (create tasks / update OKRs /
     // read remaining) — parity with the durable loop. The container relays each
     // `builtin_*` call back via the `platform_tool` op below (it has no DB).
-    const containerTools = [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
+    const containerTools = [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)];
     // A connected Claude subscription powers a direct-Claude container turn; BYO
     // OpenAI/Google/Anthropic api-keys override the operator keys for their vendors
     // (tenant-funded → byo). One round-trip (parallel reads); empty (operator-key
@@ -1522,6 +1526,8 @@ export interface CloudLoopOpts {
    *  runs (board lane auto-run, scheduled, CI-fix). Merged as a nudge over the KV
    *  routing table on the first tick. */
   routingBias?: Record<string, number>;
+  /** Brain chat that launched this run. Enables exactly one scoped write-back tool. */
+  originatingChatId?: number;
   /** Exact accountability slot a reviewer run must sign before it may finish. */
   requiredSignoff?: { roleKey: string; laneKey?: string };
   /**
@@ -1925,7 +1931,7 @@ export async function runCloudToolLoop(
     maxRepositories: executionLimits.maxRepositories,
     maxSpendMillicents: executionLimits.maxSpendMillicents,
   }).from(executionLimits).where(and(eq(executionLimits.tenantId, tenantId), eq(executionLimits.executionId, executionId))).limit(1);
-  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
+  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(opts?.originatingChatId)];
   const effectiveSystemPrompt = tenantModel?.directives
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;
@@ -2351,7 +2357,7 @@ export async function runCloudToolLoop(
         toolResult = { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` };
       } else {
         // allow — or a require-approval gate already asked + answered.
-        const platformTool = resolveCloudAgentPlatformTool(name);
+        const platformTool = resolveCloudAgentPlatformTool(name, opts?.originatingChatId);
         if (platformTool) {
           // Curated platform tool (create task / update OKR / read remaining work) —
           // run in-process, tenant-scoped, defaulting the project to THIS run's so a
@@ -2361,7 +2367,7 @@ export async function runCloudToolLoop(
           try {
             const data = await callBuiltinTool(db, {
               tenantId, tool: platformTool,
-              arguments: { projectId, ...parsed },
+              arguments: { projectId, ...parsed, ...(opts?.originatingChatId != null ? { chatId: opts.originatingChatId } : {}) },
               env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
               role: TenantRole.MANAGER,
             });
@@ -2634,6 +2640,8 @@ export interface CloudEngineContext {
    *  parsed off the run payload. Absent on headless runs. Threaded to the loop's
    *  first-tick model seed. */
   routingBias?: Record<string, number>;
+  /** Brain chat that launched the execution, when this is a conversation-originated run. */
+  originatingChatId?: number;
   /** Resolved assigned artifacts (skills/personas/content). Used by V3 to derive
    *  limbic setpoints from the assigned personas' psychometric profiles. */
   artifacts?: ResolvedArtifacts;
@@ -2673,7 +2681,7 @@ export class CloudLimbicEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}) },
+      { routingBias: this.rc.routingBias, ...(this.rc.originatingChatId != null ? { originatingChatId: this.rc.originatingChatId } : {}), ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}) },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }

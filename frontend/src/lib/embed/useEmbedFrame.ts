@@ -8,6 +8,7 @@ import {
   type FrameToHostMessage,
 } from '@seanhogg/builderforce-embedded';
 import { setEmbedAuth } from '../auth';
+import { observeResizeOnAnimationFrame } from '../observeResize';
 import { isTrustedHostOrigin, isVsCodeWebviewOrigin } from './embedTrust';
 
 /**
@@ -133,10 +134,9 @@ export function useEmbedFrame(): EmbedFrameState {
         type: 'resize',
         height: document.documentElement.scrollHeight,
       });
-    const ro = new ResizeObserver(report);
-    ro.observe(document.documentElement);
+    const disconnect = observeResizeOnAnimationFrame(document.documentElement, report);
     report();
-    return () => ro.disconnect();
+    return disconnect;
   }, [postToHost]);
 
   return { ...state, navigate, reportError };

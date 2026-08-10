@@ -92,6 +92,33 @@ function Card({
       <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0 }}>
         <span style={{ fontWeight: 600 }}>{t('recs.action')}: </span>{r.recommendation}
       </p>
+      {r.whyItMatters ? (
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+          {r.whyItMatters}
+        </p>
+      ) : null}
+      {(r.action?.href || (r.links?.length ?? 0) > 0) ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+          {r.action?.href ? (
+            <a
+              href={r.action.href}
+              style={{ fontSize: '0.8rem', fontWeight: 700, padding: '6px 12px', borderRadius: 'var(--radius-md)', background: 'var(--accent)', color: 'var(--text-on-accent)', textDecoration: 'none' }}
+            >
+              {r.action.label}
+            </a>
+          ) : null}
+          {r.links?.filter((link) => link.href && link.href !== r.action?.href).map((link) => (
+            <a
+              key={`${link.kind}:${link.id ?? link.label}:${link.field ?? ''}`}
+              href={link.href}
+              title={link.field ? `${link.field} (${link.label})` : link.label}
+              style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'underline' }}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

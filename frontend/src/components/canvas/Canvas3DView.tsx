@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import {
   CANVAS_3D_DEFAULT_ORBIT,
   CANVAS_3D_DEPTH_MODES,
@@ -208,13 +209,11 @@ export function Canvas3DView<T extends Canvas3DNode>({
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
+    return observeResizeOnAnimationFrame(viewport, () => {
       if (userFramed.current) return;
       const zoom = fitZoomRef.current();
       setOrbit((current) => current.zoom === zoom ? current : { ...current, zoom });
     });
-    observer.observe(viewport);
-    return () => observer.disconnect();
   }, []);
 
   /** Pointer position measured from the middle of the viewport, where the scene is centred. */

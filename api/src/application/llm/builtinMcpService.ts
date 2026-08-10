@@ -19,7 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Consolidated Gap Register.
  */
 
-import { and, eq, desc, getTableColumns, isNotNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, desc, getTableColumns, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
 import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
 import { advertisedName } from './toolNaming';
@@ -35,6 +35,8 @@ import {
 import { ProjectService } from '../project/ProjectService';
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
+import { summarizeTaskActivity } from '../task/taskActivity';
+import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -46,7 +48,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -99,6 +101,7 @@ import { PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from './usageLedger';
 import { catalogEntry, tierForModel, vendorForModel } from './vendors';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
+import { getPullRequestDiffSummary } from '../repos/getPullRequestDiffSummary';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
 export const BUILTIN_EXTENSION_ID = 'builtin';
@@ -237,13 +240,15 @@ async function replayRoute(
   // Dynamic import avoids a static import cycle (index → routes → this module).
   const { buildApp } = await import('../../index');
   const app = buildApp(ctx.env);
-  const tok = ctx.authToken ?? '';
-  const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(tok);
-  const bearer = tok && !isGatewayKey
-    ? tok
+  const auth = resolveReplayAuth({
+    authToken: ctx.authToken,
+    agentRef: ctx.agentRef,
+  });
+  const bearer = auth.forwardToken
+    ? auth.forwardToken
     : await signJwt(
         {
-          sub: ctx.userId && !isGatewayKey ? ctx.userId : 'agentHost:mcp',
+          sub: auth.subject,
           tid: ctx.tenantId,
           role: ctx.role ?? TenantRole.DEVELOPER,
           // Signed authorship: when an AGENT is driving this call, the replayed route
@@ -271,6 +276,35 @@ async function replayRoute(
     throw new Error(`${method} ${path} → ${res.status} ${detail}`.slice(0, 400));
   }
   return parsed;
+}
+
+export interface ReplayAuthPlan {
+  /** A real person's still-authoritative bearer token. Never set for an agent run. */
+  forwardToken?: string;
+  /** Machine subject used when the platform must mint a fresh in-process token. */
+  subject: 'agentHost:mcp';
+}
+
+/**
+ * Decide how an in-process route replay authenticates.
+ *
+ * Cloud agents must never inherit the web/session JWT that happened to launch a
+ * run. A run can outlive that token, and an agent UUID is not a user with an
+ * `auth_tokens` row. Minting a fresh machine token per replay keeps the call
+ * bounded by the run's tenant/role while the signed `agt` claim above preserves
+ * the real agent authorship. Human MCP calls still forward their bearer so
+ * session revocation and exact user permissions remain authoritative.
+ */
+export function resolveReplayAuth(args: {
+  authToken?: string | null;
+  agentRef?: string | null;
+}): ReplayAuthPlan {
+  const token = args.authToken?.trim() ?? '';
+  const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(token);
+  if (!args.agentRef && token && !isGatewayKey) {
+    return { forwardToken: token, subject: 'agentHost:mcp' };
+  }
+  return { subject: 'agentHost:mcp' };
 }
 
 interface BuiltinTool {
@@ -354,6 +388,48 @@ function compactTask(plain: Record<string, unknown>): Record<string, unknown> {
   const s = snippet(plain.description);
   if (s) out.descriptionSnippet = s;
   return out;
+}
+
+/** Bulk-load the compact progress contract without turning tasks.list into N+1 queries. */
+async function loadTaskProgress(ctx: BuiltinCtx, rows: Record<string, unknown>[]): Promise<Map<number, ReturnType<typeof buildTaskProgressBreakdown>>> {
+  const ids = rows.map((row) => Number(row.id)).filter(Number.isFinite);
+  if (!ids.length) return new Map();
+  const [children, prs, codeRows] = await Promise.all([
+    ctx.db.select({ parentTaskId: tasks.parentTaskId, status: tasks.status })
+      .from(tasks).where(inArray(tasks.parentTaskId, ids)),
+    ctx.db.select({ taskId: pullRequests.taskId, status: pullRequests.status, buildStatus: pullRequests.buildStatus })
+      .from(pullRequests)
+      .where(and(eq(pullRequests.tenantId, ctx.tenantId), inArray(pullRequests.taskId, ids)))
+      .orderBy(desc(pullRequests.updatedAt)),
+    ctx.db.select({ taskId: taskFileChanges.taskId })
+      .from(taskFileChanges)
+      .where(and(
+        eq(taskFileChanges.tenantId, ctx.tenantId),
+        inArray(taskFileChanges.taskId, ids),
+        sql`not (${taskFileChanges.path} ~* ${'(^|/)(prd\\.md|readme\\.md|roadmap\\.md|done\\.md)$|(^|/)(specs|docs)(/|$)|\\.mdx?$'})`,
+      )),
+  ]);
+  const childStatuses = new Map<number, string[]>();
+  for (const child of children) {
+    if (child.parentTaskId == null) continue;
+    const statuses = childStatuses.get(child.parentTaskId) ?? [];
+    statuses.push(child.status);
+    childStatuses.set(child.parentTaskId, statuses);
+  }
+  const latestPr = new Map<number, { status: string; buildStatus: string | null }>();
+  for (const pr of prs) if (pr.taskId != null && !latestPr.has(pr.taskId)) latestPr.set(pr.taskId, pr);
+  const codeTaskIds = new Set(codeRows.map((row) => row.taskId));
+  return new Map(rows.map((row) => {
+    const id = Number(row.id);
+    const pr = latestPr.get(id);
+    return [id, buildTaskProgressBreakdown({
+      status: typeof row.status === 'string' ? row.status : null,
+      childStatuses: childStatuses.get(id),
+      codeDelivered: codeTaskIds.has(id),
+      prStatus: pr?.status,
+      buildStatus: pr?.buildStatus,
+    })];
+  }));
 }
 
 /** Project a full project row to the identity + status fields a planner needs. */
@@ -861,15 +937,84 @@ const CATALOG: BuiltinTool[] = [
       // SECURITY tickets are included but MASKED for a caller without clearance
       // (surfaced-not-hidden; governed by security_ticket_access).
       rows = await maskSecurityTasks(ctx, rows);
-      return listEnvelope('tasks', rows.map(compactTask), clampLimit(a.limit));
+      const limit = clampLimit(a.limit);
+      const page = rows.slice(0, limit);
+      const progress = await loadTaskProgress(ctx, page.filter((row) => row.restricted !== true));
+      const projected = page.map((row) => ({ ...compactTask(row), ...(row.restricted === true ? {} : { progress: progress.get(Number(row.id)) }) }));
+      return { tasks: projected, total: rows.length, returned: projected.length, truncated: rows.length > projected.length };
     },
   },
-  { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
-    const plain = (await getTenantTask(ctx, num(a.id))).toPlain() as unknown as Record<string, unknown>;
+  { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
+    const id = num(a.id);
+    const plain = (await getTenantTask(ctx, id)).toPlain() as unknown as Record<string, unknown>;
     // A SECURITY ticket is returned MASKED (restricted: true) for a caller without
     // clearance — surfaced, not hidden. Same shared gate as the board.
     const [masked] = await maskSecurityTasks(ctx, [plain]);
-    return masked ?? plain;
+    const visible = masked ?? plain;
+    if (visible.restricted === true) return visible;
+
+    const executionRows = await ctx.db
+      .select({
+        id: executions.id,
+        agentRef: executions.cloudAgentRef,
+        payload: executions.payload,
+        status: executions.status,
+        produced: executions.produced,
+        createdAt: executions.createdAt,
+        completedAt: executions.completedAt,
+        total: sql<number>`count(*) over()`.mapWith(Number),
+      })
+      .from(executions)
+      .where(and(eq(executions.tenantId, ctx.tenantId), eq(executions.taskId, id)))
+      .orderBy(desc(executions.createdAt))
+      .limit(250);
+    const executionIds = executionRows.map((row) => row.id);
+    const fileRows = executionIds.length ? await ctx.db
+      .select({ executionId: taskFileChanges.executionId, path: taskFileChanges.path })
+      .from(taskFileChanges)
+      .where(and(
+        eq(taskFileChanges.tenantId, ctx.tenantId),
+        eq(taskFileChanges.taskId, id),
+        inArray(taskFileChanges.executionId, executionIds),
+      )) : [];
+    const [coderCode] = await ctx.db
+      .select({ id: taskFileChanges.id })
+      .from(taskFileChanges)
+      .innerJoin(executions, and(
+        eq(executions.id, taskFileChanges.executionId),
+        eq(executions.tenantId, ctx.tenantId),
+      ))
+      .where(and(
+        eq(taskFileChanges.tenantId, ctx.tenantId),
+        eq(taskFileChanges.taskId, id),
+        sql`${executions.payload} ~* ${'"(actAsRole|roleKey|role)"\\s*:\\s*"[^"]*(coder|developer|engineer)[^"]*"'}`,
+        sql`not (${taskFileChanges.path} ~* ${'(^|/)(prd\\.md|readme\\.md|roadmap\\.md|done\\.md)$|(^|/)(specs|docs)(/|$)|\\.mdx?$'})`,
+      ))
+      .limit(1);
+    const [pr] = await ctx.db
+      .select({ id: pullRequests.id, status: pullRequests.status, buildStatus: pullRequests.buildStatus })
+      .from(pullRequests)
+      .where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.taskId, id)))
+      .orderBy(desc(pullRequests.updatedAt))
+      .limit(1);
+    const childRows = await ctx.db
+      .select({ status: tasks.status })
+      .from(tasks)
+      .where(eq(tasks.parentTaskId, id));
+    return {
+      ...visible,
+      progress: buildTaskProgressBreakdown({
+        status: String(visible.status ?? ''),
+        childStatuses: childRows.map((row) => row.status),
+        codeDelivered: Boolean(coderCode),
+        prStatus: pr?.status,
+        buildStatus: pr?.buildStatus,
+      }),
+      activity: summarizeTaskActivity(String(visible.status ?? ''), executionRows, fileRows, Boolean(pr), {
+        executionsCount: executionRows[0]?.total ?? 0,
+        hasCoderCodeEver: Boolean(coderCode),
+      }),
+    };
   } },
   {
     tool: 'tasks.create', mutates: true,
@@ -1777,6 +1922,23 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
   { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
+  {
+    tool: 'chats.post_to_brain', mutates: true,
+    description: 'Post a concise progress update, blocker, or final result back into the Brain chat that launched this cloud run. The originating chat is supplied by the runtime and cannot be changed by the agent.',
+    // chatId is deliberately absent from the advertised schema: the runtime injects
+    // the verified origin after the model call, so the agent cannot redirect a post.
+    parameters: obj({ content: S }, ['content']),
+    run: async (ctx, a) => {
+      if (!ctx.agentRef) throw new Error('Only an attributed cloud agent may post an execution update.');
+      const svc = new BrainService(ctx.db);
+      const result = await svc.postExecutionUpdate(num(a.chatId), ctx.tenantId, {
+        agentRef: ctx.agentRef,
+        content: str(a.content),
+      });
+      if ('error' in result) throw new Error(result.error);
+      return result;
+    },
+  },
   { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
   {
     tool: 'chats.dispatch_agent', mutates: true,
@@ -1791,7 +1953,7 @@ const CATALOG: BuiltinTool[] = [
       // Assign the agent to the ticket, then start a run — reuses the real routes'
       // authz + the single cloud-run dispatcher (no duplicated dispatch logic).
       await replayRoute(ctx, 'PATCH', `/api/tasks/${num(a.taskId)}`, { assignedAgentRef: str(a.agentRef) });
-      return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, {});
+      return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, { chatId: num(a.chatId) });
     },
   },
 
@@ -2248,6 +2410,20 @@ const CATALOG: BuiltinTool[] = [
   //       table rows (the git/provider calls happen on separate routes). ----
   { tool: 'repos.list', mutates: false, description: 'List git repositories linked to a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(projectRepositories).where(and(eq(projectRepositories.tenantId, ctx.tenantId), eq(projectRepositories.segmentId, seg), eq(projectRepositories.projectId, num(a.projectId)))).orderBy(desc(projectRepositories.createdAt)).limit(200); } },
   { tool: 'repos.list_pull_requests', mutates: false, description: 'List pull requests for a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(pullRequests).where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.segmentId, seg), eq(pullRequests.projectId, num(a.projectId)))).orderBy(desc(pullRequests.createdAt)).limit(200); } },
+  {
+    tool: 'repos.pull_request_diff_summary', mutates: false,
+    description: 'Summarize a task or pull request diff by file category (code, test, docs, config, migration, asset, other), including per-file additions/deletions, category totals, and docsOnly/codeChanged flags. Prefer taskId; the platform resolves its recorded PR or branch changes.',
+    parameters: obj({ taskId: N, prNumber: N, projectId: N }),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('pull-request diff summary needs the platform environment');
+      return getPullRequestDiffSummary(ctx.db, ctx.env, {
+        tenantId: ctx.tenantId,
+        ...(a.taskId != null ? { taskId: num(a.taskId) } : {}),
+        ...(a.prNumber != null ? { prNumber: num(a.prNumber) } : {}),
+        ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+      });
+    },
+  },
   {
     tool: 'repos.add', mutates: true,
     description: 'Link a git repository to a project (a plain catalog row). provider: github|gitlab|bitbucket. Pass credentialId to bind an access key.',
@@ -2950,6 +3126,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'kanban.accountability', mutates: false, description: 'Get a ticket\'s Accountability Report — per required role: Who signed, When, Verdict, Comments, and the linked Contribution — plus gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and %-complete.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/accountability`) },
   { tool: 'kanban.assess_resource', mutates: true, description: 'RESOURCE ASSESSMENT — add a role the ticket needs beyond the template (e.g. designer, security). It becomes a required manifest participant that must execute + sign off; if no capable resource is available it is flagged as a resource gap. responsibility defaults to "owner".', parameters: obj({ taskId: N, roleKey: S, responsibility: { type: 'string', enum: ['owner', 'reviewer', 'contributor'] }, stageKey: S, note: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants`, { roleKey: str(a.roleKey), responsibility: a.responsibility != null ? str(a.responsibility) : undefined, stageKey: a.stageKey != null ? str(a.stageKey) : undefined, note: a.note != null ? str(a.note) : undefined }) },
   { tool: 'kanban.assign_participant', mutates: true, description: 'Assign or reassign an agent/user to an EXISTING ticket Participation Manifest role. Replaces the current assignee rather than creating a duplicate participant, and resets the role to assigned so the new assignee must provide fresh evidence.', parameters: obj({ taskId: N, roleKey: S, assigneeRef: S, assigneeKind: { type: 'string', enum: ['agent', 'user'] } }, ['taskId', 'roleKey', 'assigneeRef', 'assigneeKind']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/kanban/tasks/${num(a.taskId)}/participants/assign`, { roleKey: str(a.roleKey), assigneeRef: str(a.assigneeRef), assigneeKind: str(a.assigneeKind) }) },
+  { tool: 'kanban.remove_participant', mutates: true, description: 'Remove one specific Participation Manifest slot by participant id. Required-role safeguards reject removal when it would leave the ticket without its sole required responsibility.', parameters: obj({ taskId: N, participantId: S }, ['taskId', 'participantId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/kanban/tasks/${num(a.taskId)}/participants/${encodeURIComponent(str(a.participantId))}`) },
   { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/coordinate`, {}) },
   { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants/materialize`, {}) },
 
@@ -3524,6 +3701,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',
+  'repos.pull_request_diff_summary',
   'attachments.read', 'attachments.write',
   'reviews.record', 'tickets.from_delta',
   // Kanban role sign-off — a reviewer agent clears a lane's role/review requirement so
@@ -3535,7 +3713,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // which required roles still must execute + sign off, and performs a Resource Assessment
   // (add a role the ticket needs beyond the template). Without these on the allowlist an
   // unattended Coordinator can SEE the tools in the catalog but not invoke them.
-  'kanban.participants', 'kanban.accountability', 'kanban.assess_resource', 'kanban.assign_participant',
+  'kanban.participants', 'kanban.accountability', 'kanban.assess_resource', 'kanban.assign_participant', 'kanban.remove_participant',
   'kanban.coordinate', 'kanban.materialize_work_items',
   // Autonomy self-diagnosis — the wiring audit ("can work complete at all?"), the
   // outcome funnel, and a single ticket's chain of custody. All read-only. An agent
@@ -3592,12 +3770,13 @@ export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
 ];
 
 const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
+const ORIGINATING_CHAT_TOOL = 'chats.post_to_brain';
 
 let _cloudAgentPlatformSchemas: ToolSchema[] | undefined;
 /** OpenAI-shape tool schemas for the curated cloud-agent platform subset, named with
  *  the gateway-safe `builtin_*` prefix (dots are invalid in tool-call names). Concats
  *  directly onto CLOUD_AGENT_TOOLS in the cloud loop. Memoized (static metadata). */
-export function cloudAgentPlatformToolSchemas(): ToolSchema[] {
+export function cloudAgentPlatformToolSchemas(originatingChatId?: number): ToolSchema[] {
   if (!_cloudAgentPlatformSchemas) {
     _cloudAgentPlatformSchemas = CATALOG
       .filter((t) => CLOUD_AGENT_PLATFORM_SET.has(t.tool))
@@ -3606,14 +3785,21 @@ export function cloudAgentPlatformToolSchemas(): ToolSchema[] {
         function: { name: advertisedName(t.tool), description: t.description, parameters: t.parameters as ToolSchema['function']['parameters'] },
       }));
   }
-  return _cloudAgentPlatformSchemas;
+  if (originatingChatId == null) return _cloudAgentPlatformSchemas;
+  const entry = CATALOG.find((tool) => tool.tool === ORIGINATING_CHAT_TOOL);
+  if (!entry) return _cloudAgentPlatformSchemas;
+  return [..._cloudAgentPlatformSchemas, {
+    type: 'function',
+    function: { name: advertisedName(entry.tool), description: entry.description, parameters: entry.parameters as ToolSchema['function']['parameters'] },
+  }];
 }
 
 let _cloudAgentPlatformNameMap: Map<string, string> | undefined;
 /** Reverse an advertised `builtin_*` name to its dotted CATALOG id — but ONLY for the
  *  curated subset (undefined otherwise), so the cloud agent can never reach an off-list
  *  platform tool even if the model hallucinates one. Memoized. */
-export function resolveCloudAgentPlatformTool(advertised: string): string | undefined {
+export function resolveCloudAgentPlatformTool(advertised: string, originatingChatId?: number): string | undefined {
+  if (originatingChatId != null && advertised === advertisedName(ORIGINATING_CHAT_TOOL)) return ORIGINATING_CHAT_TOOL;
   if (!_cloudAgentPlatformNameMap) {
     _cloudAgentPlatformNameMap = new Map(CLOUD_AGENT_PLATFORM_TOOLS.map((t) => [advertisedName(t), t]));
   }
