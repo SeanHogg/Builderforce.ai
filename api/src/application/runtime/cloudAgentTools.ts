@@ -14,6 +14,7 @@
  */
 
 import { buildCoreToolRegistry, type Capability } from '@builderforce/agent-tools';
+import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
@@ -44,9 +45,7 @@ export function assertsUnrunVerification(summary: string): boolean {
  * reconsider. Pure → unit-testable in isolation.
  */
 export function hasNoCodeDeliverable(writtenPaths: ReadonlySet<string>): boolean {
-  let codeFiles = 0;
-  for (const p of writtenPaths) if (p !== 'PRD.md') codeFiles += 1;
-  return codeFiles === 0;
+  return classifyDeliverablePaths(writtenPaths) !== 'implementation';
 }
 
 /** Deterministic JSON: object keys emitted in sorted order at every depth, so two

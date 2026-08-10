@@ -36,7 +36,7 @@ import { cronSweepEnabled, readCronControls } from '../runtime/cronControls';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
-  projectManagerConfigs, managerActions, managerStallWatch, projects, featureScores,
+  projectManagerConfigs, managerActions, managerStallWatch, projects, featureScores, taskFileChanges,
 } from '../../infrastructure/database/schema';
 import { TaskStatus, TaskPriority, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
@@ -72,6 +72,7 @@ import { assignTicketOwner } from './assignOwner';
 import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
+import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 import {
   runStallTriage, loadBulkSignals, describeTriageDeferral,
   MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_PASS_STATE_KEY,
@@ -1918,6 +1919,18 @@ async function coordinatePullRequests(
           inArray(pullRequests.taskId, reviewReady.map((t) => t.id)),
         ))
       : [];
+    const reviewFileRows = reviewReady.length
+      ? await db.select({ taskId: taskFileChanges.taskId, path: taskFileChanges.path })
+        .from(taskFileChanges)
+        .where(and(
+          eq(taskFileChanges.tenantId, tenantId),
+          inArray(taskFileChanges.taskId, reviewReady.map((t) => t.id)),
+        ))
+      : [];
+    const reviewPathsByTask = new Map<number, string[]>();
+    for (const row of reviewFileRows) {
+      reviewPathsByTask.set(row.taskId, [...(reviewPathsByTask.get(row.taskId) ?? []), row.path]);
+    }
     // ── WHAT EACH REVIEW TICKET'S PULL REQUEST IS DOING ─────────────────────────────
     // An OPEN row wins over every other row a ticket has: a ticket can carry an old
     // closed PR and a live one, and it is the live one that decides both whether there is
@@ -1958,6 +1971,9 @@ async function coordinatePullRequests(
           hasAssignee: !!t.assignedAgentRef || t.assignedAgentHostId != null,
           buildStatus: normalizeBuildStatus(pr?.buildStatus),
           hasLiveRun: liveTaskIds.has(t.id),
+          deliverableEvidence: reviewPathsByTask.has(t.id)
+            ? classifyDeliverablePaths(reviewPathsByTask.get(t.id)!)
+            : (!t.gitBranch && !pr ? 'none' : 'unknown'),
           signoff,
           requireSignoff: policy.requireSignoffToComplete,
           requireGreenBuild: policy.prMergePolicy === 'on_green',

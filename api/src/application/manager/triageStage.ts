@@ -36,7 +36,7 @@ import { liveExecution } from '../rehearsal/executionMode';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
-import { executions, pullRequests, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { executions, pullRequests, tasks, taskFileChanges, taskStatusTransitions } from '../../infrastructure/database/schema';
 import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
@@ -44,6 +44,7 @@ import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes
 import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
+import { classifyDeliverablePaths, type DeliverableEvidence } from '../delivery/deliverableEvidence';
 import { coordinateTicket } from './coordinateTicket';
 import { staffUnfilledRole } from './staffUnfilledRole';
 import { assignTicketOwner } from './assignOwner';
@@ -434,10 +435,12 @@ export interface BulkSignals {
   everRan: Set<number>;
   prByTask: Map<number, { id: string; number: number | null; repoId: string | null; status: string | null; buildStatus: string | null; updatedAt: Date }>;
   liveTaskIds: Set<number>;
+  /** File evidence recorded by agent runs, classified once for the whole project. */
+  deliverableByTask: Map<number, Exclude<DeliverableEvidence, 'unknown'>>;
 }
 
 /**
- * Three queries for the whole project — the signals every diagnosis needs, gathered
+ * Four queries plus the runtime live-run read for the whole project — the signals every diagnosis needs, gathered
  * once. Doing this per ticket would be the N+1 the caching rules forbid, and at 200
  * projects a tick it would dominate the sweep.
  */
@@ -446,12 +449,12 @@ export async function loadBulkSignals(
   runtimeService: RuntimeService,
   args: { tenantId: number; projectId: number; taskIds: number[] },
 ): Promise<BulkSignals> {
-  const empty: BulkSignals = { lastMovedAt: new Map(), everRan: new Set(), prByTask: new Map(), liveTaskIds: new Set() };
+  const empty: BulkSignals = { lastMovedAt: new Map(), everRan: new Set(), prByTask: new Map(), liveTaskIds: new Set(), deliverableByTask: new Map() };
   if (args.taskIds.length === 0) return empty;
 
   // `liveExecution()` on the "has this ticket ever run?" probe: a rehearsal (0372)
   // must not count, or the manager treats a never-attempted ticket as already tried.
-  const [moves, ran, prs, live] = await Promise.all([
+  const [moves, ran, prs, fileRows, live] = await Promise.all([
     db.select({ taskId: taskStatusTransitions.taskId, at: sql<Date>`max(${taskStatusTransitions.occurredAt})` })
       .from(taskStatusTransitions)
       .where(inArray(taskStatusTransitions.taskId, args.taskIds))
@@ -469,6 +472,10 @@ export async function loadBulkSignals(
       .from(pullRequests)
       .where(and(eq(pullRequests.tenantId, args.tenantId), inArray(pullRequests.taskId, args.taskIds)))
       .orderBy(desc(pullRequests.updatedAt))
+      .catch(() => []),
+    db.select({ taskId: taskFileChanges.taskId, path: taskFileChanges.path })
+      .from(taskFileChanges)
+      .where(and(eq(taskFileChanges.tenantId, args.tenantId), inArray(taskFileChanges.taskId, args.taskIds)))
       .catch(() => []),
     runtimeService.listActiveByTasks(args.taskIds).catch(() => []),
   ]);
@@ -491,7 +498,11 @@ export async function loadBulkSignals(
   }
 
   const liveTaskIds = new Set<number>((live as Array<{ taskId: unknown }>).map((e) => e.taskId as number));
-  return { lastMovedAt, everRan, prByTask, liveTaskIds };
+  const pathsByTask = new Map<number, string[]>();
+  for (const row of fileRows) pathsByTask.set(row.taskId, [...(pathsByTask.get(row.taskId) ?? []), row.path]);
+  const deliverableByTask = new Map<number, Exclude<DeliverableEvidence, 'unknown'>>();
+  for (const [taskId, paths] of pathsByTask) deliverableByTask.set(taskId, classifyDeliverablePaths(paths));
+  return { lastMovedAt, everRan, prByTask, liveTaskIds, deliverableByTask };
 }
 
 /** Normalize the free-form `pull_requests.build_status` to the readiness vocabulary. */
@@ -713,6 +724,8 @@ export async function runStallTriage(
           hasAssignee: !!task.assignedAgentRef || task.assignedAgentHostId != null,
           buildStatus: normalizeBuildStatus(prRow?.buildStatus),
           hasLiveRun: signals.liveTaskIds.has(task.id),
+          deliverableEvidence: signals.deliverableByTask.get(task.id)
+            ?? (!task.gitBranch && !prRow ? 'none' : 'unknown'),
           signoff,
           requireSignoff: policy.requireSignoffToComplete,
           requireGreenBuild: policy.prMergePolicy === 'on_green',

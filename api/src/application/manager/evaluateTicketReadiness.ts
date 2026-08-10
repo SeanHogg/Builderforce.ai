@@ -48,6 +48,7 @@
  */
 import { producerRoleForActionType } from '../kanban/roleCapability';
 import type { SignoffGateResult } from '../kanban/signoffGate';
+import type { DeliverableEvidence } from '../delivery/deliverableEvidence';
 
 /** What the manager should do with a ticket sitting in review. */
 export type ReadinessAction =
@@ -106,6 +107,8 @@ export interface ReadinessInput {
   buildStatus: 'success' | 'failure' | 'pending' | null;
   /** A pending/submitted/running/paused execution exists right now. */
   hasLiveRun: boolean;
+  /** Recorded file evidence for this ticket. `unknown` never fails closed by itself. */
+  deliverableEvidence: DeliverableEvidence;
   /** Result of the unanimous-sign-off gate. */
   signoff: SignoffGateResult;
   /** When false, sign-off is not required to complete (explicit opt-out). */
@@ -134,6 +137,9 @@ export interface TicketReadiness {
  */
 export function expectsCodeDeliverable(taskType: string | null, actionType: string | null): boolean {
   if (taskType === 'epic') return false;
+  // `docs` is the explicit non-code classification. Its intended deliverable is the
+  // document itself, unlike a coding ticket that happens to have produced only a PRD.
+  if (actionType === 'docs' || actionType === 'analysis' || actionType === 'provisioning' || actionType === 'decision') return false;
   return producerRoleForActionType(actionType) != null;
 }
 
@@ -156,10 +162,14 @@ export function decideTicketReadiness(input: ReadinessInput): TicketReadiness {
 
   // 1. Was it supposed to produce code, and did it? This is the check whose absence
   //    let implementable tickets rot in review with nothing to show.
-  if (expectsCode && !input.hasBranch && !hasPr) {
+  if (expectsCode && (input.deliverableEvidence === 'none' || input.deliverableEvidence === 'docs_only'
+    || (!input.hasBranch && !hasPr))) {
+    const produced = input.deliverableEvidence === 'docs_only'
+      ? 'only documentation'
+      : 'no implementation files';
     return at(
       'return_to_implementation',
-      `This is ${input.actionType ?? 'implementation'} work but it reached review with no branch or PR — returning it to implementation.`,
+      `This is ${input.actionType ?? 'implementation'} work but it reached review with ${produced} — returning it to implementation.`,
     );
   }
 

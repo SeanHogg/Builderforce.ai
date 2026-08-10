@@ -31,6 +31,7 @@ function input(over: Partial<ReadinessInput> = {}): ReadinessInput {
     hasAssignee: true,
     buildStatus: 'success',
     hasLiveRun: false,
+    deliverableEvidence: 'implementation',
     signoff: signedOff,
     requireSignoff: true,
     requireGreenBuild: false,
@@ -39,9 +40,14 @@ function input(over: Partial<ReadinessInput> = {}): ReadinessInput {
 }
 
 describe('expectsCodeDeliverable', () => {
-  it.each(['backend_api', 'frontend_ui', 'sql', 'bugfix', 'refactor', 'data_migration', 'tests', 'docs', 'devops_ci'])(
+  it.each(['backend_api', 'frontend_ui', 'sql', 'bugfix', 'refactor', 'data_migration', 'tests', 'devops_ci'])(
     'expects a deliverable for %s work',
     (actionType) => expect(expectsCodeDeliverable('task', actionType)).toBe(true),
+  );
+
+  it.each(['docs', 'analysis', 'provisioning', 'decision'])(
+    'treats explicitly classified %s work as a non-code deliverable',
+    (actionType) => expect(expectsCodeDeliverable('task', actionType)).toBe(false),
   );
 
   it('does NOT expect a deliverable for unclassified work', () => {
@@ -72,11 +78,22 @@ describe('decideTicketReadiness', () => {
     // nothing. Review is not a resting place for unstarted work.
     const r = decideTicketReadiness(input({ hasBranch: false, prState: 'none' }));
     expect(r.action).toBe('return_to_implementation');
-    expect(r.detail).toContain('no branch or PR');
+    expect(r.detail).toContain('no implementation files');
+  });
+
+  it('RETURNS code work whose recorded changes are documentation-only', () => {
+    const r = decideTicketReadiness(input({ deliverableEvidence: 'docs_only', prState: 'open' }));
+    expect(r.action).toBe('return_to_implementation');
+    expect(r.detail).toContain('only documentation');
+  });
+
+  it('does not mistake unknown evidence for proof that implementation is absent', () => {
+    const r = decideTicketReadiness(input({ deliverableEvidence: 'unknown' }));
+    expect(r.action).toBe('complete');
   });
 
   it('does NOT return a non-code ticket for having no branch', () => {
-    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, prState: 'none' }));
+    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, prState: 'none', deliverableEvidence: 'none' }));
     expect(r.action).toBe('complete');
   });
 

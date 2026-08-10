@@ -24,6 +24,14 @@ describe('hasNoCodeDeliverable (ROADMAP #38 completeness self-review)', () => {
     expect(hasNoCodeDeliverable(new Set(['PRD.md']))).toBe(true);
   });
 
+  it('flags task-scoped specs and other documentation-only output', () => {
+    expect(hasNoCodeDeliverable(new Set(['specs/tasks/task-20.md', 'docs/approach.mdx']))).toBe(true);
+  });
+
+  it('accepts configuration as a real DevOps deliverable', () => {
+    expect(hasNoCodeDeliverable(new Set(['specs/tasks/task-20.md', '.github/workflows/ci.yml']))).toBe(false);
+  });
+
   it('passes once any real code file was committed', () => {
     expect(hasNoCodeDeliverable(new Set(['PRD.md', 'src/feature.ts']))).toBe(false);
     expect(hasNoCodeDeliverable(new Set(['src/feature.ts']))).toBe(false);
