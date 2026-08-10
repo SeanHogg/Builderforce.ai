@@ -3,6 +3,7 @@
 src/**
 webview/**
 esbuild.mjs
+vsce-platform.mjs
 .gitignore
 tsconfig.json
 **/tsconfig.json

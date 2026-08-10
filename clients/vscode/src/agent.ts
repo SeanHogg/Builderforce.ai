@@ -1,20 +1,17 @@
 import * as vscode from "vscode";
 import {
-  streamChatCompletion,
   chatWorkLinkingDirective,
   isCodeChangeTool,
   isTicketRecordingTool,
   codeChangeFile,
   linkedTicketsToAdvance,
-  type BrainTransport,
-  type ChatCompletionMessage,
-  type BrainToolSpec,
 } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, getApiKey, getBaseUrl } from "./gateway";
-import { describeTool, TOOL_DEFS, type ToolDef } from "./fileTools";
-import { listPlatformTools, describePlatformTool } from "./platformTools";
+import { TOOL_DEFS, type ToolDef } from "./fileTools";
+import { listPlatformTools } from "./platformTools";
 import { cognitionToolDefs, recallSystemMessage } from "./cognition";
-import { evaluatePolicyGate, renderPolicyDirectives, type PolicyGate } from "./policy";
+import { renderPolicyDirectives, type PolicyGate } from "./policy";
+import { runClaudeSdkAgent } from "./claudeSdkAgent";
 
 export interface AgentEvents {
   onText: (delta: string) => void;
@@ -34,6 +31,8 @@ export interface AgentDeps {
   secrets: vscode.SecretStorage;
   /** Workspace root. When undefined, file tools are disabled (chat-only). */
   root?: string;
+  /** Extension-owned Claude SDK state directory (never the user's ~/.claude). */
+  sdkConfigDir: string;
   /** Active project. Scopes the shared write-through memory (recall + remember_fact). */
   projectId?: number;
   /**
@@ -57,45 +56,10 @@ export interface AgentDeps {
   policyGates?: PolicyGate[];
 }
 
-// The in-editor loop's tool-step budget. Kept modest on purpose — a genuinely large
-// job should be HANDED to the platform (persona's dispatch-handoff strategy: create a
-// task + assign a cloud agent), not ground through inline. 12 was too low for even
-// ordinary multi-file work; 40 covers real inline tasks while still capping runaway
-// loops, and the ceiling message points at dispatch rather than dead-ending.
-const MAX_ITERATIONS = 40;
-
-interface RawToolCall {
-  id: string;
-  name: string;
-  args: string;
-}
-
-/** Turn a raw gateway error body into a clean, human-readable message. */
-function prettyGatewayError(status: number, body: string): string {
-  let msg = body.slice(0, 300);
-  try {
-    const parsed = JSON.parse(body) as { error?: string | { message?: string } };
-    if (typeof parsed.error === "string") msg = parsed.error;
-    else if (parsed.error?.message) msg = parsed.error.message;
-  } catch {
-    /* not JSON — keep raw */
-  }
-  if (status === 401 || status === 403) return `${msg} (try signing in again)`;
-  if (status === 429) return msg; // gateway already explains quota/limit
-  return `${msg} (HTTP ${status})`;
-}
-
-function toOpenAiTools(defs: ToolDef[]) {
-  return defs.map((d) => ({
-    type: "function" as const,
-    function: { name: d.name, description: d.description, parameters: d.parameters },
-  }));
-}
-
 /**
- * Run the agentic loop in place on `messages` (it appends assistant + tool turns).
- * Streams assistant text via events; executes tool calls against the sandboxed
- * file tools, gated by the permission mode.
+ * Run the native participant through the Claude Agent SDK. Claude Code owns the
+ * coding loop and native workspace tools; BuilderForce's platform and cognition
+ * tools are exposed through an in-process MCP server.
  */
 export async function runAgent(
   messages: ChatMessage[],
@@ -109,20 +73,20 @@ export async function runAgent(
   // so the IDE chat can do everything the web Brain can, even with no folder open.
   // File tools need a workspace; the shared-memory `remember_fact` needs only a
   // project (works chat-only). Gate each on what it actually requires.
-  const localTools: ToolDef[] = [
-    ...(deps.root ? TOOL_DEFS : []),
-    ...(deps.projectId ? cognitionToolDefs(deps.secrets, deps.projectId) : []),
-  ];
+  const cognitionTools = deps.projectId ? cognitionToolDefs(deps.secrets, deps.projectId) : [];
+  const localTools: ToolDef[] = [...(deps.root ? TOOL_DEFS : []), ...cognitionTools];
   const platformTools = await listPlatformTools(deps.secrets);
   const toolDefs: ToolDef[] = [...localTools, ...platformTools];
-  const tools = toolDefs.length ? toOpenAiTools(toolDefs) : undefined;
+  // Native Claude Code tools replace the shared file-tool facade for execution.
+  // Only app-specific tools cross the MCP seam; keep the full catalog available
+  // for deterministic backstops below, while the SDK defers it behind tool search.
+  const sdkTools: ToolDef[] = [...cognitionTools, ...platformTools];
 
   // Governance: render the gate directives into a leading system block so the model
   // is bound by the same policy on every surface; hard enforcement is at the tool
   // seam below. `policyAsked` tracks require-approval gates already approved this run.
   const governance = renderPolicyDirectives(deps.policyGates);
   if (governance) messages.unshift({ role: "system", content: governance });
-  const policyAsked = new Set<string>();
 
   // Bind this run's work to the conversation, mirroring the shared webview/web Brain
   // loop (brainRunStore): tell the model its chatId so identified work is CREATED +
@@ -213,168 +177,39 @@ export async function runAgent(
     }
   }
 
-  // The ONE shared, tool-capable streaming client (brain-embedded's
-  // streamChatCompletion) — the same transport the web + webview Brain use. The
-  // duplicate in-extension SSE parser is retired. Auth, the `vsix` surface tag, and
-  // the human-readable gateway error mapping are injected via this BrainTransport;
-  // the tool loop and MAX_ITERATIONS below are unchanged.
   const key = await getApiKey(deps.secrets);
   if (!key) {
     events.onError("not_signed_in");
     return;
   }
-  const transport: BrainTransport = {
+  const abortController = new AbortController();
+  if (deps.signal.aborted) abortController.abort();
+  else deps.signal.addEventListener("abort", () => abortController.abort(), { once: true });
+
+  await runClaudeSdkAgent({
+    messages,
+    tools: sdkTools,
+    cwd: deps.root,
+    configDir: deps.sdkConfigDir,
     baseUrl: getBaseUrl(),
-    getToken: () => key,
-    // Inject the host fetch purely so the `x-builderforce-surface: vsix` header rides
-    // every request (streamChatCompletion doesn't set it) — the gateway meters BYO
-    // usage from the extension (which runs on the user's own machine) as free off this
-    // tag, never charged against the plan allowance. Otherwise the global fetch.
-    fetch: (input, reqInit) =>
-      fetch(input, {
-        ...reqInit,
-        headers: {
-          ...((reqInit.headers as Record<string, string>) ?? {}),
-          "x-builderforce-surface": "vsix",
-        },
-      }),
-    // Preserve the extension's clean gateway-error prose (auth hints, quota, HTTP).
-    mapError: async (res) => {
-      const txt = await res.text().catch(() => "");
-      return new Error(prettyGatewayError(res.status, txt));
+    apiKey: key,
+    model: deps.model,
+    permissionMode: deps.permissionMode,
+    policyGates: deps.policyGates,
+    approve: deps.approve,
+    abortController,
+    events,
+    onToolSucceeded: (name, args) => {
+      if (isCodeChangeTool(name)) {
+        codeChanged = true;
+        const f = codeChangeFile(args) ?? (typeof args.file_path === "string" ? args.file_path : undefined);
+        if (f && !touchedFiles.includes(f)) touchedFiles.push(f);
+      }
+      if (isTicketRecordingTool(name)) ticketRecorded = true;
     },
-  };
+  });
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    if (deps.signal.aborted) return;
-
-    let turn: { content: string; toolCalls: RawToolCall[] };
-    try {
-      // messages carries assistant tool-call turns with `content: null` (valid to the
-      // gateway) — the cast is exact; streamChatCompletion only reads the array.
-      const result = await streamChatCompletion(
-        {
-          messages: messages as unknown as ChatCompletionMessage[],
-          tools: tools as BrainToolSpec[] | undefined,
-          model: deps.model,
-          modelStrict: deps.modelStrict,
-          routingMode: deps.routingMode,
-          signal: deps.signal,
-          transport,
-        },
-        { onTextDelta: (delta) => events.onText(delta) },
-      );
-      turn = { content: result.text, toolCalls: result.toolCalls };
-    } catch (e) {
-      const err = e as { name?: string; message?: string };
-      if (err.name === "AbortError") return;
-      events.onError(err.message ?? String(e), e);
-      return;
-    }
-
-    if (turn.toolCalls.length === 0) {
-      messages.push({ role: "assistant", content: turn.content });
-      await flushCodeChangeTicket();
-      await flushLinkedTicketProgress();
-      return;
-    }
-
-    // Assistant turn that requested tools.
-    messages.push({
-      role: "assistant",
-      content: turn.content || null,
-      tool_calls: turn.toolCalls.map((tc) => ({
-        id: tc.id || tc.name,
-        type: "function",
-        function: { name: tc.name, arguments: tc.args || "{}" },
-      })),
-    });
-
-    for (const tc of turn.toolCalls) {
-      const def = toolDefs.find((d) => d.name === tc.name);
-      const toolCallId = tc.id || tc.name;
-      if (!def) {
-        messages.push({ role: "tool", tool_call_id: toolCallId, content: `Unknown tool: ${tc.name}` });
-        continue;
-      }
-      // Local file tools need a workspace root; platform (remote) tools don't.
-      if (!def.remote && !deps.root) {
-        messages.push({ role: "tool", tool_call_id: toolCallId, content: `Tool "${tc.name}" needs an open workspace folder.` });
-        continue;
-      }
-
-      let args: Record<string, unknown> = {};
-      try {
-        args = tc.args ? (JSON.parse(tc.args) as Record<string, unknown>) : {};
-      } catch {
-        messages.push({ role: "tool", tool_call_id: toolCallId, content: "Invalid tool arguments JSON." });
-        continue;
-      }
-
-      const label = def.remote ? describePlatformTool(def.name, args) : describeTool(def.name, args);
-      events.onToolStart(label);
-
-      // Governance gate (compile-primitive policy modality), enforced BEFORE the tool
-      // runs — the IDE mirror of the cloud loop's tool-seam check. `block` refuses;
-      // `require-approval` asks the human (reusing the approve prompt) the first time.
-      const gate = evaluatePolicyGate(deps.policyGates, def.name);
-      if (gate.action === "block") {
-        events.onToolResult(`${label} — blocked by policy`, false);
-        messages.push({ role: "tool", tool_call_id: toolCallId, content: `Blocked by governance policy: ${gate.reason}. Do not retry — take another approach.` });
-        continue;
-      }
-      if (gate.action === "require-approval" && !policyAsked.has(gate.gateId)) {
-        const approved = await deps.approve(`Governance: approve "${def.name}"? ${gate.reason}`);
-        policyAsked.add(gate.gateId);
-        if (!approved) {
-          events.onToolResult(`${label} (approval declined)`, false);
-          messages.push({ role: "tool", tool_call_id: toolCallId, content: `Human declined approval for "${def.name}" (governance gate ${gate.gateId}).` });
-          continue;
-        }
-      }
-
-      if (def.mutating && deps.permissionMode === "ask") {
-        const approved = await deps.approve(label);
-        if (!approved) {
-          events.onToolResult(`${label} (skipped)`, false);
-          messages.push({ role: "tool", tool_call_id: toolCallId, content: "User declined this change." });
-          continue;
-        }
-      }
-
-      try {
-        const result = await def.execute(args, deps.root ?? "");
-        events.onToolResult(label, true);
-        messages.push({ role: "tool", tool_call_id: toolCallId, content: result });
-        // Backstop bookkeeping (see flushCodeChangeTicket): a successful workspace
-        // file-change marks the run as code-changing; the model recording its own
-        // delta/link/review clears the need for the auto-capture.
-        if (isCodeChangeTool(def.name)) {
-          codeChanged = true;
-          const f = codeChangeFile(args);
-          if (f && !touchedFiles.includes(f)) touchedFiles.push(f);
-        }
-        if (isTicketRecordingTool(def.name)) ticketRecorded = true;
-      } catch (e) {
-        const msg = (e as { message?: string }).message ?? String(e);
-        events.onToolResult(`${label} — ${msg}`, false);
-        messages.push({ role: "tool", tool_call_id: toolCallId, content: `Error: ${msg}` });
-      }
-    }
-  }
-
-  // Budget exhausted — still guarantee any code changed this run is tied to a ticket
-  // AND that worked linked tickets are off the backlog before we surface the dispatch hint.
+  // Preserve BuilderForce's deterministic product invariants around the SDK loop.
   await flushCodeChangeTicket();
   await flushLinkedTicketProgress();
-
-  // Hit the inline step budget without finishing — this is the signal the job is too
-  // large for an in-editor chat. Point at the dispatch path (persona's handoff
-  // strategy) instead of dead-ending, so the next turn can create + assign a task.
-  events.onError(
-    `Reached the in-editor step limit (${MAX_ITERATIONS} tool calls) before finishing. ` +
-      `This job is large for an inline chat — ask me to dispatch it to the platform ` +
-      `(I'll create a task with the full instructions and assign a cloud agent to run it to completion), ` +
-      `or narrow the scope.`,
-  );
 }

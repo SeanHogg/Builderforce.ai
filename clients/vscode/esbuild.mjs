@@ -6,6 +6,7 @@
 import * as esbuild from "esbuild";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const watch = process.argv.includes("--watch");
@@ -20,6 +21,30 @@ const harness = process.argv.includes("--harness");
 if (!harness) fs.rmSync("out", { recursive: true, force: true });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Ship the Agent SDK's native Claude Code runtime inside the VSIX. The optional
+ * dependency is platform-specific, so a package built on Windows/macOS/Linux is
+ * intentionally a package for that platform. The SDK JS is bundled by esbuild;
+ * only this executable asset must remain a real file at runtime.
+ */
+function copyClaudeAgentSdkRuntime() {
+  const sdkEntry = createRequire(import.meta.url).resolve("@anthropic-ai/claude-agent-sdk");
+  const sdkRequire = createRequire(sdkEntry);
+  const isMusl = process.platform === "linux" && !process.report?.getReport?.().header?.glibcVersionRuntime;
+  const platform = process.platform === "linux" && isMusl
+    ? `linux-${process.arch}-musl`
+    : `${process.platform}-${process.arch}`;
+  const packageName = `@anthropic-ai/claude-agent-sdk-${platform}`;
+  const manifest = sdkRequire.resolve(`${packageName}/package.json`);
+  const sourceDir = path.dirname(manifest);
+  const binaryName = process.platform === "win32" ? "claude.exe" : "claude";
+  const targetDir = path.join(here, "out", "claude-agent-sdk");
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.copyFileSync(path.join(sourceDir, binaryName), path.join(targetDir, binaryName));
+  fs.copyFileSync(path.join(sourceDir, "LICENSE.md"), path.join(targetDir, "LICENSE.md"));
+  if (process.platform !== "win32") fs.chmodSync(path.join(targetDir, binaryName), 0o755);
+}
 // The shared `@builderforce/agent-tools` contract is consumed as SOURCE (no dist —
 // mirrors how `api` resolves it via tsconfig paths), so the editor surface runs the
 // SAME tool definitions as the cloud. Bundle it from its TS entry…
@@ -73,9 +98,11 @@ const options = harness
     };
 
 if (watch) {
+  if (!harness) copyClaudeAgentSdkRuntime();
   const ctx = await esbuild.context(options);
   await ctx.watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
+  if (!harness) copyClaudeAgentSdkRuntime();
 }

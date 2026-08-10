@@ -106,6 +106,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       {
         secrets: ctx.secrets,
         root,
+        sdkConfigDir: vscode.Uri.joinPath(ctx.globalStorageUri, "claude-agent-sdk").fsPath,
         ...(activeProject ? { projectId: activeProject.id } : {}),
         ...(brainChatId != null ? { chatId: brainChatId } : {}),
         model: modelChoice.model,
