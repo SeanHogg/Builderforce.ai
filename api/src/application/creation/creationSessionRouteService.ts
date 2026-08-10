@@ -225,6 +225,30 @@ export function validCreationGraph(objects: GraphObjectInput[], connections: Gra
   return null;
 }
 
+/**
+ * Browser-local graph ids are only identities inside that draft. The database
+ * primary keys are global, so carrying a local id across the claim boundary can
+ * collide with an object from an earlier session (for example, a locally saved
+ * copy of a durable canvas). Give every claimed row a new durable identity and
+ * rewrite the edge endpoints as one graph operation.
+ */
+export function durableCreationGraph(
+  objects: GraphObjectInput[],
+  connections: GraphConnectionInput[],
+  newId: () => string = () => crypto.randomUUID(),
+): { objects: GraphObjectInput[]; connections: GraphConnectionInput[] } {
+  const objectIds = new Map(objects.map((object) => [object.id, newId()]));
+  return {
+    objects: objects.map((object) => ({ ...object, id: objectIds.get(object.id)! })),
+    connections: connections.map((edge) => ({
+      ...edge,
+      id: newId(),
+      sourceObjectId: objectIds.get(edge.sourceObjectId)!,
+      targetObjectId: objectIds.get(edge.targetObjectId)!,
+    })),
+  };
+}
+
 export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -682,14 +706,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!/^local-[0-9a-f-]{36}$/i.test(clientSessionId)) return c.json({ error: 'A valid local Session id is required' }, 400);
     const [prior] = await db.select({ sessionId: creationSessionClaims.serverSessionId }).from(creationSessionClaims).where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, clientSessionId))).limit(1);
     if (prior) return c.json({ session: { id: prior.sessionId, claimed: true, replayed: true } });
-    const objects = Array.isArray(body.objects) ? body.objects : [];
-    const connections = Array.isArray(body.connections) ? body.connections : [];
-    const graphError = validCreationGraph(objects, connections);
+    const localObjects = Array.isArray(body.objects) ? body.objects : [];
+    const localConnections = Array.isArray(body.connections) ? body.connections : [];
+    const graphError = validCreationGraph(localObjects, localConnections);
     if (graphError) return c.json({ error: graphError }, 400);
-    const resourceError = await validateResourceAccess(objects, tenantId, segmentId, userId);
+    const resourceError = await validateResourceAccess(localObjects, tenantId, segmentId, userId);
     if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED' }, 403);
     const quota = await sessionQuota(c, tenantId);
     if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
+    const { objects, connections } = durableCreationGraph(localObjects, localConnections);
     const sessionId = crypto.randomUUID();
     const title = cleanTitle(body.title, 'Untitled session');
     const statements: unknown[] = [

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   creationKindForModality,
+  durableCreationGraph,
   creationObjectSearchText,
   creationSessionSearchStatus,
   isCreationEventWriteConflict,
@@ -96,5 +97,38 @@ describe('validCreationGraph', () => {
     expect(validCreationGraph(objects, Array.from({ length: 4_001 }, () => ({
       id: crypto.randomUUID(), sourceObjectId: objects[0]!.id, targetObjectId: objects[1]!.id, kind: 'reference',
     })))).toMatch(/at most 4,000 connections/i);
+  });
+});
+
+describe('durableCreationGraph', () => {
+  it('rekeys claimed objects and preserves connection topology', () => {
+    const objects = [
+      { id: '00000000-0000-4000-8000-000000000001', kind: 'dataset' },
+      { id: '00000000-0000-4000-8000-000000000002', kind: 'chart' },
+    ];
+    const connections = [{
+      id: '00000000-0000-4000-8000-000000000003',
+      sourceObjectId: objects[0]!.id,
+      targetObjectId: objects[1]!.id,
+      kind: 'data',
+    }];
+    const ids = [
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+      '10000000-0000-4000-8000-000000000003',
+    ];
+
+    const durable = durableCreationGraph(objects, connections, () => ids.shift()!);
+
+    expect(durable.objects.map((object) => object.id)).toEqual([
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+    ]);
+    expect(durable.connections).toEqual([expect.objectContaining({
+      id: '10000000-0000-4000-8000-000000000003',
+      sourceObjectId: '10000000-0000-4000-8000-000000000001',
+      targetObjectId: '10000000-0000-4000-8000-000000000002',
+    })]);
+    expect(objects[0]!.id).toBe('00000000-0000-4000-8000-000000000001');
   });
 });
