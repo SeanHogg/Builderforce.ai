@@ -17,7 +17,6 @@ import { HeaderCartButton } from './HeaderCartButton';
 import NotificationBell from './NotificationBell';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
-import { CanvasSwitcher } from './workspace/CanvasSwitcher';
 import { CommandPalette } from './workspace/CommandPalette';
 import { LiveSessionChip } from './live/LiveSessionChip';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
@@ -83,12 +82,9 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       </div>
       <div className="topbar-right">
-        {/* The session bar: scope (who you are working as) then canvas (what you
-            are working on). Both are present on EVERY route, because "where is
-            the thing I was making" must never depend on which page you are on.
-            Each self-gates on a tenant. */}
+        {/* Workspace scope stays in the header. Canvas/session navigation lives in
+            the sidebar, so it has one canonical home instead of two selectors. */}
         <TenantProjectSwitcher />
-        <CanvasSwitcher />
         {/* …and who is here with you. The third thing that must survive every
             navigation, so it is a peer of the other two rather than a control
             that lives on whichever page happens to own the room. */}

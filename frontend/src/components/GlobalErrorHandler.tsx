@@ -153,8 +153,7 @@ export function GlobalErrorHandler() {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        maxWidth: 420,
-        width: '100%',
+        width: 'min(520px, calc(100vw - 32px))',
         pointerEvents: 'none',
       }}
     >
@@ -206,7 +205,7 @@ function Toast({
       }}
     >
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <span style={{ color: 'var(--error, var(--error))', flexShrink: 0 }}>
           <IconAlert />
         </span>
@@ -214,7 +213,10 @@ function Toast({
           style={{
             fontWeight: 600,
             color: 'var(--error-text)',
-            flexShrink: 0,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {ev.status}

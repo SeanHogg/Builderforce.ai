@@ -8,6 +8,8 @@ import { isLocalCreationSession } from '@/lib/creationSessions';
 import { claimLocalDraft, rememberLastCanvas } from '@/lib/pendingWork';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { readModelComparison } from '@/lib/modelComparisonRequest';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+import { UpgradeModal } from '@/components/UpgradeModal';
 
 const BUILD_TICKET_KINDS = new Set(['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task']);
 
@@ -27,6 +29,7 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   const t = useTranslations('creationCanvas');
   const claiming = useRef(false);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
   const local = isLocalCreationSession(sessionId);
   const canvas = useOptionalActiveCanvas();
   const focusId = searchParams.get('focus');
@@ -68,6 +71,10 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
       })
       .catch((error: unknown) => {
         claiming.current = false;
+        if (isPlanLimitError(error)) {
+          setPlanError(error);
+          return;
+        }
         setClaimError(error instanceof Error ? error.message : t('noticeClaimFailed'));
       });
   }, [hasTenant, isAuthenticated, local, router, sessionId, t]);
@@ -81,6 +88,7 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   }, [hasTenant, local, sessionId]);
 
   return <>
+    <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
     {/* Theme tokens, not literals: this rides on the guest→sign-in path, which
         renders in whichever theme the visitor arrived from. */}
     {claimError && <div role="alert" style={{ position: 'fixed', zIndex: 100, top: 76, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--error)', boxShadow: '0 6px 22px var(--shadow-coral-soft)' }}>{claimError}</div>}

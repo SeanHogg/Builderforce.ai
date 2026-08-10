@@ -54,6 +54,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { normalizeChatMode } from '../brain/chatMode';
 import { sha256Hex } from '../../domain/shared/hash';
 import { findObject, getObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
+import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import {
   acceptInvitation,
   acceptInvitationStatement,
@@ -296,18 +297,21 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     };
   }
 
-  async function creationLimits(tenantId: number): Promise<PlanLimits> {
+  async function creationPlan(tenantId: number): Promise<TenantPlan> {
     const [tenant] = await db.select({
       plan: tenants.plan,
       billingStatus: tenants.billingStatus,
       trialEndsAt: tenants.trialEndsAt,
     }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-    const effective = tenant ? resolveEffectivePlan({
+    return tenant ? resolveEffectivePlan({
       plan: tenant.plan as TenantPlan,
       billingStatus: tenant.billingStatus as TenantBillingStatus,
       trialEndsAt: tenant.trialEndsAt,
     }) : TenantPlan.FREE;
-    return getLimits(effective);
+  }
+
+  async function creationLimits(tenantId: number): Promise<PlanLimits> {
+    return getLimits(await creationPlan(tenantId));
   }
 
   async function countRows(tableName: 'creation_sessions' | 'creation_session_members' | 'creation_session_templates', clause: ReturnType<typeof sql>): Promise<number> {
@@ -315,10 +319,25 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return Number((result.rows[0] as { count?: number } | undefined)?.count ?? 0);
   }
 
-  async function sessionQuota(tenantId: number) {
-    const limits = await creationLimits(tenantId);
+  async function sessionQuota(c: Context<HonoEnv>, tenantId: number) {
+    const currentPlan = await creationPlan(tenantId);
+    const limits = getLimits(currentPlan);
     const used = await countRows('creation_sessions', sql`tenant_id = ${tenantId} AND status <> 'deleted'`);
-    return { used, limit: limits.maxCreationSessions, allowed: limits.maxCreationSessions === -1 || used < limits.maxCreationSessions, limits };
+    if (await resolveIsSuperadmin(c.env, c.get('userId') as string)) {
+      return { used, limit: -1, allowed: true, limits, currentPlan };
+    }
+    return { used, limit: limits.maxCreationSessions, allowed: limits.maxCreationSessions === -1 || used < limits.maxCreationSessions, limits, currentPlan };
+  }
+
+  function sessionQuotaError(quota: Awaited<ReturnType<typeof sessionQuota>>) {
+    return {
+      error: `Your account includes ${quota.limit} Creation Sessions. Upgrade your account to create another saved Session.`,
+      code: 'CREATION_SESSION_QUOTA',
+      upgradeRequired: true as const,
+      currentPlan: quota.currentPlan,
+      usage: quota.used,
+      limit: quota.limit,
+    };
   }
 
   async function pruneHistory(sessionId: string, tenantId: number) {
@@ -490,10 +509,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       countRows('creation_sessions', sql`tenant_id = ${tenantId} AND status <> 'deleted'`),
       countRows('creation_session_templates', sql`tenant_id = ${tenantId} AND segment_id = ${segmentId}`),
     ]);
+    const isSuperadmin = await resolveIsSuperadmin(c.env, c.get('userId') as string);
     return c.json({
       usage: { sessions, templates },
       limits: {
-        sessions: limits.maxCreationSessions,
+        sessions: isSuperadmin ? -1 : limits.maxCreationSessions,
         collaboratorsPerSession: limits.maxCreationSessionCollaborators,
         templates: limits.maxCreationSessionTemplates,
         historyPerSession: limits.maxCreationSessionHistory,
@@ -673,8 +693,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (graphError) return c.json({ error: graphError }, 400);
     const resourceError = await validateResourceAccess(objects, tenantId, segmentId, userId);
     if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED' }, 403);
-    const quota = await sessionQuota(tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, tenantId);
+    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
     const sessionId = crypto.randomUUID();
     const title = cleanTitle(body.title, 'Untitled session');
     const statements: unknown[] = [
@@ -730,8 +750,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         .where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, requestClaimId))).limit(1);
       if (prior) return c.json({ session: prior, replayed: true });
     }
-    const quota = await sessionQuota(tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, tenantId);
+    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
     const sessionId = crypto.randomUUID();
     const projectIds = [...new Set((body.projectIds ?? []).filter((id) => Number.isInteger(id) && id > 0))].slice(0, 20);
     const validProjects = projectIds.length
@@ -1382,8 +1402,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found' }, 404);
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const quota = await sessionQuota(tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, tenantId);
+    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
     const [objects, connections, timeline] = await Promise.all([
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
@@ -1419,8 +1439,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/branches', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const quota = await sessionQuota(access.session.tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, access.session.tenantId);
+    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
     const body = await c.req.json<BranchBody>().catch(() => ({} as BranchBody));
     const userId = c.get('userId') as string;
     const [objects, connections, projectLinks, timeline] = await Promise.all([

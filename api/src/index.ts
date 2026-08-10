@@ -140,6 +140,7 @@ import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
+import { createIntegrationCatalogRoutes } from './presentation/routes/integrationCatalogRoutes';
 import { createConnectorRoutes }    from './presentation/routes/connectorRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
@@ -710,6 +711,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/studio/voice-clones', createStudioVoiceCloneRoutes(db));
 
   // Phase 6 — Dev Analytics & Team Intelligence
+  // Public integration catalog — the projection the marketing page renders.
+  // Registered FIRST so the literal `catalog` segment wins over `/:id` in the
+  // authenticated router below.
+  app.route('/api/integrations/catalog', createIntegrationCatalogRoutes());
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
   app.route('/api/connectors',      createConnectorRoutes(db));
   app.route('/api/contributors',    createContributorRoutes(db));

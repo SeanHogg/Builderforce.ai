@@ -47,10 +47,12 @@ const ALLOWED = new Map([
       'login and bounce the user off the login page they are standing on.',
   ],
   [
-    'marketplaceSeo.ts',
-    'Runs server-side (generateMetadata + sitemap). The transport reads ' +
-      'localStorage and document.cookie, neither of which exists there, and these ' +
-      'calls carry no credential.',
+    'publicApi.ts',
+    'It is the transport for UNCREDENTIALED server reads (generateMetadata, ' +
+      'sitemap, public reference pages). apiClient reads localStorage and ' +
+      'document.cookie, neither of which exists server-side; these calls carry no ' +
+      'credential and are held in Next\'s data cache. Every public server read ' +
+      'goes through here — marketplaceSeo and integrationCatalog included.',
   ],
   [
     'meshPreviewCache.ts',
