@@ -11,6 +11,7 @@ import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { getModality } from '@/lib/modality';
 import styles from './DashboardCreationSessions.module.css';
 import { Icon } from '@/components/ui/Icon';
+import { ViewToggle } from '@/components/ViewToggle';
 
 /**
  * A session tile is coloured by the KIND of object it holds, and the board's
@@ -31,7 +32,10 @@ const CANVAS_STARTERS = [
   { id: 'product-discovery', icon: '◇', labelKey: 'starterProductDiscovery', descriptionKey: 'starterProductDiscoveryDescription' },
 ] as const;
 
-type CreationLibraryView = 'card' | 'list';
+/** The canonical toggle's own vocabulary — `table` IS the list view (see
+ *  `components/ViewToggle`). Older browsers hold `list` under this key, so the
+ *  read below accepts it and normalises rather than silently resetting. */
+type CreationLibraryView = 'card' | 'table';
 const CREATION_LIBRARY_VIEW_KEY = 'builderforce.dashboard.creationLibraryView';
 
 function modalityStarterPrompt(id: string, label: string, tagline: string): string {
@@ -53,7 +57,7 @@ export function DashboardCreationLauncher() {
     if (creating || sessionLimitReached) return;
     setCreating(true);
     try {
-      const result = await creationSessionsApi.create({ title: 'Untitled session' });
+      const result = await creationSessionsApi.create({ title: t('untitledSession') });
       router.push(`/create/${result.session.id}`);
     } finally { setCreating(false); }
   };
@@ -67,7 +71,7 @@ export function DashboardCreationLauncher() {
 
   return <section className={styles.launcher} aria-labelledby="creation-launcher-title">
     <div className={styles.launcherHeader}>
-      <span className={styles.eyebrow}>Create</span>
+      <span className={styles.eyebrow}>{t('launcherEyebrow')}</span>
       <h2 id="creation-launcher-title">{t('createTypeTitle')}</h2>
       <p>{t('createTypeSubtitle')}</p>
     </div>
@@ -76,13 +80,13 @@ export function DashboardCreationLauncher() {
       <section className={styles.creationPath} aria-labelledby="create-by-type-title">
         <div className={styles.pathHeader}>
           <span className={styles.step}>1</span>
-          <div><h3 id="create-by-type-title">Create by type</h3><p>Choose the kind of thing you want to make.</p></div>
+          <div><h3 id="create-by-type-title">{t('createByTypeTitle')}</h3><p>{t('createByTypeSubtitle')}</p></div>
         </div>
-        <div className={styles.typeGrid} aria-label="Create by type">
+        <div className={styles.typeGrid} aria-label={t('createByTypeTitle')}>
           {modalities.map((modality) => <button key={modality.id} type="button" disabled={creating || sessionLimitReached || !!modality.comingSoon} onClick={() => void startTemplate(modality.label, modalityStarterPrompt(modality.id, modality.label, modality.tagline))} className={styles.typeCard}>
             <span className={styles.typeIcon} aria-hidden><Icon source={modality.icon} size={20} /></span>
             <span className={styles.cardCopy}><strong>{modality.label}</strong><span>{modality.tagline}</span></span>
-            <span className={styles.cardAction} aria-hidden>{modality.comingSoon ? 'Coming soon' : 'Create'} <b>→</b></span>
+            <span className={styles.cardAction} aria-hidden>{modality.comingSoon ? t('comingSoon') : t('createAction')} <b>→</b></span>
           </button>)}
         </div>
       </section>
@@ -90,21 +94,21 @@ export function DashboardCreationLauncher() {
       <section className={`${styles.creationPath} ${styles.templatePath}`} aria-labelledby="create-from-template-title">
         <div className={styles.pathHeader}>
           <span className={styles.step}>2</span>
-          <div><h3 id="create-from-template-title">Use a guided template</h3><p>Start with a complete, connected workflow.</p></div>
+          <div><h3 id="create-from-template-title">{t('guidedTemplateTitle')}</h3><p>{t('guidedTemplateSubtitle')}</p></div>
         </div>
-        <div className={styles.templateGrid} aria-label="Guided templates">
+        <div className={styles.templateGrid} aria-label={t('guidedTemplatesLabel')}>
           {CANVAS_STARTERS.map((starter) => { const label = t(starter.labelKey); const description = t(starter.descriptionKey); return <button key={starter.id} type="button" disabled={creating || sessionLimitReached} onClick={() => void startTemplate(label, description)} className={styles.templateCard}>
             <span className={styles.templateIcon} aria-hidden><Icon source={starter.icon} size={20} /></span>
             <span className={styles.cardCopy}><strong>{label}</strong><span>{description}</span></span>
-            <span className={styles.templateAction}>Use template <b aria-hidden>→</b></span>
+            <span className={styles.templateAction}>{t('useTemplate')} <b aria-hidden>→</b></span>
           </button>; })}
         </div>
         <button type="button" onClick={createBlank} disabled={creating || sessionLimitReached} className={styles.blankButton}>
-          <span><b aria-hidden><Icon source="＋" size="1em" /></b> Start with a blank canvas</span><span aria-hidden>→</span>
+          <span><b aria-hidden><Icon source="＋" size="1em" /></b> {t('blankCanvas')}</span><span aria-hidden>→</span>
         </button>
       </section>
     </div>
-    {sessionLimitReached && <p role="alert" className={styles.quotaWarning}>Your saved Session limit is reached. Archive a Session or upgrade before creating another.</p>}
+    {sessionLimitReached && <p role="alert" className={styles.quotaWarning}>{t('sessionLimitReached')}</p>}
   </section>;
 }
 
@@ -128,7 +132,8 @@ export function DashboardCreationSessions() {
 
   useEffect(() => {
     const savedView = window.localStorage.getItem(CREATION_LIBRARY_VIEW_KEY);
-    if (savedView === 'card' || savedView === 'list') setLibraryView(savedView);
+    if (savedView === 'card') setLibraryView('card');
+    else if (savedView === 'table' || savedView === 'list') setLibraryView('table');
   }, []);
   const selectLibraryView = (view: CreationLibraryView) => {
     setLibraryView(view);
@@ -160,7 +165,7 @@ export function DashboardCreationSessions() {
     if (creating || sessionLimitReached) return;
     setCreating(true);
     try {
-      const result = await creationSessionsApi.create({ title: 'Untitled session' });
+      const result = await creationSessionsApi.create({ title: t('untitledSession') });
       router.push(`/create/${result.session.id}`);
     } finally { setCreating(false); }
   };
@@ -237,14 +242,14 @@ export function DashboardCreationSessions() {
     ...visibleProjects.filter((project) => !representedResources.has(`project:${project.id}`)).map((project) => ({ key: `project-${project.id}`, icon: '▦', title: project.name, meta: `${t('object.project')} · ${project.status || t('active').toLowerCase()} · ${t('projectTasks', { count: project.taskCount ?? 0 })}`, open: () => openProject(project) })),
     ...visibleAgents.filter((agent) => !representedResources.has(`agent:${agent.id}`)).map((agent) => ({ key: `agent-${agent.id}`, icon: '✦', title: agent.name, meta: `${t('object.agent')} · ${agent.title || agent.status}`, open: () => openAgent(agent) })),
   ];
-  const renderSessionItems = (items: typeof visible) => items.map((session) => { const target = `/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`; const running = (session.preview?.objects ?? []).filter((object) => ['agent','task','workflow'].includes(object.kind) && ['running','in progress','in_progress','queued','assigned'].includes(String(object.status || '').toLowerCase())).length; return <article key={`session-${session.id}`} onClick={() => router.push(target)} onKeyDown={(event) => { if (event.key === 'Enter') router.push(target); }} tabIndex={0} style={{ display: libraryView === 'list' ? 'grid' : 'block', gridTemplateColumns: libraryView === 'list' ? '108px minmax(0, 1fr)' : undefined, alignItems: 'stretch', color: 'inherit', border: `1px solid ${session.unread ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: libraryView === 'list' ? 'var(--radius-lg)' : 'var(--radius-xl)', overflow: 'hidden', background: 'var(--surface-raised)', boxShadow: '0 4px 16px rgba(20,35,60,.05)', cursor: 'pointer' }}>
-      <div style={{ height: libraryView === 'list' ? '100%' : 150, minHeight: libraryView === 'list' ? 82 : undefined, position: 'relative', overflow: 'hidden', borderRight: libraryView === 'list' ? '1px solid var(--border-subtle)' : undefined, background: 'radial-gradient(circle, rgba(116,137,165,.2) 1px, transparent 1px)', backgroundSize: '18px 18px' }}>
+  const renderSessionItems = (items: typeof visible) => items.map((session) => { const target = `/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`; const running = (session.preview?.objects ?? []).filter((object) => ['agent','task','workflow'].includes(object.kind) && ['running','in progress','in_progress','queued','assigned'].includes(String(object.status || '').toLowerCase())).length; return <article key={`session-${session.id}`} onClick={() => router.push(target)} onKeyDown={(event) => { if (event.key === 'Enter') router.push(target); }} tabIndex={0} style={{ display: libraryView === 'table' ? 'grid' : 'block', gridTemplateColumns: libraryView === 'table' ? '108px minmax(0, 1fr)' : undefined, alignItems: 'stretch', color: 'inherit', border: `1px solid ${session.unread ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: libraryView === 'table' ? 'var(--radius-lg)' : 'var(--radius-xl)', overflow: 'hidden', background: 'var(--surface-raised)', boxShadow: '0 4px 16px rgba(20,35,60,.05)', cursor: 'pointer' }}>
+      <div style={{ height: libraryView === 'table' ? '100%' : 150, minHeight: libraryView === 'table' ? 82 : undefined, position: 'relative', overflow: 'hidden', borderRight: libraryView === 'table' ? '1px solid var(--border-subtle)' : undefined, background: 'radial-gradient(circle, rgba(116,137,165,.2) 1px, transparent 1px)', backgroundSize: '18px 18px' }}>
         {(session.preview?.objects ?? []).slice(0, 8).map((object, index) => <span key={object.id} title={object.title} style={{ position: 'absolute', left: `${12 + ((Math.abs(object.x) + index * 31) % 68)}%`, top: `${14 + ((Math.abs(object.y) + index * 23) % 58)}%`, width: 42, height: 26, borderRadius: 'var(--radius-sm)', border: `2px solid ${KIND_COLOR[object.kind] ?? 'var(--canvas-obj-unknown)'}`, background: 'var(--surface-raised)', transform: 'translate(-50%, -50%)', boxShadow: '0 3px 9px var(--shadow-color)' }} />)}
-        {!session.preview?.objects?.length && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Blank canvas</span>}
+        {!session.preview?.objects?.length && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{t('blankCanvasEmpty')}</span>}
       </div>
-      <div style={{ padding: libraryView === 'list' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned && <Icon name="sparkles" size={14} />} {session.title}{session.unread ? ' · New' : ''}</strong>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>Project {id}</small>)}</div>
-        <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{session.preview?.objectCount ?? 0} objects · {session.collaboratorCount ?? 1} people{running ? ` · ${running} running` : ''}</span><span>{new Date(session.lastActivityAt).toLocaleDateString()}</span></span>
+      <div style={{ padding: libraryView === 'table' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned && <Icon name="sparkles" size={14} />} {session.title}{session.unread ? ` · ${t('unreadBadge')}` : ''}</strong>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>{t('projectBadge', { id })}</small>)}</div>
+        <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{t('sessionObjectsPeople', { objects: session.preview?.objectCount ?? 0, people: session.collaboratorCount ?? 1 })}{running ? ` · ${t('sessionRunning', { count: running })}` : ''}</span><span>{new Date(session.lastActivityAt).toLocaleDateString()}</span></span>
         {session.folder && <small style={{ display: 'block', marginTop: 7, color: 'var(--text-muted)' }}>📁 {session.folder}</small>}
         <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 10 }}>{(['pin','rename','move', ...(status === 'active' ? ['merge'] as const : []), 'duplicate','share', status === 'archived' ? 'restore' : 'archive', 'delete'] as const).map((action) => <button key={action} type="button" onClick={() => void act(action, session)} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: action === 'delete' ? 'var(--danger)' : 'var(--text-secondary)', padding: '4px 7px', cursor: 'pointer', textTransform: 'capitalize' }}>{action === 'pin' && session.pinned ? t('unpinSession') : t(`${action}Session`)}</button>)}</div>
       </div>
@@ -254,27 +259,27 @@ export function DashboardCreationSessions() {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
       <div><h2 style={{ margin: 0, fontSize: 20 }}>{t('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('dashboardSubtitle')}</p></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <div role="group" aria-label="Creation library view" style={{ display: 'flex', padding: 3, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
-          <button type="button" aria-pressed={libraryView === 'card'} onClick={() => selectLibraryView('card')} title="Card view" style={{ border: 0, borderRadius: 'var(--radius-sm)', padding: '6px 9px', background: libraryView === 'card' ? 'var(--accent)' : 'transparent', color: libraryView === 'card' ? 'var(--text-on-accent)' : 'var(--text-secondary)', cursor: 'pointer' }}><Icon name="apps" size={16} /> <span>Card</span></button>
-          <button type="button" aria-pressed={libraryView === 'list'} onClick={() => selectLibraryView('list')} title="List view" style={{ border: 0, borderRadius: 'var(--radius-sm)', padding: '6px 9px', background: libraryView === 'list' ? 'var(--accent)' : 'transparent', color: libraryView === 'list' ? 'var(--text-on-accent)' : 'var(--text-secondary)', cursor: 'pointer' }}><Icon name="menu" size={16} /> <span>List</span></button>
-        </div>
-        <select aria-label="Creation status" value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select>
-        <input aria-label="Search creations" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '9px 11px', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }} />
-        <button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? 'Archive a Session or upgrade before creating another.' : undefined} className="btn btn-primary">{creating ? 'Creating…' : sessionLimitReached ? 'Session limit reached' : `+ ${t('newSession')}`}</button>
+        {/* The canonical control (`components/ViewToggle`), not a fourth inline
+            copy of the same button pair — it owns the glyphs, the order and the
+            pressed state, so this library reads exactly like Projects and Tasks. */}
+        <ViewToggle<CreationLibraryView> value={libraryView} onChange={selectLibraryView} cardLabel={t('viewCard')} tableLabel={t('viewList')} />
+        <select aria-label={t('creationStatusLabel')} value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select>
+        <input aria-label={t('searchCreationsLabel')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '9px 11px', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }} />
+        <button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? t('sessionLimitHint') : undefined} className="btn btn-primary">{creating ? t('creatingSession') : sessionLimitReached ? t('sessionLimitShort') : `+ ${t('newSession')}`}</button>
       </div>
     </div>
-    {sessionLimitReached && <p role="alert" style={{ margin: '-7px 0 14px', color: 'var(--warning)', fontSize: 12 }}>Your plan includes {sessionQuota?.limit} Sessions. Archive one or upgrade before starting another saved Session.</p>}
+    {sessionLimitReached && <p role="alert" style={{ margin: '-7px 0 14px', color: 'var(--warning)', fontSize: 12 }}>{t('sessionLimitPlan', { limit: sessionQuota?.limit ?? 0 })}</p>}
     {loading || resourcesLoading ? <div style={{ padding: 36, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : visible.length === 0 && resourceItems.length === 0 ?
-      <button onClick={createBlank} style={{ width: '100%', minHeight: 220, border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-xl)', background: 'var(--surface-raised)', color: 'var(--text-secondary)', cursor: 'pointer' }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: 18, marginBottom: 6 }}>Start with a blank canvas</strong>Describe what you want to create above, or click here.</button> :
-      <div aria-label="Creation library" data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>
+      <button onClick={createBlank} style={{ width: '100%', minHeight: 220, border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-xl)', background: 'var(--surface-raised)', color: 'var(--text-secondary)', cursor: 'pointer' }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: 18, marginBottom: 6 }}>{t('blankCanvas')}</strong>{t('blankCanvasHint')}</button> :
+      <div aria-label={t('libraryLabel')} data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>
         {[...new Set(visible.map((session) => session.folder || ''))].map((folder) => <section key={folder || '__unfiled'} style={{ display: 'contents' }}>
-          {folder && <h3 style={{ gridColumn: '1 / -1', margin: '8px 0 0', fontSize: 15, color: 'var(--text-secondary)' }}>📁 {folder}</h3>}
+          {folder && <h3 className="ui-text-card-title" style={{ gridColumn: '1 / -1', margin: '8px 0 0', color: 'var(--text-secondary)' }}>📁 {folder}</h3>}
           {renderSessionItems(visible.filter((session) => (session.folder || '') === folder))}
         </section>)}
-        {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} style={{ minHeight: libraryView === 'card' ? 132 : 70, display: 'grid', gridTemplateColumns: libraryView === 'list' ? '42px minmax(0, 1fr) auto' : '1fr', alignItems: 'center', gap: libraryView === 'list' ? 12 : 0, padding: libraryView === 'list' ? '12px 16px' : 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-          <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'list' ? 36 : 'auto', height: libraryView === 'list' ? 36 : 'auto', borderRadius: 'var(--radius-md)', background: libraryView === 'list' ? 'var(--surface-sunken)' : 'transparent' }}><Icon source={item.icon} size={22} /></span>
+        {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} style={{ minHeight: libraryView === 'card' ? 132 : 70, display: 'grid', gridTemplateColumns: libraryView === 'table' ? '42px minmax(0, 1fr) auto' : '1fr', alignItems: 'center', gap: libraryView === 'table' ? 12 : 0, padding: libraryView === 'table' ? '12px 16px' : 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+          <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'table' ? 36 : 'auto', height: libraryView === 'table' ? 36 : 'auto', borderRadius: 'var(--radius-md)', background: libraryView === 'table' ? 'var(--surface-sunken)' : 'transparent' }}><Icon source={item.icon} size={22} /></span>
           <span style={{ minWidth: 0 }}><strong style={{ display: 'block', marginTop: libraryView === 'card' ? 8 : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.meta}</span></span>
-          {libraryView === 'list' && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>›</span>}
+          {libraryView === 'table' && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>›</span>}
         </button>)}
       </div>}
   </section>;

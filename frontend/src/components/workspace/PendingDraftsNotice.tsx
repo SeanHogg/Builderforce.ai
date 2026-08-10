@@ -70,7 +70,7 @@ export function PendingDraftsNotice() {
       </div>
       {[...new Set(drafts.map((draft) => draft.folder || ''))].map((folder) => (
         <div key={folder || '__unfiled'} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {folder && <strong style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>📁 {folder}</strong>}
+          {folder && <strong className="ui-text-small" style={{ color: 'var(--text-secondary)' }}>📁 {folder}</strong>}
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {drafts.filter((draft) => (draft.folder || '') === folder).map((draft) => (
           <li key={draft.sessionId} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
