@@ -16282,6 +16282,7 @@
     "crumb": "{seat} · Référence",
     "section": {
       "label": "Sur cette page",
+      "start": "Commencer",
       "report": "Votre rapport",
       "criteria": "Contrôles",
       "how": "Comment ça marche",
@@ -16296,7 +16297,8 @@
     },
     "eyebrow": "Intégrations",
     "title": "Connectez vos agents à votre stack",
-    "lede": "Builderforce.ai relie vos agents IA auto-hébergés et indépendants du modèle à votre gestion de versions, à vos canaux de discussion, à vos fournisseurs de modèles et aux outils que vous utilisez déjà — chaque action passe par des approbations et une piste d'audit."
+    "lede": "Builderforce.ai relie vos agents IA auto-hébergés et indépendants du modèle à votre gestion de versions, à vos canaux de discussion, à vos fournisseurs de modèles et aux outils que vous utilisez déjà — chaque action passe par des approbations et une piste d'audit.",
+    "provenCategory": "Services connectés"
   },
   "integrationDetail": {
     "eyebrow": "Intégration {category}",

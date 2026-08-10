@@ -167,10 +167,12 @@ aliases exist so older call sites keep resolving.
 | `--info` | `#60a5fa` | `#1d4ed8` | Neutral notice |
 
 **Categorical hues** — for chart series, speaker tiles, run-source badges. Distinct from each other
-*and* from the brand. Never hardcode: they flip per theme like everything else.
+and from the brand in dark mode. In light mode the historical teal slot deliberately aliases the
+primary blue; pair categorical colour with text or an icon, as required by §2.5. Never hardcode:
+they flip per theme like everything else.
 `--violet-bright` `#a78bfa`/`#6d28d9` · `--indigo-bright` `#7c83fd`/`#4338ca` ·
 `--emerald-bright` `#34d399`/`#047857` · `--amber-bright` `#fbbf24`/`#b45309` ·
-`--red-bright` `#ff6b6b`/`#b91c1c` · `--teal-bright` `#14b8a6`/`#0f766e` ·
+`--red-bright` `#ff6b6b`/`#b91c1c` · `--teal-bright` `#14b8a6`/`#1d4ed8` (historical name; primary blue in light) ·
 `--pink-bright` `#ec4899`/`#be185d` · `--purple-bright` `#8b5cf6`/`#7e22ce` ·
 `--sky-bright` `#38bdf8`/`#0369a1` · `--yellow-bright` `#eab308`/`#a16207` ·
 `--orange-bright` `#f97316`/`#c2410c`. Eleven, because the shared `CHART_PALETTE` needs ten and the
@@ -194,7 +196,7 @@ than one surface reads each of them. Each existed as two or three drifting copie
 shade**. `--shadow-xs` · `--shadow-sm` · `--shadow-lg`. **Accent-coloured shadow is a dark-mode
 mechanic only — never use it as elevation in light.**
 
-**Focus.** `--focus-color` (`#60a5fa` / `#0f766e`), `--focus-ring`
+**Focus.** `--focus-color` (`#60a5fa` / `#1d4ed8`), `--focus-ring`
 (`0 0 0 3px rgba(...,.28)`). Every interactive element shows it. Removing focus without an
 equivalent visible treatment fails review.
 
@@ -1208,7 +1210,7 @@ panel's top rule and index marker, the marketing card, and any chart series brok
 | CMO | `--seat-cmo` | pink |
 | CTO | `--seat-cto` | sky |
 | CPO | `--seat-cpo` | yellow |
-| HR | `--seat-hr` | teal |
+| HR | `--seat-hr` | primary blue in light (historical `--teal-bright` alias) |
 | Recruiter | `--seat-recruiter` | orange |
 | Security | `--seat-security` | red |
 | Support | `--seat-support` | purple |

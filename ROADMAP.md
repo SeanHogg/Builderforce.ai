@@ -137,7 +137,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 38 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
 
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
@@ -158,7 +158,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 37 |
+| 14 | 38 |
 | 15 | 28 |
 
 ---
@@ -810,6 +810,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ## 14 · 🖥️ Frontend, i18n, Theme & Marketing/SEO
 
+- **The public integration list is the frontend's, not the product's** *(found 2026-08-09 while making `/integrations` render both public lists)*. `SEO_INTEGRATIONS` + `INTEGRATION_CAPABILITY_PROOF` in `frontend/src/lib/content.ts` are now rendered together so the page cannot contradict `/product`, but both are hand-maintained frontend arrays while the real connector registry is `api/src/application/boardsync/providerCatalog.ts` (plus the `DriveProvider`, `MailboxProvider` and model-provider ports). A connector added to the API still has to be retyped here or it never appears publicly. Fix = a cached public read (`getOrSetCached`, invalidated on catalog change) that projects the provider ports into one list, with the SEO landing pages remaining an opt-in overlay keyed by slug. Unblocks: a marketing page that cannot drift from what the product actually connects to.
 - **Product Updates has no unread-since-last-open indicator** *(product-update/beta pass 2026-08-09)*. The changelog is now reachable everywhere — the marketing footer version and the app sidebar version both open the one app-wide `ProductUpdatesHost` (see [DONE.md](./DONE.md)) — but nothing tells a user there is something new behind it, so the affordance only pays off for someone who thinks to click a version number. Every ingredient exists: `release_notes.publishedAt` is the "new since" clock and `release_note_beta_enrollments` shows the per-user table pattern to copy. Fix = persist a per-user `product_updates_seen_at`, expose the count of notes published after it on the existing `/api/release-notes/betas` read (it is already the signed-in call), and badge both version triggers from one shared hook so the two cannot disagree. Unblocks: passive feature discovery rather than opt-in.
 - **`reportError.ts` posts with a raw `fetch()` and fails `check:api-transport`** *(found 2026-08-09 during the product-update/beta pass)*. `frontend/src/lib/reportError.ts:38` calls `fetch(`${config.endpoint}/events`)` directly with its own `Authorization: Bearer <apiKey>` header, which the transport guard rejects — `npm run check:api-transport` is red, and it is wired into `frontend npm test`, so the whole frontend test script fails before vitest runs. Fix = route it through `apiRequest` with `auth: 'none'`, `baseUrl: config.endpoint` and an explicit header, or add it to `ALLOWED` in `scripts/check-api-transport.mjs` with the reason (it targets a customer-configured endpoint with a customer API key, not our API). **BLOCKER: the file is part of an uncommitted change being edited in parallel with this pass (mtime moved mid-run); changing its transport would collide with work in flight.** Unblocks: a green `frontend npm test`.
 - **Weekly release-digest audience query is an unbounded full-table scan** *(release-notes pass 2026-07-24)*. `runWeeklyReleaseDigest` (`api/src/application/email/releaseDigest.ts`) selects every verified, non-suspended user in one query and sends in 10-wide batches with no cursor/cap; fine at current scale (Neon Free, small base) but will exceed Worker CPU/subrequest limits and Resend rate windows as the user base grows. Fix = paginate the audience (keyset by user id), persist per-run progress so a Worker eviction resumes rather than re-sends, and honour a Resend batch/rate ceiling. Unblocks: safe digest sends at scale.

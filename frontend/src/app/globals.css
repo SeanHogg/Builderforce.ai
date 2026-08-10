@@ -533,7 +533,9 @@ html[data-theme='light'] {
   --emerald-bright: #047857;
   --amber-bright: #b45309;
   --red-bright: #b91c1c;
-  --teal-bright: #0f766e;
+  /* Historical categorical token; light mode intentionally resolves it to the
+     primary blue so no teal ink leaks into the unified light experience. */
+  --teal-bright: var(--coral-bright);
   --pink-bright: #be185d;
   --purple-bright: #7e22ce;
   --sky-bright: #0369a1;
@@ -576,8 +578,8 @@ html[data-theme='light'] {
   --surface-sunken: rgba(60, 48, 36, 0.045);
   --border-default: var(--border-subtle);
   --border-strong: rgba(60, 48, 36, 0.24);
-  --focus-color: #0f766e;
-  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.2);
+  --focus-color: var(--coral-bright);
+  --focus-ring: 0 0 0 3px rgba(29, 78, 216, 0.22);
   --shadow-xs: 0 1px 2px rgba(60, 48, 36, 0.08);
   --shadow-sm: 0 10px 28px rgba(60, 48, 36, 0.1);
   --shadow-lg: 0 28px 80px rgba(60, 48, 36, 0.15);
@@ -685,8 +687,8 @@ textarea {
   font-family: inherit;
 }
 
-/* Warm stock, warmed further at the top corners — teal then blue, both at a
-   whisper. The tints must stay under the stock's own warmth or the ground turns
+/* Warm stock, warmed further at the top corners with two restrained blue blooms.
+   The tints must stay under the stock's own warmth or the ground turns
    grey and the elevation step to the board disappears. */
 html[data-theme='light'] body {
   background:
@@ -1494,7 +1496,9 @@ html[data-theme='light'] .nebula {
 .nav {
   grid-area: nav;
   position: relative;
-  z-index: 2;
+  /* The handle straddles the nav/content boundary. Keep this stacking context
+     above positioned canvas chrome, whose own local layers reach z-index 20. */
+  z-index: 30;
   /* min-height:0 stops this tall (flex-column) grid item from forcing the
      shell's `1fr` row to grow to the full menu height — without it the row
      blows past the viewport, the shell clips, the menu can't scroll, and page
@@ -3797,6 +3801,10 @@ select.input option {
 /* Nav */
 .mh-nav {
   display: flex;
+  /* Keep menu triggers hoverable all the way from their buttons to the bottom
+     edge of the header. Without this stretch, the nav's box ends at the link
+     text and leaves a dead strip before the dropdown bridge begins. */
+  align-self: stretch;
   align-items: center;
   gap: 2px;
   flex: 1 1 auto;
@@ -3822,6 +3830,10 @@ select.input option {
 .mh-link.active { color: var(--coral-bright); }
 .mh-caret { transition: transform 0.2s ease; opacity: 0.7; }
 .mh-item { position: relative; display: inline-flex; }
+.mh-item.has-menu {
+  align-self: stretch;
+  align-items: center;
+}
 /* A mega panel is anchored to the COLUMN, not to its trigger — so it opens
    inside the header's own left and right edges instead of spilling past them
    (Learn ▾ sits left of centre, so a trigger-centred panel hung 70px outside
@@ -4094,38 +4106,9 @@ select.input option {
 .nav-stage--dim .nav-item__seat { opacity: 0.5; }
 .nav.collapsed .nav-item__seat { display: none; }
 
-/* Consolidated BurnRateOS marketing surfaces. */
-.br-domain-page { position: relative; z-index: 1; min-height: 100vh; color: var(--text-primary); }
-.br-domain-hero { width: 100%; max-width: var(--marketing-max); margin: 0 auto; padding: 64px var(--marketing-gutter); display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 56px; align-items: center; }
-.br-domain-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
-.br-domain-badges span { padding: 5px 10px; border: 1px solid var(--border-accent); border-radius: var(--radius-full); color: var(--coral-bright); font-size: var(--font-size-eyebrow); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.br-domain-kicker { margin: 0 0 10px; color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.br-domain-hero h1 { margin: 0; font-family: var(--font-display); font-size: clamp(2.8rem, 6vw, 5.4rem); line-height: .96; letter-spacing: -.055em; }
-.br-domain-hero h2 { margin: 16px 0; color: var(--text-secondary); font-size: clamp(1.35rem, 2.5vw, 2rem); font-weight: 500; }
-.br-domain-lede { max-width: 680px; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.7; }
-.br-domain-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
-.br-domain-primary, .br-domain-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 20px; border-radius: var(--radius-lg); font-weight: 700; text-decoration: none; }
-.br-domain-primary { background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent); box-shadow: 0 8px 28px var(--shadow-coral-mid); }
-.br-domain-secondary { border: 1px solid var(--border-subtle); color: var(--text-primary); background: var(--surface-card); }
-.br-domain-visual { min-height: 360px; padding: 36px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: radial-gradient(circle at 75% 10%, var(--shadow-coral-soft), transparent 45%), var(--surface-card); box-shadow: var(--shadow-lg); }
-.br-domain-visual__icon { margin-bottom: 28px; }
-.br-domain-visual strong { font-family: var(--font-display); font-size: clamp(3rem, 7vw, 6rem); line-height: 1; }
-.br-domain-visual > span:not(.br-domain-visual__icon) { margin-top: 8px; color: var(--text-secondary); }
-.br-domain-signal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 38px; }
-.br-domain-signal-grid i { height: calc(34px + var(--signal-index) * 15px); align-self: end; border-radius: var(--radius-sm); background: linear-gradient(180deg, var(--coral-bright), color-mix(in srgb, var(--coral-bright) 18%, transparent)); }
-/* A full-bleed band whose content sits in the column without an inner wrapper:
-   the side padding IS the gutter plus whatever the viewport has over the
-   column. Same measure as `.mkt-in`, expressed as padding. */
-.br-domain-features { padding: 72px max(var(--marketing-gutter), calc((100% - var(--marketing-column)) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
-.br-domain-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.br-domain-card { padding: 26px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); }
-.br-domain-card__number { color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 800; }
-.br-domain-card h3 { margin: 22px 0 8px; font-size: var(--font-size-card-title); }
-.br-domain-card p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
-.br-domain-closing { width: 100%; max-width: var(--marketing-max); margin: 0 auto; padding: 72px var(--marketing-gutter) 92px; text-align: center; }
-.br-domain-closing p { max-width: 62ch; margin: 0 auto 28px; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.6; }
-@media (max-width: 850px) { .br-domain-hero { grid-template-columns: 1fr; padding-top: 38px; } .br-domain-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .br-domain-grid { grid-template-columns: 1fr; } .br-domain-visual { min-height: 280px; } }
+/* The nine BurnRateOS domain explainers render through the house .mk-* kit
+ * (components/reference/ReferencePage). Their private .br-domain-* stylesheet
+ * was the fourth copy of the same hero, band and card grid, and is deleted. */
 
 /* Right cluster */
 .mh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
@@ -4606,6 +4589,17 @@ select.input option {
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   align-items: center;
 }
+/* The centred variant, for a page with no companion column beside the copy —
+   every reference page (PRD 21 §11.4.5) is one. It was the missing modifier
+   that made `/soc2`, `/integrations` and `/tools/<id>` each hand-roll a whole
+   private stylesheet (`.s2-*`, `.intx-*`, `.tref-*`) rather than extend the kit
+   by one rule; `components/reference/ReferencePage.tsx` is what emits it now. */
+.mk-hero--center { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+.mk-hero--center .mk-lede { max-width: 62ch; }
+.mk-hero--center .mk-actions { justify-content: center; }
+.mk-hero--center .mk-h1 { max-width: 20ch; }
+.mk-hero__mark { display: block; margin-bottom: var(--space-3); color: var(--seat, var(--coral-bright)); }
+
 .mk-badges { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
 
 /* The one badge shape. `--seat` is the owner's hue from `lib/seats.ts`; the
@@ -4739,6 +4733,20 @@ select.input option {
 .mk-rowchip:hover { border-color: var(--seat, var(--border-strong)); }
 .mk-rowchip em { font-style: normal; font-family: var(--font-mono); font-size: var(--font-size-field-label); letter-spacing: 0.06em; color: var(--seat, var(--text-muted)); }
 .mk-note { margin-top: var(--space-4); font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.55; }
+
+/* A literal string the reader is meant to copy — a prompt, a command, a key.
+   `.mk-badge` is the wrong shape for it: that is an uppercase, letter-spaced
+   LABEL, and running a sentence through it makes it unreadable. */
+.mk-code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  padding: 3px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
 
 /* ── FAQ ──────────────────────────────────────────────────────────────── */
 .mk-faq { display: flex; flex-direction: column; gap: var(--space-2); max-width: 760px; margin: 0 auto; }

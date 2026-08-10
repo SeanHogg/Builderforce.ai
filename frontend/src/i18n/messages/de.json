@@ -16282,6 +16282,7 @@
     "crumb": "{seat} · Referenz",
     "section": {
       "label": "Auf dieser Seite",
+      "start": "Loslegen",
       "report": "Dein Bericht",
       "criteria": "Kontrollen",
       "how": "So funktioniert es",
@@ -16296,7 +16297,8 @@
     },
     "eyebrow": "Integrationen",
     "title": "Verbinden Sie Ihre Agenten mit Ihrem Stack",
-    "lede": "Builderforce.ai bindet Ihre selbst gehosteten, modellunabhängigen KI-Agenten an Versionsverwaltung, Chat-Kanäle, Modellanbieter und die Werkzeuge an, die Sie bereits nutzen — jede Aktion mit Freigaben und Audit-Protokoll."
+    "lede": "Builderforce.ai bindet Ihre selbst gehosteten, modellunabhängigen KI-Agenten an Versionsverwaltung, Chat-Kanäle, Modellanbieter und die Werkzeuge an, die Sie bereits nutzen — jede Aktion mit Freigaben und Audit-Protokoll.",
+    "provenCategory": "Verbundene Dienste"
   },
   "integrationDetail": {
     "eyebrow": "{category}-Integration",

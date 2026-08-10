@@ -1,9 +1,7 @@
 .canvasShell {
-  /* The primary accent. Teal on paper, blue on ink — the light theme is "warm
-     stock, teal ink", where teal leads and blue drops back to a signal (see
-     --tone-info-*). It was called --canvas-accent while it held one value in both
-     themes; the name had to go when the value stopped being blue. */
-  --canvas-accent: #0f766e;
+  /* The Canvas follows the shell's light-theme brand hierarchy: primary actions,
+     focus treatments and object-picker glyphs are brand blue on paper. */
+  --canvas-accent: var(--coral-bright);
   /* The Canvas owns its palette in BOTH themes — light here, dark in the block
      near the end of this file — rather than inheriting the application shell's.
      A board is a tinted surface CARRYING white objects, but the shell's light
@@ -32,11 +30,11 @@
   /* Shade, never glow: a warm neutral drop, not a tinted bloom. */
   --canvas-shadow: rgba(60, 48, 36, .12);
   /* Wash held over the board while a file is dragged in from the desktop. */
-  --canvas-drop-veil: rgba(15, 118, 110, .10);
+  --canvas-drop-veil: color-mix(in srgb, var(--canvas-accent) 10%, transparent);
   /* Accent INK: a tint or a glyph drawn ON a canvas surface. A hue legible on ink
      is invisible on paper, so this is a token with a value per theme rather than a
      literal repeated at each call site. */
-  --canvas-accent-ink: #0b5f58;
+  --canvas-accent-ink: var(--coral-mid);
   --canvas-positive-ink: #166534;
   /* Classification tones, in the TWO roles they are actually used in: `-mark` is a
      solid fill (a dot, a map marker) and `-ink` is text read ON the `-bg` tint. They
@@ -46,8 +44,8 @@
   --tone-success-mark: var(--success); --tone-success-ink: #166534; --tone-success-bg: rgba(21,128,61,.12);
   --tone-warning-mark: #b45309; --tone-warning-ink: #92400e; --tone-warning-bg: rgba(180,83,9,.14);
   --tone-danger-mark: #b91c1c; --tone-danger-ink: #991b1b; --tone-danger-bg: rgba(185,28,28,.12);
-  /* Blue is the SECONDARY signal in this theme, and `info` is the role that
-     carries it — the accent above went teal, so this is where blue still speaks. */
+  /* Info is semantic blue; it may share the brand hue because text/icon context,
+     rather than a second accent colour, distinguishes the role. */
   --tone-info-mark: #1d4ed8; --tone-info-ink: #1e3a8a; --tone-info-bg: rgba(29,78,216,.11);
   /* TWO palettes, not twenty. Brain surfaces (the Brain Object and the prompt it
      owns) share one identity so the conversation reads as a single system; every
@@ -1476,7 +1474,7 @@
    of the marketing site's near-black background. This keeps hierarchy visible
    without turning cards and controls into bright white islands. */
 :global(html:not([data-theme='light'])) .canvasShell {
-  /* Dark keeps the blue accent: teal leads on paper, blue leads on ink. */
+  /* Dark uses the brighter blue rung needed to carry on ink. */
   --canvas-accent:#3978f6;
   --canvas-board:#09111f;
   --canvas-board-background:var(--canvas-board);

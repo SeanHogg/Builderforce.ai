@@ -67,6 +67,52 @@ exported constant (`CREATION_CANVAS_TOUR`) now and the suite seeds the returning
 third assertion (`textContent === '✦'`) was left behind by the SVG icon migration and could never
 pass again.
 
+**10 · Every reference page had its own stylesheet, and I added a third before
+extracting the primitive.** `/soc2` shipped `.s2-*`, `/integrations` shipped
+`.intx-*`, and the new tool page shipped `.tref-*` — three private `<style>`
+blocks inside three route files, declaring the same hero, band, card grid and
+button pair at different paddings, type scales and grid floors. Pages the PRD
+calls one surface did not line up with each other. The house marketing kit
+(`.mk-*` in `globals.css`, already rendering `/features`, `/media`, `/prompts`,
+`/marketplace` and the tools hub) was the answer the whole time; the kit gained
+exactly **two** rules for this — `.mk-hero--center` (the missing modifier that
+made three authors hand-roll a whole stylesheet rather than extend the kit) and
+`.mk-code` — and `components/reference/ReferencePage.tsx` is a thin vocabulary
+that emits `.mk-*` and nothing else. All three routes migrated; all three
+`<style>` blocks deleted.
+
+**10b · The index rail now belongs to the PAGE, so every reference page has
+one.** The rail was a `sections:` array on the registry row, with
+`check-destinations` asserting each id appeared in the route's source — a
+build-time check standing in for a structural guarantee, and one that could not
+describe a page whose sections are DATA. So `/integrations` (sections =
+categories), the nine domain explainers (sections = features) and `/tools/<id>`
+(sections = a catalog's) opened as panels with no rail at all, which is the
+visible gap against §11.4.5's mockup. `ReferencePage` takes `title` and
+`sections` and publishes them through a leaf client component
+(`ReferenceChrome`), so a **server** page can name itself; it is handed the same
+array it renders its anchored bands from, so the rail cannot list a section the
+page stopped having. The registry field, its type, and check #6 are deleted —
+replaced by an assertion that nobody puts the second copy back.
+
+**11 · `/integrations` and `/product` were two public answers to one question.**
+`/product` renders `INTEGRATION_CAPABILITY_PROOF` (Jira, Confluence, Sentry,
+PostHog) as the integration matrix; `/integrations` rendered only
+`SEO_INTEGRATIONS`, so somebody asking "do you support Jira?" on the page named
+Integrations was told no. The index now derives the difference, so a connector
+added to either list appears on the page rather than nowhere.
+
+**12 · A reference page could not be a panel for a guest, because nothing put
+their board back.** `rendersOperatorShell` hands a signed-out visitor the
+operator shell *when the shell is holding a board* — and `LastBoardBridge` only
+restored boards for authenticated users with a tenant. So a guest who had been
+building locally, then opened `/integrations`, got the full-page marketing
+render with no board behind it: the panel had nothing to be a panel over, which
+is §6.7's cold-`/settings` defect wearing a different URL. The bridge now
+restores a guest's last **local** board on any route that would open a panel.
+Still free for a first-time visitor and a crawler — no local board, nothing
+restored, the indexable page renders exactly as before.
+
 **9 · Two guards were red on `main`, and a red guard hides the rest.** `check:design-scale` flagged
 `AboutPage.module.css`'s `max-width: 900px` — a reading measure typed as a number inside the range
 reserved for page columns; it is `68ch` now. And the dev CSP pinned `connect-src` to

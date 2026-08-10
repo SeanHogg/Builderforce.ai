@@ -16282,6 +16282,7 @@
     "crumb": "{seat} · Referencia",
     "section": {
       "label": "En esta página",
+      "start": "Empezar",
       "report": "Tu informe",
       "criteria": "Controles",
       "how": "Cómo funciona",
@@ -16296,7 +16297,8 @@
     },
     "eyebrow": "Integraciones",
     "title": "Conecta tu equipo de agentes con tu stack",
-    "lede": "Builderforce.ai conecta tus agentes de IA autoalojados e independientes del modelo con el control de versiones, los canales de chat, los proveedores de modelos y las herramientas que ya usas: cada acción queda sujeta a aprobaciones y a un registro de auditoría."
+    "lede": "Builderforce.ai conecta tus agentes de IA autoalojados e independientes del modelo con el control de versiones, los canales de chat, los proveedores de modelos y las herramientas que ya usas: cada acción queda sujeta a aprobaciones y a un registro de auditoría.",
+    "provenCategory": "Servicios conectados"
   },
   "integrationDetail": {
     "eyebrow": "Integración de {category}",

@@ -180,8 +180,14 @@ describe('message catalogs', () => {
         `nav.stage.${stage}`,
         ...productFacesFor(stage).flatMap((face) => [`nav.${face.titleKey}`, face.taglineKey]),
       ]),
-      ...PUBLIC_DESTINATIONS.flatMap((entry) =>
-        (entry.sections ?? []).map((section) => `referencePanel.section.${section.labelKey}`)),
+      // The panel's index-rail labels. They are no longer reachable from the
+      // registry — a reference page hands `ReferencePage` the same array it
+      // renders its anchors from — so the keys are listed here directly. Only
+      // the fixed-section pages key their labels in the catalog at all;
+      // `/integrations` and the domain explainers label their rail from the copy
+      // they are already rendering.
+      ...['label', 'report', 'criteria', 'how', 'audits', 'faq', 'start']
+        .map((section) => `referencePanel.section.${section}`),
       'marketingNav.megaFoot',
       'marketingNav.megaFootLearn',
       // `referencePanel.crumb` is deliberately absent: it takes a `{seat}`

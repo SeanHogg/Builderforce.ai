@@ -17,6 +17,9 @@
  * So: restore the last board onto the stage on any authenticated app route, and
  * — once per browser tab — send the post-auth dashboard arrival to that board.
  *
+ * It restores a GUEST's last local board too, which is what makes a reference
+ * page arrive as a panel for someone who has no account. See the first effect.
+ *
  * IT COSTS NOTHING FOR SOMEONE WHO HAS NEVER OPENED A CANVAS. No remembered
  * board, no recent session, nothing restored, no redirect: the dashboard is
  * still the dashboard. This is deliberately the same "free unless you use it"
@@ -34,7 +37,9 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { listLocalCreationSessions } from '@/lib/creationSessions';
 import { fetchRecentCanvases, readLastCanvas } from '@/lib/pendingWork';
+import { panelOpen } from '@/lib/workbenchPolicy';
 
 /** One redirect per tab. Not localStorage: "you just signed in" is a per-tab fact. */
 const RESUMED_FLAG = 'builderforce:create:resumed';
@@ -66,6 +71,47 @@ export function LastBoardBridge() {
   const stageHosted = canvas?.stageHosted ?? false;
   const hasBoard = canvas?.active != null;
   const open = canvas?.open;
+
+  /**
+   * The guest half — and the reason `/integrations` looked nothing like the
+   * mockup.
+   *
+   * A reference page is meant to arrive as a PANEL over the board (§11.4.5),
+   * and `rendersOperatorShell` will give a signed-out visitor that shell — but
+   * only if the shell is holding a board, and nothing put one there. So a guest
+   * who had been building on a local canvas, then opened Integrations, got the
+   * full-page marketing render with no board behind it: the panel had nothing
+   * to be a panel over, exactly as §6.7 describes for a cold `/settings`.
+   *
+   * Their last board is a LOCAL session (no account, no server row), restored
+   * only on a route that would open a panel — so `/blog` stays a page, and the
+   * gate is `panelOpen` rather than `stageHosted`, which cannot be true yet
+   * precisely because there is no board.
+   *
+   * Free for a first-time visitor and for a crawler: no local board, nothing
+   * restored, the indexable page renders exactly as before.
+   */
+  useEffect(() => {
+    if (isAuthenticated || hasBoard || !open) return;
+    if (!panelOpen(pathname, true)) return;
+    if (ran.current) return;
+    ran.current = true;
+
+    const sessionId = listLocalCreationSessions()[0]?.sessionId;
+    if (!sessionId) return;
+    open({
+      sessionId,
+      persistence: 'local',
+      focusId: null,
+      shareOpen: false,
+      buildOpen: false,
+      buildChatId: null,
+      buildTicket: null,
+      prompt: null,
+      present: false,
+      modelComparisonIds: [],
+    });
+  }, [hasBoard, isAuthenticated, open, pathname]);
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant || !stageHosted || hasBoard || !open) return;

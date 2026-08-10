@@ -110,16 +110,15 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   const publicRow = publicDestinationFor(pathname);
   const reference = publicRow?.panel ? publicRow : undefined;
 
-  // A reference page whose identity is DATA — `/tools/<id>`, whose members the
-  // API's diagnostics catalog declares — says what it is called rather than the
-  // registry restating a catalog it does not own. Registry rows keep their
-  // static titles; a published one wins for exactly as long as it is mounted.
+  // Every reference page names ITSELF, through `ReferencePage` — the title the
+  // panel header shows and the sections its rail lists, from the same array the
+  // page renders its anchored bands from. The registry row supplies the crumb,
+  // the hue and a fallback title; it no longer holds a second copy of the
+  // page's own structure, which is what stopped a page whose sections are DATA
+  // (`/integrations`' categories, `/tools/<id>`'s diagnostics) from having a
+  // rail at all.
   const published = useReferenceChrome();
-  const sections: ReferenceChromeSection[] | undefined = published?.sections?.length
-    ? published.sections
-    : reference?.sections?.length
-      ? reference.sections.map((section) => ({ id: section.id, label: tRefSection(section.labelKey) }))
-      : undefined;
+  const sections: ReferenceChromeSection[] | undefined = published?.sections?.length ? published.sections : undefined;
 
   return (
     <SlideOutPanel

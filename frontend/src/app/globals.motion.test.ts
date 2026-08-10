@@ -37,4 +37,16 @@ describe('reduced-motion layout safety', () => {
     // while the trigger's own containing block is dropped.
     expect(css).toMatch(/\.mh-item\.has-menu:has\(> \.mh-panel-wide\)\s*\{\s*position:\s*static/);
   });
+
+  it('keeps the menu hover target connected to the dropdown bridge', () => {
+    const nav = css.match(/\.mh-nav\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(nav).toMatch(/align-self:\s*stretch/);
+
+    const menuItem = css.match(/\.mh-item\.has-menu\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(menuItem).toMatch(/align-self:\s*stretch/);
+    expect(menuItem).toMatch(/align-items:\s*center/);
+
+    const bridge = css.match(/\.mh-item\.has-menu::after\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(bridge).toMatch(/top:\s*100%/);
+  });
 });

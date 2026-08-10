@@ -16282,6 +16282,7 @@
     "crumb": "{seat} · 参考",
     "section": {
       "label": "本页内容",
+      "start": "开始使用",
       "report": "你的报告",
       "criteria": "控制项",
       "how": "运作方式",
@@ -16296,7 +16297,8 @@
     },
     "eyebrow": "集成",
     "title": "将你的智能体团队连接到现有技术栈",
-    "lede": "Builderforce.ai 把自托管、不绑定模型的 AI 智能体接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具——每一次操作都有审批和审计记录。"
+    "lede": "Builderforce.ai 把自托管、不绑定模型的 AI 智能体接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具——每一次操作都有审批和审计记录。",
+    "provenCategory": "已连接的服务"
   },
   "integrationDetail": {
     "eyebrow": "{category} 集成",

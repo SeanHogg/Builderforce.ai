@@ -16283,6 +16283,7 @@
     "crumb": "{seat} · Reference",
     "section": {
       "label": "On this page",
+      "start": "Get started",
       "report": "Your report",
       "criteria": "Controls",
       "how": "How it works",
@@ -16297,7 +16298,8 @@
     },
     "eyebrow": "Integrations",
     "title": "Connect your agent workforce to your stack",
-    "lede": "Builderforce.ai plugs your self-hosted, model-agnostic AI agents into source control, chat channels, model providers and the tools you already use — every action governed by approvals and an audit trail."
+    "lede": "Builderforce.ai plugs your self-hosted, model-agnostic AI agents into source control, chat channels, model providers and the tools you already use — every action governed by approvals and an audit trail.",
+    "provenCategory": "Connected services"
   },
   "integrationDetail": {
     "eyebrow": "{category} integration",

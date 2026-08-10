@@ -241,23 +241,21 @@ for (const row of referenceBlock.matchAll(/groupId:\s*'([^']+)'/g)) {
   }
 }
 
-// ── 6 · Every declared panel section exists in the page that owns it ───────
-// The panel's index rail is declared on the registry row. If a page renames an
-// anchor, the rail silently scrolls nowhere — so the ids are asserted against
-// the route's own source rather than trusted.
-for (const row of referenceBlock.matchAll(/marketingHref:\s*'([^']+)',[\s\S]{0,400}?sections:\s*\[([\s\S]*?)\n\s*\],/g)) {
-  const [, href, body] = row;
-  const pageFile = path.join(SRC, 'app', href.replace(/^\//, ''), 'page.tsx');
-  if (!fs.existsSync(pageFile)) {
-    fail(`[sections] \`${href}\` declares panel sections but ${path.relative(ROOT, pageFile)} does not exist.`);
-    continue;
-  }
-  const pageSource = fs.readFileSync(pageFile, 'utf8');
-  for (const [, id] of body.matchAll(/\bid:\s*'([^']+)'/g)) {
-    if (!pageSource.includes(`id="${id}"`)) {
-      fail(`[sections] \`${href}\` declares section \`${id}\`, which its page never renders as an anchor.`);
-    }
-  }
+// ── 6 · The registry does not hold a second copy of a page's own structure ──
+// The panel's index rail used to be a `sections:` array on the registry row,
+// checked here against the route's source. That check is gone because the thing
+// it guarded against cannot happen any more: a reference page hands
+// `ReferencePage` the SAME array it renders its anchored bands from, so the rail
+// and the page are one declaration rather than two kept in step by a script.
+// What IS still worth asserting is that nobody puts the second copy back —
+// especially since the registry form could never express a page whose sections
+// are data (`/integrations`' categories, `/tools/<id>`'s diagnostics).
+if (/\n\s*sections:\s*\[/.test(referenceBlock)) {
+  fail(
+    '[sections] A public row declares `sections`. The index rail belongs to the PAGE —\n'
+    + '    pass it to `ReferencePage`, which publishes it via lib/referenceChrome.\n'
+    + '    A registry copy can drift from the anchors and cannot describe a data-shaped page.',
+  );
 }
 
 // ── report ─────────────────────────────────────────────────────────────────

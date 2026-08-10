@@ -1,6 +1,25 @@
 'use client';
 
-import Link from 'next/link';
+/**
+ * The nine domain explainers (`/business-intelligence`, `/sales-revenue`, …) —
+ * one component, nine `copyId`s.
+ *
+ * It rendered through `.br-domain-*`, a fourth private marketing vocabulary
+ * beside `/soc2`'s `.s2-*`, `/integrations`' `.intx-*` and the tool page's
+ * `.tref-*`. All four now render through `components/reference/ReferencePage`,
+ * i.e. the house `.mk-*` kit — so the nine explainers, the two standalone
+ * reference pages and the diagnostics family are one surface rather than four
+ * that look like each other from memory.
+ *
+ * It publishes its own panel chrome through `ReferencePage`, which is what gives
+ * these nine an index rail: their sections are their FEATURES, which are copy,
+ * so they could never have been declared on the registry row.
+ */
+
+import { useTranslations } from 'next-intl';
+import {
+  referenceAnchorId, ReferenceCard, ReferenceCta, ReferenceGrid, ReferenceHero, ReferencePage, ReferenceSection,
+} from '@/components/reference/ReferencePage';
 import { useAuth } from '@/lib/AuthContext';
 import type { ReferenceDestination } from '@/lib/navGroups';
 import { seatHueVar } from '@/lib/seats';
@@ -35,58 +54,54 @@ export default function BurnrateDomainPage({
   copy: BurnrateDomainCopy;
   shared: BurnrateSharedCopy;
 }) {
+  const t = useTranslations('referencePanel.section');
   const { isAuthenticated } = useAuth();
   const primaryHref = isAuthenticated ? domain.appHref : '/register';
+  const featuresId = referenceAnchorId(shared.featureHeading);
 
   return (
     // The page carries its owner's hue from the one declaration (§11.10.1), so
     // the explainer, the features card and the roster chip agree about who this
-    // domain belongs to instead of each picking a colour.
-    <main className="br-domain-page" style={{ '--seat': `var(${seatHueVar(domain.seat)})` } as React.CSSProperties}>
-      <section className="br-domain-hero">
-        <div className="br-domain-hero__copy">
-          <div className="br-domain-badges">
-            <span>{shared.builtFor.replace('{persona}', domain.seat)}</span>
-            <span>{shared.poweredBy}</span>
-          </div>
-          <p className="br-domain-kicker">{isAuthenticated ? shared.authenticatedEyebrow : copy.tagline}</p>
-          <h1>{copy.title}</h1>
-          <h2>{copy.hero}</h2>
-          <p className="br-domain-lede">{copy.description}</p>
-          <div className="br-domain-actions">
-            <Link href={primaryHref} className="br-domain-primary">
-              {isAuthenticated ? shared.authenticatedCta : shared.publicCta} <span aria-hidden="true">→</span>
-            </Link>
-            {!isAuthenticated && <Link href="/book-demo" className="br-domain-secondary">{shared.publicSecondaryCta}</Link>}
-          </div>
-        </div>
-        <div className="br-domain-visual" aria-hidden="true">
-          <span className="br-domain-visual__icon"><Icon source={domain.icon} size={44} /></span>
-          <strong>{domain.seat}</strong>
-          <span>{copy.tagline}</span>
-          <div className="br-domain-signal-grid">
-            {copy.features.slice(0, 4).map((feature, index) => <i key={feature.title} style={{ '--signal-index': index } as React.CSSProperties} />)}
-          </div>
-        </div>
-      </section>
+    // domain belongs to instead of each picking a colour. `--seat` is what the
+    // `.mk-*` kit reads for every accent on the page.
+    <main style={{ '--seat': `var(${seatHueVar(domain.seat)})` } as React.CSSProperties}>
+      <ReferencePage
+        title={copy.title}
+        sections={[
+          { id: featuresId, label: shared.featureHeading },
+          { id: 'ref-start', label: t('start') },
+        ]}
+      >
+        <ReferenceHero
+          eyebrow={shared.builtFor.replace('{persona}', domain.seat)}
+          mark={<Icon source={domain.icon} size={40} />}
+          title={copy.title}
+          titleAccent={copy.hero}
+          lede={copy.description}
+          actions={[
+            { href: primaryHref, label: `${isAuthenticated ? shared.authenticatedCta : shared.publicCta} →` },
+            ...(isAuthenticated ? [] : [{ href: '/book-demo', label: shared.publicSecondaryCta, variant: 'ghost' as const }]),
+          ]}
+        />
 
-      <section className="br-domain-features">
-        <p className="br-domain-kicker">{shared.featureHeading}</p>
-        <div className="br-domain-grid">
-          {copy.features.map((feature, index) => (
-            <article key={feature.title} className="br-domain-card">
-              <span className="br-domain-card__number">{String(index + 1).padStart(2, '0')}</span>
-              <h3>{feature.title}</h3>
-              <p>{feature.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        <ReferenceSection id={featuresId} title={shared.featureHeading} sub={isAuthenticated ? shared.authenticatedEyebrow : copy.tagline}>
+          <ReferenceGrid wide>
+            {copy.features.map((feature, index) => (
+              <ReferenceCard key={feature.title} mark={String(index + 1).padStart(2, '0')} title={feature.title}>
+                {feature.description}
+              </ReferenceCard>
+            ))}
+          </ReferenceGrid>
+        </ReferenceSection>
 
-      <section className="br-domain-closing">
-        <p>{isAuthenticated ? shared.authenticatedClosing : shared.publicClosing}</p>
-        <Link href={primaryHref} className="br-domain-primary">{isAuthenticated ? shared.authenticatedCta : shared.publicCta} →</Link>
-      </section>
+        <div id="ref-start">
+          <ReferenceCta
+            title={copy.hero}
+            body={isAuthenticated ? shared.authenticatedClosing : shared.publicClosing}
+            actions={[{ href: primaryHref, label: `${isAuthenticated ? shared.authenticatedCta : shared.publicCta} →` }]}
+          />
+        </div>
+      </ReferencePage>
     </main>
   );
 }

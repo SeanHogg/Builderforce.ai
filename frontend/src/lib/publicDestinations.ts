@@ -45,14 +45,6 @@ export type MenuColumn = (typeof PRODUCT_COLUMNS)[number] | (typeof LEARN_COLUMN
 /** `bar` = a flat header link; `account` = footer only (sign in, demo, media). */
 export type Placement = MenuColumn | 'bar' | 'account';
 
-/** A named section INSIDE a reference page, offered as the panel's index rail. */
-export interface ReferenceSection {
-  /** The page's own anchor id. */
-  id: string;
-  /** i18n key under `referencePanel.section`. */
-  labelKey: string;
-}
-
 export interface PublicDestination {
   id: string;
   /**
@@ -83,8 +75,14 @@ export interface PublicDestination {
    * asserts it.
    */
   groupId?: string;
-  /** The panel's index rail, when the page declares matching anchor ids. */
-  sections?: ReferenceSection[];
+  /**
+   * NOT a `sections` field. The panel's index rail is declared by the PAGE, via
+   * `ReferencePage`'s `sections` prop — the same array it renders its anchored
+   * bands from, so the two are structurally identical rather than asserted
+   * equal by a build-time check. It lived here, and could only ever work for a
+   * page with a fixed section list; `/integrations`' sections are its
+   * categories, which are data the registry does not own.
+   */
 }
 
 /** Kept as an alias: a reference destination is a public one that explains a domain. */
@@ -132,20 +130,7 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   // ── Learn ▾ · PROVE — evidence surfaces. These ARE panels: "can I show my
   //    auditor the controls" is a question you ask mid-turn, not instead of one.
   { id: 'diagnostics', seat: 'Manager', icon: '🩺', marketingHref: '/tools', appHref: '/insights/compliance', kind: 'link', placement: 'prove', panel: true },
-  {
-    id: 'soc2', seat: 'Security', icon: '🛡', marketingHref: '/soc2', appHref: '/seat/governance',
-    kind: 'link', placement: 'prove', panel: true,
-    // The page's own `<section id>`s, offered as the panel's index rail. Declared
-    // beside the destination rather than inside the page so the rail cannot list
-    // a section the page stopped having — `check-destinations` asserts the ids.
-    sections: [
-      { id: 'report', labelKey: 'report' },
-      { id: 'criteria', labelKey: 'criteria' },
-      { id: 'how', labelKey: 'how' },
-      { id: 'audits', labelKey: 'audits' },
-      { id: 'faq', labelKey: 'faq' },
-    ],
-  },
+  { id: 'soc2', seat: 'Security', icon: '🛡', marketingHref: '/soc2', appHref: '/seat/governance', kind: 'link', placement: 'prove', panel: true },
   { id: 'evermind', seat: 'Brain', icon: '🧠', marketingHref: '/evermind', appHref: '/create', kind: 'link', placement: 'prove', panel: true },
   // ── Learn ▾ · BUILD WITH ─────────────────────────────────────────────────
   { id: 'ref.integrations', copyId: 'integrations', seat: 'CTO', icon: '🔌', marketingHref: '/integrations', appHref: '/settings/integrations', kind: 'foundation', placement: 'buildWith', panel: true },
