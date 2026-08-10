@@ -1388,6 +1388,7 @@ export const creationSessions = pgTable('creation_sessions', {
   segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   title:          varchar('title', { length: 255 }).notNull().default('Untitled session'),
   description:    text('description'),
+  folder:         varchar('folder', { length: 120 }),
   status:         varchar('status', { length: 16 }).notNull().default('active'),
   /** What this canvas session is FOR (0409) — 'chat' (a conversation: read, reason,
    *  answer, author objects) or 'work' (an execution: turn the conclusion into a
@@ -1409,6 +1410,7 @@ export const creationSessions = pgTable('creation_sessions', {
   byTenantActivity: index('idx_creation_sessions_tenant_activity').on(t.tenantId, t.status, t.lastActivityAt),
   byCreator: index('idx_creation_sessions_creator').on(t.createdBy, t.lastActivityAt),
   bySegment: index('idx_creation_sessions_segment').on(t.tenantId, t.segmentId, t.lastActivityAt),
+  byFolder: index('idx_creation_sessions_tenant_folder').on(t.tenantId, t.segmentId, t.folder, t.lastActivityAt),
 }));
 
 export const creationSessionObjects = pgTable('creation_session_objects', {

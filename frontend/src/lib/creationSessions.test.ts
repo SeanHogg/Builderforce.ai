@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, listLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, writeLocalCreationSession } from './creationSessions';
+import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, listLocalCreationSessions, mergeLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, updateLocalCreationSession, writeLocalCreationSession } from './creationSessions';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
 
 describe('creationGraphFromSnapshot', () => {
@@ -113,5 +113,24 @@ describe('local Creation Session index', () => {
     writeLocalCreationSession(id, { ...snapshot, title: 'Renamed board' });
 
     expect(listLocalCreationSessions()[0]).toMatchObject({ sessionId: id, title: 'Renamed board' });
+  });
+
+  it('renames and moves a draft while keeping its index synchronized', () => {
+    const id = createLocalCreationSession('Loose idea');
+    updateLocalCreationSession(id, { title: 'Launch plan', folder: 'Marketing' });
+
+    expect(readLocalCreationSession(id)).toMatchObject({ title: 'Launch plan', folder: 'Marketing' });
+    expect(listLocalCreationSessions()[0]).toMatchObject({ sessionId: id, title: 'Launch plan', folder: 'Marketing' });
+  });
+
+  it('merges draft graphs and removes the source draft', () => {
+    const target = createLocalCreationSession('Target');
+    const source = createLocalCreationSession('Source');
+
+    const merged = mergeLocalCreationSessions(target, [source]);
+
+    expect(merged?.nodes).toHaveLength(2);
+    expect(readLocalCreationSession(source)).toBeNull();
+    expect(listLocalCreationSessions().map((entry) => entry.sessionId)).toEqual([target]);
   });
 });

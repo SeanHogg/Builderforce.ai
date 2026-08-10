@@ -1,3 +1,77 @@
+## ✅ RESOLVED 2026-08-09 — the panel is 70% of the screen, the header follows the visitor, and the integration list belongs to the product
+
+Follow-up pass on §11.4.5, all five items reported from the running app.
+
+**1 · The public integration list is the PRODUCT's now, not the frontend's.** This was logged to the
+Gap Register last pass instead of being built, which was the wrong call and is corrected here.
+`api/src/application/integrations/integrationCatalog.ts` projects **five ports** — the built-in
+connector manifests (`connectors/defaults`), `boardsync/providerCatalog`, `dataProviderCatalog`, the
+`DriveProvider` port and the `MailboxProvider` port — into one public catalog, merging a system that
+appears on several (GitHub is a built-in connector AND a synced board) into ONE entry carrying both
+surfaces. Categories are the catalog's own twelve-key vocabulary with *total* maps from each port's
+internal grouping, so a new port category is a compile error rather than a silently dropped
+integration; a connector's direction is derived from whether its manifest declares a non-`GET`
+action, so "two-way" is never an overclaim. `GET /api/integrations/catalog` serves it, mounted before
+the authenticated router so the literal segment beats `/:id`, and uncached on purpose — it serialises
+a module constant, exactly like `GET /api/tools`. `/integrations` renders it; `SEO_INTEGRATIONS`
+survives with its scope corrected to what it always was, the **editorial** layer supplying the
+curated leaf pages, matched by name because port ids are adapter keys and leaf slugs are marketing
+URLs. Degrades to the editorial subset if the endpoint blips rather than 500ing the page.
+
+**2 · One uncredentialed server read, not one per page.** `lib/publicApi.ts` is the single
+server-side public GET — it owns the base URL, Next's data-cache window and the degrade-to-`null`
+contract that `marketplaceSeo.ts` carried a private copy of. `marketplaceSeo` is migrated onto it and
+its `check-api-transport` allowlist entry is *replaced* rather than added to, so the number of files
+allowed to call `fetch` is unchanged at five.
+
+**3 · A `full` panel is 70% of the viewport, not 94%.** At 94% the board behind it was a 30px
+sliver — the letter of §0 and not its point. Narrow viewports override to 96vw: there is no board
+beside a panel on a phone, and 70vw there is a 260px column.
+
+**4 · The reference panel has a reading gutter.** Reference content still gets no wrapper padding
+(it brings full-bleed bands), but `.ref-panel-body` widens the marketing COLUMN's own
+`--marketing-gutter` to `clamp(24px, 5cqi, 48px)` — `cqi` is the PANEL's inline size, so the gutter
+tracks how wide the reader made the panel. Both marketing columns (`.mk-in`, `.mkt-in`) read that
+variable, so every reference page gets it from one line.
+
+**5 · Closing the panel goes to the BOARD, by id.** `ShellPanel`'s close pushed the literal
+`/create` — which is itself a panel destination. On every other route that read as "close"; on
+`/create` it resolved to the route already on screen, so the ✕, the scrim and `Esc` were all inert
+and the only way out of your own canvas list was the browser's Back button. It reads the session id
+off the stage now.
+
+**6 · The header follows the VISITOR, not the shell.** A guest arriving on a canvas had the marketing
+header — Product, Learn, Features, Pricing — replaced by a stub carrying a logo and a Marketplace
+link, so every way back into the product vanished at the moment somebody was deciding whether to
+sign up. `AppShell` renders `MarketingHeader` while signed out and `TopBar` once there is a session
+to switch scope, canvas and workspace in; `.shell > .mh` seats it in the same grid row. The marketing
+header owns its own mobile drawer, so the Sidebar's is handed over with it rather than racing a
+second one open. Its primary CTA also stops pointing at `/create/new` once you are already in the
+product — that route MINTS A NEW SESSION, so the most prominent control on a guest's own board was
+"throw this board away and start again".
+
+**7 · The index rail can be a selector, not only anchors.** `/embedded`'s sections are TABS: one is
+in the DOM at a time, so an anchor rail had nothing to scroll to and the page opened with no rail at
+all. A page may now publish `usePublishReferenceSelect` alongside its chrome; the rail renders
+buttons with `aria-current` and switches the view instead of navigating. The handler rides a ref
+rather than the chrome object, because chrome is serialized to break the publish→render→publish
+cycle and a function does not survive JSON.
+
+**8 · The tools hub is built like a reference page.** `ToolsHubClient` laid itself out in inline
+styles inside `.mkt-in` — a fourth copy of the vocabulary `components/reference/ReferencePage`
+exists to be — which cost it the rail and the gutter. It renders through the kit now, and its
+categories are one array used as both the page's groups and the panel's rail, so the rail grows when
+a sixth diagnostic ships.
+
+**Also closed:** the stale `reportError.ts` raw-`fetch` entry — that file already routes through
+`apiRequest`, and `check-api-transport` is green.
+
+**Verification:** `tsgo --noEmit` clean in `frontend` and `api`; eslint clean on every touched file;
+all six frontend guards green; new tests in `api/src/application/integrations/integrationCatalog.test.ts`
+(the projection covers every port), `frontend/src/components/shell/ShellPanel.test.tsx` (close goes to
+the board; selector vs anchor rail) and `frontend/src/lib/integrationCatalog.test.ts`. Five locales
+updated for the new category / direction / surface keys.
+
 ## ✅ RESOLVED 2026-08-09 — a tool is a reference page; a destination never costs a guest their board
 
 `/tools/ai-cost-estimator` loaded forever and looked nothing like a reference page, because it was

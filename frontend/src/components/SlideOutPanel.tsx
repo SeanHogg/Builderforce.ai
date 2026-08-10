@@ -24,8 +24,8 @@ export interface SlideOutPanelTab {
 /**
  * The three widths, and only three (PRD 21 §2.4 / §3.4).
  *
- *   sheet (440) — settings, profile, ⌘K, short forms
- *   wide  (660) — index + detail, e.g. Workforce's fourteen sub-views
+ *   sheet (25%) — settings, profile, ⌘K, short forms
+ *   wide  (50%) — index + detail, e.g. Workforce's fourteen sub-views
  *   full  (94%) — dashboards that need the room; the board is one Esc away
  *
  * A bespoke `min(560px, 96vw)` at a call site is what produced twenty distinct
@@ -324,7 +324,7 @@ export function SlideOutPanel({
           )}
           {/* `.ui-panel-body` carries the size container (§3.4): a destination
               in here measures the PANEL, not the viewport, which is the only
-              breakpoint that means anything at 440/660px inside a 2560px window. */}
+              breakpoint that means anything inside a viewport-relative panel. */}
           <div className="ui-panel-body">
             {children}
           </div>

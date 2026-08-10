@@ -20,6 +20,7 @@ const INDEX_KEY = `${STORAGE_PREFIX}index`;
 export interface LocalCreationSnapshot {
   version: 1;
   title: string;
+  folder?: string;
   initialPrompt?: string;
   /**
    * Conversation mode (0409) for a canvas that has nowhere on the server to keep it.
@@ -47,6 +48,7 @@ export function isLocalCreationSession(sessionId: string): boolean {
 export interface LocalCreationEntry {
   sessionId: string;
   title: string;
+  folder?: string;
   updatedAt: string;
 }
 
@@ -58,6 +60,7 @@ function readIndex(): LocalCreationEntry[] {
       !!entry && typeof entry === 'object'
       && typeof (entry as LocalCreationEntry).sessionId === 'string'
       && typeof (entry as LocalCreationEntry).title === 'string'
+      && ((entry as LocalCreationEntry).folder === undefined || typeof (entry as LocalCreationEntry).folder === 'string')
       && typeof (entry as LocalCreationEntry).updatedAt === 'string');
   } catch {
     return [];
@@ -74,9 +77,9 @@ function writeIndex(entries: LocalCreationEntry[]): void {
 }
 
 /** Upsert one draft into the index, newest first. */
-function indexLocalCreationSession(sessionId: string, title: string, updatedAt: string): void {
+function indexLocalCreationSession(sessionId: string, title: string, updatedAt: string, folder?: string): void {
   const rest = readIndex().filter((entry) => entry.sessionId !== sessionId);
-  writeIndex([{ sessionId, title, updatedAt }, ...rest]);
+  writeIndex([{ sessionId, title, ...(folder ? { folder } : {}), updatedAt }, ...rest]);
 }
 
 /**
@@ -102,7 +105,7 @@ export function listLocalCreationSessions(): LocalCreationEntry[] {
       if (sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX)) { legacyToolBoards.push(key); continue; }
       if (indexed.has(sessionId)) continue;
       const snapshot = readLocalCreationSession(sessionId);
-      if (snapshot) indexed.set(sessionId, { sessionId, title: snapshot.title, updatedAt: snapshot.updatedAt });
+      if (snapshot) indexed.set(sessionId, { sessionId, title: snapshot.title, ...(snapshot.folder ? { folder: snapshot.folder } : {}), updatedAt: snapshot.updatedAt });
     }
   } catch {
     // Enumeration blocked (rare privacy modes) — the stored index still stands.
@@ -185,7 +188,7 @@ export function writeLocalCreationSession(sessionId: string, snapshot: LocalCrea
     return;
   }
   // The index rides the ONE write, so a board can never exist unlisted.
-  indexLocalCreationSession(sessionId, snapshot.title, snapshot.updatedAt);
+  indexLocalCreationSession(sessionId, snapshot.title, snapshot.updatedAt, snapshot.folder);
 }
 
 export function readLocalCreationSession(sessionId: string): LocalCreationSnapshot | null {
@@ -197,6 +200,7 @@ export function readLocalCreationSession(sessionId: string): LocalCreationSnapsh
     return {
       version: 1,
       title: typeof parsed.title === 'string' ? parsed.title : 'Untitled session',
+      folder: typeof parsed.folder === 'string' && parsed.folder.trim() ? parsed.folder.trim().slice(0, 120) : undefined,
       initialPrompt: typeof parsed.initialPrompt === 'string' ? parsed.initialPrompt : undefined,
       mode: normalizeChatMode(parsed.mode),
       timeline: Array.isArray(parsed.timeline) ? parsed.timeline.filter((message): message is NonNullable<LocalCreationSnapshot['timeline']>[number] => !!message && typeof message.clientMessageId === 'string' && (message.role === 'user' || message.role === 'assistant' || message.role === 'system') && typeof message.body === 'string' && typeof message.createdAt === 'string') : [],
@@ -229,6 +233,7 @@ export function localCreationSnapshot(
     version: 1,
     initialPrompt: prior?.initialPrompt,
     mode: prior?.mode,
+    folder: prior?.folder,
     ...board,
     updatedAt: new Date().toISOString(),
   };
@@ -237,6 +242,53 @@ export function localCreationSnapshot(
 export function removeLocalCreationSession(sessionId: string): void {
   localStorage.removeItem(creationStorageKey(sessionId));
   writeIndex(readIndex().filter((entry) => entry.sessionId !== sessionId));
+}
+
+/** Rename or file a browser-local session without duplicating snapshot logic in UI. */
+export function updateLocalCreationSession(
+  sessionId: string,
+  patch: { title?: string; folder?: string | null },
+): LocalCreationSnapshot | null {
+  const current = readLocalCreationSession(sessionId);
+  if (!current) return null;
+  const title = patch.title === undefined ? current.title : patch.title.trim().slice(0, 80) || current.title;
+  const folder = patch.folder === undefined ? current.folder : patch.folder?.trim().slice(0, 120) || undefined;
+  const next = { ...current, title, folder, updatedAt: new Date().toISOString() };
+  writeLocalCreationSession(sessionId, next);
+  return next;
+}
+
+/** Fold source drafts into the target and remove the now-redundant sources. */
+export function mergeLocalCreationSessions(targetSessionId: string, sourceSessionIds: string[]): LocalCreationSnapshot | null {
+  const target = readLocalCreationSession(targetSessionId);
+  if (!target) return null;
+  const sources = sourceSessionIds
+    .filter((id) => id !== targetSessionId)
+    .map((id) => ({ id, snapshot: readLocalCreationSession(id) }))
+    .filter((item): item is { id: string; snapshot: LocalCreationSnapshot } => item.snapshot !== null);
+  if (!sources.length) return target;
+
+  const nodes = [...target.nodes];
+  const edges = [...target.edges];
+  const timeline = [...(target.timeline ?? [])];
+  for (const { snapshot } of sources) {
+    const idMap = new Map(snapshot.nodes.map((node) => [node.id, crypto.randomUUID()]));
+    nodes.push(...snapshot.nodes.map((node) => ({
+      ...node,
+      id: idMap.get(node.id)!,
+      position: { x: node.position.x + 120, y: node.position.y + 120 },
+    })));
+    edges.push(...snapshot.edges.flatMap((edge) => {
+      const source = idMap.get(edge.source);
+      const targetId = idMap.get(edge.target);
+      return source && targetId ? [{ ...edge, id: crypto.randomUUID(), source, target: targetId }] : [];
+    }));
+    timeline.push(...(snapshot.timeline ?? []).map((message) => ({ ...message, clientMessageId: `merge:${crypto.randomUUID()}` })));
+  }
+  const merged = { ...target, nodes, edges, timeline, updatedAt: new Date().toISOString() };
+  writeLocalCreationSession(targetSessionId, merged);
+  sources.forEach(({ id }) => removeLocalCreationSession(id));
+  return merged;
 }
 
 export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 'nodes' | 'edges' | 'viewport'>): CreationGraphInput {

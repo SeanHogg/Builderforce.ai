@@ -7967,6 +7967,7 @@ export interface CreationSessionSummary {
   id: string;
   title: string;
   description: string | null;
+  folder?: string | null;
   status: 'active' | 'archived' | 'deleted';
   preview: { objectCount?: number; kinds?: string[]; objects?: Array<{ id: string; kind: string; x: number; y: number; title: string; status?: string; resourceType?: string; resourceId?: string }> } | null;
   revision: number;
@@ -8133,7 +8134,7 @@ export const creationSessionsApi = {
   outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
   recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
     request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
+  update: (id: string, body: { title?: string; description?: string | null; folder?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   preview: (id: string) => request<{ sessionId: string; title: string; revision: number; preview: CreationSessionSummary['preview']; lastActivityAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/preview`),
@@ -8151,6 +8152,7 @@ export const creationSessionsApi = {
   },
   pin: (id: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) }),
   duplicate: (id: string) => request<{ session: { id: string; title: string; revision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: '{}' }),
+  merge: (targetId: string, sourceSessionId: string) => request<{ session: { id: string; title: string; revision: number }; mergedSessionId: string }>(`/api/creation-sessions/${encodeURIComponent(targetId)}/merge`, { method: 'POST', body: JSON.stringify({ sourceSessionId }) }),
   branch: (id: string, title?: string) => request<{ session: { id: string; title: string; revision: number; parentSessionId: string; baseRevision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/branches`, { method: 'POST', body: JSON.stringify({ title }) }),
   watch: (id: string, state: 'all' | 'mentions' | 'muted') => request<{ state: 'all' | 'mentions' | 'muted' }>(`/api/creation-sessions/${encodeURIComponent(id)}/watch`, { method: 'PATCH', body: JSON.stringify({ state }) }),
   lock: (id: string, objectId: string, action: 'acquire' | 'renew' | 'release' = 'acquire', leaseSeconds = 60) => request<{ objectId: string; lockedBy: string | null; lockExpiresAt: string | null }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/lock`, { method: 'POST', body: JSON.stringify({ action, leaseSeconds }) }),

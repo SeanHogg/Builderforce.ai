@@ -174,8 +174,8 @@
      fourth. A bespoke `min(560px, 96vw)` at a call site is how twenty distinct
      panel widths arrived; `<SlideOutPanel width="sheet|wide|full">` resolves to
      these, so the scale is enforced by the primitive rather than by review. */
-  --panel-width-sheet: min(440px, 96vw);
-  --panel-width-wide: min(660px, 96vw);
+  --panel-width-sheet: 25%;
+  --panel-width-wide: 50%;
   /* `full` is 70% of the viewport, not 94%. At 94% the board behind it was a
      30px sliver — technically still mounted, which is the letter of §0 and not
      its point: the panel is meant to sit OVER work you can still see. 70% keeps
@@ -3798,11 +3798,12 @@ select.input option {
   }
 }
 
-/* A `full` panel is 70% of a desktop viewport because the board behind it is
-   worth seeing. On a phone there is no board beside it to preserve — 70vw would
-   be a 260px column — so the widest panel takes the screen. */
+/* Percentage-based panels preserve the underlying desktop context. On a phone
+   there is no useful canvas beside them, so every named width takes the screen. */
 @media (max-width: 900px) {
   :root {
+    --panel-width-sheet: 96vw;
+    --panel-width-wide: 96vw;
     --panel-width-full: 96vw;
   }
 }

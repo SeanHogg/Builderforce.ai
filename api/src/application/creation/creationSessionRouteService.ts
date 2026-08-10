@@ -96,7 +96,7 @@ type GraphConnectionInput = {
   metadata?: unknown;
 };
 type CreateSessionBody = { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] };
-type PatchSessionBody = { title?: string; description?: string | null; status?: string; preview?: unknown; mode?: string };
+type PatchSessionBody = { title?: string; description?: string | null; folder?: string | null; status?: string; preview?: unknown; mode?: string };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] };
@@ -468,6 +468,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         id: creationSessions.id,
         title: creationSessions.title,
         description: creationSessions.description,
+        folder: creationSessions.folder,
         status: creationSessions.status,
         preview: creationSessions.preview,
         revision: creationSessions.canvasRevision,
@@ -536,6 +537,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       id: creationSessions.id,
       title: creationSessions.title,
       description: creationSessions.description,
+      folder: creationSessions.folder,
       status: creationSessions.status,
       preview: creationSessions.preview,
       revision: creationSessions.canvasRevision,
@@ -1224,6 +1226,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const patch: Partial<typeof creationSessions.$inferInsert> = { updatedBy: c.get('userId') as string, updatedAt: new Date(), lastActivityAt: new Date() };
     if (body.title !== undefined) patch.title = cleanTitle(body.title);
     if (body.description !== undefined) patch.description = body.description == null ? null : String(body.description).slice(0, 2_000);
+    if (body.folder !== undefined) patch.folder = body.folder == null || !String(body.folder).trim() ? null : String(body.folder).trim().slice(0, 120);
     if (body.status === 'active' || body.status === 'archived') {
       patch.status = body.status;
       patch.archivedAt = body.status === 'archived' ? new Date() : null;
@@ -1414,7 +1417,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       connections: copiedConnections.map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata })),
     };
     const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: cleanTitle(`Copy of ${access.session.title}`), description: access.session.description, preview: buildPreview(graph.objects), createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: cleanTitle(`Copy of ${access.session.title}`), description: access.session.description, folder: access.session.folder, preview: buildPreview(graph.objects), createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.duplicated', payload: { sourceSessionId: access.session.id } }),
       db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),
@@ -1426,6 +1429,67 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (projectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(projectLinks.map(({ projectId }) => ({ sessionId, projectId, addedBy: userId }))));
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ session: { id: sessionId, title: cleanTitle(`Copy of ${access.session.title}`), revision: 1 } }, 201);
+  });
+
+  router.post('/:id/merge', async (c) => {
+    const targetAccess = await requireSession(c, 'editor');
+    if (!targetAccess) return c.json({ error: 'Target session not found or not editable' }, 404);
+    const body = await c.req.json<MergeBody>().catch(() => ({} as MergeBody));
+    const sourceId = body.sourceSessionId ?? '';
+    if (!UUID_RE.test(sourceId) || sourceId === targetAccess.session.id) return c.json({ error: 'A different source session is required' }, 400);
+    const userId = c.get('userId') as string;
+    const sourceAccess = await membership(sourceId, targetAccess.session.tenantId, userId);
+    if (!sourceAccess || ROLE_RANK[sourceAccess.role as SessionRole] < ROLE_RANK.editor || sourceAccess.session.segmentId !== targetAccess.session.segmentId) {
+      return c.json({ error: 'Source session not found or not editable' }, 404);
+    }
+    if (sourceAccess.session.status !== 'active') return c.json({ error: 'Only an active session can be merged' }, 409);
+
+    const [targetObjects, targetConnections, sourceObjects, sourceConnections, sourceTimeline, targetProjectLinks, sourceProjectLinks] = await Promise.all([
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, targetAccess.session.id)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, targetAccess.session.id)),
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, sourceId)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, sourceId)),
+      db.select().from(creationSessionTimeline).where(eq(creationSessionTimeline.sessionId, sourceId)).orderBy(asc(creationSessionTimeline.id)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, targetAccess.session.id)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, sourceId)),
+    ]);
+    const targetResources = new Set(targetObjects.flatMap((object) => object.resourceType && object.resourceId ? [`${object.resourceType}:${object.resourceId}`] : []));
+    const acceptedSourceObjects = sourceObjects.filter((object) => !object.resourceType || !object.resourceId || !targetResources.has(`${object.resourceType}:${object.resourceId}`));
+    const idMap = new Map(acceptedSourceObjects.map((object) => [object.id, crypto.randomUUID()]));
+    const copiedObjects = acceptedSourceObjects.map((object) => {
+      const canvasData = object.canvasData && typeof object.canvasData === 'object' && !Array.isArray(object.canvasData)
+        ? { ...(object.canvasData as Record<string, unknown>), x: Number((object.canvasData as Record<string, unknown>).x ?? 0) + 120, y: Number((object.canvasData as Record<string, unknown>).y ?? 0) + 120 }
+        : { x: 120, y: 120 };
+      return { id: idMap.get(object.id)!, sessionId: targetAccess.session.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId, resourceRevision: object.resourceRevision, canvasData, content: object.content, searchText: object.searchText, createdBy: userId, updatedBy: userId };
+    });
+    const copiedConnections = sourceConnections.flatMap((edge) => {
+      const sourceObjectId = idMap.get(edge.sourceObjectId);
+      const targetObjectId = idMap.get(edge.targetObjectId);
+      return sourceObjectId && targetObjectId ? [{ id: crypto.randomUUID(), sessionId: targetAccess.session.id, sourceObjectId, targetObjectId, kind: edge.kind, label: edge.label, metadata: edge.metadata, createdBy: userId }] : [];
+    });
+    const graphObjects = [...targetObjects, ...copiedObjects].map(({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content }) => ({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content }));
+    const graphConnections = [...targetConnections, ...copiedConnections].map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata }));
+    const graphError = validCreationGraph(graphObjects, graphConnections);
+    if (graphError) return c.json({ error: graphError }, 400);
+
+    const revision = targetAccess.session.canvasRevision + 1;
+    const now = new Date();
+    const graph = { objects: graphObjects, connections: graphConnections };
+    const targetProjects = new Set(targetProjectLinks.map(({ projectId }) => projectId));
+    const newProjectLinks = sourceProjectLinks.filter(({ projectId }) => !targetProjects.has(projectId));
+    const statements: unknown[] = [
+      db.update(creationSessions).set({ canvasRevision: revision, preview: buildPreview(graphObjects), updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(eq(creationSessions.id, targetAccess.session.id)),
+      db.update(creationSessions).set({ status: 'archived', archivedAt: now, updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(eq(creationSessions.id, sourceId)),
+      db.insert(creationSessionEvents).values({ sessionId: targetAccess.session.id, revision, actorType: 'user', actorRef: userId, eventType: 'session.merged', payload: { sourceSessionId: sourceId, importedObjects: copiedObjects.length } }),
+      db.insert(creationSessionSnapshots).values({ sessionId: targetAccess.session.id, revision, graph, viewport: targetAccess.session.viewport, createdBy: userId }),
+    ];
+    if (copiedObjects.length) statements.push(db.insert(creationSessionObjects).values(copiedObjects));
+    if (copiedConnections.length) statements.push(db.insert(creationSessionConnections).values(copiedConnections));
+    if (sourceTimeline.length) statements.push(db.insert(creationSessionTimeline).values(sourceTimeline.map((message) => ({ sessionId: targetAccess.session.id, clientMessageId: `merge:${crypto.randomUUID()}`, messageRole: message.messageRole, body: message.body, metadata: message.metadata, createdBy: message.createdBy }))));
+    if (newProjectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(newProjectLinks.map(({ projectId }) => ({ sessionId: targetAccess.session.id, projectId, addedBy: userId }))));
+    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    await pruneHistory(targetAccess.session.id, targetAccess.session.tenantId);
+    return c.json({ session: { id: targetAccess.session.id, title: targetAccess.session.title, revision }, mergedSessionId: sourceId });
   });
 
   router.post('/:id/branches', async (c) => {
@@ -1456,7 +1520,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     };
     const title = cleanTitle(body.title, `${access.session.title} branch`);
     const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId: access.session.tenantId, segmentId: access.session.segmentId, title, description: access.session.description, preview: buildPreview(graph.objects), branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessions).values({ id: sessionId, tenantId: access.session.tenantId, segmentId: access.session.segmentId, title, description: access.session.description, folder: access.session.folder, preview: buildPreview(graph.objects), branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.branched', payload: { parentSessionId: access.session.id, baseRevision: access.session.canvasRevision } }),
       db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),

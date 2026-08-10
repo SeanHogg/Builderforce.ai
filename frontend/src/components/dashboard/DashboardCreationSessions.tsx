@@ -165,13 +165,32 @@ export function DashboardCreationSessions() {
     } finally { setCreating(false); }
   };
 
-  const act = async (action: 'pin' | 'rename' | 'duplicate' | 'archive' | 'restore' | 'share', session: CreationSessionSummary) => {
+  const act = async (action: 'pin' | 'rename' | 'move' | 'merge' | 'delete' | 'duplicate' | 'archive' | 'restore' | 'share', session: CreationSessionSummary) => {
     if (action === 'share') { trackActivity('creation_session_shared', { sessionId: session.id, metadata: { clientSurface: 'web', intent: 'open_share' } }); router.push(`/create/${session.id}?share=1`); return; }
     if (action === 'pin') await creationSessionsApi.pin(session.id, !session.pinned);
     if (action === 'rename') {
-      const title = window.prompt('Rename session', session.title)?.trim();
+      const title = window.prompt(t('renameSession'), session.title)?.trim();
       if (!title) return;
       await creationSessionsApi.update(session.id, { title });
+    }
+    if (action === 'move') {
+      const folder = window.prompt(t('moveSessionPrompt'), session.folder ?? '')?.trim();
+      if (folder === undefined) return;
+      await creationSessionsApi.update(session.id, { folder: folder || null });
+    }
+    if (action === 'merge') {
+      const choices = sessions.filter((candidate) => candidate.id !== session.id && candidate.status === 'active');
+      if (!choices.length) return;
+      const sourceTitle = window.prompt(t('mergeSessionPrompt', { sessions: choices.map((candidate) => candidate.title).join(', ') }))?.trim();
+      if (!sourceTitle) return;
+      const source = choices.find((candidate) => candidate.title.toLocaleLowerCase() === sourceTitle.toLocaleLowerCase());
+      if (!source) { window.alert(t('mergeSessionNotFound')); return; }
+      if (!window.confirm(t('mergeSessionConfirm', { source: source.title, target: session.title }))) return;
+      await creationSessionsApi.merge(session.id, source.id);
+    }
+    if (action === 'delete') {
+      if (!window.confirm(t('deleteSessionConfirm', { title: session.title }))) return;
+      await creationSessionsApi.remove(session.id);
     }
     if (action === 'duplicate') {
       const copy = await creationSessionsApi.duplicate(session.id);
@@ -226,7 +245,8 @@ export function DashboardCreationSessions() {
       <div style={{ padding: libraryView === 'list' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned && <Icon name="sparkles" size={14} />} {session.title}{session.unread ? ' · New' : ''}</strong>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>Project {id}</small>)}</div>
         <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{session.preview?.objectCount ?? 0} objects · {session.collaboratorCount ?? 1} people{running ? ` · ${running} running` : ''}</span><span>{new Date(session.lastActivityAt).toLocaleDateString()}</span></span>
-        <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 10 }}>{(['pin','rename','duplicate','share', status === 'archived' ? 'restore' : 'archive'] as const).map((action) => <button key={action} type="button" onClick={() => void act(action, session)} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-secondary)', padding: '4px 7px', cursor: 'pointer', textTransform: 'capitalize' }}>{action === 'pin' && session.pinned ? 'Unpin' : action}</button>)}</div>
+        {session.folder && <small style={{ display: 'block', marginTop: 7, color: 'var(--text-muted)' }}>📁 {session.folder}</small>}
+        <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 10 }}>{(['pin','rename','move', ...(status === 'active' ? ['merge'] as const : []), 'duplicate','share', status === 'archived' ? 'restore' : 'archive', 'delete'] as const).map((action) => <button key={action} type="button" onClick={() => void act(action, session)} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: action === 'delete' ? 'var(--danger)' : 'var(--text-secondary)', padding: '4px 7px', cursor: 'pointer', textTransform: 'capitalize' }}>{action === 'pin' && session.pinned ? t('unpinSession') : t(`${action}Session`)}</button>)}</div>
       </div>
     </article>; });
 
@@ -247,7 +267,10 @@ export function DashboardCreationSessions() {
     {loading || resourcesLoading ? <div style={{ padding: 36, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : visible.length === 0 && resourceItems.length === 0 ?
       <button onClick={createBlank} style={{ width: '100%', minHeight: 220, border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-xl)', background: 'var(--surface-raised)', color: 'var(--text-secondary)', cursor: 'pointer' }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: 18, marginBottom: 6 }}>Start with a blank canvas</strong>Describe what you want to create above, or click here.</button> :
       <div aria-label="Creation library" data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>
-        {renderSessionItems(visible)}
+        {[...new Set(visible.map((session) => session.folder || ''))].map((folder) => <section key={folder || '__unfiled'} style={{ display: 'contents' }}>
+          {folder && <h3 style={{ gridColumn: '1 / -1', margin: '8px 0 0', fontSize: 15, color: 'var(--text-secondary)' }}>📁 {folder}</h3>}
+          {renderSessionItems(visible.filter((session) => (session.folder || '') === folder))}
+        </section>)}
         {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} style={{ minHeight: libraryView === 'card' ? 132 : 70, display: 'grid', gridTemplateColumns: libraryView === 'list' ? '42px minmax(0, 1fr) auto' : '1fr', alignItems: 'center', gap: libraryView === 'list' ? 12 : 0, padding: libraryView === 'list' ? '12px 16px' : 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}>
           <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'list' ? 36 : 'auto', height: libraryView === 'list' ? 36 : 'auto', borderRadius: 'var(--radius-md)', background: libraryView === 'list' ? 'var(--surface-sunken)' : 'transparent' }}><Icon source={item.icon} size={22} /></span>
           <span style={{ minWidth: 0 }}><strong style={{ display: 'block', marginTop: libraryView === 'card' ? 8 : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.meta}</span></span>
