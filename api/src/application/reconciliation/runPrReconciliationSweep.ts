@@ -2,7 +2,7 @@
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { ideAgents, prReconciliationRuns, projectRepositories } from '../../infrastructure/database/schema';
+import { ideAgents, prReconciliationErrors, prReconciliationRuns, projectRepositories } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { PR_RECONCILIATION_POLICY_VERSION, runPrTicketReconciliation } from './prReconciliationService';
 
@@ -21,6 +21,10 @@ export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliati
   // The frequent cron is every five minutes. A four-minute lease prevents
   // overlap while ensuring PRs opened just after a run wait at most one tick.
   const cutoff = new Date(Date.now() - 4 * 60 * 1_000);
+  // Authentication/authorization failures do not heal five minutes later. Back
+  // off long enough for credentials to be repaired instead of flooding both the
+  // system error table and GitHub (project 11 produced 2,000+ identical 403s).
+  const forbiddenCutoff = new Date(Date.now() - 6 * 60 * 60 * 1_000);
   const repos = await db.select({ id: projectRepositories.id, tenantId: projectRepositories.tenantId })
     .from(projectRepositories)
     .innerJoin(ideAgents, and(
@@ -35,8 +39,16 @@ export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliati
         SELECT 1 FROM ${prReconciliationRuns} recent
         WHERE recent.repo_id = ${projectRepositories.id}
           AND recent.mode = 'apply'
-          AND recent.summary ->> 'policyVersion' = ${String(PR_RECONCILIATION_POLICY_VERSION)}
-          AND recent.started_at >= ${cutoff}
+          AND (
+            (recent.summary ->> 'policyVersion' = ${String(PR_RECONCILIATION_POLICY_VERSION)}
+              AND recent.started_at >= ${cutoff})
+            OR (recent.status = 'failed' AND recent.started_at >= ${forbiddenCutoff}
+              AND EXISTS (
+                SELECT 1 FROM ${prReconciliationErrors} failure
+                WHERE failure.run_id = recent.id
+                  AND failure.details ->> 'status' = '403'
+              ))
+          )
       )`,
     ))
     .orderBy(sql`(

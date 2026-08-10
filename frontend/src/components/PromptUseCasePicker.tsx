@@ -27,6 +27,92 @@ export function cSuiteCanvasOwner(useCase: PromptUseCase) {
   return C_SUITE_CANVAS_OWNERS[useCase.category as keyof typeof C_SUITE_CANVAS_OWNERS] ?? null;
 }
 
+export type ExecutiveCanvasWorkflow = {
+  evidence: 'domain' | 'canvas' | 'web';
+  operation: 'summarize' | 'analyze' | 'upsert' | 'update' | 'delete' | 'append' | 'rename' | 'research';
+  /** Terms used to select relevant entities from the owning domain's live
+   * catalog. They are hints, not table names: unmatched terms fall back to the
+   * domain summary, object registry and metrics instead of inventing schema. */
+  entityTerms: readonly string[];
+  outputs: readonly string[];
+  completion: string;
+  confirmTarget?: boolean;
+};
+
+const executiveWorkflow = (
+  evidence: ExecutiveCanvasWorkflow['evidence'],
+  operation: ExecutiveCanvasWorkflow['operation'],
+  entityTerms: readonly string[],
+  outputs: readonly string[],
+  completion: string,
+  confirmTarget = false,
+): ExecutiveCanvasWorkflow => ({ evidence, operation, entityTerms, outputs, completion, ...(confirmTarget ? { confirmTarget: true } : {}) });
+
+/** Execution contracts for the 48 extracted intents. The contract says what to
+ * read, what existing Canvas kinds may constitute the result, and what must be
+ * true before the turn is reported complete. */
+export const C_SUITE_CANVAS_WORKFLOWS: Readonly<Record<string, ExecutiveCanvasWorkflow>> = {
+  'agile.sprint.current': executiveWorkflow('domain', 'summarize', ['sprint', 'work_item', 'capacity'], ['dashboard', 'table'], 'A dated sprint view exists with goal, capacity, progress, blockers and evidence gaps.'),
+  'agile.velocity.summary': executiveWorkflow('domain', 'analyze', ['sprint', 'velocity', 'work_item'], ['chart', 'report'], 'A period-labelled committed-versus-completed trend exists and every value is sourced.'),
+  'agile.bottlenecks.list': executiveWorkflow('domain', 'analyze', ['bottleneck', 'work_item', 'task_time'], ['table', 'report'], 'Bottlenecks are ranked with impact, owner, evidence and next action.'),
+  'agile.technical_debt.list': executiveWorkflow('domain', 'upsert', ['technical_debt', 'work_item', 'action_item'], ['table', 'roadmap'], 'A deduplicated debt register is connected to a remediation roadmap.'),
+  'agile.deployments.recent': executiveWorkflow('domain', 'summarize', ['release', 'deployment', 'incident'], ['table', 'report'], 'Recent releases show environment, outcome, failures and recovery evidence.'),
+  'crm.pipeline.summary': executiveWorkflow('domain', 'summarize', ['deal', 'pipeline', 'sales'], ['salesPipeline', 'dashboard'], 'The canonical pipeline is mirrored with stage value, count, weighted value and movement.'),
+  'crm.deals.at_risk': executiveWorkflow('domain', 'analyze', ['deal', 'risk', 'activity'], ['table'], 'At-risk deals are ranked by value and cited risk evidence with owner and next action.'),
+  'crm.conversion_rates.list': executiveWorkflow('domain', 'analyze', ['deal', 'conversion', 'pipeline'], ['chart', 'kpi'], 'The funnel states its period, denominators and sourced conversion values.'),
+  'crm.quota.attainment': executiveWorkflow('domain', 'analyze', ['quota', 'goal', 'deal'], ['dashboard', 'kpi'], 'Target, actual, attainment, gap, period and owner are present without inferred figures.'),
+  'cross.risks.aggregate': executiveWorkflow('domain', 'analyze', ['risk', 'incident', 'objective'], ['dashboard', 'report'], 'A cross-domain risk rollup cites every source and leaves unsupported scores blank.'),
+  'finance.runway.snapshot': executiveWorkflow('domain', 'analyze', ['expense', 'ledger', 'revenue', 'kpi'], ['kpi', 'dashboard'], 'Runway carries an as-of date, balance, burn basis, revenue basis and explicit assumptions.'),
+  'finance.transactions.summary': executiveWorkflow('domain', 'summarize', ['ledger', 'expense', 'invoice'], ['table', 'chart'], 'The requested period is grouped and totaled from canonical finance rows.'),
+  'finance.forecast_scenarios.list': executiveWorkflow('domain', 'analyze', ['scenario', 'simulation', 'assumption'], ['table', 'chart'], 'Comparable scenarios preserve their horizon and assumptions and expose missing inputs.'),
+  'finance.breakeven.list': executiveWorkflow('domain', 'analyze', ['break_even', 'scenario', 'pricing'], ['chart', 'report'], 'The break-even point and horizon are traceable to fixed and variable assumptions.'),
+  'finance.arr_projections.list': executiveWorkflow('domain', 'analyze', ['arr', 'revenue', 'scenario', 'kpi'], ['chart', 'kpi'], 'ARR projections label period, scenario, growth basis and source evidence.'),
+  'governance.soc_controls.list': executiveWorkflow('domain', 'summarize', ['control', 'evidence', 'soc'], ['table', 'report'], 'Controls are grouped by status with owner and evidence gap; absent data is explicit.'),
+  'governance.security_incidents.list': executiveWorkflow('domain', 'summarize', ['incident', 'finding', 'risk'], ['table', 'dashboard'], 'Incidents include severity, status, age, owner and containment evidence.'),
+  'governance.compliance_events.upcoming': executiveWorkflow('domain', 'summarize', ['compliance', 'event', 'control'], ['roadmap', 'table'], 'Upcoming and overdue obligations carry framework, due date, owner and status.'),
+  'governance.snapshot': executiveWorkflow('domain', 'summarize', ['control', 'incident', 'vendor', 'training', 'evidence'], ['dashboard', 'report'], 'The snapshot separates measured coverage from missing governance evidence.'),
+  'governance.vendors.list': executiveWorkflow('domain', 'summarize', ['vendor', 'subprocessor', 'connection'], ['table', 'report'], 'The register shows risk, DPA/review state, owner and open action where evidence exists.'),
+  'investor.market.get': executiveWorkflow('domain', 'summarize', ['market', 'company', 'analysis'], ['targetMarket', 'report'], 'TAM, SAM, SOM, growth, assumptions and sources are represented without fabricated values.'),
+  'investor.market.upsert_analysis': executiveWorkflow('domain', 'upsert', ['market', 'company', 'analysis'], ['targetMarket', 'report'], 'The selected market is updated in place and unchanged sourced fields are preserved.', true),
+  'investor.market.add_peers': executiveWorkflow('web', 'append', ['company', 'peer', 'market'], ['dataset'], 'One sourced row is appended per researched peer without changing existing rows.'),
+  'investor.market.update_peer': executiveWorkflow('web', 'update', ['company', 'peer', 'market'], ['dataset'], 'Only the confirmed peer row changes and each changed value has a source.', true),
+  'investor.market.delete_peer': executiveWorkflow('canvas', 'delete', ['peer', 'dataset'], ['dataset'], 'Only the confirmed peer row is removed and every other row is preserved.', true),
+  'marketing.heatmaps.list': executiveWorkflow('domain', 'summarize', ['heatmap', 'session', 'traffic'], ['table', 'dashboard'], 'Each page entry states path, sample, period, click concentration and scroll depth.'),
+  'marketing.heatmaps.analyze': executiveWorkflow('domain', 'analyze', ['heatmap', 'session', 'experiment'], ['report', 'evaluation'], 'Findings distinguish observed evidence, confidence limits and proposed experiments.', true),
+  'marketing.campaigns.list': executiveWorkflow('domain', 'summarize', ['campaign', 'message', 'audience'], ['table'], 'Campaigns show channel, audience, status, schedule, delivery, engagement and outcome.'),
+  'marketing.channel_performance.summary': executiveWorkflow('domain', 'analyze', ['channel', 'campaign', 'conversion', 'spend'], ['dashboard', 'chart'], 'All channels use the same period and expose spend, reach, leads, conversion, revenue, CAC and return only where sourced.'),
+  'marketing.ab_tests.list': executiveWorkflow('domain', 'summarize', ['experiment', 'ab_test', 'variant'], ['table', 'evaluation'], 'Experiments carry hypothesis, variants, sample, primary metric, state and supported conclusion.'),
+  'ops.employees.summary': executiveWorkflow('domain', 'summarize', ['employee', 'department', 'employment'], ['dashboard', 'chart'], 'Only aggregate people data is shown, including headcount cuts, starts, departures and manager coverage.'),
+  'ops.hiring_forecast.list': executiveWorkflow('domain', 'analyze', ['headcount', 'hiring', 'forecast'], ['roadmap', 'chart'], 'Planned head delta, cost, timing, department and status are traceable to source plans.'),
+  'ops.headcount_plan.list': executiveWorkflow('domain', 'analyze', ['headcount', 'budget', 'department'], ['spreadsheet', 'dashboard'], 'Planned versus actual heads and budget are aligned by period and department.'),
+  'ops.performance_reviews.summary': executiveWorkflow('domain', 'summarize', ['review', 'objective', 'performance'], ['dashboard', 'report'], 'The output is aggregate, period-labelled and omits unnecessary personal detail.'),
+  'ops.one_on_ones.cadence': executiveWorkflow('domain', 'analyze', ['one_on_one', 'meeting', 'action_item'], ['report', 'dashboard'], 'Recent and overdue cadence is grouped by team/manager with sourced follow-up actions.'),
+  'product.ideas.list': executiveWorkflow('domain', 'summarize', ['idea', 'feature', 'validation'], ['table', 'featureSummary'], 'Canonical ideas are deduplicated and grouped by status, priority and type.'),
+  'product.ideas.get': executiveWorkflow('domain', 'summarize', ['idea', 'feature', 'validation', 'work_item'], ['featureSummary', 'report'], 'The selected idea brief connects problem, evidence, hypothesis, status and delivery work.', true),
+  'product.company.snapshot': executiveWorkflow('domain', 'summarize', ['company', 'portfolio', 'market'], ['dashboard', 'report'], 'The selected company snapshot shows sourced stage, sector, headcount, ARR, valuation, market and priorities.', true),
+  'product.company.list': executiveWorkflow('domain', 'summarize', ['company', 'portfolio'], ['table'], 'Companies are listed from canonical records with ownership state and last update.'),
+  'product.company.update': executiveWorkflow('domain', 'update', ['company', 'portfolio', 'market'], ['targetMarket', 'report'], 'The selected company profile is updated in place; assumptions are marked and unchanged fields preserved.', true),
+  'research.web_search': executiveWorkflow('web', 'research', [], ['dataset', 'report'], 'Search and fetched sources produce a row-level evidence dataset and a cited decision report.'),
+  'scratchpad.read': executiveWorkflow('canvas', 'summarize', ['document', 'note'], ['document'], 'Working-note pages are represented in their existing title/order/content without loss.'),
+  'scratchpad.add_page': executiveWorkflow('canvas', 'append', ['document'], ['document'], 'One fully authored page is appended to the selected notes document.', true),
+  'scratchpad.append_to_page': executiveWorkflow('canvas', 'append', ['document'], ['document'], 'Requested markdown is appended to the confirmed page without replacing prior content.', true),
+  'scratchpad.update_page': executiveWorkflow('canvas', 'update', ['document'], ['document'], 'Only the confirmed page content/title changes and other pages remain identical.', true),
+  'scratchpad.rename_page': executiveWorkflow('canvas', 'rename', ['document'], ['document'], 'Only the confirmed page title changes; its content and sibling pages are preserved.', true),
+  'scratchpad.set_title': executiveWorkflow('canvas', 'rename', ['document'], ['document'], 'Only the selected working-notes document title changes.', true),
+  'scratchpad.create_deck': executiveWorkflow('canvas', 'upsert', ['document', 'slides'], ['slides'], 'A fully authored ordered slide narrative exists rather than an empty deck shell.'),
+};
+
+export function cSuiteCanvasWorkflow(useCase: PromptUseCase): ExecutiveCanvasWorkflow | null {
+  return useCase.id ? C_SUITE_CANVAS_WORKFLOWS[useCase.id] ?? null : null;
+}
+
+export function executiveCanvasPrompt(useCase: PromptUseCase): string | null {
+  const owner = cSuiteCanvasOwner(useCase);
+  const workflow = cSuiteCanvasWorkflow(useCase);
+  if (!owner || !workflow || !useCase.id) return null;
+  return `${useCase.prompt}\n\nExecution contract ${useCase.id}: first call canvas_prepare_executive_use_case with useCaseId "${useCase.id}". Perform the ${workflow.operation} operation for the ${owner.stages.join(' → ')} stage of Builderforce's IDEA → REAL loop. Use only the returned evidence and create or update only these existing Canvas object kinds: ${workflow.outputs.join(', ')}. Completion means: ${workflow.completion}${workflow.confirmTarget ? ' Confirm the exact target before changing it.' : ''} Do not propose a new database table and do not report completion without a successful Canvas mutation.`;
+}
+
 /**
  * BurnRateOS' 48 executive "tools" were starting-point intents: each one asked
  * the assistant to assemble or amend a management view.  Creation Canvas already

@@ -7828,3 +7828,40 @@ Coordination records and aggregates contention and is readable directly from an 
 | Creation architecture boundary | Canonical group orchestration and delivery construction moved to dedicated libraries; the contract is documented in `docs/design/creation-canvas/DELIVERY-ARCHITECTURE.md`. |
 
 ---
+## RESOLVED 2026-08-10 - BurnRateOS became a selective IDEA-to-REAL extraction, not a second product inside Builderforce
+
+The roadmap's bulk-port premise is retired. Builderforce does not import BurnRateOS's 404 Prisma
+models, 262 pages, C-suite navigation module, session/notification Durable Objects or duplicate
+domain systems. No database table or migration was added. A source capability is eligible only when
+it advances IDEA → REAL, maps to an existing domain/object owner, and production evidence proves a
+real workflow or data invariant that the existing owner cannot already preserve.
+
+**The 48 C-suite use cases execute through the Creation Canvas menu.** Each keeps its legacy dotted
+identifier for search, outcome metadata and migration traceability and declares an
+IDEA/MAKE/RUN/MEASURE stage, evidence mode, operation, entity hints, existing Builderforce domains,
+allowed existing Creation object kinds, target-confirmation rule and measurable completion
+condition. `canvas_prepare_executive_use_case` reads the existing domain APIs (or directs Canvas/web
+evidence gathering), and the run is recorded incomplete unless it successfully mutates an allowed
+artifact kind. This is Canvas composition, not a new C-suite backend.
+
+**Builderforce runtime is locally owned.** Burn and runway reads now use local tenant `metric_facts`;
+validation engagement reads combine local validation results, dashboards and feedback collectors.
+The obsolete `/api/bi/config` surface and frontend client calls are removed. A source guard fails CI
+if runtime code reintroduces the BurnRate API host/config path. The cutover audit is deliberately
+read-only: it inventories source/target rows, directly compares only one-to-one keeps and reports
+collapsed mappings as `transform_required`; it performs no DDL or writes.
+
+**The tenant and room roadmap decisions are closed, not deferred implementations.** There is no
+wholesale Prisma→Drizzle codemod whose 162 ambiguous-company models need tenancy stamped, and no
+BurnRate session/notification room is ported beside the shell. Any extracted production row must
+resolve to an explicit Builderforce tenant and existing owner; ambiguity blocks that user's row
+cutover rather than justifying a parallel schema.
+
+**Evidence:** 48 unique use-case IDs, 48 exact workflow contracts and complete owner mappings;
+focused frontend tests 6/6; focused
+API tests 8/8; frontend and API typechecks clean; `check:no-burnrate-runtime` clean; cutover audit
+validate-only reports 344 source tables and 114 one-to-one keep targets; model coverage remains
+1,130/1,130 sources and 362/362 targets; table adoption is 258 created/registered, 36 feature-reached,
+222 registry-only; no schema or migration files added. Production row reconciliation, user identity
+cutover, provider/storage/billing disposition, communications and redirect verification remain open
+in PRD 19, so this resolution is not evidence that `burnrateos.com` can be switched off yet.

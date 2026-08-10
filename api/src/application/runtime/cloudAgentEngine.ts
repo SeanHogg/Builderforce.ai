@@ -21,7 +21,7 @@ import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
-import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
+import { commitPrdAsPendingChange, taskPrdRepoPath } from '../repos/commitPrdToRepo';
 import { resolveRepoRefSha } from '../repos/commitFileToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
@@ -418,7 +418,7 @@ export async function ensureTaskPrd(
 
 /**
  * Land a PRD body change as a pending change on the ticket branch: record the
- * attributed PRD.md file change, commit it to the SAME branch the agent's code
+ * attributed task-scoped PRD file change, commit it to the SAME branch the agent's code
  * commits to (single run PR covers it), surface the branch on the ticket, and
  * notify the execution stream. The single PRD-commit path — shared by the
  * first-draft ({@link ensureTaskPrd}) and per-run directive ({@link recordPrdDirective})
@@ -439,7 +439,8 @@ async function landPrdChange(
   },
 ): Promise<void> {
   const fileChange = args.isUpdate ? 'modified' : 'created';
-  await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, 'PRD.md', fileChange, args.agentLabel);
+  const prdPath = taskPrdRepoPath(args.taskId);
+  await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, prdPath, fileChange, args.agentLabel);
 
   const committed = await commitPrdAsPendingChange(db, gitSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
   if (committed.ok) {
@@ -448,20 +449,20 @@ async function landPrdChange(
       .where(eq(tasks.id, args.taskId))
       .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "landPrdChange", context: { logMessage: '[cloud-prd] task branch update failed', details: { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error } } }));
   } else {
-    // The DB PRD copy (specs.prd) stands but the repo PRD.md commit failed — the 3 copies
+    // The DB PRD copy (specs.prd) stands but the repo task brief commit failed — the copies
     // have DIVERGED. Surface it on the audit trail (a reconcile signal) instead of silently
     // dropping it (PRD §5.7), so an operator/agent can re-land the repo copy.
     await recordActivity(env, db, {
       tenantId: args.tenantId, projectId: null, actor: SYSTEM_ACTOR,
       verb: 'ticket.prd.reconcile_needed',
       targetType: 'task', targetId: String(args.taskId), targetLabel: `#${args.taskId}`,
-      summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo PRD.md have diverged; re-land needed`.slice(0, 300),
-      metadata: { reason: committed.reason ?? null, executionId: args.executionId },
+      summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo ${prdPath} have diverged; re-land needed`.slice(0, 300),
+      metadata: { reason: committed.reason ?? null, executionId: args.executionId, path: prdPath },
     }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "landPrdChange", context: { logMessage: '[cloud-prd] divergence activity append failed', details: { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error } } }));
   }
 
   notifyExecutionSubscribers(args.executionId, {
-    type: 'file_change', executionId: args.executionId, path: 'PRD.md', change: fileChange, ts: new Date().toISOString(),
+    type: 'file_change', executionId: args.executionId, path: prdPath, change: fileChange, ts: new Date().toISOString(),
   });
   notifyExecutionSubscribers(args.executionId, {
     type: 'message', executionId: args.executionId, role: 'assistant',
@@ -1487,6 +1488,10 @@ export interface CloudLoopState {
   /** ROADMAP #38: set once the empty-deliverable finish gate has fired, so the
    *  durable surface doesn't re-arm (and re-block) the same self-review every tick. */
   noDeliverableBlocked?: boolean;
+  /** A reviewer run cannot become terminal until the exact lane/role verdict tool
+   * succeeds. Persisted because durable runs execute one model turn per tick. */
+  reviewVerdictRecorded?: boolean;
+  requiredSignoff?: { roleKey: string; laneKey?: string };
   /** How many finish attempts the anti-stub gate has already blocked this RUN. MUST be
    *  persisted: the durable surface runs ONE step per alarm tick, so a loop-local
    *  counter resets to 0 every tick and MAX_PLACEHOLDER_FINISH_BLOCKS could never be
@@ -1517,6 +1522,8 @@ export interface CloudLoopOpts {
    *  runs (board lane auto-run, scheduled, CI-fix). Merged as a nudge over the KV
    *  routing table on the first tick. */
   routingBias?: Record<string, number>;
+  /** Exact accountability slot a reviewer run must sign before it may finish. */
+  requiredSignoff?: { roleKey: string; laneKey?: string };
   /**
    * Per-step dynamic system directive injected into THIS turn's LLM request only
    * — never persisted into the conversation state the loop owns. The decoupling
@@ -1581,6 +1588,26 @@ export interface CloudLoopResult {
    *  (NOT finished — no PR, not terminal). `state` carries the resume point so the
    *  surface persists it and wakes the loop once the question is answered. */
   awaitingInput?: { approvalId: string; question: string };
+}
+
+export type RequiredReviewSignoff = { roleKey: string; laneKey?: string };
+
+/** Accept evidence only for the exact accountability slot that caused this run. */
+export function matchesRequiredReviewSignoff(
+  required: RequiredReviewSignoff | undefined,
+  toolName: string,
+  args: Record<string, unknown>,
+  succeeded: boolean,
+): boolean {
+  if (!required || !succeeded || toolName !== 'builtin_kanban_signoff') return false;
+  const roleKey = typeof args.roleKey === 'string' ? args.roleKey.trim() : '';
+  const laneKey = typeof args.laneKey === 'string' ? args.laneKey.trim() : undefined;
+  return roleKey === required.roleKey && laneKey === required.laneKey;
+}
+
+export function missingReviewVerdictMessage(required: RequiredReviewSignoff): string {
+  const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : '';
+  return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
 }
 
 /**
@@ -1930,14 +1957,8 @@ export async function runCloudToolLoop(
     );
   }
 
-  // The PRD (committed to the ticket branch during prep) is part of this task's
-  // single PR. Seed it into writtenPaths on the first tick so the finalize opens a
-  // PR — and lists PRD.md — even if the agent ends up writing zero code files. Done
-  // once (resume is undefined on the first tick); thereafter it rides resume state.
-  if (repoCtx && !opts?.resume) {
-    const prdOnBranch = await readRepoFile({ ...repoCtx, ref: repoCtx.branch }, 'PRD.md').catch(() => null);
-    if (prdOnBranch?.ok) writtenPaths.add('PRD.md');
-  }
+  // The task brief is committed during prep, but deliberately is NOT counted as a
+  // run deliverable. A brief without implementation must never open a PR by itself.
 
   // Resume from persisted state (DO surface) or start fresh (Worker surface).
   const messages: Array<Record<string, unknown>> = opts?.resume?.messages ?? [
@@ -2048,6 +2069,8 @@ export async function runCloudToolLoop(
   // premature one ("wrote a plan, shipped nothing") is forced to reconsider. Carried
   // across DO ticks via resume state so the block isn't re-armed every tick.
   let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? false;
+  const requiredSignoff = opts?.resume?.requiredSignoff ?? opts?.requiredSignoff;
+  let reviewVerdictRecorded = opts?.resume?.reviewVerdictRecorded ?? false;
 
   // Governance gates (compile-primitive policy modality). Resolved ONCE: a resumed
   // run reuses the gates persisted on its first tick (the payload may not survive
@@ -2245,7 +2268,22 @@ export async function runCloudToolLoop(
     const { content, toolCalls } = turn;
     if (content) finalOutput = content;
 
-    if (toolCalls.length === 0) { finished = true; break; }
+    if (toolCalls.length === 0) {
+      if (requiredSignoff && !reviewVerdictRecorded) {
+        const error = missingReviewVerdictMessage(requiredSignoff);
+        messages.push({ role: 'assistant', content });
+        messages.push({ role: 'user', content: error });
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'review_verdict_missing', ...requiredSignoff },
+          result: error,
+        });
+        continue;
+      }
+      finished = true;
+      break;
+    }
 
     // Echo the assistant turn (with its tool_calls) so tool results attach to it.
     messages.push({ role: 'assistant', content, tool_calls: toolCalls });
@@ -2342,6 +2380,10 @@ export async function runCloudToolLoop(
         }
       }
 
+      if (matchesRequiredReviewSignoff(requiredSignoff, name, parsed, toolResult.ok !== false)) {
+        reviewVerdictRecorded = true;
+      }
+
       if (control?.kind === 'finish') {
         const summary = control.summary;
         // Four finish gates, in order. Either yields a block message that forces the
@@ -2352,9 +2394,17 @@ export async function runCloudToolLoop(
           ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
           : null;
         let finishBlock: string | null = null;
-        if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+        if (requiredSignoff && !reviewVerdictRecorded) {
+          finishBlock = missingReviewVerdictMessage(requiredSignoff);
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef, executionId,
+            toolName: 'finish.blocked', category: 'tool',
+            detail: { reason: 'review_verdict_missing', ...requiredSignoff },
+            result: finishBlock,
+          });
+        } else if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
           // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
-          // with NO code deliverable (only the seeded PRD, or nothing). Block ONCE and
+          // with NO code deliverable. Block ONCE and
           // make the agent self-review the requirements — implement what's missing, or
           // explicitly confirm no code change was required — before an empty finish is
           // honored. A legitimate no-op run finishes on the retry.
@@ -2488,6 +2538,8 @@ export async function runCloudToolLoop(
     repoCtx,
     repoMiss,
     noDeliverableBlocked,
+    reviewVerdictRecorded,
+    requiredSignoff,
     placeholderBlocks,
     policyGates,
     policyAskedGates: [...policyAskedGates],
@@ -2529,6 +2581,18 @@ export async function runCloudToolLoop(
   // DEFERRED tick is not the end of the run — the agent keeps its leases across ticks,
   // which is exactly what makes a multi-tick read→edit→write sequence safe.
   await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskRow.id));
+
+  // The global step cap is a safety limit, never an evidence bypass. Exhausting it
+  // without the required reviewer verdict fails the run and leaves the slot open
+  // for retry/escalation; it must not finalize as successful acceptance.
+  if (requiredSignoff && !reviewVerdictRecorded) {
+    return {
+      ok: false,
+      output: missingReviewVerdictMessage(requiredSignoff),
+      cancelled,
+      finished: true,
+    };
+  }
 
   // Rehearsal: the loop is over and nothing may be shipped, closed or summarised onto
   // the real ticket. Hand the transcript back and stop.

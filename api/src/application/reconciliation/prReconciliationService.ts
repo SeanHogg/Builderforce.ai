@@ -28,7 +28,7 @@ import {
 type FetchLike = typeof fetch;
 
 /** Bump when scheduled apply semantics change so an old run cannot postpone rollout validation. */
-export const PR_RECONCILIATION_POLICY_VERSION = 3;
+export const PR_RECONCILIATION_POLICY_VERSION = 4;
 
 export interface GithubPrSnapshot extends ReconciliationPrInput {
   url: string;
@@ -539,7 +539,23 @@ export async function runPrTicketReconciliation(
     let queued = 0;
     let journaled = 0;
     let repairTicketsReopened = 0;
+    let reviewTicketsQueued = 0;
     if (mode === 'apply') {
+      // A journal string is not a queue. Put green PRs into the lane consumed by
+      // ManagerService.coordinatePullRequests so its reviewer/sign-off workflow
+      // can actually see and assign them on the next sweep.
+      const reviewTaskIds = [...new Set(decisions
+        .filter(({ decision, taskId }) => decision.classification === 'ready_for_review' && taskId != null)
+        .map(({ taskId }) => taskId as number))];
+      if (reviewTaskIds.length) {
+        const moved = await db.update(tasks).set({
+          status: TaskStatus.IN_REVIEW,
+          completedAt: null,
+          updatedAt: new Date(),
+        }).where(and(eq(tasks.projectId, repo.projectId), inArray(tasks.id, reviewTaskIds))).returning({ id: tasks.id });
+        reviewTicketsQueued = moved.length;
+      }
+
       // Every PR targets the same moving base. Activating hundreds of repair
       // tickets in parallel creates hundreds of soon-to-be-stale branches and an
       // execution retry storm. Activate exactly one stable head; the next sweep
@@ -644,6 +660,7 @@ export async function runPrTicketReconciliation(
       queued,
       journaled,
       repairTicketsReopened,
+      reviewTicketsQueued,
       quarantined: decisions.filter(({ taskId, ticket }) => taskId == null || ticket == null).length,
       policyApproved: policyApproved.length,
     };

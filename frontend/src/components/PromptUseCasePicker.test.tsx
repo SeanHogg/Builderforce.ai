@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
-import { C_SUITE_CANVAS_OWNERS, C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner } from './PromptUseCasePicker';
+import { C_SUITE_CANVAS_OWNERS, C_SUITE_CANVAS_USE_CASES, C_SUITE_CANVAS_WORKFLOWS, PromptUseCasePicker, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from './PromptUseCasePicker';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => Object.assign(
@@ -31,6 +31,24 @@ describe('PromptUseCasePicker', () => {
     expect(Object.values(C_SUITE_CANVAS_OWNERS).flatMap((owner) => owner.objects).every((kind) => supportedKinds.has(kind))).toBe(true);
     const ideaToRealStages = new Set(['idea', 'make', 'run', 'measure']);
     expect(Object.values(C_SUITE_CANVAS_OWNERS).flatMap((owner) => owner.stages).every((stage) => ideaToRealStages.has(stage))).toBe(true);
+  });
+
+  it('gives all 48 use cases an executable evidence, mutation, output, and completion contract', () => {
+    const ids = C_SUITE_CANVAS_USE_CASES.map((item) => item.id);
+
+    expect(Object.keys(C_SUITE_CANVAS_WORKFLOWS).sort()).toEqual([...ids].sort());
+    for (const item of C_SUITE_CANVAS_USE_CASES) {
+      const owner = cSuiteCanvasOwner(item)!;
+      const workflow = cSuiteCanvasWorkflow(item)!;
+      expect(['domain', 'canvas', 'web']).toContain(workflow.evidence);
+      expect(workflow.outputs.length).toBeGreaterThan(0);
+      expect(workflow.outputs.every((kind) => owner.objects.includes(kind as never))).toBe(true);
+      expect(workflow.completion.length).toBeGreaterThan(40);
+      if (workflow.evidence === 'domain') expect(workflow.entityTerms.length).toBeGreaterThan(0);
+      expect(executiveCanvasPrompt(item)).toContain(`canvas_prepare_executive_use_case with useCaseId "${item.id}"`);
+      expect(executiveCanvasPrompt(item)).toContain(workflow.completion);
+      expect(executiveCanvasPrompt(item)).toContain('Do not propose a new database table');
+    }
   });
 
   it('renders the tab above a constrained prompt and returns the selected prescription', () => {

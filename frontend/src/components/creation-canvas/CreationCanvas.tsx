@@ -110,7 +110,7 @@ import { useSectionTour } from '@/components/onboarding/useSectionTour';
 import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
-import { PromptUseCasePicker, cSuiteCanvasOwner } from '@/components/PromptUseCasePicker';
+import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from '@/components/PromptUseCasePicker';
 import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
@@ -2681,6 +2681,81 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   const canvasActions = useMemo<BrainAction[]>(() => [{
+    name: 'canvas_prepare_executive_use_case',
+    description: 'Prepare one of the 48 migrated executive use cases for execution on this Canvas. Call this first when the prompt contains a legacy dotted use-case id. It returns the exact operation, completion condition, permitted existing Canvas outputs, and live evidence from the already-owning Builderforce domains. It never creates schema or mutates canonical domain data.',
+    parameters: {
+      type: 'object', required: ['useCaseId'], additionalProperties: false,
+      properties: {
+        useCaseId: { type: 'string', enum: C_SUITE_CANVAS_USE_CASES.map((item) => item.id) },
+        days: { type: 'number', minimum: 1, maximum: 365 },
+        limit: { type: 'number', minimum: 1, maximum: 100 },
+      },
+    },
+    run: async (raw: unknown) => {
+      const args = raw as { useCaseId?: unknown; days?: unknown; limit?: unknown };
+      const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === args.useCaseId);
+      const workflow = useCase ? cSuiteCanvasWorkflow(useCase) : null;
+      const owner = useCase ? cSuiteCanvasOwner(useCase) : null;
+      if (!useCase || !workflow || !owner) return { error: 'Unknown executive Canvas use case.' };
+      const contract = {
+        id: useCase.id,
+        label: useCase.label,
+        stages: owner.stages,
+        operation: workflow.operation,
+        evidence: workflow.evidence,
+        domains: owner.domains,
+        entityTerms: workflow.entityTerms,
+        allowedOutputs: workflow.outputs,
+        completion: workflow.completion,
+        confirmTarget: workflow.confirmTarget === true,
+        noNewTables: true,
+      };
+      if (workflow.evidence === 'web') return {
+        contract,
+        evidenceStatus: 'research_required',
+        next: 'Use builtin_web_search and builtin_web_fetch, preserve source URLs in a dataset, then author only the allowed Canvas outputs.',
+      };
+      if (workflow.evidence === 'canvas') return {
+        contract,
+        evidenceStatus: 'canvas_snapshot_available',
+        next: workflow.confirmTarget
+          ? 'Read the selected target in full with canvas_read_object before changing it; preserve every field outside the requested change.'
+          : 'Use the current Canvas snapshot and canvas_read_object/canvas_read_snapshot when more detail is needed.',
+      };
+      if (persistence !== 'server') return {
+        contract,
+        evidenceStatus: 'saved_session_required',
+        error: 'This use case requires live tenant-scoped Builderforce domain data. Save or claim the Creation Canvas before executing it.',
+      };
+      const days = Math.max(1, Math.min(365, Math.floor(Number(args.days) || 30)));
+      const limit = Math.max(1, Math.min(100, Math.floor(Number(args.limit) || 50)));
+      const normalizedTerms = workflow.entityTerms.map((term) => term.toLocaleLowerCase().replaceAll('-', '_'));
+      const domains = await Promise.all(owner.domains.map(async (domain) => {
+        const [summary, entities, items, metrics] = await Promise.all([
+          getDomainSummary(domain), getScopeEntities(domain), getDomainItems(domain, { limit }), getDomainMetrics(domain, days),
+        ]);
+        const matches = entities.filter((entity) => {
+          const name = entity.name.toLocaleLowerCase();
+          return entity.readable && normalizedTerms.some((term) => name.includes(term) || term.includes(name));
+        }).sort((left, right) => right.count - left.count).slice(0, 4);
+        const entityEvidence = await Promise.all(matches.map(async (entity) => {
+          try {
+            const page = await getEntityRows(domain, entity.name, { limit: Math.min(limit, 50) });
+            return { entity, rows: page.rows, total: page.total };
+          } catch (error) {
+            return { entity, rows: [], total: entity.count, error: error instanceof Error ? error.message : 'Entity rows unavailable' };
+          }
+        }));
+        return { domain, summary, matchedEntities: entityEvidence, items, metrics };
+      }));
+      return {
+        contract,
+        evidenceStatus: domains.some((domain) => domain.summary.itemCount > 0 || domain.metrics.length > 0 || domain.matchedEntities.some((entity) => entity.total > 0)) ? 'available' : 'empty',
+        domains,
+        instruction: 'Create or update an allowed Canvas output only from these rows, metrics and registered objects. State missing evidence inside the artifact; never fill it with example values.',
+      };
+    },
+  }, {
     name: 'canvas_read_domain',
     description: 'Read real, tenant-scoped Builderforce domain data for an executive Canvas request. Use this before authoring a C-suite dashboard, report, chart, table, KPI, forecast, register, company view, or risk rollup. Returns the domain summary, registered entity catalog with row counts, recent objects, metric series, and—when entity is supplied—the selected entity rows. Never invent a value when this result has no supporting row or metric.',
     parameters: {
@@ -3610,7 +3685,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
-    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
+    const executiveUseCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => requestText.includes(`Execution contract ${candidate.id}:`)) ?? null;
+    const executiveWorkflow = executiveUseCase ? cSuiteCanvasWorkflow(executiveUseCase) : null;
+    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } });
     setThinking(true);
     setBrainRunStartedAt(Date.now());
     setNotice(t('noticeBrainEvaluating'));
@@ -3618,7 +3695,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
     const promptStartedAt = performance.now();
-    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode } }).catch(() => undefined);
+    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode, ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } }).catch(() => undefined);
     // A composer submission is a chat interaction, so reveal its Brain object
     // immediately. Waiting for the vendor request to succeed left a blank canvas
     // (and hid useful streaming/failure state) whenever the provider cascade
@@ -3768,14 +3845,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
       );
       void runGroupTurn().then((answer) => {
-        turnDone({ ok: true, detail: `${proposalBuffer.current.length} proposed change(s)` });
         const changes = [...proposalBuffer.current];
+        const changedKinds = new Set(changes.flatMap((change) => {
+          if (change.type === 'object.add') return [change.node.data.kind];
+          if ('objectId' in change) {
+            const target = nodes.find((node) => node.id === change.objectId)
+              ?? changes.find((candidate): candidate is Extract<ProposedCanvasChange, { type: 'object.add' }> => candidate.type === 'object.add' && candidate.node.id === change.objectId)?.node;
+            return target ? [target.data.kind] : [];
+          }
+          return [];
+        }));
+        const executiveContractSatisfied = !executiveWorkflow || executiveWorkflow.outputs.some((kind) => changedKinds.has(kind as CreationObjectKind));
+        turnDone({ ok: executiveContractSatisfied, detail: `${proposalBuffer.current.length} proposed change(s)${executiveUseCase ? ` · ${executiveUseCase.id} ${executiveContractSatisfied ? 'complete' : 'incomplete'}` : ''}` });
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim()) {
           appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' } }, `${requestMessageId}:assistant`);
           setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
           const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
           if (promptTargets.length) setEdges((current) => associateBrainWithArtifacts(current, brainId, promptTargets));
+        }
+        if (!executiveContractSatisfied && executiveUseCase && executiveWorkflow) {
+          appendTimeline('system', `${executiveUseCase.label} is incomplete: the run did not successfully create or update an allowed ${executiveWorkflow.outputs.join(' or ')} Canvas object.`, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:use-case-incomplete`);
         }
         if (changes.length) {
           setProposedChanges(changes);
@@ -3788,9 +3878,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
         setThinking(false);
         setActiveAgentIds(new Set());
-        setNotice(changes.length ? t(shouldAutoApply ? 'noticeApplyingBrainChanges' : 'noticeBrainChangesAwaitReview', { count: changes.length }) : t('noticeBrainFinished'));
-        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
-        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
+        setNotice(!executiveContractSatisfied && executiveUseCase
+          ? `${executiveUseCase.label} did not produce its required Canvas artifact.`
+          : changes.length ? t(shouldAutoApply ? 'noticeApplyingBrainChanges' : 'noticeBrainChangesAwaitReview', { count: changes.length }) : t('noticeBrainFinished'));
+        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: executiveContractSatisfied } : {}) } });
+        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: executiveContractSatisfied ? 'succeeded' : 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count', metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: executiveContractSatisfied, allowedOutputs: executiveWorkflow?.outputs } : undefined }).catch(() => undefined);
       }).catch((error) => {
         const detail = describeTurnError(error, 'noticeBrainFailed');
         turnDone({ ok: false, detail });
@@ -3798,7 +3890,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setThinking(false);
         setActiveAgentIds(new Set());
         setNotice(detail);
-        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt }).catch(() => undefined);
+        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: false } : undefined }).catch(() => undefined);
       });
       return;
     }
@@ -4943,10 +5035,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
     <PromptUseCasePicker placement="top" align="end" onSelect={(nextPrompt, useCase) => {
-      const owner = cSuiteCanvasOwner(useCase);
-      setPrompt(owner
-        ? `${nextPrompt}\n\nThis supports the ${owner.stages.join(' → ')} stage of Builderforce's IDEA → REAL loop. Read the existing Builderforce ${owner.domains.join(', ')} domain data first with canvas_read_domain, then create or update only these existing Canvas object kinds as appropriate: ${owner.objects.join(', ')}. Do not propose a new database table.`
-        : nextPrompt);
+      setPrompt(executiveCanvasPrompt(useCase) ?? nextPrompt);
       if (useCase.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
     }} />
   </div>;
