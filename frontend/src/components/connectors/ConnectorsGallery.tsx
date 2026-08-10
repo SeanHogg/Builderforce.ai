@@ -415,6 +415,36 @@ function ConnectionsTab({ detail, canManage, onChanged }: {
   );
 }
 
+/**
+ * The canonical connection form, embeddable from a contextual surface such as
+ * Creation Canvas. Keeping the form here means a canvas never invents a second
+ * credential path (or a second definition of Twilio's auth fields).
+ */
+export function ConnectorConnectionManager({ connectorKey, onChanged }: {
+  connectorKey: string;
+  onChanged?: () => void;
+}) {
+  const t = useTranslations('connectors');
+  const role = getStoredTenant()?.role;
+  const canManage = role === 'owner' || role === 'manager';
+  const [detail, setDetail] = useState<ConnectorDetail | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    setFailed(false);
+    connectorsApi.get(connectorKey)
+      .then((next) => { if (!cancelled) setDetail(next); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [connectorKey]);
+
+  if (failed) return <div className="ui-text-body" style={{ padding: 20, color: 'var(--danger)' }}>{t('connect.failed')}</div>;
+  if (!detail) return <div className="ui-text-body" style={{ padding: 20, color: 'var(--text-muted)' }}>{t('gallery.loading')}</div>;
+  return <div style={{ padding: 20 }}><ConnectionsTab detail={detail} canManage={canManage} onChanged={() => onChanged?.()} /></div>;
+}
+
 // ── Actions tab: what the agents can do once this is connected ───────────────
 
 function ActionsTab({ detail }: { detail: ConnectorDetail }) {

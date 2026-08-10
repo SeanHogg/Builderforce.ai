@@ -31,7 +31,7 @@ import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/navGroups';
 import { seatHueVar } from '@/lib/seats';
 import { ShellIndex, useShellIndex } from './ShellIndex';
-import { useReferenceChrome, useReferenceSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
+import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 
 /**
@@ -168,6 +168,10 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   const published = useReferenceChrome();
   const selectSection = useReferenceSelect();
   const sections: ReferenceChromeSection[] | undefined = published?.sections?.length ? published.sections : undefined;
+  // Tell the page its tabs are on screen already, so it can drop its own copy of
+  // them. Only a SELECTOR rail replaces a control — an anchor rail is a table of
+  // contents beside the page, not instead of anything in it.
+  useOwnReferenceRail(sections != null && selectSection != null);
 
   return (
     <SlideOutPanel

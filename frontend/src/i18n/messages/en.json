@@ -5736,9 +5736,10 @@
         "prompt": "Build an executable workflow with configured steps, inputs, approvals, and integrations."
       },
       {
+        "id": "twilio-ai-journey",
         "category": "apps",
-        "label": "Twilio workflow",
-        "prompt": "Build and validate an executable Twilio workflow for SMS or voice, using the real connector actions and required inputs."
+        "label": "Twilio AI journey",
+        "prompt": "Build a reusable Twilio-powered AI customer journey around one clear persona → story → measurable outcome. Create one executable workflow with an obvious AI decision step followed by a real action on the existing twilio connector (SMS, WhatsApp, or Voice), required inputs, human approval, failure handling, and production-readiness details; then build and validate it. Add a concise experience brief, a lightweight architecture diagram, a quality evaluation for creativity, long-term end-user impact, market potential, and technical feasibility, a live end-to-end demo script, measurable success evidence, and an Idea-to-Real website embed handoff that reuses BuilderForce Embedded with the host install snippet, selected customer-site capability, identity/event contract, and test checklist. Add a guided tour targeting setup, AI decision, Twilio delivery, safeguards, evidence, website embed, and demo steps. Reuse matching Twilio objects, connections, and embedded capabilities already available; do not create duplicate workflows, connectors, or embed systems."
       },
       {
         "category": "apps",
@@ -14090,6 +14091,22 @@
       "emailTemplate": "Email template",
       "course": "Course",
       "guidedTour": "Guided tour"
+    },
+    "twilioSetup": {
+      "title": "Twilio integration",
+      "crumb": "Creation Canvas · Settings · Integrations",
+      "checking": "Checking Twilio…",
+      "ready": "Twilio ready",
+      "configure": "Set up Twilio",
+      "guideTitle": "Three-step setup",
+      "stepCredentials": "Add your Account SID, API key SID (or Account SID), and Auth token. Secrets stay in the existing encrypted integration store.",
+      "stepTest": "Test the connection here. Keep it enabled so workflow actions can use it.",
+      "stepReturn": "Return to the canvas, build the workflow, then run the end-to-end demo with a real Twilio number.",
+      "connectedStatus": "An enabled Twilio connection is available to this canvas.",
+      "missingStatus": "This canvas needs an enabled Twilio connection before its delivery step can run.",
+      "embedTitle": "Take this experience to your website",
+      "embedBody": "Use the existing embedded capabilities to install the customer-facing experience, pass identity and events, and keep the Twilio workflow behind it.",
+      "openEmbed": "Open embedded capabilities"
     },
     "tourBuilder": {
       "defaultObjectTitle": "Product onboarding tour",

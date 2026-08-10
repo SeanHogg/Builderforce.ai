@@ -5735,9 +5735,10 @@
         "prompt": "构建包含已配置步骤、输入、审批和集成的可执行工作流。"
       },
       {
+        "id": "twilio-ai-journey",
         "category": "apps",
-        "label": "Twilio 工作流",
-        "prompt": "使用真实连接器操作和必需输入，构建并验证用于短信或语音的 Twilio 工作流。"
+        "label": "Twilio AI 客户旅程",
+        "prompt": "围绕一个清晰的角色 → 故事 → 可衡量结果，构建可复用的 Twilio AI 客户旅程。创建一个可执行工作流：先展示明确的 AI 决策步骤，再调用现有 twilio 连接器的真实操作（短信、WhatsApp 或语音），包含必需输入、人工审批、失败处理和生产就绪细节，并完成构建和验证。再添加简明体验说明、轻量架构图、针对创意、长期用户影响、市场潜力和技术可行性的质量评估、真实端到端演示脚本、可衡量的成功证据，以及复用 BuilderForce Embedded 的 Idea-to-Real 网站嵌入交付，包含主站安装代码、选定的客户侧能力、身份/事件契约和测试清单。添加覆盖设置、AI 决策、Twilio 交付、安全措施、证据、网站嵌入和演示步骤的导览。复用画布上已有的 Twilio 对象、连接和嵌入能力；不要创建重复的工作流、连接器或嵌入系统。"
       },
       {
         "category": "apps",
@@ -14089,6 +14090,22 @@
       "emailTemplate": "邮件模板",
       "course": "课程",
       "guidedTour": "引导式导览"
+    },
+    "twilioSetup": {
+      "title": "Twilio 集成",
+      "crumb": "创作画布 · 设置 · 集成",
+      "checking": "正在检查 Twilio…",
+      "ready": "Twilio 已就绪",
+      "configure": "设置 Twilio",
+      "guideTitle": "三步完成设置",
+      "stepCredentials": "添加 Account SID、API key SID（或 Account SID）和 Auth token。密钥仍保存在现有的加密集成存储中。",
+      "stepTest": "在这里测试连接，并保持启用，以便工作流操作可以使用它。",
+      "stepReturn": "返回画布，构建工作流，然后使用真实 Twilio 号码运行端到端演示。",
+      "connectedStatus": "此画布已有可用的 Twilio 启用连接。",
+      "missingStatus": "交付步骤运行前，此画布需要一个启用的 Twilio 连接。",
+      "embedTitle": "将此体验嵌入你的网站",
+      "embedBody": "使用现有嵌入能力安装客户体验、传递身份和事件，并在背后运行 Twilio 工作流。",
+      "openEmbed": "打开嵌入能力"
     },
     "tourBuilder": {
       "defaultObjectTitle": "产品引导导览",

@@ -43,6 +43,9 @@ const SECRET_KEYS = [
   'GOOGLE_API_KEY',
   'CLAUDE_API_KEY',
   'TOGETHER_API_KEY',
+  'UNSPLASH_ACCESS_KEY',
+  'PEXELS_API_KEY',
+  'PIXABAY_API_KEY',
   'FLUX_API_KEY',
   // Transactional account email (verification codes, magic links, welcomes).
   // Keep this in the deployment list: EmailService intentionally reads it from

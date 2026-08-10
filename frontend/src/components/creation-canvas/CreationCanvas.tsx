@@ -67,6 +67,7 @@ import { EvermindValidationProvider } from '@/components/builder/EvermindValidat
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution, type LlmError } from '@/lib/builderforceApi';
 import { ApiRequestError } from '@/lib/apiClient';
+import { resolveCanvasImage, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
@@ -110,6 +111,7 @@ import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesig
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
+import { TwilioCanvasSetup } from './TwilioCanvasSetup';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
@@ -670,6 +672,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
+  const [twilioPromptSelected, setTwilioPromptSelected] = useState(false);
   const [thinking, setThinking] = useState(false);
   // When the in-flight turn began. Shared with every Brain surface (dock strip,
   // transcript, board anchor) so they narrate the same phase at the same instant.
@@ -3250,8 +3253,70 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, {
+    name: 'canvas_add_image',
+    description: 'Find or create an actual image and put the finished image on the Canvas. ALWAYS use this instead of canvas_add_object for an image request. Use mode="generate" for create/draw/generate/make requests, mode="find" for find/search/stock/photo requests, and mode="auto" only when the user did not express a preference.',
+    parameters: {
+      type: 'object', required: ['query', 'mode'], additionalProperties: false,
+      properties: {
+        query: { type: 'string', description: 'The complete visual search query or generation prompt.' },
+        mode: { type: 'string', enum: ['find', 'generate', 'auto'] },
+        title: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      if (persistence !== 'server') return { error: 'Image search and generation require a saved Canvas session' };
+      const args = raw as { query?: string; mode?: CanvasImageResolveMode; title?: string; x?: number; y?: number };
+      const query = typeof args.query === 'string' ? args.query.trim().slice(0, 2_000) : '';
+      const mode = args.mode === 'find' || args.mode === 'generate' || args.mode === 'auto' ? args.mode : null;
+      if (!query || !mode) return { error: 'Pass an image query and mode (find, generate, or auto)' };
+      try {
+        const asset = await resolveCanvasImage(query, mode);
+        const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+        const node = newNode('image', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
+        const imageTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : query.slice(0, 80);
+        const mimeType = asset.url.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(asset.url) ? 'image/png'
+          : /\.webp(?:$|[?#])/i.test(asset.url) ? 'image/webp' : 'image/jpeg';
+        const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const delivered: CreationDeliverable = {
+          id: crypto.randomUUID(), action: asset.source === 'stock' ? 'find' : 'generate', artifactKind: 'image',
+          status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+          url: asset.url, mimeType, fileName: `${safeDownloadName(imageTitle)}.${extension}`, provider: asset.provider,
+          validation: { status: 'passed', detail: asset.source === 'stock' ? `Selected from ${asset.licence ?? asset.provider}` : 'Image generation returned renderable pixels' },
+          metadata: { source: asset.source, ...(asset.model ? { model: asset.model } : {}) },
+        };
+        node.data = {
+          ...node.data,
+          title: imageTitle,
+          subtitle: asset.source === 'stock' ? `${asset.licence ?? asset.provider}${asset.author ? ` · ${asset.author}` : ''}` : query,
+          status: asset.source === 'stock' ? 'Found · Ready' : 'Generated · Ready',
+          prompt: query,
+          outputUrl: asset.url,
+          thumbnailUrl: asset.thumbnailUrl,
+          outputFormat: 'Image',
+          outputFileName: delivered.fileName,
+          outputMimeType: mimeType,
+          provider: asset.provider,
+          ...(asset.model ? { model: asset.model } : {}),
+          ...(asset.width ? { imageWidth: asset.width } : {}),
+          ...(asset.height ? { imageHeight: asset.height } : {}),
+          imageSource: asset.source,
+          imageLicence: asset.licence,
+          imageAuthor: asset.author,
+          imageAuthorUrl: asset.authorUrl,
+          deliverables: withCreationDeliverable(node.data, delivered),
+        };
+        node.style = { width: 520, height: 430 };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `${asset.source === 'stock' ? 'Add found' : 'Add generated'} image “${node.data.title}”`, node });
+        return { ok: true, proposed: true, object: { id: node.id, kind: 'image', title: node.data.title }, source: asset.source, provider: asset.provider, imageUrl: asset.url };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'The image could not be resolved' };
+      }
+    },
+  }, {
     name: 'canvas_add_object',
-    description: `Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.`,
+    description: `Create a fully authored visual object. For an actual image, NEVER use this tool; use canvas_add_image so pixels are found or generated and attached immediately. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.`,
     parameters: {
       type: 'object', required: ['kind'], additionalProperties: false,
       properties: {
@@ -3460,7 +3525,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, knowledge]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: knowledge.id, target: agent.id, type: 'smoothstep', label: 'grounds', animated: true, data: { connectionKind: 'reference' } }]);
     setNotice(t('noticeKnowledgeConnected'));
-  }, [canEdit, nodes, setEdges, setNodes]);
+  }, [canEdit, nodes, persistence, setEdges, setNodes]);
 
   const runAgentTest = useCallback(async (agentId: string, testPrompt: string, expected: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -4835,8 +4900,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * of the Brain surface: it stays put and stays reachable whether Brain is inline in
    * its Object, docked to either edge, or closed entirely.
   */
+  const canvasUsesTwilio = twilioPromptSelected || nodes.some((node) => (
+    Array.isArray(node.data.steps) && node.data.steps.some((step) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return false;
+      const connector = (step as Record<string, unknown>).connector;
+      return typeof connector === 'string' && (connector === 'twilio' || connector.startsWith('twilio-'));
+    })
+  ));
+
   const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
-    <PromptUseCasePicker placement="top" align="end" onSelect={setPrompt} />
+    <PromptUseCasePicker placement="top" align="end" onSelect={(nextPrompt, useCase) => {
+      setPrompt(nextPrompt);
+      if (useCase.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
+    }} />
   </div>;
 
   const composer = !presentMode && <div ref={composerDockRef} className={styles.composerDock} data-tour="creation-brain-dock">
@@ -4895,6 +4971,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       <div className={styles.sessionBar}>
         <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
+          <TwilioCanvasSetup active={canvasUsesTwilio} />
           <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
             {/* In a shared free session the roster is REAL — showing only "you"
                 while three other people move cards around is a lie the board

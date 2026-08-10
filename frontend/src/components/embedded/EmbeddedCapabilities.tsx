@@ -10,7 +10,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { embedApi, type CustomerEmbedFeatureKey, type EmbedConfigResult } from '@/lib/builderforceApi';
 import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type EmbeddedCapabilityCategory } from '@/lib/embeddedCapabilities';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
-import { usePublishReferenceChrome, usePublishReferenceSelect } from '@/lib/referenceChrome';
+import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './EmbeddedCapabilities.module.css';
 
 const TABS = ['features', 'install', 'consent', 'surfaces'] as const;
@@ -94,6 +94,10 @@ export function EmbeddedCapabilities() {
     activeId: tab,
   });
   usePublishReferenceSelect((id) => setTab(id as Tab));
+  // In a panel the rail IS this tablist, so rendering both put the same four
+  // choices on screen twice. Signed out — the page render — there is no rail and
+  // the tablist is the only way to change view, so it stays.
+  const railHasTabs = useReferenceRailActive();
 
   const filters: Filter[] = ['all', 'engage', 'measure', 'govern', 'operate'];
 
@@ -111,9 +115,9 @@ export function EmbeddedCapabilities() {
       </div>
     </section>
 
-    <div className={styles.tabs} role="tablist" aria-label={t('tabsLabel')}>
+    {!railHasTabs && <div className={styles.tabs} role="tablist" aria-label={t('tabsLabel')}>
       {TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={`${styles.tab} ${tab === item ? styles.tabActive : ''}`} onClick={() => setTab(item)}>{t(`tabs.${item}`)}</button>)}
-    </div>
+    </div>}
 
     {error && <div className={styles.error} role="alert">{error}</div>}
     {!tenantToken && <div className={styles.notice} role="status">{t('selectWorkspace')}</div>}

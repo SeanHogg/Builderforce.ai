@@ -6,7 +6,7 @@ vi.mock('next-intl', () => ({
   useTranslations: () => Object.assign(
     (key: string) => ({ tabLabel: 'Choose a starting point', heading: 'What should we create?' })[key] ?? key,
     { raw: () => [
-      { category: 'apps', label: 'Wireframe', prompt: 'Create a product wireframe.' },
+      { id: 'wireframe', category: 'apps', label: 'Wireframe', prompt: 'Create a product wireframe.' },
       { category: 'creative', label: 'Animation', prompt: 'Create an animation concept.' },
     ] },
   ),
@@ -27,7 +27,9 @@ describe('PromptUseCasePicker', () => {
     expect(root).toHaveAttribute('data-open', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Wireframe' }));
 
-    expect(onSelect).toHaveBeenCalledWith('Create a product wireframe.');
+    expect(onSelect).toHaveBeenCalledWith('Create a product wireframe.', {
+      id: 'wireframe', category: 'apps', label: 'Wireframe', prompt: 'Create a product wireframe.',
+    });
     expect(tab).toHaveAttribute('aria-expanded', 'false');
   });
 

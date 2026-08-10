@@ -5735,9 +5735,10 @@
         "prompt": "Crea un flujo ejecutable con pasos, entradas, aprobaciones e integraciones configuradas."
       },
       {
+        "id": "twilio-ai-journey",
         "category": "apps",
-        "label": "Flujo de Twilio",
-        "prompt": "Crea y valida un flujo ejecutable de Twilio para SMS o voz con acciones y entradas reales del conector."
+        "label": "Recorrido de IA con Twilio",
+        "prompt": "Crea un recorrido de cliente reutilizable impulsado por IA y Twilio alrededor de una persona → historia → resultado medible. Construye un flujo ejecutable con una decisión de IA evidente seguida de una acción real del conector twilio existente (SMS, WhatsApp o Voz), entradas obligatorias, aprobación humana, gestión de errores y detalles de preparación para producción; compílalo y valídalo. Añade un resumen de la experiencia, un diagrama de arquitectura ligero, una evaluación de calidad sobre creatividad, impacto duradero para el usuario, potencial de mercado y viabilidad técnica, un guion de demo real de principio a fin, pruebas medibles del éxito y una entrega Idea-to-Real para integrar en la web que reutilice BuilderForce Embedded con el snippet de instalación, la capacidad elegida, el contrato de identidad/eventos y una lista de pruebas. Añade una visita guiada por configuración, decisión de IA, entrega de Twilio, protecciones, pruebas, integración web y demo. Reutiliza objetos, conexiones y capacidades integradas existentes; no crees flujos, conectores ni sistemas de integración duplicados."
       },
       {
         "category": "apps",
@@ -14089,6 +14090,22 @@
       "emailTemplate": "Plantilla de correo",
       "course": "Curso",
       "guidedTour": "Visita guiada"
+    },
+    "twilioSetup": {
+      "title": "Integración de Twilio",
+      "crumb": "Lienzo de Creación · Ajustes · Integraciones",
+      "checking": "Comprobando Twilio…",
+      "ready": "Twilio listo",
+      "configure": "Configurar Twilio",
+      "guideTitle": "Configuración en tres pasos",
+      "stepCredentials": "Añade tu Account SID, API key SID (o Account SID) y Auth token. Los secretos permanecen en el almacén cifrado de integraciones existente.",
+      "stepTest": "Prueba la conexión aquí. Déjala habilitada para que las acciones del flujo puedan usarla.",
+      "stepReturn": "Vuelve al lienzo, compila el flujo y ejecuta la demo completa con un número real de Twilio.",
+      "connectedStatus": "Hay una conexión de Twilio habilitada disponible para este lienzo.",
+      "missingStatus": "Este lienzo necesita una conexión de Twilio habilitada antes de ejecutar el paso de entrega.",
+      "embedTitle": "Lleva esta experiencia a tu sitio web",
+      "embedBody": "Usa las capacidades integradas existentes para instalar la experiencia, pasar identidad y eventos y mantener detrás el flujo de Twilio.",
+      "openEmbed": "Abrir capacidades integradas"
     },
     "tourBuilder": {
       "defaultObjectTitle": "Visita de incorporación al producto",

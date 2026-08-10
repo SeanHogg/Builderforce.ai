@@ -146,6 +146,15 @@ describe('message catalogs', () => {
     expect(missing).toEqual([]);
   });
 
+  it.each(LOCALES)('%s keeps the Twilio AI journey starter addressable and complete', (locale) => {
+    const promptUseCases = CATALOGS[locale].promptUseCases as { items?: Array<Record<string, unknown>> } | undefined;
+    const starter = promptUseCases?.items?.find((item) => item.id === 'twilio-ai-journey');
+    expect(starter).toMatchObject({ category: 'apps' });
+    expect(String(starter?.label || '')).toContain('Twilio');
+    expect(String(starter?.prompt || '')).toContain('twilio');
+    expect(String(starter?.prompt || '').length).toBeGreaterThan(200);
+  });
+
   it.each(LOCALES)('%s resolves every registry-backed localization key', (locale) => {
     const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
     const navGroups = [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS, ...FREELANCER_NAV_GROUPS, ...SALES_NAV_GROUPS];

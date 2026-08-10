@@ -27,7 +27,7 @@ import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
 import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
-import { usePublishReferenceChrome, usePublishReferenceSelect } from '@/lib/referenceChrome';
+import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './Dashboard.module.css';
 import { signInHref } from '@/lib/auth';
 
@@ -68,18 +68,6 @@ export default function DashboardPage() {
     },
     [router],
   );
-
-  // Opened from anywhere in the operator shell this route renders inside
-  // `ShellPanel`, which without this called it "Panel" — the generic fallback —
-  // because the dashboard is not a nav group. It names itself, and hands over its
-  // five tabs as the panel's index rail; they are VIEWS, not anchors, so the rail
-  // switches rather than scrolls (`usePublishReferenceSelect`).
-  usePublishReferenceChrome({
-    title: t('title'),
-    sections: DASHBOARD_TABS.map((key) => ({ id: key, label: t(`tabs.${key}`) })),
-    activeId: activeTab,
-  });
-  usePublishReferenceSelect((key) => selectTab(key as DashboardTab));
 
   // Onboarding wizard — the show/dismiss decision is shared with the hired
   // dashboard (useOnboardingPrompt); the stepper picks its own account-type track.
@@ -177,6 +165,35 @@ export default function DashboardPage() {
   const taskSeries = useMemo(() => cumulativeDailySeries(taskDates), [taskDates]);
   const approvalSeries = useMemo(() => dailyCounts(approvalDates), [approvalDates]);
 
+  // The five tabs, once. `tabRows` is the list; the inline bar and the panel's
+  // index rail are two renderings of it, so a sixth view is one entry here and
+  // appears in both. Declared below `scopedProjects` so the rail carries the same
+  // counts the bar does rather than a second, unlabelled copy of the same tabs.
+  const tabRows = DASHBOARD_TABS.map((key) => ({
+    key,
+    label: t(`tabs.${key}`),
+    count: key === 'projects' && !loading ? scopedProjects.length : undefined,
+  }));
+
+  // Opened from anywhere in the operator shell this route renders inside
+  // `ShellPanel`, which without this called it "Panel" — the generic fallback —
+  // because the dashboard is not a nav group. It names itself, and hands over its
+  // five tabs as the panel's index rail; they are VIEWS, not anchors, so the rail
+  // switches rather than scrolls (`usePublishReferenceSelect`).
+  usePublishReferenceChrome({
+    title: t('title'),
+    sections: tabRows.map(({ key, label, count }) => ({
+      id: key,
+      label: count != null ? `${label} · ${count}` : label,
+    })),
+    activeId: activeTab,
+  });
+  usePublishReferenceSelect((key) => selectTab(key as DashboardTab));
+  // Opened as a panel, the rail IS the tab bar — so the inline one below would be
+  // the same five buttons a second time. Standalone there is no rail, and the
+  // inline bar is the only way to change view, so it must stay.
+  const railHasTabs = useReferenceRailActive();
+
   if (!isAuthenticated) return null;
 
   // No tenant → the picker (a brand-new builder's named workspace is provisioned
@@ -220,13 +237,13 @@ export default function DashboardPage() {
       subtitle: activeTab === 'create' ? t('panel.creationsSubtitle') : t('panel.workspaceWidget'),
       icon: activeTab === 'quality' ? '◆' : activeTab === 'knowledge' ? '▤' : '◇',
       content: <div className={styles.workspaceWidget}>
-        <nav aria-label={t('widgetsLabel')}>{([
-          { key: 'create', label: t('tabs.create'), count: undefined },
-          { key: 'projects', label: t('tabs.projects'), count: scopedProjects.length as number | undefined },
-          { key: 'workforce', label: t('tabs.workforce'), count: undefined },
-          { key: 'quality', label: t('tabs.quality'), count: undefined },
-          { key: 'knowledge', label: t('tabs.knowledge'), count: undefined },
-        ] as const).map(({ key, label, count }) => <button key={key} type="button" data-active={activeTab === key} onClick={() => selectTab(key)}>{label}<TabCountBadge count={loading ? null : count} /></button>)}</nav>
+        {!railHasTabs && (
+          <nav aria-label={t('widgetsLabel')}>{tabRows.map(({ key, label, count }) => (
+            <button key={key} type="button" data-active={activeTab === key} onClick={() => selectTab(key)}>
+              {label}<TabCountBadge count={loading ? null : count ?? undefined} />
+            </button>
+          ))}</nav>
+        )}
         <div className={styles.workspaceContent}>
           {activeTab === 'create' && <DashboardCreationSessions />}
           {activeTab === 'projects' && <ProjectsContent limit={6} viewAllHref="/projects" />}

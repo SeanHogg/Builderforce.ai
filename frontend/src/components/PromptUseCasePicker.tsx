@@ -5,12 +5,12 @@ import { useTranslations } from 'next-intl';
 import styles from './PromptUseCasePicker.module.css';
 import { Icon } from '@/components/ui/Icon';
 
-type PromptUseCase = { category: string; label: string; prompt: string };
+export type PromptUseCase = { id?: string; category: string; label: string; prompt: string };
 
 export function PromptUseCasePicker({ placement, align = 'center', onSelect }: {
   placement: 'top' | 'bottom';
   align?: 'center' | 'end';
-  onSelect: (prompt: string) => void;
+  onSelect: (prompt: string, useCase: PromptUseCase) => void;
 }) {
   const t = useTranslations('promptUseCases');
   // Some embedded/test translation adapters intentionally expose only the
@@ -77,7 +77,7 @@ export function PromptUseCasePicker({ placement, align = 'center', onSelect }: {
               <div className={styles.category}>{t(`categories.${category}`)}</div>
               <div className={styles.grid}>
                 {entries.map(({ item, index }) => (
-                  <button key={item.label} type="button" className={styles.item} tabIndex={open ? 0 : -1} onClick={() => { onSelect(item.prompt); setOpen(false); setQuery(''); }}>
+                  <button key={item.id || item.label} type="button" className={styles.item} tabIndex={open ? 0 : -1} onClick={() => { onSelect(item.prompt, item); setOpen(false); setQuery(''); }}>
                     <span className={styles.icon} aria-hidden="true"><Icon source={USE_CASE_ICONS[index % USE_CASE_ICONS.length]} size={18} /></span>
                     <span>{item.label}</span>
                   </button>

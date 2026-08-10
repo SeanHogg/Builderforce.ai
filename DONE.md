@@ -22,6 +22,20 @@ index rail - views rather than anchors, so the rail switches (`usePublishReferen
 the /embedded pass). It also opens at `full` rather than `wide`: a wall of panels in a 50% drawer was
 a single column of squeezed cards.
 
+**3b - …and only says its tabs once.** Handing the rail five tabs the page also renders inline put
+the same five buttons on screen twice, both doing the same thing. A page cannot simply drop its own
+bar - the same component renders standalone, where there is no rail and the bar is the ONLY control
+(section 11.4.5: one component, two shells). So the RENDERER claims the rail (`useOwnReferenceRail`)
+and the page asks (`useReferenceRailActive`); one signal, available to every page that publishes a
+selector rather than a rule each of them re-derives. Only a SELECTOR rail claims - an anchor rail is
+a contents list beside the page, not instead of anything in it. The tab list itself is declared once
+now (`tabRows`) and rendered twice, so the rail carries the same counts the bar does. `/embedded` -
+the only other page publishing a selector - had the identical double tablist and is migrated in the
+same pass rather than left as the one place the rule does not hold.
+
+**3c - `DashboardCanvas.module.css` -> `Dashboard.module.css`**, and `.promptWidget`'s `height:100%`
+is gone: it sized the widget to a 230px node box and means nothing in flow.
+
 **4 - Localized.** The page carried ~12 hardcoded English strings (panel titles, subtitles, the quota
 alert, the widget nav label) plus a `tabs.create` key that never existed, which is why the tab label
 was typed inline. All five catalogs; the dead `tabs.ide` / `tabs.ideas` keys are deleted.
@@ -40,8 +54,15 @@ that path is unconfirmed and logged as such - see the Gap Register entry for the
 They live in `common.viewMode.*` now. Its buttons carry `data-view-mode` so a test targets the MODE
 rather than the words - `TaskMgmtContent.test.tsx` was matching `/list/i`, i.e. matching on a locale.
 
+**Also fixed - two ratchets a parallel branch had broken.** `check:design-scale` was +6 literal font
+sizes (four in the new `TwilioCanvasSetup.module.css`, two added to `ConnectorsGallery`) and
+`check:frontend-architecture` was +1 client file. The literals are on the role scale now
+(`--font-size-small` / `--font-size-body`, `ui-text-body`) and the client-file baseline moves to 769
+for the genuinely-new component. A red ratchet hides every later regression, so it does not matter
+whose branch turned it red.
+
 **Verification:** `tsgo --noEmit` clean in both packages; eslint clean; six frontend guards green
-(client-file baseline 767 -> 768 for `WorkspacePanelList`); `check-roadmap` green.
+(client-file baseline 767 -> 769); `check-roadmap` green; api 5,370 tests + 11 guards green.
 
 ## RESOLVED 2026-08-10 - the phone canvas: the bar stops covering the team, and the prompt stops covering the rail
 

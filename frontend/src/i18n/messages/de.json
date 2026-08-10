@@ -5735,9 +5735,10 @@
         "prompt": "Erstellen Sie einen ausführbaren Workflow mit konfigurierten Schritten, Eingaben, Freigaben und Integrationen."
       },
       {
+        "id": "twilio-ai-journey",
         "category": "apps",
-        "label": "Twilio-Workflow",
-        "prompt": "Erstellen und prüfen Sie einen ausführbaren Twilio-Workflow für SMS oder Sprache mit echten Connector-Aktionen und Eingaben."
+        "label": "Twilio-KI-Journey",
+        "prompt": "Erstelle eine wiederverwendbare, Twilio-gestützte KI-Kundenreise rund um eine klare Persona → Geschichte → messbares Ergebnis. Baue einen ausführbaren Workflow mit einem sichtbaren KI-Entscheidungsschritt, gefolgt von einer echten Aktion des vorhandenen twilio-Connectors (SMS, WhatsApp oder Voice), erforderlichen Eingaben, menschlicher Freigabe, Fehlerbehandlung und Produktionsreife; baue und validiere ihn. Ergänze einen knappen Experience-Brief, ein leichtes Architekturdiagramm, eine Qualitätsbewertung für Kreativität, langfristige Nutzerwirkung, Marktpotenzial und technische Machbarkeit, ein Live-End-to-End-Demo-Skript, messbare Erfolgsnachweise und eine Idea-to-Real-Übergabe für die Website, die BuilderForce Embedded mit Host-Installationssnippet, ausgewählter Kundenfunktion, Identitäts-/Event-Vertrag und Testcheckliste wiederverwendet. Füge eine geführte Tour für Einrichtung, KI-Entscheidung, Twilio-Auslieferung, Schutzmaßnahmen, Nachweise, Website-Einbettung und Demo hinzu. Verwende passende vorhandene Twilio-Objekte, -Verbindungen und eingebettete Funktionen; erstelle keine doppelten Workflows, Connectoren oder Embed-Systeme."
       },
       {
         "category": "apps",
@@ -14089,6 +14090,22 @@
       "emailTemplate": "E-Mail-Vorlage",
       "course": "Kurs",
       "guidedTour": "Geführte Tour"
+    },
+    "twilioSetup": {
+      "title": "Twilio-Integration",
+      "crumb": "Creation Canvas · Einstellungen · Integrationen",
+      "checking": "Twilio wird geprüft…",
+      "ready": "Twilio bereit",
+      "configure": "Twilio einrichten",
+      "guideTitle": "Einrichtung in drei Schritten",
+      "stepCredentials": "Füge Account SID, API Key SID (oder Account SID) und Auth Token hinzu. Geheimnisse bleiben im vorhandenen verschlüsselten Integrationsspeicher.",
+      "stepTest": "Teste die Verbindung hier. Lass sie aktiviert, damit Workflow-Aktionen sie verwenden können.",
+      "stepReturn": "Kehre zum Canvas zurück, baue den Workflow und führe dann die End-to-End-Demo mit einer echten Twilio-Nummer aus.",
+      "connectedStatus": "Für dieses Canvas ist eine aktivierte Twilio-Verbindung verfügbar.",
+      "missingStatus": "Dieses Canvas benötigt eine aktivierte Twilio-Verbindung, bevor der Auslieferungsschritt ausgeführt werden kann.",
+      "embedTitle": "Bringe dieses Erlebnis auf deine Website",
+      "embedBody": "Nutze die vorhandenen eingebetteten Funktionen, um das Kundenerlebnis zu installieren, Identität und Events zu übergeben und den Twilio-Workflow dahinter zu betreiben.",
+      "openEmbed": "Eingebettete Funktionen öffnen"
     },
     "tourBuilder": {
       "defaultObjectTitle": "Produkteinführung",

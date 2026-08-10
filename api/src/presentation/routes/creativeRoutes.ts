@@ -42,6 +42,7 @@ import {
   stlFromSolids,
 } from '../../application/creative/geometryService';
 import { normalizeGameDocument, validateGameDocument } from '../../application/game/gameDocument';
+import { findStockImages } from '../../application/creative/stockImageSearch';
 
 /** Every kind this route can generate, and what it produces. */
 const KINDS = {
@@ -100,6 +101,18 @@ function stripFence(text: string): string {
 export function createCreativeRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  /** Live provider reads are cached briefly so repeated agent turns do not spend provider quota. */
+  router.get('/images/search', async (c) => {
+    const query = String(c.req.query('q') ?? '').trim().slice(0, 200);
+    if (!query) return c.json({ error: 'q is required' }, 400);
+    const limit = Math.max(1, Math.min(20, Number(c.req.query('limit')) || 12));
+    try {
+      return c.json({ results: await findStockImages(c.env, query, limit) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'Stock image search failed' }, 503);
+    }
+  });
 
   /**
    * POST /api/creative/generate

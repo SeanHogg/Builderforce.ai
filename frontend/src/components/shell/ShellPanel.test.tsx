@@ -15,6 +15,7 @@ import {
   ReferenceChromeProvider,
   usePublishReferenceChrome,
   usePublishReferenceSelect,
+  useReferenceRailActive,
 } from '@/lib/referenceChrome';
 import { ActiveCanvasProvider, useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import type { ActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -68,6 +69,22 @@ function TabbedPage({ onSelect }: { onSelect: (id: string) => void }) {
   return <p>tabbed body</p>;
 }
 
+/**
+ * A page that owns a tab bar of its own — the `/dashboard` shape. Standalone the
+ * bar is the only control; in a panel the rail is the same control, so the bar
+ * must stand down rather than render the same five buttons twice.
+ */
+function PageWithOwnTabs() {
+  usePublishReferenceChrome({
+    title: 'Dashboard',
+    sections: [{ id: 'create', label: 'Create' }, { id: 'projects', label: 'Projects' }],
+    activeId: 'create',
+  });
+  usePublishReferenceSelect(() => {});
+  const railHasTabs = useReferenceRailActive();
+  return railHasTabs ? <p>body only</p> : <nav aria-label="inline tabs"><button type="button">Projects</button></nav>;
+}
+
 /** A reference page whose sections are anchors on one long page. */
 function AnchoredPage() {
   usePublishReferenceChrome({
@@ -107,5 +124,26 @@ describe('ShellPanel', () => {
     render(<Harness><AnchoredPage /></Harness>);
     expect(screen.getByRole('link', { name: 'Criteria' })).toHaveAttribute('href', '#criteria');
     expect(screen.queryByRole('button', { name: 'Criteria' })).toBeNull();
+  });
+
+  it('claims the rail so the page drops its own copy of the same tabs', () => {
+    const { unmount } = render(<Harness><PageWithOwnTabs /></Harness>);
+    expect(screen.queryByRole('navigation', { name: 'inline tabs' })).toBeNull();
+    expect(screen.getByText('body only')).toBeInTheDocument();
+    unmount();
+
+    // …and standalone, with no panel to take it over, the bar is still there.
+    render(<ReferenceChromeProvider><PageWithOwnTabs /></ReferenceChromeProvider>);
+    expect(screen.getByRole('navigation', { name: 'inline tabs' })).toBeInTheDocument();
+  });
+
+  it('leaves an ANCHOR rail unclaimed — it is a contents list, not a control', () => {
+    function RailProbe() {
+      return <span data-testid="claimed">{String(useReferenceRailActive())}</span>;
+    }
+    render(<Harness><AnchoredPage /><RailProbe /></Harness>);
+    // An anchor rail sits BESIDE the page rather than replacing anything in it,
+    // so it must never tell a page one of its controls is already on screen.
+    expect(screen.getByTestId('claimed')).toHaveTextContent('false');
   });
 });

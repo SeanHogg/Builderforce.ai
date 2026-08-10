@@ -55,10 +55,18 @@ interface ReferenceChromeStore {
    */
   select: ((id: string) => void) | null;
   publishSelect: (handler: ((id: string) => void) | null) => void;
+  /**
+   * True while something is actually RENDERING the published sections as a rail.
+   * Publishing does not imply that: the same page renders standalone (no panel,
+   * no rail) as often as it renders in one.
+   */
+  railActive: boolean;
+  setRailActive: (active: boolean) => void;
 }
 
 const NOOP_STORE: ReferenceChromeStore = {
   chrome: null, publish: () => {}, select: null, publishSelect: () => {},
+  railActive: false, setRailActive: () => {},
 };
 
 const ReferenceChromeContext = createContext<ReferenceChromeStore>(NOOP_STORE);
@@ -70,6 +78,7 @@ export function ReferenceChromeProvider({ children }: { children: React.ReactNod
   // JSON. So it lives in a ref, and only its PRESENCE is state — the rail needs
   // to re-render when a selector appears, not when the closure is replaced.
   const [hasSelect, setHasSelect] = useState(false);
+  const [railActive, setRailActive] = useState(false);
   const selectRef = useRef<((id: string) => void) | null>(null);
 
   const publishSelect = useCallback((handler: ((id: string) => void) | null) => {
@@ -80,8 +89,8 @@ export function ReferenceChromeProvider({ children }: { children: React.ReactNod
   const select = useCallback((id: string) => { selectRef.current?.(id); }, []);
 
   const value = useMemo<ReferenceChromeStore>(
-    () => ({ chrome, publish: setChrome, select: hasSelect ? select : null, publishSelect }),
-    [chrome, hasSelect, publishSelect, select],
+    () => ({ chrome, publish: setChrome, select: hasSelect ? select : null, publishSelect, railActive, setRailActive }),
+    [chrome, hasSelect, publishSelect, railActive, select],
   );
   return <ReferenceChromeContext.Provider value={value}>{children}</ReferenceChromeContext.Provider>;
 }
@@ -113,6 +122,31 @@ export function usePublishReferenceSelect(handler: ((id: string) => void) | null
   const { publishSelect } = useContext(ReferenceChromeContext);
   useEffect(() => { publishSelect(handler); });
   useEffect(() => () => publishSelect(null), [publishSelect]);
+}
+
+/**
+ * Is this page's own section list being rendered as a rail somewhere else?
+ *
+ * A page that publishes tabs is the SAME component in both shells (§11.4.5), and
+ * standalone it must still render them — the panel is not there to. So a page
+ * with a tab bar of its own asks this and drops it only when the panel has taken
+ * it over; otherwise `/dashboard` in a panel showed its five tabs twice, once in
+ * the rail and once inline, and clicking either did the same thing.
+ */
+export function useReferenceRailActive(): boolean {
+  return useContext(ReferenceChromeContext).railActive;
+}
+
+/**
+ * Claim the rail. Called by whatever renders the published sections, so the
+ * signal is owned by the renderer rather than guessed at by the page.
+ */
+export function useOwnReferenceRail(active: boolean): void {
+  const { setRailActive } = useContext(ReferenceChromeContext);
+  useEffect(() => {
+    setRailActive(active);
+    return () => setRailActive(false);
+  }, [active, setRailActive]);
 }
 
 /**

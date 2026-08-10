@@ -161,6 +161,11 @@ export interface Env {
    *  Set via `wrangler secret put FLUX_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   FLUX_API_KEY?: string;
 
+  /** Optional stock-image providers used by Canvas image search. */
+  UNSPLASH_ACCESS_KEY?: string;
+  PEXELS_API_KEY?: string;
+  PIXABAY_API_KEY?: string;
+
   // ---------------------------------------------------------------------------
   // Embeddings (`POST /v1/embeddings`)
   // ---------------------------------------------------------------------------
