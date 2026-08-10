@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { startDemoSession, DEMO_PERSONAS, type DemoPersona } from '@/lib/demoApi';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 
 /** Compact product-area marks — presentation only; copy comes from i18n. */
 const PERSONA_META: Record<DemoPersona, { icon: string; accent: string }> = {
@@ -48,13 +49,12 @@ export function DemoShowcase() {
     const track = trackRef.current;
     if (!track) return;
 
-    const resizeObserver = new ResizeObserver(syncCarousel);
-    resizeObserver.observe(track);
+    const disconnectResize = observeResizeOnAnimationFrame(track, syncCarousel);
     track.addEventListener('scroll', syncCarousel, { passive: true });
     syncCarousel();
 
     return () => {
-      resizeObserver.disconnect();
+      disconnectResize();
       track.removeEventListener('scroll', syncCarousel);
     };
   }, [syncCarousel]);

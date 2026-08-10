@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './HomeScroller.module.css';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 
 /**
  * A horizontal rail for a set the reader BROWSES rather than reads.
@@ -58,11 +59,10 @@ export function useHomeScroller(): HomeScrollerState {
     sync();
     rail.addEventListener('scroll', sync, { passive: true });
     // Cards reflow on resize and on font load, which changes both ends.
-    const observer = new ResizeObserver(sync);
-    observer.observe(rail);
+    const disconnectResize = observeResizeOnAnimationFrame(rail, sync);
     return () => {
       rail.removeEventListener('scroll', sync);
-      observer.disconnect();
+      disconnectResize();
     };
   }, [sync]);
 

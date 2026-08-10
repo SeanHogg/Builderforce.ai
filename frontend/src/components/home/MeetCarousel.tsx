@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { HomeButton } from './HomePatterns';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 
 type TitleDesc = { title: string; desc: string };
 type RoleDesc = { role: string; desc: string };
@@ -87,9 +88,7 @@ export function MeetCarousel() {
     const sync = () => setFrameHeight(node.offsetHeight);
     sync();
     if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(sync);
-    observer.observe(node);
-    return () => observer.disconnect();
+    return observeResizeOnAnimationFrame(node, sync);
   }, [activeSlide]);
 
   const move = (direction: -1 | 1) => {

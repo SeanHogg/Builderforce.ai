@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { colorAt } from './chartColors';
+import { observeResizeOnAnimationFrame } from '../../lib/observeResize';
 
 /**
  * Reusable multi-series line/area trend chart — the project's time-series
@@ -55,12 +56,10 @@ export function TrendChart({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver((entries) => {
+    return observeResizeOnAnimationFrame(el, (entries) => {
       const w = entries[0]?.contentRect.width;
       if (w && w > 0) setWidth(w);
     });
-    ro.observe(el);
-    return () => ro.disconnect();
   }, []);
 
   const n = labels.length;

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { DEVICE_PRESETS, getDevicePreset, DEFAULT_DEVICE_ID } from '@/lib/devicePresets';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { Icon } from '@/components/ui/Icon';
 
 interface DevicePreviewProps {
@@ -63,9 +64,7 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
       setScale(Number.isFinite(next) && next > 0 ? next : 1);
     };
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(stage);
-    return () => observer.disconnect();
+    return observeResizeOnAnimationFrame(stage, measure);
   }, [frameWidth, frameHeight]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);

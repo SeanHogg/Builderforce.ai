@@ -29,6 +29,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import {
   getRecents,
   getRoster,
@@ -98,13 +99,11 @@ export function RosterNav({
   useEffect(() => {
     const node = shell.current;
     if (!node || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(([entry]) => {
+    return observeResizeOnAnimationFrame(node, ([entry]) => {
       if (!entry) return;
       // A width-forced collapse never un-collapses something the user chose.
       rail(userCollapsed || entry.contentRect.width < RAIL_BREAKPOINT);
     });
-    ro.observe(node);
-    return () => ro.disconnect();
   }, [rail, userCollapsed]);
 
   return (

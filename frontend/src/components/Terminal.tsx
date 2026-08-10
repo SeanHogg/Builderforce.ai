@@ -2,6 +2,7 @@
 
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
+import { observeResizeOnAnimationFrame } from '../lib/observeResize';
 
 interface TerminalProps {
   onReady?: (write: (data: string) => void) => void;
@@ -77,8 +78,9 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
         term!.write(data);
       });
 
-      const ro = new ResizeObserver(() => fitAddon.fit());
-      if (containerRef.current) ro.observe(containerRef.current);
+      const disconnectResize = containerRef.current
+        ? observeResizeOnAnimationFrame(containerRef.current, () => fitAddon.fit())
+        : () => undefined;
 
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
       const onWindowResize = () => {
@@ -91,7 +93,7 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
       window.addEventListener('resize', onWindowResize);
 
       return () => {
-        ro.disconnect();
+        disconnectResize();
         window.removeEventListener('resize', onWindowResize);
         if (resizeTimer) clearTimeout(resizeTimer);
         fitCleanup?.();
