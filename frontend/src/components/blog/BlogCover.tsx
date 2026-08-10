@@ -75,7 +75,7 @@ export default function BlogCover({
       viewBox="0 0 1200 360"
       role="img"
       aria-label={title}
-      style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 16, margin: '8px 0 28px' }}
+      style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 'var(--radius-xl)', margin: '8px 0 28px' }}
     >
       <defs>
         <linearGradient id={`${gid}-bg`} x1="0" y1="0" x2="1" y2="1">

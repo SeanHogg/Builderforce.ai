@@ -33,9 +33,9 @@ export function SkillTags({
         <span
           key={s}
           style={{
-            fontSize: 10,
+            fontSize: 'var(--font-size-field-label)',
             padding: '2px 6px',
-            borderRadius: 99,
+            borderRadius: 'var(--radius-full)',
             background: 'var(--surface-2)',
             color: 'var(--text)',
             border: '1px solid var(--border)',

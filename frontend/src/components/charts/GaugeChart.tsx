@@ -74,7 +74,7 @@ export function GaugeChart({
         )}
       </svg>
       {centerLabel != null && (
-        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>{centerLabel}</span>
+        <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontWeight: 600 }}>{centerLabel}</span>
       )}
     </div>
   );

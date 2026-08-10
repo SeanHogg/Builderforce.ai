@@ -172,6 +172,22 @@ export function defaultInput(def: ToolDefinition): Record<string, number> {
   return {};
 }
 
+/**
+ * Every input/question id a definition scores, whatever its kind.
+ *
+ * Distinct from {@link defaultInput}, which is empty for a questionnaire or a
+ * quiz because those have no defaults to seed — so it cannot be used to tell a
+ * CALLER what it may send. The canvas tool (`canvas_add_diagnostic`) needs
+ * exactly that: an answer key the tool does not define is dropped rather than
+ * posted, because a score computed against a shape the tool never declared is a
+ * number that looks computed and is not.
+ */
+export function questionIds(def: ToolDefinition): string[] {
+  if (def.kind === 'calculator') return def.inputs.map((i) => i.id);
+  if (def.kind === 'quiz') return def.questions.map((q) => q.id);
+  return def.sections.flatMap((s) => s.questions.map((q) => q.id));
+}
+
 /** Whether every answer is provided for an answer-based tool. Calculators are
  *  always "complete" (they have defaults), so they can run immediately. */
 export function answersComplete(def: ToolDefinition, input: Record<string, number>): boolean {

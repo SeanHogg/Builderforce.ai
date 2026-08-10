@@ -61,8 +61,9 @@ export type {
 } from '@seanhogg/builderforce-brain-embedded';
 
 // App-specific brain pieces (not part of the portable package).
+export { useOpenProjectChat } from './openProjectChat';
 export { brainConfig } from './runtime';
-export { guestBrainConfig } from './guestRuntime';
+export { guestBrainConfig, guestMessageAuthor, GUEST_ROOM_CHAT_ID } from './guestRuntime';
 export {
   generatePrd,
   savePrd,
@@ -78,6 +79,32 @@ export {
   type PlatformActionContext,
 } from './platformActions';
 export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from './platformPrompt';
+
+// Chat capabilities: what the chat is making (document / slides / site / game …).
+export {
+  capabilitiesForSurface,
+  getBrainCapability,
+  type BrainCapabilityId,
+  type BrainCapabilityDef,
+  type BrainCapabilitySurface,
+} from './capabilities';
+
+// Chat MODE: is this conversation a CONVERSATION (`chat`) or an EXECUTION (`work`)?
+// Re-exported from the model-facing package alongside the UI-only work-option catalogue,
+// so a surface imports one thing rather than reaching into two.
+export {
+  CHAT_MODES,
+  NEW_CHAT_MODE,
+  RESTING_CHAT_MODE,
+  CHAT_MODE_ICON,
+  isChatMode,
+  normalizeChatMode,
+  workOptions,
+  type ChatMode,
+  type WorkOptionId,
+  type WorkOptionDef,
+} from './chatModes';
+export { extractCsv, exportFilenameStem, replyHasArtifact } from './messageExport';
 
 // Model-authored "next step" buttons parsed out of a Brain reply.
 export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedActions } from './suggestedActions';

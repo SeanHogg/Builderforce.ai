@@ -4,17 +4,15 @@
  * Auth, datasets, training, AI always use the auth API.
  */
 
-import { checkUnauthorizedAndRedirect } from './auth';
 import {
   apiRequest,
   apiRequestText,
   apiRequestStream,
-  getApiBaseUrl,
-  getAuthHeaders,
   getProjectsBaseUrl,
   isWorkerForProjects,
+  type RequestOptions,
 } from './apiClient';
-import { planLimitErrorFromResponse } from './planLimitError';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type {
   Project,
   IdeProject,
@@ -31,27 +29,17 @@ import type {
 const IDE = '/api/ide';
 const AI = '/api/ai';
 
-async function projectsRequest<T>(
-  path: string,
-  opts: RequestInit & { body?: string } = {}
-): Promise<T> {
-  const authHeaders = getAuthHeaders();
-  const hadToken = !!authHeaders.Authorization;
-  const { body, ...init } = opts;
-  const url = `${getProjectsBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...authHeaders, ...(init.headers as Record<string, string>) },
-    ...(body !== undefined && { body }),
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const msg = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+/**
+ * Project + IDE-file calls, which target the standalone worker when
+ * NEXT_PUBLIC_WORKER_URL is set and the auth API otherwise.
+ *
+ * The different ORIGIN used to justify a separate fetch wrapper here; it no
+ * longer does — `apiRequest` takes a `baseUrl`, so these calls get the same
+ * headers (emulation, locale), the same 401 redirect and the same error
+ * reporting as everything else.
+ */
+function projectsRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return apiRequest<T>(path, { ...opts, baseUrl: getProjectsBaseUrl() });
 }
 
 // ---------------------------------------------------------------------------
@@ -63,23 +51,17 @@ async function projectsRequest<T>(
 // each firing their own. Browser-side, so this is request coalescing — not the
 // server's cross-isolate getOrSetCached, which can't run here. Cleared on settle,
 // so there's no staleness window: later (sequential) calls always re-fetch.
-let inFlightProjects: Promise<Project[]> | null = null;
+const PROJECTS_CACHE_KEY = 'projects:list';
 
 export async function fetchProjects(): Promise<Project[]> {
-  if (inFlightProjects) return inFlightProjects;
-  inFlightProjects = (async () => {
+  return getOrSetClientCached(PROJECTS_CACHE_KEY, async () => {
     if (isWorkerForProjects()) {
       const arr = await projectsRequest<Project[]>('/api/projects');
       return Array.isArray(arr) ? arr : [];
     }
     const res = await apiRequest<{ projects: Project[] }>('/api/projects');
     return res?.projects ?? [];
-  })();
-  try {
-    return await inFlightProjects;
-  } finally {
-    inFlightProjects = null;
-  }
+  }, { ttlMs: 0 });
 }
 
 export async function fetchProject(id: number | string): Promise<Project> {
@@ -96,7 +78,7 @@ export async function createProject(data: {
   name: string;
   description?: string;
   template?: string;
-  /** IDE project type — 'designer' | 'video' | 'llm'. Defaults server-side to 'designer'. */
+  /** IDE project type — 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Where the project was born — 'ide' tags it for the Designer badge. */
   origin?: string;
@@ -106,6 +88,7 @@ export async function createProject(data: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
   const p = res as Project;
   return {
     ...p,
@@ -129,11 +112,13 @@ export async function updateProject(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
   return res as Project;
 }
 
 export async function deleteProject(id: number | string): Promise<void> {
   await projectsRequest(`/api/projects/${id}`, { method: 'DELETE' });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +146,7 @@ export async function listIdeContainers(): Promise<IdeContainerOption[]> {
 
 export async function createIdeProject(data: {
   name: string;
-  /** 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
+  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Optional parent Project to group this build under. */
   containerProjectId?: number | null;
@@ -221,12 +206,14 @@ export async function fetchFileContent(
   projectId: number | string,
   filePath: string
 ): Promise<string> {
-  const base = getProjectsBaseUrl();
-  const url = `${base}${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
-  const authHeaders = getAuthHeaders();
-  const hadToken = !!authHeaders.Authorization;
-  const res = await fetch(url, { headers: authHeaders as HeadersInit });
-  checkUnauthorizedAndRedirect(res, hadToken);
+  const path = `${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
+  // 404 = the object was never written (the API distinguishes missing from
+  // empty). Surface it as its own error so callers don't cache '' for a file
+  // that doesn't exist — the silent-empty that used to propagate into saves.
+  // It is an "expected" status: a missing file is not a system fault, so it must
+  // not raise the global error toast.
+  const res = await apiRequestStream(path, { baseUrl: getProjectsBaseUrl(), expectedErrors: [404] });
+  if (res.status === 404) throw new Error(`File not found: ${filePath}`);
   if (!res.ok) throw new Error('Failed to fetch file content');
   return res.text();
 }
@@ -290,6 +277,15 @@ export const ideRepoApi = {
     projectsRequest(`${ideProjectBase(projectId)}/create-repo`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
+
+  /** Write the GitHub Actions deploy workflow into the repo (idempotent). */
+  enableDeploys: (
+    projectId: number | string,
+    body: { repoId?: string; subdomain?: string; distDir?: string } = {},
+  ): Promise<{ path: string; branch: string; workflow: string }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/enable-deploys`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
 };
 
 // ---------------------------------------------------------------------------
@@ -339,23 +335,12 @@ export async function publishSite(
   for (const { path, data } of assets) {
     form.append(path, new Blob([data as BlobPart]), path);
   }
-  // FormData sets its own multipart Content-Type (with boundary) — don't override.
-  const authHeaders = getAuthHeaders();
-  const hadToken = !!authHeaders.Authorization;
-  const headers = { ...authHeaders } as Record<string, string>;
-  delete headers['Content-Type'];
-  const res = await fetch(`${getApiBaseUrl()}${IDE}/projects/${projectId}/publish`, {
+  // apiRequest leaves Content-Type unset for FormData so the multipart boundary
+  // survives — no header surgery needed.
+  return apiRequest<SitePublishResult>(`${IDE}/projects/${projectId}/publish`, {
     method: 'POST',
-    headers,
     body: form,
   });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const msg = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(msg.error || res.statusText || `Publish failed (${res.status})`);
-  }
-  return res.json() as Promise<SitePublishResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +357,7 @@ export async function sendAIMessage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId: String(projectId), messages }),
   });
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  // 402 already threw a typed plan-limit error inside apiRequestStream.
   if (!res.ok) throw new Error('Failed to send AI message');
   const reader = res.body?.getReader();
   if (!reader) return;
@@ -562,21 +547,40 @@ export async function updateTrainingJob(
 
 export async function uploadArtifact(
   jobId: string,
-  data: ArrayBuffer
+  data: ArrayBuffer,
+  metadata?: {
+    format?: 'safetensors' | 'evermind-lora';
+    filename?: string;
+    baseModel?: string;
+    rank?: number;
+    alpha?: number;
+  },
 ): Promise<{ r2Key: string }> {
-  const authHeaders = getAuthHeaders({ 'Content-Type': 'application/octet-stream' });
-  const hadToken = !!authHeaders.Authorization;
-  const res = await fetch(
-    `${getApiBaseUrl()}${IDE}/training/${jobId}/artifact`,
-    {
-      method: 'POST',
-      headers: authHeaders as HeadersInit,
-      body: data,
-    }
-  );
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (!res.ok) throw new Error('Failed to upload artifact');
-  return res.json();
+  const query = metadata?.format ? `?format=${encodeURIComponent(metadata.format)}` : '';
+  return apiRequest<{ r2Key: string }>(`${IDE}/training/${jobId}/artifact${query}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': metadata?.format === 'safetensors' ? 'application/x-safetensors' : 'application/octet-stream',
+      ...(metadata?.filename ? { 'X-Artifact-Filename': metadata.filename } : {}),
+      ...(metadata?.baseModel ? { 'X-Base-Model': metadata.baseModel } : {}),
+      ...(metadata?.rank != null ? { 'X-LoRA-Rank': String(metadata.rank) } : {}),
+      ...(metadata?.alpha != null ? { 'X-LoRA-Alpha': String(metadata.alpha) } : {}),
+    },
+    body: data,
+  });
+}
+
+/** Persist a binary artifact through the same authenticated workspace route. */
+export async function saveBinaryFile(
+  projectId: number | string,
+  filePath: string,
+  content: Blob,
+): Promise<void> {
+  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': content.type || 'application/octet-stream' },
+    body: content,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -692,12 +696,14 @@ export type AgentPricingModel = 'flat_fee' | 'consumption';
  */
 export type AgentEngine = 'builderforce-v3';
 /**
- * Execution surface for a V2 cloud agent — the two types the user picks at
- * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid
- * agent): `durable` on a Durable Object (on-demand serverless, per step);
- * `container` on a long-lived Cloudflare Container for very long, continuous tasks.
+ * Execution surface for a V2 cloud agent — the types the user picks at creation.
+ * All run the full task remotely (no local/hybrid agent): `durable` on a Durable
+ * Object (on-demand serverless, per step); `container` on a long-lived Cloudflare
+ * Container for very long, continuous tasks; `github_actions` on the linked repo's
+ * own GitHub Actions runners (real filesystem + toolchain, 60-minute cap), which
+ * requires the Builderforce agent workflow committed to the repo.
  */
-export type AgentRuntimeSurface = 'durable' | 'container';
+export type AgentRuntimeSurface = 'durable' | 'container' | 'github_actions';
 
 export interface CloudAgentInput {
   name: string;

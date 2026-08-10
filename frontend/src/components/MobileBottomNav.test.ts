@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { itemsFor } from './MobileBottomNav';
+// The item table moved into the registry (PRD 21 §11.7.1 caught it as a
+// fifth list of hrefs and labels); the component is now only its renderer.
+import { bottomNavFor as itemsFor } from '@/lib/navGroups';
 
 const hrefs = (items: ReturnType<typeof itemsFor>) => items.map((i) => i.href);
 
@@ -14,9 +16,11 @@ describe('MobileBottomNav itemsFor (account-type + privilege aware)', () => {
     expect(items.filter((i) => i.accent)).toHaveLength(1);
   });
 
-  it('builder (IDE creator) bar is Home / Projects / Workforce / Insights / account slot', () => {
+  // The canvas leads, not `/dashboard`: PRD 21 §6.8 lands sign-in on the last
+  // board, and a Home slot pointing at the dashboard is what undoes that.
+  it('builder (IDE creator) bar is Canvas / Projects / Workforce / Insights / account slot', () => {
     expect(hrefs(itemsFor(true, false))).toEqual([
-      '/dashboard',
+      '/create',
       '/projects',
       '/workforce',
       '/insights',

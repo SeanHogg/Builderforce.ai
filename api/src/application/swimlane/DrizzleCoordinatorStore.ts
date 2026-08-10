@@ -17,6 +17,7 @@ import {
   tenants,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { freezeDispatchAgentDefinition } from '../agentIdentity/agentRunIdentity';
 import type {
   AssignmentLite,
   BoardLite,
@@ -188,9 +189,12 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
   }
 
   async insertDispatch(data: NewDispatch): Promise<string> {
+    const frozen = await freezeDispatchAgentDefinition(this.db, {
+      tenantId: data.tenantId, agentId: data.agentId,
+    });
     const [row] = await this.db
       .insert(agentDispatches)
-      .values({ ...data })
+      .values({ ...data, agentDefinitionVersionId: frozen?.id ?? null })
       .returning({ id: agentDispatches.id });
     if (!row) throw new Error('Failed to insert dispatch.');
     return row.id;

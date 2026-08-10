@@ -66,7 +66,7 @@ function CapacityCard(_props: WidgetCardProps) {
       label: m.memberName,
       value: m.openWip,
       secondary: m.maxConcurrentWip ?? undefined,
-      color: m.overAllocated ? 'var(--coral-bright, #f4726e)' : (m.population === 'agent' ? AGENT_COLOR : HUMAN_COLOR),
+      color: m.overAllocated ? 'var(--coral-bright)' : (m.population === 'agent' ? AGENT_COLOR : HUMAN_COLOR),
     }));
   if (bars.length === 0) return <Muted>{t('wfp.empty')}</Muted>;
   return <BarChart data={bars} formatValue={int} ariaLabel={t('title.wfpCapacity')} />;

@@ -1,20 +1,26 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * GitHub webhook handler — /api/webhooks/github
  *
- * Three jobs, keyed off X-GitHub-Event:
+ * Four jobs, keyed off X-GitHub-Event:
  *   - CI/deploy events → feed build/deploy results back to the cloud execution
  *     (and auto-fix on failure).
  *   - push / pull_request / pull_request_review → INGEST engineering activity into
  *     activity_events (the producer side of the consolidation surface): commits,
  *     PRs, reviews — attributed to a contributor (auto-created on first sight) and a
  *     project (via the connected repo). Issues are ingested inline below too.
+ *   - code_scanning_alert / dependabot_alert → ingest GitHub's own security
+ *     scanners into the SAME findings pipeline the Security agent uses, so a
+ *     CodeQL/Dependabot hit becomes a SECURITY ticket on the board. See
+ *     application/security/githubAlerts.ts.
  *   - issues → auto-dispatch labelled/opened issues as BuilderForce Agents tasks.
  *
  * SETUP:
  *   1. In GitHub, create a webhook (App or repo level) pointing to:
  *        https://api.builderforce.ai/api/webhooks/github
  *      Content type: application/json
- *      Events: Pushes, Pull requests, Pull request reviews, Issues (+ CI events).
+ *      Events: Pushes, Pull requests, Pull request reviews, Issues (+ CI events),
+ *              Code scanning alerts, Dependabot alerts.
  *   2. Set the webhook secret, then:
  *        wrangler secret put GITHUB_WEBHOOK_SECRET
  *   3. Link the repo to a Builderforce project — either via project_repositories
@@ -30,16 +36,18 @@
  */
 
 import { Hono } from 'hono';
-import type { Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects, tasks, agentHosts, toolAuditEvents } from '../../infrastructure/database/schema';
+import { projects, tasks, agentHosts } from '../../infrastructure/database/schema';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
-import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, type RepoCiEvent, type AutoFixIntent } from '../../application/ci/ingestRepoCiEvent';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
+import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
+import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
+import { ALERT_EVENTS, ingestAlertWebhook } from '../../application/security/githubAlerts';
+import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -244,34 +252,6 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
   const router = new Hono<HonoEnv>();
 
   /**
-   * A build failed (pre-merge PR branch or post-merge deploy) → dispatch an auto-fix
-   * run for the task (the agent fixes the build → updated/new approval-gated PR). The
-   * loop-guard lives in `ingestRepoCiEvent` (it only returns an intent under the
-   * attempt cap); here we just start the run and record the `autofix.dispatch` event
-   * the guard counts.
-   */
-  const dispatchAutoFix = (c: Context<HonoEnv>, intent: AutoFixIntent): void => {
-    c.executionCtx.waitUntil((async () => {
-      try {
-        const executionId = await dispatchCloudRunForTask(
-          c.env as Env, db, runtimeService,
-          (p) => c.executionCtx.waitUntil(p),
-          { taskId: intent.taskId, tenantId: intent.tenantId, payload: intent.payload, submittedBy: 'system:autofix' },
-        );
-        if (executionId != null) {
-          await db.insert(toolAuditEvents).values({
-            tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
-            executionId, sessionKey: `exec:${executionId}`,
-            toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
-            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt }),
-            result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
-          }).catch(() => { /* telemetry best-effort */ });
-        }
-      } catch { /* webhook stays 200 — never let a dispatch failure retry the hook */ }
-    })());
-  };
-
-  /**
    * POST /github
    * GitHub posts here for subscribed events. Signature verification is required.
    * Body must be read as raw text — do not use c.req.json() before verification.
@@ -301,12 +281,10 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
       const norm = normalizeCiEvent(event, p);
       if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
-      const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET ?? '';
-      const res = await ingestRepoCiEvent(db, c.env as Env, secret, norm);
-      // A build failed (pre-merge PR branch or post-merge deploy) and is under the
-      // attempt cap → kick off a fix run so the agent fixes the build it broke.
-      if (res.autoFix) dispatchAutoFix(c, res.autoFix);
-      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: true, attempt: res.autoFix.attempt } : undefined });
+      // Post-ingest handling (dispatch, loop-guard telemetry, exhaustion, merge-on-green)
+      // is provider-independent — GitHub/GitLab/Bitbucket all go through this one helper.
+      const res = await handleCiEventOutcome(ciOutcomeDeps(c, db, runtimeService), norm, 'github');
+      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: res.autoFixDispatched, attempt: res.autoFix.attempt } : undefined });
     }
 
     // Engineering-activity ingestion: connecting a repo makes its commits / PRs /
@@ -325,7 +303,23 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       if (!out) {
         return c.json({ received: true, processed: false, reason: `no project linked to repo '${full}'` });
       }
+      // A PR lifecycle change is work for the frequent reconciler. Signal the
+      // shared cron gate so a newly opened PR cannot wait for the 30-minute floor.
+      if (event === 'pull_request') c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
       return c.json({ received: true, processed: true, inserted: out.inserted, skipped: out.skipped });
+    }
+
+    // Security alerts: GitHub's own scanners (CodeQL / Dependabot) feed the SAME
+    // findings pipeline as the Security agent, so a CodeQL hit lands on the board
+    // as a SECURITY ticket instead of sitting in the GitHub UI untriaged.
+    // Dedupe on repo + alert number lives in the ingest module (webhook redelivery
+    // would otherwise mint duplicates — recordFinding has no idempotency key).
+    if (event && ALERT_EVENTS.has(event)) {
+      let p: Record<string, unknown>;
+      try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+      const out = await ingestAlertWebhook(db, event, p);
+      if (!out.ok) return c.json({ received: true, processed: false, reason: out.reason });
+      return c.json({ received: true, processed: true, ingested: out.ingested, deduped: out.deduped, taskIds: out.taskIds });
     }
 
     if (event !== 'issues') {
@@ -349,7 +343,9 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
     try {
       const issuePayload = JSON.parse(rawBody) as Record<string, unknown>;
       await ingestGithubActivity(c.env as Env, db, repository.full_name, issueEvents(issuePayload));
-    } catch { /* activity ingest is best-effort; never block dispatch */ }
+    } catch (error) { /* activity ingest is best-effort; never block dispatch */ 
+      reportCaughtError(error, { source: "presentation/routes/githubWebhookRoutes.ts", operation: "createGitHubWebhookRoutes" });
+    }
 
     // Only dispatch on 'opened' or when a dispatch label is added
     const isOpen = action === 'opened';

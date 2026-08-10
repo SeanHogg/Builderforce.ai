@@ -1,0 +1,546 @@
+/*
+ * Landing hero — the Creation Canvas itself, running, above the fold.
+ *
+ * Every colour is a theme token so the board reads in BOTH themes: the dot grid
+ * and node cards sit on --bg-surface, which flips per theme with the token.
+ * The old hero hardcoded rgba(236,242,255,…) text because it always sat on the
+ * dark BrainBackdrop; nothing here may assume a ground colour.
+ *
+ * Below --canvas-hero-break the board is not rendered at all (see the component):
+ * an infinite pan/zoom surface is the wrong first touch on a phone, so narrow
+ * viewports get the copy-first hero, the same composer in normal flow, and the
+ * Evermind brain animation behind it (`.heroBrain`).
+ */
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  /* Vertical rhythm only — `.inner` carries `.mkt-in`, and two gutters stack. */
+  padding-block: clamp(28px, 5vw, 56px) clamp(24px, 4vw, 40px);
+  text-align: center;
+}
+
+/* The catalog intentionally escapes the fixed-height board. Promote the whole
+   hero while it is open so the following homepage section cannot paint over it. */
+.hero:has(.promptWrap [aria-expanded='true']) {
+  z-index: 2;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── Copy — deliberately short: the board has to fit the same viewport ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 16px;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.badgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan-bright);
+  box-shadow: 0 0 8px var(--cyan-bright);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .badgeDot { animation: heroPulse 2.2s ease-in-out infinite; }
+}
+@keyframes heroPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(0.72); opacity: 0.5; }
+}
+
+.title {
+  margin: 0;
+  max-width: 18ch;
+  font-family: var(--font-display);
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+.title em {
+  font-style: italic;
+  background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lede {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--text-secondary);
+  font-size: var(--font-size-lede);
+  line-height: 1.55;
+}
+
+/* ── Stage: the board with the composer riding on it ── */
+/* Fills the marketing column its `.inner` already establishes — a second, wider
+   cap here is how the hero board ended up 32px off the header. */
+.stage {
+  position: relative;
+  width: 100%;
+  margin-top: clamp(10px, 2vw, 20px);
+}
+
+/*
+ * The board carries two chrome bands — a session bar on top and the team roster
+ * along the bottom — so it reads as a live room with people in it rather than an
+ * illustration of one. Both survive the blur as distinct horizontal bands, which
+ * is the point: the silhouette has to say "session" before anything is legible.
+ * Heights are declared once here and consumed by `.field` and `.promptWrap`, so
+ * the composer lane and the object field can never drift out of the band.
+ */
+.board {
+  --board-chrome: 38px;
+  --board-team: 44px;
+  --board-composer-lane: 118px;
+  --board-resting-height: clamp(420px, 56vh, 560px);
+
+  position: relative;
+  overflow: visible;
+  height: var(--board-resting-height);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background-color: var(--bg-surface);
+  background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
+  background-size: 22px 22px;
+  box-shadow: 0 24px 60px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
+}
+
+/* ── Session bar: live dot, what this board is, who is on it ── */
+.chrome {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--board-chrome);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--surface-sunken);
+}
+.liveDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .liveDot { animation: heroPulse 2.2s ease-in-out infinite; }
+}
+.chromeTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.facepile {
+  flex: none;
+  display: flex;
+}
+.face {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  background: var(--surface-interactive);
+  color: var(--text-secondary);
+  font-size: var(--font-size-field-label);
+  font-weight: 700;
+  font-style: normal;
+}
+.face + .face { margin-left: -6px; }
+.face:nth-child(1) { background: var(--coral-bright); color: var(--bg-surface); }
+.face:nth-child(2) { background: var(--violet-bright); color: var(--bg-surface); }
+.face:nth-child(3) { background: var(--amber-bright); color: var(--bg-surface); }
+
+/* ── Team roster: the always-on agents, where the product puts them ── */
+.team {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--board-team);
+  padding: 0 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+.teamLabel {
+  flex: none;
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.teamChip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-eyebrow);
+  cursor: pointer;
+  transition: border-color 0.22s, box-shadow 0.22s;
+}
+.teamChip:hover,
+.teamChip:focus-visible {
+  border-color: var(--border-accent);
+}
+.teamChipSelected {
+  position: relative;
+  z-index: 2;
+  border-color: var(--coral-bright);
+  box-shadow: 0 10px 26px var(--shadow-coral-mid);
+}
+.teamAvatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+  color: var(--bg-surface);
+  font-size: var(--font-size-field-label);
+  font-weight: 700;
+  font-style: normal;
+}
+
+/* The veil blurs whatever is behind it while its mask cuts a soft lens around
+   the pointer. Cards promoted above this layer remain crisp after selection;
+   the composer always lives above it. */
+.blurVeil {
+  --lens-x: 50%;
+  --lens-y: 50%;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.01);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  -webkit-mask-image: linear-gradient(black, black);
+  mask-image: linear-gradient(black, black);
+  transition: opacity 180ms ease;
+}
+.blurVeilLens {
+  -webkit-mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, black 108px);
+  mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, black 108px);
+}
+.boardRevealed .blurVeil {
+  opacity: 0;
+}
+
+/*
+ * The objects live in a field that stops short of the bottom, so the composer
+ * owns an exclusive lane. Positioning the nodes as a percentage of the FIELD
+ * (rather than the board) is what makes that hold at every board height — at the
+ * 390px floor, board-relative percentages put the lower nodes under the composer.
+ */
+.field {
+  position: absolute;
+  inset: var(--board-chrome) 0 calc(var(--board-team) + var(--board-composer-lane));
+}
+
+.wires {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.wires path {
+  fill: none;
+  stroke: var(--coral-bright);
+  stroke-opacity: 0.42;
+  stroke-width: 1.4;
+  stroke-dasharray: 5 4;
+}
+.wires path.solid {
+  stroke: var(--cyan-bright);
+  stroke-opacity: 0.5;
+  stroke-dasharray: none;
+}
+
+/* ── Seeded objects. Real buttons: clicking one seeds the composer, so the
+      board is an invitation rather than a screenshot. ── */
+.node {
+  position: absolute;
+  display: block;
+  width: clamp(150px, 15vw, 196px);
+  padding: 11px 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  /* --bg-elevated, not --surface-card-strong: the board ground is --bg-surface,
+     which is pure white in light mode, so a translucent white card would wash
+     out against it. This reads as a distinct card in BOTH themes. */
+  background: var(--bg-elevated);
+  box-shadow: 0 14px 32px var(--shadow-coral-soft);
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s, box-shadow 0.22s;
+}
+.nodeSelected {
+  z-index: 2;
+  border-color: var(--border-accent);
+  box-shadow: 0 20px 44px var(--shadow-coral-mid);
+}
+.node:hover,
+.node:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--border-accent);
+  box-shadow: 0 20px 44px var(--shadow-coral-mid);
+}
+@media (prefers-reduced-motion: reduce) {
+  .board { transition: none; }
+  .node { transition: border-color 0.22s; }
+  .node:hover, .node:focus-visible { transform: none; }
+}
+/* The one agent on the board is tinted rather than merely labelled — an agent is
+   a teammate, so it should read as a different KIND of object at a glance, and at
+   blur the tint is the only thing that still carries that. */
+.nodeAgent {
+  border-color: var(--border-accent);
+  background: linear-gradient(180deg, var(--surface-coral-soft), var(--bg-elevated) 62%);
+}
+
+.nodeKind {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--cyan-bright);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.nodeTitle {
+  display: block;
+  margin-bottom: 3px;
+  font-size: var(--font-size-small);
+  font-weight: 650;
+  line-height: 1.3;
+}
+.nodeDetail {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.45;
+}
+
+/* Chart preview inside the one node that carries data */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 34px;
+  margin-top: 9px;
+}
+.spark i {
+  flex: 1;
+  display: block;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--coral-bright);
+  opacity: 0.8;
+}
+.spark i:nth-child(3),
+.spark i:nth-child(6) { background: var(--cyan-bright); }
+
+/* Agent presence row */
+.who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+}
+.whoAvatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+  color: var(--bg-surface);
+  font-size: var(--font-size-field-label);
+  font-weight: 700;
+  font-style: normal;
+}
+.whoLabel {
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+}
+
+/* ── Composer — bottom-centre ON the board, per the canvas convention ── */
+.promptWrap {
+  position: absolute;
+  left: 50%;
+  /* Anchor the resting top edge, not the changing bottom edge. Otherwise opening
+     the catalog adds height above the prompt and can push it out of the viewport. */
+  top: calc(var(--board-resting-height) - var(--board-team) - var(--board-composer-lane) + 20px);
+  transform: translateX(-50%);
+  z-index: 10;
+  width: min(600px, calc(100% - 40px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+.prompt {
+  width: 100%;
+  --prompt-panel-bg: var(--bg-elevated);
+  --prompt-panel-border: var(--border-accent);
+  --prompt-panel-shadow: 0 18px 44px var(--shadow-coral-mid), inset 0 1px 0 var(--surface-inset-highlight);
+}
+
+/* ── Guest reassurance + scroll affordance ── */
+.footRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 18px;
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+.footRow strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+/*
+ * ── Narrow viewports ──
+ * The board is removed from the DOM by the component below 900px, so this only
+ * has to return the composer to normal flow and give the copy its full length.
+ */
+.stageNarrow .promptWrap {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.stageNarrow .prompt {
+  --prompt-panel-bg: var(--surface-card);
+  --prompt-panel-shadow: 0 12px 34px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
+}
+.narrowNote {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}
+
+/*
+ * ── The brain scene (narrow only) ──
+ *
+ * The wide hero argues with the board; the narrow hero argues with the Evermind
+ * brain, which is what stood here before the board existed. The scene is a fixed
+ * dark artwork — `.wb-scene` paints its own near-black ground and the canvas
+ * render loop composites in `lighter`, which is invisible over white — so this
+ * hero DECLARES its palette for both themes instead of inheriting the shell's.
+ * The values below are the dark theme's own tokens, so nothing here is a new
+ * colour; a light-theme visitor sees the same hero a dark-theme visitor sees,
+ * and `.wb-fade` still fades into whichever `--bg` the page actually uses.
+ */
+.heroBrain {
+  overflow: hidden; /* the aura is 116vw wide — never let it scroll the page */
+  /* Clears the scene's bottom fade (below) so no light-on-dark copy ever lands
+     in the band where the scene has already blended into the page's own --bg —
+     which in the light theme is very nearly white. */
+  padding-bottom: 88px;
+
+  /* The scene is lit in BOTH themes, so it re-declares the ink it needs rather
+     than inheriting the shell's. These are overrides: `--text-primary:
+     var(--text-primary)` is a CYCLE, which makes the property invalid at
+     computed-value time and strips the token from every descendant — the whole
+     hero loses its ink. It has to be a value. */
+  --text-primary: #f0f4ff;
+  --text-secondary: #b9c4de;
+  --text-muted: var(--text-secondary);
+  --border-subtle: rgba(136, 146, 176, 0.28);
+  --border-accent: rgba(77, 158, 255, 0.42);
+  --surface-card: rgba(10, 15, 26, 0.72);
+  --surface-card-strong: rgba(10, 15, 26, 0.88);
+  --surface-interactive: rgba(255, 255, 255, 0.1);
+  --surface-interactive-hover: rgba(255, 255, 255, 0.16);
+  --surface-inset-highlight: rgba(255, 255, 255, 0.06);
+  --bg-elevated: rgba(17, 24, 39, 0.82);
+  --chat-input-bg: rgba(255, 255, 255, 0.08);
+}
+/* The shared scene fades over its last 150px, sized for the full-height
+   /evermind hero. That is most of a phone hero, so shorten it here and let the
+   hero's own bottom padding be the lane it fades through. */
+.brain :global(.wb-fade) {
+  height: 80px;
+}
+/*
+ * /evermind gives the cortex a tall hero to itself and sets its copy well above
+ * it. A phone hero is short enough that the headline and lede land ON the
+ * brightest part of the render, so the text-safe vignette is pulled up and
+ * deepened over the copy band, and the cortex is dimmed under it — the animation
+ * still reads, the sentence still passes contrast.
+ */
+.brain :global(.wb-veil) {
+  background: radial-gradient(
+    ellipse 82% 40% at 50% 24%,
+    rgba(3, 7, 17, 0.88) 0%,
+    rgba(3, 7, 17, 0.7) 46%,
+    rgba(3, 7, 17, 0.24) 76%,
+    transparent 100%
+  );
+}
+.brain :global(.wb-brain-shell) {
+  opacity: 0.82;
+}
+/* The composer is the hero's job on a phone — float it clear of the cortex. */
+.heroBrain .prompt {
+  --prompt-panel-bg: rgba(8, 13, 24, 0.86);
+  --prompt-panel-border: var(--border-accent);
+  --prompt-panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--surface-inset-highlight);
+  backdrop-filter: blur(14px);
+}

@@ -1,0 +1,48 @@
+/**
+ * Editor-fit for the canvas bundle.
+ *
+ * The design tokens themselves come from the frontend's own `globals.css`, which
+ * this bundle imports — so the board, its 66 object kinds and every panel use the
+ * SAME palette as the web app in both themes, and there is no second copy of the
+ * theme to drift. This file only reconciles the two differences a webview has:
+ * there is no application shell around the canvas, and the surrounding chrome is
+ * VS Code's rather than the web top bar.
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  /* The webview is the canvas — no shell chrome, so the board owns the viewport. */
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  /* Match the editor's font so the canvas reads as part of VS Code, while the
+     board's own typography (set by the canvas stylesheet) is unaffected. */
+  font-family: var(--vscode-font-family, var(--font-sans));
+}
+
+:root {
+  /* The web canvas sizes itself as `100vh - topbar`. There is no top bar here, so
+     the board gets the whole panel. */
+  --topbar-height: 0px;
+  --shell-topbar-height: 0px;
+  --footer-height: 0px;
+}
+
+/* The canvas asks for a minimum height meant for a browser window. A VS Code panel
+   is routinely shorter (a split editor, a terminal open below), and enforcing it
+   would push the composer off-screen with no way to scroll to it. */
+#root > * {
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+/* VS Code renders its own focus ring on the webview; the inner one is enough. */
+body:focus-visible {
+  outline: none;
+}

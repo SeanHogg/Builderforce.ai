@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 
@@ -178,10 +179,11 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         type="button"
         onClick={() => setOpen(true)}
         className="btn btn-secondary btn-sm"
-        style={{ padding: '4px 10px', fontSize: 12 }}
+        style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)' }}
         title={t('assignTooltip')}
       >
-        📌 {t('assign')}
+        
+        <Icon source="📌" size="1em" /> {t('assign')}
       </button>
 
       <SlideOutPanel
@@ -191,11 +193,11 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         width="min(480px, 96vw)"
       >
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {error && <div style={{ color: 'var(--error-text, #ef4444)', fontSize: 12 }}>{error}</div>}
-          {success && <div style={{ color: 'var(--success-text, #22c55e)', fontSize: 12 }}>{success}</div>}
+          {error && <div style={{ color: 'var(--error-text)', fontSize: 'var(--font-size-small)' }}>{error}</div>}
+          {success && <div style={{ color: 'var(--success-text, var(--success))', fontSize: 'var(--font-size-small)' }}>{success}</div>}
 
           {loading ? (
-            <div style={{ color: 'var(--muted)', fontSize: 13 }}>{tc('loading')}</div>
+            <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)' }}>{tc('loading')}</div>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -212,14 +214,14 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
               </div>
 
               {entities.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 0' }}>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', padding: '8px 0' }}>
                   {t(`noEntities_${scope}`)}
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <Select
                     className="input"
-                    style={{ flex: 1, fontSize: 13, padding: '6px 8px' }}
+                    style={{ flex: 1, fontSize: 'var(--font-size-small)', padding: '6px 8px' }}
                     value={selectedId}
                     onChange={(e) => setSelectedId(e.target.value)}
                   >
@@ -241,20 +243,20 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
 
               {assignments.length > 0 && (
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{t('currentAssignments')}</div>
+                  <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', marginBottom: 4 }}>{t('currentAssignments')}</div>
                   {assignments.map((a) => (
-                    <div key={`${a.scope}-${a.scopeId}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', fontSize: 12 }}>
+                    <div key={`${a.scope}-${a.scopeId}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', fontSize: 'var(--font-size-small)' }}>
                       <span>
-                        <span className="badge badge-gray" style={{ fontSize: 10 }}>{scopeName(a.scope)}</span>{' '}
+                        <span className="badge badge-gray" style={{ fontSize: 'var(--font-size-field-label)' }}>{scopeName(a.scope)}</span>{' '}
                         {scopeLabel(a.scope, a.scopeId)}
                       </span>
                       <button
                         type="button"
                         className="btn btn-danger btn-sm"
-                        style={{ padding: '1px 6px', fontSize: 10 }}
+                        style={{ padding: '1px 6px', fontSize: 'var(--font-size-field-label)' }}
                         onClick={() => handleUnassign(a.scope, a.scopeId)}
                       >
-                        ✕
+                        <Icon name="close" size={14} />
                       </button>
                     </div>
                   ))}

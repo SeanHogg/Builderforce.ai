@@ -71,9 +71,23 @@ function makeFakeDb(opts: FakeOpts = {}) {
       const value = isRunLoad ? (runRow ? [runRow] : []) : Array.from({ length: prCount }, (_, i) => ({ id: i }));
       return thenable(value);
     },
+    // The once-only requeue guard reads the UPDATE's affected rows
+    // (`.returning({ id })`) to decide whether it won the race against a
+    // concurrent cancel, while the fail path just awaits `.where(...)`. The double
+    // has to support both shapes, so `where()` records the write and returns a
+    // value that is awaitable AND carries `.returning()`.
     update: (table: unknown) => ({
       set: (vals: Record<string, unknown>) => ({
-        where: async () => { updates.push({ table, vals }); },
+        where: () => {
+          updates.push({ table, vals });
+          const affected = [{ id: (vals.id as number | undefined) ?? 1 }];
+          return {
+            returning: () => Promise.resolve(affected),
+            then: (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) =>
+              Promise.resolve(affected).then(onF, onR),
+            catch: (onR: (e: unknown) => unknown) => Promise.resolve(affected).catch(onR),
+          };
+        },
       }),
     }),
     insert: (table: unknown) => ({ values: async (row: Record<string, unknown>) => { inserts.push({ table, row }); } }),

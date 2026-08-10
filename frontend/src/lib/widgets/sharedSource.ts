@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /**
  * Dedup-and-cache for widget data sources.
@@ -17,13 +18,8 @@ import { useEffect, useState } from 'react';
  * read-only collector reads).
  */
 
-interface Entry<T> {
-  promise: Promise<T>;
-  ts: number;
-}
-
 const TTL_MS = 30_000;
-const cache = new Map<string, Entry<unknown>>();
+const CACHE_PREFIX = 'widget-source:';
 
 export interface SharedAsync<T> {
   data: T | null;
@@ -39,17 +35,11 @@ export function useSharedSource<T>(key: string, loader: () => Promise<T>): Share
 
   useEffect(() => {
     let alive = true;
-    const now = Date.now();
-    let entry = cache.get(key) as Entry<T> | undefined;
-    if (!entry || now - entry.ts > TTL_MS) {
-      entry = { promise: loader(), ts: now };
-      cache.set(key, entry);
-    }
-    entry.promise
+    getOrSetClientCached(`${CACHE_PREFIX}${key}`, () => loader(), { ttlMs: TTL_MS })
       .then((d) => { if (alive) setState({ key, data: d, error: null }); })
       .catch((e: unknown) => {
         // Drop the failed entry so a remount retries instead of caching the error.
-        cache.delete(key);
+        invalidateClientCache(`${CACHE_PREFIX}${key}`);
         if (alive) setState({ key, data: null, error: e instanceof Error ? e.message : String(e) });
       });
     return () => { alive = false; };

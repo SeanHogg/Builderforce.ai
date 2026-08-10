@@ -1,14 +1,26 @@
 /**
- * Single source of truth for the authenticated app navigation.
+ * THE destination registry (PRD 21 §11.2).
  *
- * The menu is organized as a small set of PRIMARY DESTINATIONS (the sidebar
- * links). Sub-views are NOT separate menu items — they are TABS inside their
- * destination, rendered by one shared <SectionTabs> bar in the app shell. So
- * e.g. Portfolio/PMO and Ceremonies are tabs of Projects, not top-level items;
- * every analytics/measurement lens (incl. Surveys, custom Dashboards and
- * DevFinOps) is a tab of the one "Insights" item, not its own sidebar entry.
+ * One list of every place in the app you can go, placed by two facts each row
+ * carries: its **owner** (`seat` — which decides the footer roster and the row's
+ * colour) and its **stage** (`stage` — which decides the left panel's grouping,
+ * Idea → Make → Run). Everything downstream is a projection of this array: the
+ * left panel groups by stage, the ⌘K palette flattens it (`destinations/registry`),
+ * the panel takes its crumb from it, and the public header and the features page
+ * render the reference rows from it.
  *
- * Two tab flavors, unified here so the Sidebar + SectionTabs never drift:
+ * It replaced a genuine mess. Before this, `BURNRATE_DOMAINS` was a SECOND
+ * navigation list living in `burnrateCatalog.ts` whose rows pointed at marketing
+ * pages, so the authenticated rail rendered nine C-suite domains that navigated
+ * OUT of the product; the kernel's `DOMAINS` was a third; and the footer roster
+ * a fourth. The CFO existed four times under four names. The rule that stops it
+ * returning is `scripts/check-destinations.mjs`: exactly one array in the repo
+ * may declare a navigable destination's label, icon and href, and it is this one.
+ *
+ * The menu is a small set of PRIMARY DESTINATIONS (the sidebar links). Sub-views
+ * are NOT separate menu items — they are TABS inside their destination, rendered
+ * by one shared <ShellIndex>. Two tab flavors, unified here so the shell's index
+ * and the panel never drift:
  *   - kind:'route'  — each tab is its own route (e.g. /insights/dora). The tab
  *                     bar links between routes; each page renders its own body.
  *   - kind:'query'  — one page with a `?tab=` param (e.g. /projects?tab=pm). The
@@ -19,9 +31,37 @@
 
 import { isNavItemActive } from './nav';
 import { ADMIN_GROUP_META } from './adminGroups';
+import type { SeatOrPlatform } from './seats';
+
+/**
+ * Where a destination sits in the arc — the operator's sentence ("one canvas,
+ * idea to real") made into an information architecture. This is what the left
+ * panel groups by, and it answers *where am I in the journey*, which is the only
+ * question a first-time visitor can actually ask.
+ *
+ * `reference` is the odd one out and deliberately so: those rows are the public
+ * explainer surfaces (`/soc2`, `/integrations`, the domain pages). They are NOT
+ * left-panel rows — they appear in the marketing header and on `/features`, and
+ * when a signed-in person opens one it mounts as a panel over the board rather
+ * than throwing them out of their session (§11.4.5).
+ */
+export const STAGES = ['idea', 'make', 'run', 'measure', 'market', 'admin'] as const;
+export type Stage = (typeof STAGES)[number];
+
+/**
+ * Progressive disclosure (§11.4.4). A row is ALWAYS LISTED; the rung gates its
+ * STATE. A dim row is an invitation; a missing row is a secret.
+ *
+ * Only three rungs are enforceable today, because the fourth ("claimed a
+ * company") needs the company graph PRD 19 B0 brings. Run rows therefore sit at
+ * WORKSPACE until then, which is honest: they need a workspace, and they do not
+ * yet need a company because there is not yet a company to need.
+ */
+export const RUNG = { PUBLIC: 0, SIGNED_IN: 1, WORKSPACE: 2 } as const;
+export type Rung = (typeof RUNG)[keyof typeof RUNG];
 
 /** Count-badge key for the Projects tab (published by the Projects page, read by
- *  <SectionTabs>). Lives here so the config + publisher share one constant. */
+ *  <ShellIndex>). Lives here so the config + publisher share one constant. */
 export const PROJECTS_COUNT_KEY = 'projects';
 
 export interface NavTab {
@@ -47,6 +87,16 @@ export interface NavGroup {
   href: string;
   /** Path prefixes that belong to this group (drives sidebar-active + tab-bar). */
   match: string[];
+  /**
+   * PRD 20 §3 owner. Decides the footer chip this row corresponds to, and the
+   * row's colour via `seatHue()`. `'platform'` means nobody sits behind it —
+   * panel only, per PRD 21 §4, and no footer chip.
+   */
+  seat: SeatOrPlatform;
+  /** Where in Idea → Make → Run this sits. Decides the LEFT PANEL grouping. */
+  stage: Stage;
+  /** The rung at which this row's STATE is earned. It is listed at every rung. */
+  rung: Rung;
   /** 'route' tabs link to distinct paths; 'query' tabs are ?tab= on `basePath`. */
   tabKind?: 'route' | 'query';
   /** Base path for kind:'query' tab hrefs. */
@@ -57,10 +107,17 @@ export interface NavGroup {
 }
 
 export const NAV_GROUPS: NavGroup[] = [
-  { id: 'dashboard', labelKey: 'group.dashboard', icon: '🏠', href: '/dashboard', match: ['/dashboard'] },
-  { id: 'brainstorm', labelKey: 'group.brainstorm', icon: '💡', href: '/brainstorm', match: ['/brainstorm'] },
+  // ── IDEA ─────────────────────────────────────────────────────────────────
+  // Every creation mode lives in Canvas. Middleware redirects legacy entry URLs.
+  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows'], seat: 'Brain', stage: 'idea', rung: RUNG.PUBLIC },
+  // `challenges` is NOT a row. A challenge is something the CANVAS DOES — paste a
+  // brief, get a working system — and a capability of a destination does not get
+  // a door beside it. `/challenges` is still a route and the canvas still opens
+  // it; what is gone is the menu item that made it look like a separate place.
+  // ── MAKE ─────────────────────────────────────────────────────────────────
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',
+    seat: 'Manager', stage: 'make', rung: RUNG.WORKSPACE,
     match: ['/projects', '/tasks', '/pmo', '/ceremonies', '/kanban-templates'],
     tabKind: 'query', basePath: '/projects',
     tabs: [
@@ -76,11 +133,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'rfp', labelKey: 'tab.rfp', icon: '📄' },
     ],
   },
-  // IDE is one destination scoped to its project type. Each project IS typed by
-  // modality (designer/video/llm/voice) at creation, so there are no modality
-  // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
-  { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
-  { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   {
     // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
     // external hires (Talent) share one destination. The Talent tab is the relocated
@@ -89,7 +141,8 @@ export const NAV_GROUPS: NavGroup[] = [
     // standups, planning, retros, ad-hoc and direct calls; connect Google/Microsoft
     // calendars. `/meetings` redirects into ?tab=meetings.
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
-    match: ['/workforce', '/hires', '/meetings'],
+    seat: 'Manager', stage: 'make', rung: RUNG.WORKSPACE,
+    match: ['/workforce', '/hires', '/meetings', '/agent-ops'],
     tabKind: 'query', basePath: '/workforce',
     tabs: [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
@@ -102,12 +155,15 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'plan', labelKey: 'tab.plan', icon: '🧮' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
-      { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
       { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
+      { id: 'coordination', labelKey: 'tab.coordination', icon: '🔗' },
+      { id: 'memory', labelKey: 'tab.memory', icon: '🧠' },
+      { id: 'rehearsal', labelKey: 'tab.rehearsal', icon: '🎬' },
     ],
   },
   {
     id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights',
+    seat: 'platform', stage: 'measure', rung: RUNG.WORKSPACE,
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
     // so they live here as lenses of Insights rather than as their own top-level
     // sidebar items (keeping the "few primary destinations" rule above intact).
@@ -128,6 +184,12 @@ export const NAV_GROUPS: NavGroup[] = [
       // redirect here with ?panel=). activePaths keeps the tab highlighted on the
       // retired routes while they redirect in. [insights consolidation]
       { id: '/insights/delivery', labelKey: 'tab.delivery', icon: '📦', activePaths: ['/insights/bottlenecks', '/insights/dora', '/insights/space', '/insights/benchmarking', '/insights/funnel'] },
+      // Autonomy Health — "are manager/agent-created tickets actually completing
+      // their lifecycle autonomously?". Its own tab because it answers a question
+      // no delivery metric does (per-ORIGIN funnel + the autonomous-vs-human hop
+      // split); it is ALSO a Delivery-hub drill-down panel so the dashboard cards
+      // and the Brain can open the same lens in a slide-out.
+      { id: '/insights/autonomy', labelKey: 'tab.autonomy', icon: '🕹' },
       // Finance is a HUB: FinOps spend + Investment Allocation + DevFinOps (R&D /
       // SOC / audit) are drill-down slide-outs of this one tab (their old routes
       // redirect here with ?drill=). activePaths keeps the tab highlighted on the
@@ -144,36 +206,65 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Growth was built in 0412 and never linked from anywhere — the page existed
+    // but no route in the app reached it, so the whole marketing surface was
+    // dead. It is a destination in its own right now that it also owns connected
+    // mailboxes and the campaign studio (0414).
+    // The CMO's surface. It keeps `/growth` rather than resolving to
+    // `/seat/growth`: where a real product surface already exists it wins over
+    // the kernel's generic domain view, and one destination may not have two
+    // hrefs.
+    id: 'growth', labelKey: 'group.growth', icon: '📣', href: '/growth',
+    seat: 'CMO', stage: 'run', rung: RUNG.WORKSPACE,
+    match: ['/growth'],
+  },
+  // ── RUN — the business seats ─────────────────────────────────────────────
+  // Each resolves to the kernel domain surface PRD 20 built (`/seat/<domain>`),
+  // under its PRODUCT name with the seat as a trailing chip: "you are going to
+  // Finance, which the CFO owns" reads correctly; "you are going to CFO" does
+  // not. The `seat` nav group that used to sit here — a door labelled *door* —
+  // is deleted; these rows and the footer chips are how you reach a seat now.
+  { id: 'finance', labelKey: 'group.finance', icon: '💰', href: '/seat/finance', match: ['/seat/finance'], seat: 'CFO', stage: 'run', rung: RUNG.WORKSPACE },
+  { id: 'revenue', labelKey: 'group.revenue', icon: '📈', href: '/seat/revenue', match: ['/seat/revenue'], seat: 'CRO', stage: 'run', rung: RUNG.WORKSPACE },
+  { id: 'people', labelKey: 'group.people', icon: '🧑‍🤝‍🧑', href: '/seat/people', match: ['/seat/people'], seat: 'HR', stage: 'run', rung: RUNG.WORKSPACE },
+  { id: 'hiring', labelKey: 'group.hiring', icon: '🤝', href: '/seat/hiring', match: ['/seat/hiring'], seat: 'Recruiter', stage: 'run', rung: RUNG.WORKSPACE },
+  { id: 'investor', labelKey: 'group.investor', icon: '💼', href: '/seat/investor', match: ['/seat/investor'], seat: 'CEO', stage: 'run', rung: RUNG.WORKSPACE },
+  { id: 'governance', labelKey: 'group.governance', icon: '🛡', href: '/seat/governance', match: ['/seat/governance'], seat: 'Security', stage: 'run', rung: RUNG.WORKSPACE },
+  { id: 'support', labelKey: 'group.support', icon: '💬', href: '/seat/support', match: ['/seat/support'], seat: 'Support', stage: 'run', rung: RUNG.WORKSPACE },
+  {
+    // The bridge from a Canvas idea to a live customer-facing experience:
+    // one install rail, independently consented capabilities, and host surfaces.
+    id: 'embedded', labelKey: 'group.embedded', icon: '⌗', href: '/embedded',
+    seat: 'CTO', stage: 'make', rung: RUNG.WORKSPACE,
+    match: ['/embedded', '/embed'],
+  },
+  {
     id: 'quality', labelKey: 'group.quality', icon: '🐞', href: '/quality',
+    seat: 'CTO', stage: 'make', rung: RUNG.WORKSPACE,
     match: ['/quality'],
     tabKind: 'query', basePath: '/quality',
     tabs: [
       { id: '', labelKey: 'tab.errors', icon: '🐞' },
       { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
+      { id: 'feedback', labelKey: 'tab.feedback', icon: '💬' },
     ],
   },
   {
-    // Incident Management: live incident war rooms + on-call rotations + escalation
-    // policies + business-contact directory. Sub-views are ?tab= pills on the page.
-    id: 'incidents', labelKey: 'group.incidents', icon: '🚨', href: '/incidents',
-    match: ['/incidents'],
+    // Reliability: the detect→respond loop under ONE destination — active Monitoring
+    // (diagram boards + monitor pins; a breach opens an incident) folded together with
+    // Incident Management (war rooms + on-call + escalation + contacts). Sub-views are
+    // ?tab= pills on the /incidents page; the retired /monitoring route redirects into
+    // ?tab=monitors so old deep links still resolve (kept in `match` for highlighting).
+    id: 'reliability', labelKey: 'group.reliability', icon: '🚨', href: '/incidents',
+    seat: 'CTO', stage: 'make', rung: RUNG.WORKSPACE,
+    match: ['/incidents', '/monitoring'],
     tabKind: 'query', basePath: '/incidents',
     tabs: [
       { id: '', labelKey: 'tab.incidents', icon: '🚨' },
+      { id: 'monitors', labelKey: 'tab.monitors', icon: '📡' },
       { id: 'oncall', labelKey: 'tab.oncall', icon: '📟' },
       { id: 'escalation', labelKey: 'tab.escalation', icon: '⏫' },
       { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
-    ],
-  },
-  {
-    // Active Monitoring: upload an architecture diagram to a board, overlay
-    // monitor pins on it; a breach opens an incident. Reporting tab rolls up
-    // incident + monitor metrics. Sub-views are ?tab= pills on the page.
-    id: 'monitoring', labelKey: 'group.monitoring', icon: '📡', href: '/monitoring',
-    match: ['/monitoring'],
-    tabKind: 'query', basePath: '/monitoring',
-    tabs: [
-      { id: '', labelKey: 'tab.boards', icon: '🗺️' },
       { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
     ],
   },
@@ -184,6 +275,7 @@ export const NAV_GROUPS: NavGroup[] = [
   // Knowledge, and "Content" is replaced by knowledge documents themselves.
   {
     id: 'knowledge', labelKey: 'group.knowledge', icon: '📖', href: '/knowledge',
+    seat: 'Support', stage: 'make', rung: RUNG.WORKSPACE,
     match: ['/knowledge', '/content-manager', '/skills', '/personas', '/prompts', '/facts'],
     tabKind: 'route',
     tabs: [
@@ -195,37 +287,142 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/facts', labelKey: 'tab.facts', icon: '🧩' },
     ],
   },
+  // ── MARKET ───────────────────────────────────────────────────────────────
+  // The second front door. Canvas is "I have an idea"; the marketplace is "I
+  // have a business" — and both end in a company you run. Public, so rung 0.
+  // Agents are a FAMILY inside it, never a destination of their own (§11.5).
+  { id: 'marketplace', labelKey: 'group.marketplace', icon: '🛒', href: '/marketplace', match: ['/marketplace', '/talent'], seat: 'platform', stage: 'market', rung: RUNG.PUBLIC },
+  // ── ADMIN ────────────────────────────────────────────────────────────────
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
+    seat: 'platform', stage: 'admin', rung: RUNG.SIGNED_IN,
     match: ['/settings', '/security', '/pricing', '/tenants'],
     tabKind: 'route',
     tabs: [
       { id: '/settings', labelKey: 'tab.settings', icon: '⚙', activePaths: [] },
-      // Lateral "lens persona" (CEO/CFO/CTO/CISO/PMO/EM) — reshapes insight lenses.
-      { id: '/settings/persona', labelKey: 'tab.persona', icon: '🎯' },
+      // The insight LENS (CEO/CFO/CTO/CISO/PMO/EM) — which role's view of the
+      // dashboards you get. Named "Viewpoint" so it is not read as Settings'
+      // "Personality", which is the user's psychometric profile (PRD 21 §7).
+      { id: '/settings/viewpoint', labelKey: 'tab.viewpoint', icon: '🎯' },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },
       { id: '/tenants', labelKey: 'tab.tenant', icon: '🏢' },
-      { id: '/settings/api-keys', labelKey: 'tab.apiKeys', icon: '🔑', ownerOnly: true },
     ],
   },
   {
     // Platform Admin: superadmin-only. The 19 capabilities are consolidated into
     // 10 top-level GROUPS (ADMIN_GROUP_META — the single source of truth, shared
-    // with the admin page). Each group is a TAB in the shared <SectionTabs> bar
-    // (query kind, ?tab=…); a group's sub-views are an inner <AdminGroupNav>
+    // with the admin page). Each group is an entry in the shared <ShellIndex>
+    // (query kind, ?tab=…); a group's sub-views are an inner <DestinationIndex>
     // (?sub=…) on the page. The default group (Overview) uses id '' so a bare
     // /admin highlights it.
     id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true,
+    seat: 'platform', stage: 'admin', rung: RUNG.WORKSPACE,
     tabKind: 'query', basePath: '/admin',
     tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
   },
+  { id: 'sales-admin', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], superadminOnly: true, seat: 'CRO', stage: 'admin', rung: RUNG.WORKSPACE },
 ];
 
 /**
+ * The public surface, re-exported.
+ *
+ * It lives in `publicDestinations.ts` (this file crossed the 800-line ratchet and
+ * the seam was already there: the rail is where a SIGNED-IN person goes, that is
+ * which pages a SIGNED-OUT one can reach). Re-exported so every consumer keeps
+ * importing "the registry" from one place and no call site had to move.
+ */
+export * from './publicDestinations';
+
+/**
+ * The mobile bottom bar — five high-traffic destinations per audience.
+ *
+ * A curated SUBSET, and it lives in the registry for the same reason everything
+ * else does: it was a fifth list of hrefs and labels, and the ratchet found it.
+ * `icon` is an id rather than a node so this file stays free of JSX; the one
+ * non-emoji id (`mascot`) is resolved by the component that renders it.
+ */
+export interface BottomNavItem {
+  href: string;
+  /** i18n key under `nav`. */
+  labelKey: string;
+  icon: string;
+  exactMatch?: boolean;
+  /** Priority CTA treatment (e.g. Sign In when logged out). */
+  accent?: boolean;
+}
+
+export const MASCOT_ICON = 'mascot';
+
+export function bottomNavFor(
+  isAuthenticated: boolean,
+  isSuperadmin: boolean,
+  isFreelancer = false,
+  isSales = false,
+): BottomNavItem[] {
+  if (!isAuthenticated) {
+    return [
+      { href: '/', labelKey: 'tab.home', icon: '🏠', exactMatch: true },
+      { href: '/features', labelKey: 'bottom.product', icon: '✨' },
+      { href: '/marketplace', labelKey: 'group.marketplace', icon: MASCOT_ICON },
+      { href: '/pricing', labelKey: 'bottom.pricing', icon: '💳' },
+      { href: '/login', labelKey: 'bottom.signIn', icon: '🔑', accent: true },
+    ];
+  }
+  // Shared final slot: superadmins manage the platform (Admin), everyone else
+  // manages their own account (Settings). One definition, used by every bar.
+  const accountSlot: BottomNavItem = isSuperadmin
+    ? { href: '/admin', labelKey: 'group.admin', icon: '⚙' }
+    : { href: '/settings', labelKey: 'group.settings', icon: '⚙', exactMatch: true };
+
+  if (isFreelancer) {
+    return [
+      { href: '/freelancer/dashboard', labelKey: 'tab.home', icon: '🏠' },
+      { href: '/freelancer/profile', labelKey: 'group.myProfile', icon: '👤' },
+      { href: '/marketplace', labelKey: 'group.marketplace', icon: MASCOT_ICON },
+      { href: '/freelancer/timecard', labelKey: 'group.timecard', icon: '⏱' },
+      accountSlot,
+    ];
+  }
+  if (isSales) {
+    return [
+      { href: '/sales', labelKey: 'group.sales', icon: '📈' },
+      { href: '/media', labelKey: 'group.library', icon: '🗂' },
+      accountSlot,
+    ];
+  }
+  // Builder: the canvas leads, because the canvas is the front door — the bar's
+  // first slot used to be `/dashboard`, which is the destination §6.8 exists to
+  // stop landing people on.
+  return [
+    { href: '/create', labelKey: 'group.create', icon: '✦' },
+    { href: '/projects', labelKey: 'group.projects', icon: '📁' },
+    { href: '/workforce', labelKey: 'tab.workforce', icon: MASCOT_ICON },
+    { href: '/insights', labelKey: 'group.insights', icon: '📈' },
+    accountSlot,
+  ];
+}
+
+/** The registry's rows for one stage, in declaration order. */
+export function groupsForStage(groups: readonly NavGroup[], stage: Stage): NavGroup[] {
+  return groups.filter((group) => group.stage === stage);
+}
+
+/**
+ * The rung this visitor has reached (§11.4.4). ONE helper, so the left panel,
+ * the roster and any preview state cannot each invent their own idea of what is
+ * earned — and so the fourth rung has exactly one place to land when the company
+ * graph arrives.
+ */
+export function earnedRung(isAuthenticated: boolean, hasWorkspace: boolean): Rung {
+  if (!isAuthenticated) return RUNG.PUBLIC;
+  return hasWorkspace ? RUNG.WORKSPACE : RUNG.SIGNED_IN;
+}
+
+/**
  * The RESTRICTED navigation for a freelancer / gig account (users.account_type =
- * 'freelancer'). A for-hire worker never sees the IDE, Brain, projects, insights,
+ * 'freelancer'). A for-hire worker never sees Canvas, Brain, projects, insights,
  * etc. — only their for-hire profile, the gigs they can bid on / are engaged with,
  * their timecard, and account settings. Kept as its own list (not a filter of the
  * builder nav) because it is a deliberately different, minimal destination set.
@@ -236,11 +433,11 @@ export const NAV_GROUPS: NavGroup[] = [
  * same set — never re-inlined in two places.
  */
 export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
-  { id: 'freelancer-dashboard', labelKey: 'group.myDashboard', icon: '🏠', href: '/freelancer/dashboard', match: ['/freelancer/dashboard'] },
-  { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'] },
-  { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/marketplace?category=gigs', match: ['/marketplace', '/freelancer/gigs'] },
-  { id: 'freelancer-workspace', labelKey: 'group.myWorkspace', icon: '🛠', href: '/freelancer/workspace', match: ['/freelancer/workspace'] },
-  { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'] },
+  { id: 'freelancer-dashboard', labelKey: 'group.myDashboard', icon: '🏠', href: '/freelancer/dashboard', match: ['/freelancer/dashboard'], seat: 'platform', stage: 'make', rung: RUNG.SIGNED_IN },
+  { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'], seat: 'platform', stage: 'make', rung: RUNG.SIGNED_IN },
+  { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/marketplace?family=talent&kind=gig', match: ['/marketplace', '/freelancer/gigs'], seat: 'platform', stage: 'market', rung: RUNG.SIGNED_IN },
+  { id: 'freelancer-workspace', labelKey: 'group.myWorkspace', icon: '🛠', href: '/freelancer/workspace', match: ['/freelancer/workspace'], seat: 'platform', stage: 'make', rung: RUNG.SIGNED_IN },
+  { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'], seat: 'platform', stage: 'make', rung: RUNG.SIGNED_IN },
 ];
 
 export const FREELANCER_NAV_GROUPS: NavGroup[] = [
@@ -251,6 +448,7 @@ export const FREELANCER_NAV_GROUPS: NavGroup[] = [
     // Workspace sub-tab self-hides without a tenant, and the tenant-only sub-routes
     // (integrations / api-keys) are never linked here.
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
+    seat: 'platform', stage: 'admin', rung: RUNG.SIGNED_IN,
     match: ['/settings'],
     tabKind: 'route',
     tabs: [
@@ -271,14 +469,25 @@ export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer'];
  *  reachable for old deep links; it degrades to a "no workspace" state. */
 export const FREELANCER_ALLOWED_EXACT = ['/settings', '/security'];
 
+/** Focused navigation for referral and sales-associate accounts. */
+export const SALES_NAV_GROUPS: NavGroup[] = [
+  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'run', rung: RUNG.SIGNED_IN },
+  { id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings', match: ['/settings'], seat: 'platform', stage: 'admin', rung: RUNG.SIGNED_IN },
+];
+
 /** The nav destinations for the current account type — the ONE place the
- *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
+ *  freelancer-vs-builder nav split is decided, so the Sidebar + ShellIndex and
  *  the route guard never drift. A dedicated freelancer gets the restricted shell; a
  *  builder who opted in to being hired (`availableForHire`) keeps the full builder
  *  nav PLUS the for-hire worker destinations. */
-export function navGroupsForAccountType(isFreelancer: boolean, availableForHire = false): NavGroup[] {
+export function navGroupsForAccountType(isFreelancer: boolean, availableForHire = false, isSales = false): NavGroup[] {
+  if (isSales) return SALES_NAV_GROUPS;
   if (isFreelancer) return FREELANCER_NAV_GROUPS;
   return availableForHire ? [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS] : NAV_GROUPS;
+}
+
+export function isSalesAllowedPath(pathname: string): boolean {
+  return pathname === '/sales' || pathname.startsWith('/sales/') || pathname === '/create' || pathname.startsWith('/create/') || pathname === '/settings' || pathname === '/security';
 }
 
 /** Whether a freelancer account may view this in-app path (else redirect). */
@@ -287,7 +496,7 @@ export function isFreelancerAllowedPath(pathname: string): boolean {
   return FREELANCER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-/** Longest-prefix match so /ide/dashboard resolves to IDE, /settings/api-keys to Settings, etc. */
+/** Longest-prefix match so /create/build resolves to Canvas, /settings/api-keys to Settings, etc. */
 export function findActiveGroup(pathname: string): NavGroup | undefined {
   let best: NavGroup | undefined;
   let bestLen = -1;

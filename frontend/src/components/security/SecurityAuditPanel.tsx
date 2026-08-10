@@ -16,20 +16,20 @@ import {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#dc2626', high: '#f4726e', medium: '#f59e0b', low: '#3b82f6', info: '#6b7280',
+  critical: 'var(--error)', high: 'var(--orange-bright)', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
 };
 
 function SeverityChip({ severity, count }: { severity: string; count: number }) {
   const color = SEVERITY_COLOR[severity] ?? 'var(--text-muted)';
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999,
+      fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-full)',
       background: `color-mix(in srgb, ${color} 15%, transparent)`, color,
       border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
     }}>
@@ -93,8 +93,8 @@ export function SecurityAuditPanel() {
           disabled={running}
           style={{
             padding: '8px 14px', fontSize: 13, fontWeight: 600,
-            background: 'var(--coral-bright, #f4726e)', color: '#fff',
-            border: 'none', borderRadius: 8, cursor: running ? 'default' : 'pointer', opacity: running ? 0.7 : 1, flexShrink: 0,
+            background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+            border: 'none', borderRadius: 'var(--radius-md)', cursor: running ? 'default' : 'pointer', opacity: running ? 0.7 : 1, flexShrink: 0,
           }}
         >
           {running ? t('auditStarting') : t('auditRunNow')}
@@ -114,12 +114,12 @@ export function SecurityAuditPanel() {
               const sev = a.countsBySeverity ?? {};
               const isOpen = expanded === a.id;
               return (
-                <div key={a.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 14px' }}>
+                <div key={a.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }} onClick={() => void toggle(a.id)}>
                     <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)',
                       background: a.status === 'running' ? 'rgba(245,158,11,0.15)' : a.status === 'failed' ? 'rgba(220,38,38,0.15)' : 'rgba(34,197,94,0.12)',
-                      color: a.status === 'running' ? '#f59e0b' : a.status === 'failed' ? '#dc2626' : '#22c55e',
+                      color: a.status === 'running' ? 'var(--warning)' : a.status === 'failed' ? 'var(--error)' : 'var(--success)',
                     }}>
                       {t(`auditStatus_${a.status}` as 'auditStatus_running' | 'auditStatus_complete' | 'auditStatus_failed')}
                     </span>

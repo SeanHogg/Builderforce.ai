@@ -1,9 +1,11 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { inviteByEmail } from '@/lib/auth';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
@@ -94,7 +96,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             fontSize: 14,
             background: 'var(--bg-base)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             color: 'var(--text-primary)',
             outline: 'none',
           }}
@@ -108,7 +110,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             fontSize: 14,
             background: 'var(--bg-base)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             color: 'var(--text-primary)',
             cursor: 'pointer',
           }}
@@ -125,9 +127,9 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             fontSize: 14,
             fontWeight: 600,
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: adding || !email.trim() ? 'not-allowed' : 'pointer',
             opacity: adding || !email.trim() ? 0.6 : 1,
             whiteSpace: 'nowrap',
@@ -148,8 +150,8 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 gap: 10,
                 padding: '8px 12px',
                 background: 'var(--bg-base)',
-                border: `1px solid ${invite.status === 'error' ? 'var(--error-border, #e74c3c)' : invite.status === 'added' ? 'rgba(34,197,94,0.3)' : invite.status === 'invited' ? 'rgba(245,158,11,0.35)' : 'var(--border-subtle)'}`,
-                borderRadius: 8,
+                border: `1px solid ${invite.status === 'error' ? 'var(--error-border)' : invite.status === 'added' ? 'rgba(34,197,94,0.3)' : invite.status === 'invited' ? 'rgba(245,158,11,0.35)' : 'var(--border-subtle)'}`,
+                borderRadius: 'var(--radius-md)',
                 fontSize: 13,
               }}
             >
@@ -161,13 +163,13 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('statusSending')}</span>
               )}
               {invite.status === 'added' && (
-                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ {t('statusAdded')}</span>
+                <span style={{ fontSize: 11, color: 'var(--success-text)', fontWeight: 600 }}>✓ {t('statusAdded')}</span>
               )}
               {invite.status === 'invited' && (
-                <span style={{ fontSize: 11, color: '#d97706', fontWeight: 600 }} title={t('statusInvitedHint')}>✉ {t('statusInvited')}</span>
+                <span style={{ fontSize: 11, color: 'var(--warning-text)', fontWeight: 600 }} title={t('statusInvitedHint')}><Icon source="✉" size="1em" /> {t('statusInvited')}</span>
               )}
               {invite.status === 'error' && (
-                <span style={{ fontSize: 11, color: 'var(--error-text, #e74c3c)' }} title={invite.errorMsg}>
+                <span style={{ fontSize: 11, color: 'var(--error-text)' }} title={invite.errorMsg}>
                   ✗ {invite.errorMsg ?? t('statusError')}
                 </span>
               )}
@@ -180,9 +182,9 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
         <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {t.rich('laterHint', {
             link: (chunks) => (
-              <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+              <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
                 {chunks}
-              </a>
+              </Link>
             ),
           })}
         </p>

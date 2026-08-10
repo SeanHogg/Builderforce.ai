@@ -52,14 +52,14 @@ export function AiInsightPanelProvider({ children }: { children: ReactNode }) {
         open={def != null}
         onClose={close}
         width={def?.width}
-        title={def ? `${def.icon} ${t(def.titleKey)}` : undefined}
+        title={def ? t(def.titleKey) : undefined}
         tabs={tabs}
         activeTabId={active ?? undefined}
         onTabChange={(id) => setActive(id as AiInsightPanelId)}
       >
         {def && (
           <div style={{ padding: 20 }}>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 18px' }}>{t(def.descKey)}</p>
+            <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', margin: '0 0 18px' }}>{t(def.descKey)}</p>
             <RoleGate capability={def.capability} variant="block">
               {def.render()}
             </RoleGate>

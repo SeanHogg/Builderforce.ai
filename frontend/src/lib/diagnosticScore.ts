@@ -7,10 +7,10 @@
 
 /** Best→worst tier hexes (match the DORA/health tier palette used across the app). */
 const TIER_HEX = {
-  healthy: '#22c55e',
-  watch: '#eab308',
-  atRisk: '#f59e0b',
-  critical: '#ef4444',
+  healthy: 'var(--success)',
+  watch: 'var(--yellow-bright)',
+  atRisk: 'var(--warning)',
+  critical: 'var(--error)',
 } as const;
 
 /** Map a 1–5 diagnostic score to a tier colour. Higher is better. */

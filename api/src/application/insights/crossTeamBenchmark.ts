@@ -15,9 +15,9 @@
  * within-tenant percentile via the pure {@link percentileWithinPeers}.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { teams, teamMembers } from '../../infrastructure/database/schema';
+import { teams, teamMembers, teamProjects } from '../../infrastructure/database/schema';
 import { computeMemberMetrics, type MemberScorecard } from '../metrics/workforceMetrics';
 
 /** A team metric and whether a HIGHER raw value is the better outcome. */
@@ -111,12 +111,22 @@ export async function computeCrossTeamBenchmark(
   db: Db,
   tenantId: number,
   days: number,
+  projectId?: number,
 ): Promise<CrossTeamBenchmarkResult> {
+  const projectTeamIds = projectId == null ? null : (await db
+    .select({ teamId: teamProjects.teamId })
+    .from(teamProjects)
+    .where(eq(teamProjects.projectId, projectId))).map((row) => row.teamId);
   const [teamRows, rosterRows, cards] = await Promise.all([
-    db.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.tenantId, tenantId)),
+    projectTeamIds != null && projectTeamIds.length === 0
+      ? Promise.resolve([])
+      : db.select({ id: teams.id, name: teams.name }).from(teams).where(and(
+        eq(teams.tenantId, tenantId),
+        ...(projectTeamIds != null ? [inArray(teams.id, projectTeamIds)] : []),
+      )),
     db.select({ teamId: teamMembers.teamId, memberKind: teamMembers.memberKind, memberRef: teamMembers.memberRef })
       .from(teamMembers),
-    computeMemberMetrics(db, tenantId, days),
+    computeMemberMetrics(db, tenantId, days, projectId),
   ]);
 
   // Restrict the roster to this tenant's teams (team_members has no tenant column).

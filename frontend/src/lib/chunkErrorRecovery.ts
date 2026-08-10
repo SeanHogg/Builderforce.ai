@@ -1,12 +1,24 @@
 /**
- * Recovery for webpack ChunkLoadError / stale-asset crashes.
+ * Recovery for bundler chunk-load / stale-asset crashes (webpack AND Turbopack).
  *
- * Symptom: `Loading chunk 466 failed. (missing: .../466.undefined.js)`. The
- * literal `undefined` where the content-hash belongs means the webpack runtime
+ * Symptom A (webpack): `Loading chunk 466 failed. (missing: .../466.undefined.js)`.
+ * The literal `undefined` where the content-hash belongs means the webpack runtime
  * currently in memory has NO hash-map entry for that chunk id — i.e. the loaded
  * `webpack-*.js` runtime and the page bundle requesting the chunk are from
  * DIFFERENT builds. Our cache-first service worker (public/sw.js) can serve a
  * stale runtime across a deploy, which produces exactly this skew.
+ *
+ * Symptom B (Turbopack): `Module [project]/…/x.ts was instantiated because it was
+ * required from …, but the module factory is not available. It might have been
+ * deleted in an HMR update.` Same class of failure, different runtime: the page
+ * holds a module graph from an EARLIER build that still references a module the
+ * current build no longer emits (typically because the file was deleted while the
+ * dev server was running). The page is skewed against the server, not broken —
+ * so the same purge-and-reload cure applies.
+ *
+ * Symptom C (Turbopack async loader): `Failed to load chunk /_next/static/chunks/
+ * …js from module [project]/…`. The runtime requested a content-addressed chunk
+ * that the dev server no longer has, so this is another page/server graph skew.
  *
  * The reliable cure is to drop the stale caches + service worker and hard-reload
  * onto the current build. A time-window guard prevents an infinite reload loop
@@ -18,7 +30,7 @@ const RELOAD_AT_KEY = 'bf-chunk-reload-at';
 /** How long a just-happened auto-reload suppresses another one (loop guard). */
 const RELOAD_WINDOW_MS = 30_000;
 
-/** True when `err` is a webpack chunk-load / stale-asset failure. */
+/** True when `err` is a webpack/Turbopack chunk-load / stale-asset failure. */
 export function isChunkLoadError(err: unknown): boolean {
   if (!err) return false;
   const name = (err as { name?: string }).name;
@@ -26,11 +38,16 @@ export function isChunkLoadError(err: unknown): boolean {
   const message = String((err as { message?: string }).message ?? err);
   return (
     /Loading chunk [\w-]+ failed/i.test(message) ||
+    /Failed to load chunk\b/i.test(message) ||
     /Loading CSS chunk/i.test(message) ||
     /ChunkLoadError/i.test(message) ||
     // `NN.undefined.js` / a hashed chunk that 404'd — the stale-runtime signature.
     /\.undefined\.js/i.test(message) ||
-    /importScripts|Failed to fetch dynamically imported module/i.test(message)
+    /importScripts|Failed to fetch dynamically imported module/i.test(message) ||
+    // Turbopack: the loaded module graph references a module the current build
+    // no longer emits (file deleted/moved while the page was open).
+    /module factory is not available/i.test(message) ||
+    /deleted in an HMR update/i.test(message)
   );
 }
 

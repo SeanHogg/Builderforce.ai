@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { buildTree, getFileName } from '@/lib/utils';
 import type { TreeNode } from '@/lib/utils';
@@ -51,8 +52,8 @@ function TreeNodeComponent({
           }}
           onClick={() => setExpanded(!expanded)}
         >
-          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', width: 10, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
-          <span>📁</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', width: 10, flexShrink: 0 }}>{expanded ? '▼' : <Icon source="▶" size="1em" />}</span>
+          <span><Icon source="📁" size="1em" /></span>
           <span style={{ fontWeight: 600, fontFamily: 'var(--font-display)', fontSize: '0.78rem' }}>{node.name}</span>
         </div>
         {expanded && node.children?.map(child => (
@@ -122,7 +123,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
           <button
             onClick={() => setIsCreating(true)}
             title="New file"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
           >+</button>
         </div>
       )}
@@ -132,7 +133,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
           <button
             onClick={() => setIsCreating(true)}
             title="New file"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)' }}
           >+</button>
         </div>
       )}
@@ -150,7 +151,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
             placeholder="src/newfile.ts"
             style={{
               width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              fontSize: '0.78rem', padding: '4px 8px', borderRadius: 6,
+              fontSize: '0.78rem', padding: '4px 8px', borderRadius: 'var(--radius-sm)',
               outline: 'none', border: '1px solid var(--coral-bright)',
               fontFamily: "'JetBrains Mono', monospace", boxSizing: 'border-box',
             }}
@@ -161,7 +162,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
       <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4 }}>
         {tree.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px 10px', fontSize: '0.78rem' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>📂</div>
+            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}><Icon source="📂" size="1em" /></div>
             No files yet.<br />Click + to create one.
           </div>
         ) : tree.map(node => (

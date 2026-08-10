@@ -28,6 +28,18 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { seedProjectEvermindFromPublished } from '../../application/llm/evermindRecipes';
 import {
+  assessEvermindCoherence,
+  probeEvermindGeneration,
+  type ArtifactStore,
+} from '../../application/llm/evermindRuntime';
+import {
+  analyzeProjectEvermindKnowledge,
+  applyKnowledgeRepairs,
+  type KnowledgeFinding,
+} from '../../application/llm/evermindAnalyzer';
+import { purgeProjectQaCache } from '../../application/llm/projectFacts';
+import { isRoutableModel } from '../../application/llm/vendors/registry';
+import {
   getProjectEvermindHead,
   resolveEvermindTargets,
   contributeTextToProjectEverminds,
@@ -41,8 +53,16 @@ import {
   validateProjectEvermindRecall,
   recallProjectEvermindMemory,
   flushProjectEvermind,
+  extractMemoriesToEvermind,
+  MEMORY_EXTRACT_MAX_ENTRIES,
   projectEvermindRef,
   type ProjectEvermindMode,
+  type MemoryExtractEntry,
+  resolveEffectiveEvermindProjectId,
+  reindexProjectEvermindRecall,
+  discardProjectEvermindPending,
+  reseedProjectEvermind,
+  generateDefaultEvermindBase,
 } from '../../application/llm/projectEvermind';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
@@ -63,8 +83,11 @@ const json = (body: unknown, status = 200): Response =>
 
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0 });
+  // An IDE build without its own Evermind inherits its container project's.
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
+  const inherited = effectiveId !== projectId;
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason, inherited, ...(inherited ? { inheritedFromProjectId: effectiveId } : {}) });
 }
 
 /**
@@ -92,7 +115,29 @@ async function targetsCore(env: Env, db: Db, tenantId: number, projectId: number
 /** Read the inspection console payload: head summary + queued depth + recent-learned ring. */
 async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  return json(await getProjectEvermindContributions(env, db, tenantId, projectId));
+  // Same inheritance as headCore — the console must not report "Not set up" for an
+  // IDE build whose container project has a live Evermind.
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  const payload = await getProjectEvermindContributions(env, db, tenantId, effectiveId);
+  // Tell the console WHOSE Evermind it is looking at.
+  //
+  // Inheritance is the intended model for non-`evermind` builds (see the decision
+  // note on `ideProjectRoutes`' create handler), but until now it was invisible: the
+  // console read the CONTAINER's head — so `seeded: true`, stats rendered — while
+  // every mutation on that panel (seed-from-model, mode, inference, teacher, teach,
+  // flush) posts to the RAW project id, which has no `project_evermind` row. Those
+  // writes updated zero rows and returned OK, so the panel offered management
+  // controls that silently did nothing.
+  //
+  // Surfacing `inherited` lets the console render read-only and point at the owner
+  // instead. This is a projection, not a change to the cached payload — the cache
+  // key is the effective project's version token and must stay that way.
+  const inherited = effectiveId !== projectId;
+  return json({
+    ...payload,
+    inherited,
+    ...(inherited ? { inheritedFromProjectId: effectiveId } : {}),
+  });
 }
 
 /**
@@ -182,6 +227,37 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
   return json(result.body, result.status);
 }
 
+/**
+ * Batch "Import from builderforce-memory" — the VS Code Evermind console reads the
+ * local memory snapshot and POSTs its entries `{ entries: [{ key, text, prompt? }] }`.
+ * Each is folded into THIS Evermind and a single flush merges them, so the editor can
+ * then compact the absorbed entries to stubs. Manager-gated (a training write).
+ */
+async function extractMemoriesCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const body = (await c.req.json<{ entries?: unknown }>().catch(() => ({}))) as { entries?: unknown };
+  if (!Array.isArray(body.entries)) return json({ error: 'entries[] is required' }, 400);
+  const entries: MemoryExtractEntry[] = [];
+  for (const raw of body.entries) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const key = typeof r.key === 'string' ? r.key : '';
+    const text = typeof r.text === 'string' ? r.text : '';
+    if (!key || !text.trim()) continue;
+    entries.push({
+      key,
+      text,
+      ...(typeof r.prompt === 'string' ? { prompt: r.prompt } : {}),
+      ...(typeof r.weight === 'number' ? { weight: r.weight } : {}),
+    });
+  }
+  if (entries.length === 0) return json({ error: 'no valid entries (each needs a key + non-empty text)' }, 400);
+  if (entries.length > MEMORY_EXTRACT_MAX_ENTRIES) return json({ error: `too many entries (max ${MEMORY_EXTRACT_MAX_ENTRIES})` }, 400);
+  const out = await extractMemoriesToEvermind(env, db, tenantId, projectId, entries);
+  if (!out.ok) return json({ error: out.error }, out.status);
+  return json(out.result);
+}
+
 const pid = (c: Context): number => Number(c.req.param('projectId'));
 
 // ── JWT front door (web UI + internal JWT callers) ───────────────────────────
@@ -200,6 +276,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
   router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c));
+  /** Import a batch of raw memories (VS Code "Import from builderforce-memory") + flush. */
+  router.post('/:projectId/evermind/extract-memories', requireRole(TenantRole.MANAGER), (c) => extractMemoriesCore(c.env as Env, db, t(c), pid(c), c));
 
   /** Seed the base model (version 1) from a published `.evermind` blob (manager). */
   router.post('/:projectId/evermind/seed', requireRole(TenantRole.MANAGER), async (c) => {
@@ -285,19 +363,37 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** Toggle whether this project's agent runs execute ON its Evermind (manager).
-   *  Body: { enabled: boolean }. The emitter of the `project_evermind:<id>` pin. */
+   *  Body: { enabled: boolean }. The emitter of the `project_evermind:<id>` pin.
+   *  ENABLING is BENCHMARK-GATED: the head must pass a coherence probe (it can't be
+   *  promoted to serve while it produces gibberish) — a 422 with the probe samples
+   *  explains a refusal. `force:true` bypasses the probe (deliberate operator override). */
   router.patch('/:projectId/evermind/inference', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
+    const env = c.env as Env;
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
-    const body = (await c.req.json<{ enabled?: unknown }>().catch(() => ({}))) as { enabled?: unknown };
+    const body = (await c.req.json<{ enabled?: unknown; force?: unknown }>().catch(() => ({}))) as { enabled?: unknown; force?: unknown };
     if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled (boolean) is required' }, 400);
-    const head = await getProjectEvermindHead(c.env as Env, db, tenantId, projectId);
+    const head = await getProjectEvermindHead(env, db, tenantId, projectId);
     if (body.enabled && head.version <= 0) {
       return c.json({ error: 'seed a base model before enabling inference' }, 409);
     }
-    await setProjectEvermindInference(c.env as Env, db, tenantId, projectId, body.enabled);
-    return c.json({ ok: true, inferenceEnabled: body.enabled });
+    // Gate the enable on the coherence probe unless the operator forces it. The probe
+    // needs the R2 store; if it isn't bound we allow the toggle (serve-time gate + the
+    // auto-quarantine still protect users).
+    const store = env.UPLOADS as ArtifactStore | undefined;
+    const assessReadiness = body.enabled && body.force !== true && store
+      ? (ref: string) => assessEvermindCoherence(store, ref)
+      : undefined;
+    const result = await setProjectEvermindInference(env, db, tenantId, projectId, body.enabled, { ...(assessReadiness ? { assessReadiness } : {}) });
+    if (!result.ok) {
+      return c.json({
+        error: 'This Evermind is not coherent enough to serve yet — it produced gibberish on the readiness probe. Retrain or set a frontier teacher, then try again (or force to override).',
+        reason: result.reason,
+        readiness: result.readiness,
+      }, 422);
+    }
+    return c.json({ ok: true, inferenceEnabled: result.inferenceEnabled });
   });
 
   /** Pin/clear the frontier-LLM TEACHER (manager). Body: { model: string | null }.
@@ -313,6 +409,14 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     }
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null;
     if (model) {
+      // Refuse an id that routes nowhere. Dispatch would silently fall back to the
+      // default vendor, which has never heard of it, so EVERY coordinator alarm
+      // would 503 forever with nothing to self-correct it (see isRoutableModel).
+      if (!isRoutableModel(model)) {
+        return c.json({
+          error: `'${model}' is not a routable model id. Use a catalog id or an explicit vendor prefix (e.g. 'direct/xai/grok-4.5', 'xai-oauth/grok-4.5').`,
+        }, 400);
+      }
       // Setting a frontier teacher IS frontier use — gate it on frontier access
       // (paid plan OR a connected BYO account OR superadmin). Clearing (model=null)
       // stays open so a downgraded tenant can always turn distillation off.
@@ -324,6 +428,182 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     }
     await setProjectEvermindTeacher(c.env as Env, db, tenantId, projectId, model);
     return c.json({ ok: true, teacherModel: model });
+  });
+
+  /**
+   * TEST BENCH — run a prompt through the head and see EXACTLY what it produces,
+   * graded by the same gate the serve path applies (manager; it costs CPU).
+   *
+   * This is the answer to "how does a person validate what the model will produce?".
+   * `validate` only ever previewed which learned MEMORIES would be recalled — it never
+   * generated a single token, so the only way to discover that a head emitted gibberish
+   * was for a user to receive some. Body: `{ prompt?, maxTokens?, temperature?, seed? }`.
+   * With no prompt it runs the standard readiness suite (the identical probe the
+   * enable-inference gate uses), so "will this pass the gate?" is answerable up front.
+   */
+  router.post('/:projectId/evermind/probe', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    const env = c.env as Env;
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const store = env.UPLOADS as ArtifactStore | undefined;
+    if (!store) return c.json({ error: 'R2 artifact storage not configured' }, 503);
+    // Reads inherit (an IDE build probes the head it actually serves from).
+    const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+    const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
+    if (head.version <= 0 || !head.ref) return c.json({ error: 'this project’s Evermind is not set up yet' }, 409);
+
+    const body = (await c.req.json<{ prompt?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown }>().catch(() => ({}))) as {
+      prompt?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown;
+    };
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim().slice(0, 2000) : '';
+    const opts = {
+      ...(typeof body.maxTokens === 'number' ? { maxTokens: Math.min(Math.max(16, body.maxTokens), 512) } : {}),
+      ...(typeof body.temperature === 'number' ? { temperature: Math.min(Math.max(0, body.temperature), 2) } : {}),
+      ...(typeof body.seed === 'number' ? { seed: body.seed } : {}),
+    };
+
+    try {
+      if (!prompt) {
+        // Readiness suite — the same verdict the enable gate will reach.
+        const readiness = await assessEvermindCoherence(store, head.ref);
+        return c.json({
+          version: head.version, projectId: effectiveId, mode: 'readiness' as const,
+          ready: readiness.ready, passRate: readiness.passRate, samples: readiness.samples,
+        });
+      }
+      const sample = await probeEvermindGeneration(store, head.ref, prompt, opts);
+      return c.json({
+        version: head.version, projectId: effectiveId, mode: 'prompt' as const,
+        ready: sample.coherent, passRate: sample.coherent ? 1 : 0, samples: [sample], usage: sample.usage,
+      });
+    } catch (err) {
+      // A broken/absent artifact is an operator-visible condition, not a 500 mystery.
+      return c.json({ error: err instanceof Error ? err.message : 'could not run the model' }, 422);
+    }
+  });
+
+  /**
+   * RE-SEED — replace this Evermind's weights with a fresh base, as a new version
+   * (manager). Body: `{ slug? }` — a published Studio model, or omitted for a fresh
+   * starter base.
+   *
+   * The repair door for a head that trained itself into gibberish. Until now
+   * `seedProjectEvermind` deliberately refused to clobber an existing head, so a bad
+   * model could be quarantined but never fixed from the product — "retrain or re-seed"
+   * was an operator action with nowhere to perform it. Inference is left OFF: a fresh
+   * base has proven nothing and must re-earn the right to serve through the same
+   * benchmark gate as any other enable.
+   */
+  router.post('/:projectId/evermind/reseed', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    const env = c.env as Env;
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
+
+    const body = (await c.req.json<{ slug?: unknown; name?: unknown }>().catch(() => ({}))) as { slug?: unknown; name?: unknown };
+    const slug = typeof body.slug === 'string' ? body.slug.trim() : '';
+    const name = typeof body.name === 'string' ? body.name : undefined;
+
+    if (slug) {
+      const seeded = await seedProjectEvermindFromPublished(env, db, tenantId, projectId, slug, name, { replace: true });
+      if (!seeded.ok) {
+        const status = /no published/i.test(seeded.error ?? '') ? 404 : 400;
+        return c.json({ error: seeded.error ?? 'could not re-seed from that model' }, status);
+      }
+    } else {
+      // No slug → a fresh STARTER base. Deliberately allowed: a project whose model is
+      // unusable is better off back at a clean learnable substrate than stuck on it.
+      const { modelBlob, tokenizer } = generateDefaultEvermindBase();
+      await reseedProjectEvermind(env, db, env.UPLOADS, { tenantId, projectId, ...(name ? { name } : {}), modelBlob, tokenizer });
+    }
+    const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+    return c.json({ ok: true, version: head.version, ref: head.ref, inferenceEnabled: head.inferenceEnabled, quarantinedAt: head.quarantinedAt });
+  });
+
+  /**
+   * REINDEX — recompute every learned memory's recall embedding against the CURRENT
+   * head (manager). Embeddings are computed at merge time with the model as it was
+   * then, while recall embeds the QUERY with today's model, so retrieval quality decays
+   * silently as the model learns. Nothing re-derived them until now.
+   */
+  router.post('/:projectId/evermind/reindex', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const result = await reindexProjectEvermindRecall(c.env as Env, tenantId, projectId);
+    return c.json(result.body, result.status as never);
+  });
+
+  /**
+   * CLEAN UP — drop queued-but-unmerged contributions and/or purge the memory-first
+   * Q&A cache (manager). Body: `{ pending?: boolean, qaCache?: boolean }`, both default
+   * true. Durable facts and everything already LEARNED are never touched here; use the
+   * knowledge analyzer to repair learned knowledge.
+   */
+  router.post('/:projectId/evermind/cleanup', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    const env = c.env as Env;
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const body = (await c.req.json<{ pending?: unknown; qaCache?: unknown }>().catch(() => ({}))) as { pending?: unknown; qaCache?: unknown };
+    const doPending = body.pending !== false;
+    const doQa = body.qaCache !== false;
+
+    let discarded = 0;
+    if (doPending) {
+      const res = await discardProjectEvermindPending(env, tenantId, projectId);
+      discarded = typeof res.body['discarded'] === 'number' ? (res.body['discarded'] as number) : 0;
+    }
+    const cachedAnswers = doQa ? await purgeProjectQaCache(env, db, tenantId, projectId) : 0;
+    return c.json({ ok: true, discarded, cachedAnswers });
+  });
+
+  /**
+   * ANALYZE — audit what this Evermind has learned and (optionally) fix it (manager).
+   *
+   * GET-shaped POST with `{ apply?: boolean, findings?: [...] }`:
+   *   - no `apply` → read-only review; returns per-memory verdicts + proposed corrections
+   *     so the operator sees what would change before anything does;
+   *   - `apply: true` → repairs. With `findings` supplied, exactly those are applied
+   *     (the operator's selection); without, the analysis is re-run and every actionable
+   *     finding applied.
+   *
+   * Frontier-gated when it reaches a frontier model: reviewing knowledge with Opus is
+   * frontier use. The local coherence screen alone needs no gate, but the endpoint runs
+   * both, so the gate is applied up front for honesty about what it will spend.
+   */
+  router.post('/:projectId/evermind/analyze', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    const env = c.env as Env;
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const gate = await requireFrontierAccess(c);
+    if (gate) return gate;
+
+    const body = (await c.req.json<{ apply?: unknown; limit?: unknown; findings?: unknown }>().catch(() => ({}))) as {
+      apply?: unknown; limit?: unknown; findings?: unknown;
+    };
+    const limit = typeof body.limit === 'number' ? body.limit : undefined;
+    // Analysis + repair both operate on the head this project actually serves from.
+    const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+
+    if (body.apply !== true) {
+      return c.json(await analyzeProjectEvermindKnowledge(env, db, tenantId, effectiveId, { ...(limit ? { limit } : {}) }));
+    }
+
+    // Apply: prefer the operator's explicit selection; otherwise re-analyze and fix all.
+    let findings: KnowledgeFinding[];
+    if (Array.isArray(body.findings)) {
+      findings = body.findings.filter((f): f is KnowledgeFinding =>
+        !!f && typeof f === 'object' && typeof (f as KnowledgeFinding).id === 'number' && typeof (f as KnowledgeFinding).verdict === 'string');
+      if (findings.length === 0) return c.json({ error: 'findings[] contained no applicable entries' }, 400);
+    } else {
+      findings = (await analyzeProjectEvermindKnowledge(env, db, tenantId, effectiveId, { ...(limit ? { limit } : {}) })).findings;
+    }
+    const repair = await applyKnowledgeRepairs(env, db, tenantId, effectiveId, findings);
+    return c.json({ ok: true, ...repair });
   });
 
   /** Force a merge NOW ("Learn now" / distill) instead of waiting out the debounce

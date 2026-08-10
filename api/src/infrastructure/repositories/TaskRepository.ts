@@ -90,10 +90,8 @@ export class TaskRepository implements ITaskRepository {
         description:       plain.description ?? undefined,
         status:            plain.status,
         priority:          plain.priority,
-        taskType:          plain.taskType ?? undefined,
+        taskType:          plain.taskType,
         parentTaskId:      plain.parentTaskId ?? undefined,
-        prdTaskType:       (plain.prdTaskType ?? undefined),
-        deliverableType:   (plain.deliverableType ?? undefined),
         assignedAgentType: plain.assignedAgentType ?? undefined,
         assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
         assignedAgentRef:  plain.assignedAgentRef ?? undefined,
@@ -114,6 +112,7 @@ export class TaskRepository implements ITaskRepository {
         githubPrNumber:    plain.githubPrNumber ?? undefined,
         startDate:         plain.startDate ?? undefined,
         dueDate:           plain.dueDate ?? undefined,
+        decompositionSource: plain.decompositionSource ?? undefined,
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
       })
@@ -133,30 +132,42 @@ export class TaskRepository implements ITaskRepository {
         description:       plain.description ?? undefined,
         status:            plain.status,
         priority:          plain.priority,
-        taskType:          plain.taskType ?? undefined,
+        taskType:          plain.taskType,
+        // Authoritative (real null) so de-nesting a child (clearing its parent)
+        // actually NULLs the column — Drizzle would omit `undefined` from SET.
         parentTaskId:      plain.parentTaskId ?? null,
-        prdTaskType:       (plain.prdTaskType ?? undefined),
-        deliverableType:   (plain.deliverableType ?? undefined),
         assignedAgentType: plain.assignedAgentType ?? undefined,
+        // Assignee columns write real null (not undefined) so reassignment actually
+        // CLEARS the other two — a task is owned by exactly one of host/cloud/human.
+        // (Drizzle omits `undefined` from the SET clause, which would leave a stale
+        //  assignee behind; only `null` nulls the column.)
         assignedAgentHostId: plain.assignedAgentHostId ?? null,
         assignedAgentRef:  plain.assignedAgentRef ?? null,
         assignedUserId:    plain.assignedUserId ?? null,
         gitBranch:         plain.gitBranch ?? undefined,
+        // Authoritative (real null) so un-pinning the repo via the domain clears it.
         explicitRepoId:    plain.explicitRepoId ?? null,
+        // Authoritative (real null) so un-scheduling (drag out of a sprint) clears it.
         sprintId:          plain.sprintId ?? null,
+        // Authoritative (real null) so un-linking from a release clears it.
         releaseId:         plain.releaseId ?? null,
+        // Authoritative (real null) so clearing the estimate persists.
         storyPoints:       plain.storyPoints ?? null,
+        // AI Manager fields — authoritative so a manual clear/round-trip persists.
         businessValue:         plain.businessValue ?? null,
         businessValueRationale: plain.businessValueRationale ?? null,
         businessValueSource:   plain.businessValueSource ?? null,
         managerRank:           plain.managerRank ?? null,
-        gapOriginTaskId:       plain.gapOriginTaskId ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
         githubPrNumber:    plain.githubPrNumber ?? undefined,
-        startDate:         plain.startDate ?? undefined,
-        dueDate:           plain.dueDate ?? undefined,
+        // Authoritative (real null) so UN-SCHEDULING actually clears the column —
+        // `undefined` is omitted from the SET clause, which left a cleared date
+        // stubbornly persisted (the same class of bug as the assignee columns above).
+        startDate:         plain.startDate ?? null,
+        dueDate:           plain.dueDate ?? null,
+        decompositionSource: plain.decompositionSource ?? null,
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
         updatedAt:         plain.updatedAt,
@@ -229,8 +240,6 @@ function toDomain(row: Row): Task {
     priority:          row.priority as TaskPriority,
     taskType:          (row.taskType as TaskType) ?? TaskType.TASK,
     parentTaskId:      row.parentTaskId != null ? asTaskId(row.parentTaskId) : null,
-    prdTaskType:       row.prdTaskType ?? null,
-    deliverableType:   row.deliverableType ?? null,
     assignedAgentType: (row.assignedAgentType as AgentType) ?? null,
     assignedAgentHostId: row.assignedAgentHostId != null ? asAgentHostId(row.assignedAgentHostId) : null,
     assignedAgentRef:  row.assignedAgentRef ?? null,
@@ -254,6 +263,7 @@ function toDomain(row: Row): Task {
     githubPrNumber:    row.githubPrNumber ?? null,
     startDate:         row.startDate ?? null,
     dueDate:           row.dueDate ?? null,
+    decompositionSource: row.decompositionSource ?? null,
     persona:           row.persona ?? null,
     archived:          row.archived,
     createdAt:         row.createdAt,

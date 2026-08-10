@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { RuntimeService } from './RuntimeService';
 import { Execution } from '../../domain/execution/Execution';
 import { Task } from '../../domain/task/Task';
@@ -31,7 +31,7 @@ function buildTask(status: string): Task {
     gitBranch: null, explicitRepoId: null, sprintId: null, releaseId: null, storyPoints: null,
     businessValue: null, businessValueRationale: null, businessValueSource: null, managerRank: null,
     reviewCount: 0, lastReviewedAt: null, lastReviewVerdict: null, gapOriginTaskId: null,
-    startDate: null, dueDate: null,
+    startDate: null, dueDate: null, decompositionSource: null,
     persona: null, archived: false, createdAt: now, updatedAt: now,
   });
 }
@@ -41,19 +41,30 @@ function buildExecution(payload: string | null, status = ExecutionStatus.RUNNING
   return Execution.reconstitute({
     id: EXEC_ID as never, taskId: TASK_ID as never, agentId: null, agentHostId: null,
     tenantId: 1 as never, submittedBy: 'system:lane-auto', sessionId: null, status,
-    payload, cloudAgentRef: 'agent-dev', result: null, errorMessage: null,
+    payload, cloudAgentRef: 'agent-dev', result: null, errorMessage: null, produced: null,
     startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
   });
 }
 
 type Captured = { status: string; originLaneKey?: string } | null;
 
-function makeService(opts: { taskStatus: string; payload: string | null; nextStatus?: string | null }) {
+function makeService(opts: {
+  taskStatus: string;
+  payload: string | null;
+  produced?: boolean | null;
+  nextStatus?: string | null;
+  managedToStatus?: string;
+  taskSyncFailures?: number;
+  laneEntryFailures?: number;
+}) {
   let stored = buildTask(opts.taskStatus);
-  const exec = buildExecution(opts.payload);
+  let storedExecution = Execution.reconstitute({
+    ...buildExecution(opts.payload).toPlain(),
+    produced: opts.produced ?? null,
+  });
   const executions = {
-    findById: async () => exec,
-    update: async (e: Execution) => e,
+    findById: async () => storedExecution,
+    update: async (e: Execution) => { storedExecution = e; return e; },
   } as unknown as IExecutionRepository;
   const tasks = {
     findById: async () => stored,
@@ -63,8 +74,17 @@ function makeService(opts: { taskStatus: string; payload: string | null; nextSta
   const audit = { save: async () => undefined } as unknown as IAuditRepository;
 
   let captured: Captured = null;
+  let taskSyncCalls = 0;
+  let laneEntryCalls = 0;
+  let managedRunStatusCalls = 0;
   const onLaneEntry = async (info: { status: string; originLaneKey?: string }) => {
+    laneEntryCalls += 1;
+    if (laneEntryCalls <= (opts.laneEntryFailures ?? 0)) throw new Error('lane dispatcher unavailable');
     captured = { status: info.status, originLaneKey: info.originLaneKey };
+  };
+  const onTaskStatusSync = async () => {
+    taskSyncCalls += 1;
+    if (taskSyncCalls <= (opts.taskSyncFailures ?? 0)) throw new Error('metrics unavailable');
   };
   // When a nextStatus is provided the service is wired WITH the config-driven
   // resolver (mimicking the board having a next swimlane); otherwise it is left
@@ -72,8 +92,22 @@ function makeService(opts: { taskStatus: string; payload: string | null; nextSta
   const resolveNextStatus = opts.nextStatus !== undefined
     ? async () => opts.nextStatus ?? null
     : undefined;
-  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry, resolveNextStatus);
-  return { svc, getCaptured: () => captured, getStored: () => stored };
+  const onManagedRunStatus = opts.managedToStatus !== undefined
+    ? async () => {
+        managedRunStatusCalls += 1;
+        return { managed: true, toStatus: opts.managedToStatus! };
+      }
+    : undefined;
+  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, onTaskStatusSync, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
+  return {
+    svc,
+    getCaptured: () => captured,
+    getStored: () => stored,
+    getTaskSyncCalls: () => taskSyncCalls,
+    getLaneEntryCalls: () => laneEntryCalls,
+    getManagedRunStatusCalls: () => managedRunStatusCalls,
+    getStoredExecution: () => storedExecution,
+  };
 }
 
 describe('RuntimeService lane chaining', () => {
@@ -84,6 +118,27 @@ describe('RuntimeService lane chaining', () => {
     await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
     expect(getStored().status).toBe(TaskStatus.IN_REVIEW);
     expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+  });
+
+  it('counts a lane advance as productive even when the run wrote no files', async () => {
+    const { svc, getStoredExecution } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      produced: false,
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'advanced workflow' });
+    expect(getStoredExecution().produced).toBe(true);
+  });
+
+  it('does not call a completed run productive when its ticket remained in place', async () => {
+    const { svc, getStoredExecution } = makeService({
+      taskStatus: 'ready',
+      payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }),
+      managedToStatus: 'ready',
+      produced: false,
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'no accepted change' });
+    expect(getStoredExecution().produced).toBe(false);
   });
 
   it('threads originLaneKey = the destination lane when a run completes back into its own lane (loop case the guard then suppresses)', async () => {
@@ -151,5 +206,93 @@ describe('RuntimeService lane chaining', () => {
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.FAILED, errorMessage: 'boom' });
     expect(getCaptured()).toBeNull();
+  });
+
+  it('does not let RuntimeService move a managed ticket when the Coordinator keeps the stage blocked', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'requirements drafted' });
+    expect(getStored().status).toBe('ready');
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('uses the Coordinator result without invoking legacy lane chaining', async () => {
+    const { svc, getCaptured, getManagedRunStatusCalls } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'architect' }), managedToStatus: 'in_progress',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'design approved' });
+    // The composition-root Coordinator performs the DB move + next-role dispatch;
+    // RuntimeService must not perform a second move/trigger.
+    expect(getCaptured()).toBeNull();
+    expect(getManagedRunStatusCalls()).toBe(1);
+  });
+
+  it('does not move a managed ticket to in_progress merely because its role run started', async () => {
+    const { svc, getStored, getManagedRunStatusCalls } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
+    expect(getStored().status).toBe('ready');
+    expect(getManagedRunStatusCalls()).toBe(1);
+  });
+
+  it('retries a transient side-effect failure and still runs later lifecycle effects', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { svc, getCaptured, getTaskSyncCalls } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      taskSyncFailures: 1,
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+
+    expect(getTaskSyncCalls()).toBe(2);
+    expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[caught-error]',
+      expect.objectContaining({
+        source: 'application/runtime/RuntimeService.ts',
+        operation: 'runEffect',
+        context: expect.objectContaining({
+          details: expect.objectContaining({
+            effect: 'task_status_sync',
+            attempt: 1,
+            executionId: EXEC_ID,
+          }),
+        }),
+      }),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('records a permanently failed effect without suppressing the remaining chain', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { svc, getCaptured, getTaskSyncCalls } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      taskSyncFailures: 99,
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+
+    expect(getTaskSyncCalls()).toBe(3);
+    expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+    errorSpy.mockRestore();
+  });
+
+  it('retries lane dispatch with the same idempotent transition context', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { svc, getCaptured, getLaneEntryCalls } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      laneEntryFailures: 2,
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+
+    expect(getLaneEntryCalls()).toBe(3);
+    expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+    errorSpy.mockRestore();
   });
 });

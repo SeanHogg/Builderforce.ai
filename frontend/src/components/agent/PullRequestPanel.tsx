@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { Select } from '@/components/Select';
 import {
@@ -8,6 +9,7 @@ import {
   type TaskPullRequest,
   type PullRequestDetail,
 } from '@/lib/builderforceApi';
+import { getMergeBlockReason } from './pullRequestMergeState';
 
 /**
  * In-product Pull Request review for a task's run. Shows the recorded PR + its
@@ -21,15 +23,15 @@ import {
 
 const STATUS_COLOR: Record<string, string> = {
   open: 'var(--coral-bright)',
-  merged: 'var(--success, #16a34a)',
+  merged: 'var(--success)',
   closed: 'var(--text-muted)',
   draft: 'var(--text-muted)',
 };
 
 const CHECK_COLOR: Record<string, string> = {
-  success: 'var(--success, #16a34a)',
-  failure: 'var(--danger, #dc2626)',
-  pending: 'var(--warning, #d97706)',
+  success: 'var(--success)',
+  failure: 'var(--danger)',
+  pending: 'var(--warning)',
 };
 
 const MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
@@ -38,7 +40,7 @@ function Badge({ label, color }: { label: string; color: string }) {
   return (
     <span style={{
       fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
-      color, border: `1px solid ${color}`, borderRadius: 6, padding: '2px 6px',
+      color, border: `1px solid ${color}`, borderRadius: 'var(--radius-sm)', padding: '2px 6px',
     }}>{label}</span>
   );
 }
@@ -63,9 +65,9 @@ function BuildStatus({ status, error, phase, showValidating }: {
         <span style={{ color: 'var(--text-muted)' }}>{phase === 'pre-merge' ? 'PR build:' : 'Build:'}</span>
         {status === 'success' && <Badge label="passing" color={CHECK_COLOR.success} />}
         {status === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
-        {validating && <span style={{ color: 'var(--text-muted)' }}>⏳ validating…</span>}
+        {validating && <span style={{ color: 'var(--text-muted)' }}><Icon source="⏳" size="1em" /> validating…</span>}
         {status === 'failure' && (
-          <span style={{ color: 'var(--warning, #d97706)' }}>
+          <span style={{ color: 'var(--warning)' }}>
             {phase === 'pre-merge'
               ? 'auto-fix dispatched — the agent will push a fix to this branch.'
               : 'auto-fix dispatched — a new PR will open for review.'}
@@ -75,8 +77,8 @@ function BuildStatus({ status, error, phase, showValidating }: {
       {status === 'failure' && error && (
         <pre style={{
           margin: 0, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          color: 'var(--text-secondary)', background: 'var(--bg-subtle, rgba(127,127,127,0.08))',
-          border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '8px 10px',
+          color: 'var(--text-secondary)', background: 'var(--surface-sunken, rgba(127,127,127,0.08))',
+          border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '8px 10px',
           maxHeight: 220, overflow: 'auto', fontFamily: 'var(--font-mono)',
         }}>{error}</pre>
       )}
@@ -119,6 +121,12 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
     return () => clearInterval(t);
   }, [buildPending, taskId]);
 
+  const liveDetail = data?.detail ?? null;
+  const availableMethods = liveDetail?.allowedMergeMethods?.length ? liveDetail.allowedMergeMethods : MERGE_METHODS;
+  useEffect(() => {
+    if (!availableMethods.includes(method)) setMethod(availableMethods[0] ?? 'squash');
+  }, [availableMethods, method]);
+
   const merge = async () => {
     if (!data?.pullRequest) return;
     setMerging(true);
@@ -138,10 +146,13 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
   if (!data?.pullRequest) return null;
 
   const pr = data.pullRequest;
-  const detail: PullRequestDetail | null = data.detail;
+  const detail: PullRequestDetail | null = liveDetail;
   const isMerged = pr.status === 'merged' || detail?.merged === true;
   const checks = detail?.checks ?? null;
   const checksRed = checks === 'failure' || checks === 'pending';
+  const mergeBlockReason = pr.status === 'draft'
+    ? 'Mark this pull request ready for review on the provider before merging.'
+    : getMergeBlockReason(detail);
 
   return (
     <div style={{ minHeight: 80, fontSize: 13, color: 'var(--text-secondary)' }}>
@@ -162,12 +173,12 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       {detail?.supported && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
           {checks && <span style={{ color: CHECK_COLOR[checks] }}>● CI {checks}{detail.checksTotal ? ` (${detail.checksTotal})` : ''}</span>}
-          {detail.mergeable === false && !isMerged && <span style={{ color: 'var(--danger, #dc2626)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
+          {mergeBlockReason && !isMerged && <span style={{ color: 'var(--danger)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
           {(detail.changedFiles != null) && (
             <span style={{ color: 'var(--text-muted)' }}>
               {detail.changedFiles} file{detail.changedFiles === 1 ? '' : 's'}
-              {detail.additions != null && <span style={{ color: 'var(--success, #16a34a)' }}> +{detail.additions}</span>}
-              {detail.deletions != null && <span style={{ color: 'var(--danger, #dc2626)' }}> −{detail.deletions}</span>}
+              {detail.additions != null && <span style={{ color: 'var(--success)' }}> +{detail.additions}</span>}
+              {detail.deletions != null && <span style={{ color: 'var(--danger)' }}> −{detail.deletions}</span>}
             </span>
           )}
         </div>
@@ -184,35 +195,36 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
         </div>
       )}
 
-      {/* Approve & merge — enabled anytime (warns on red checks per product policy) */}
+      {/* Approve & merge — provider mergeability is authoritative. */}
       {!isMerged && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Select
             value={method}
             onChange={(e) => setMethod(e.target.value as MergeMethod)}
-            disabled={merging}
-            style={{ fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+            disabled={merging || !!mergeBlockReason}
+            style={{ fontSize: 12, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
           >
-            {MERGE_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+            {availableMethods.map((m) => <option key={m} value={m}>{m}</option>)}
           </Select>
           <button
             type="button"
             onClick={merge}
-            disabled={merging}
+            disabled={merging || !!mergeBlockReason}
             style={{
-              fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 6, border: 'none', cursor: merging ? 'default' : 'pointer',
-              background: 'var(--success, #16a34a)', color: 'var(--text-on-accent, #fff)', opacity: merging ? 0.6 : 1,
+              fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: merging || mergeBlockReason ? 'not-allowed' : 'pointer',
+              background: 'var(--success)', color: 'var(--text-on-accent)', opacity: merging || mergeBlockReason ? 0.6 : 1,
             }}
           >
             {merging ? 'Merging…' : 'Approve & Merge'}
           </button>
-          {checksRed && <span style={{ fontSize: 12, color: 'var(--warning, #d97706)' }}>⚠ CI is {checks} — merging anyway will override it.</span>}
+          {mergeBlockReason && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{mergeBlockReason}</span>}
+          {!mergeBlockReason && checksRed && <span style={{ fontSize: 12, color: 'var(--warning)' }}><Icon source="⚠" size="1em" /> CI is {checks}. Repository rules may block merging until required checks pass.</span>}
         </div>
       )}
 
       {isMerged && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 13, color: 'var(--success, #16a34a)' }}>
+          <div style={{ fontSize: 13, color: 'var(--success)' }}>
             ✓ Merged{pr.mergedAt ? ` ${new Date(pr.mergedAt).toLocaleString()}` : ''}.
           </div>
           {/* Post-merge deploy-branch build validation (status + reason + auto-fix). */}
@@ -220,11 +232,11 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 8 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
 
       {pr.url && (
         <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Open on {pr.provider === 'github' ? 'GitHub' : pr.provider} ↗
+          Open on {pr.provider === 'github' ? 'GitHub' : pr.provider}  <Icon source="↗" size="1em" />
         </a>
       )}
     </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { decksApi, type DeckTemplateSummary } from '@/lib/builderforceApi';
+import { Select } from '@/components/Select';
 
 /**
  * Board-deck download — the dedicated entry point (paired with the Brain
@@ -55,33 +56,33 @@ export function DeckDownloadButton() {
   };
 
   const selectStyle: React.CSSProperties = {
-    padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border, #d1d5db)',
-    background: 'var(--surface, #fff)', fontSize: '0.82rem', color: 'inherit',
+    padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+    background: 'var(--surface)', fontSize: '0.82rem', color: 'inherit',
   };
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <select aria-label={t('pickTemplate')} value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={selectStyle}>
+      <Select aria-label={t('pickTemplate')} value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={selectStyle}>
         {templates.length === 0 && <option value="">{t('boardDeck')}</option>}
         {templates.map((tmpl) => (
           <option key={tmpl.id} value={tmpl.id}>{tmpl.isBuiltin ? t(tmpl.archetype === 'cfo_devfinops' ? 'cfoDeck' : 'boardDeck') : tmpl.name}</option>
         ))}
-      </select>
-      <select aria-label={t('pickQuarter')} value={quarter} onChange={(e) => setQuarter(e.target.value)} style={selectStyle}>
+      </Select>
+      <Select aria-label={t('pickQuarter')} value={quarter} onChange={(e) => setQuarter(e.target.value)} style={selectStyle}>
         {quarterOptions().map((q) => <option key={q} value={q}>{q}</option>)}
-      </select>
+      </Select>
       <button
         type="button"
         onClick={onDownload}
         disabled={busy}
         style={{
-          padding: '6px 14px', borderRadius: 6, border: 'none', cursor: busy ? 'default' : 'pointer',
-          background: '#4F46E5', color: '#fff', fontSize: '0.82rem', fontWeight: 600, opacity: busy ? 0.6 : 1,
+          padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: busy ? 'default' : 'pointer',
+          background: 'var(--indigo-bright)', color: 'var(--text-on-accent)', fontSize: '0.82rem', fontWeight: 600, opacity: busy ? 0.6 : 1,
         }}
       >
         {busy ? t('generating') : t('download')}
       </button>
-      {error && <span style={{ fontSize: '0.75rem', color: '#dc2626' }}>{error}</span>}
+      {error && <span style={{ fontSize: '0.75rem', color: 'var(--error-text)' }}>{error}</span>}
     </div>
   );
 }

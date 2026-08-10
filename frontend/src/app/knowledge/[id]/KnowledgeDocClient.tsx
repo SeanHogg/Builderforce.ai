@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -7,6 +8,7 @@ import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import PageContainer from '@/components/PageContainer';
+import { Select } from '@/components/Select';
 import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useDocCollaboration } from '@/hooks/useDocCollaboration';
@@ -160,8 +162,8 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   if (error) {
     return (
       <PageContainer width="readable">
-        <div style={{ color: 'var(--error-text, #f87171)' }}>{error}</div>
-        <Link href="/knowledge" style={{ color: 'var(--accent, #60a5fa)' }}>
+        <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>
+        <Link href="/knowledge" style={{ color: 'var(--accent, var(--info))' }}>
           ← {t('backToList')}
         </Link>
       </PageContainer>
@@ -170,7 +172,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   if (!doc) {
     return (
       <PageContainer width="readable">
-        <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>
+        <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>
       </PageContainer>
     );
   }
@@ -178,13 +180,13 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   return (
     <PageContainer width="readable">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Link href="/knowledge" style={{ color: 'var(--accent, #60a5fa)', textDecoration: 'none' }}>
+        <Link href="/knowledge" style={{ color: 'var(--accent, var(--info))', textDecoration: 'none' }}>
           ← {t('backToList')}
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <PresenceBar collab={collab} t={t} />
           {saveState !== 'idle' && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {saveState === 'saving' ? t('saving') : t('saved')}
             </span>
           )}
@@ -210,13 +212,13 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
       {canEdit && (
         <>
           <div style={{ display: 'flex', gap: 10, margin: '12px 0', flexWrap: 'wrap', alignItems: 'center' }}>
-            <select value={docType} onChange={(e) => markDirty(setDocType)(e.target.value as DocType)} style={inputStyle}>
+            <Select value={docType} onChange={(e) => markDirty(setDocType)(e.target.value as DocType)} style={inputStyle}>
               {DOC_TYPES.map((dt) => (
                 <option key={dt} value={dt}>
                   {t(`type_${dt}`)}
                 </option>
               ))}
-            </select>
+            </Select>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
               <input type="checkbox" checked={requiresAck} onChange={(e) => markDirty(setRequiresAck)(e.target.checked)} />
               {t('requiresAckLabel')}
@@ -298,9 +300,9 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             width: '100%',
             minHeight: 420,
             padding: 16,
-            borderRadius: 10,
-            border: '1px solid var(--border, #333)',
-            background: 'var(--surface-2, #111)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface-2)',
             color: 'inherit',
             fontFamily: 'ui-monospace, monospace',
             fontSize: 14,
@@ -313,16 +315,16 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         <article
           style={{
             padding: 20,
-            borderRadius: 10,
-            border: '1px solid var(--border, #333)',
-            background: 'var(--surface, #1a1a1a)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
             minHeight: 200,
           }}
         >
           {content.trim() ? (
             <DocumentMarkdown content={content} />
           ) : (
-            <span style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('emptyContent')}</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('emptyContent')}</span>
           )}
         </article>
       )}
@@ -401,9 +403,9 @@ function SharePanel({
     <div
       style={{
         margin: '14px 0',
-        borderRadius: 10,
-        border: '1px solid var(--border, #333)',
-        background: 'var(--surface, #1a1a1a)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface)',
         overflow: 'hidden',
       }}
     >
@@ -424,9 +426,10 @@ function SharePanel({
           alignItems: 'center',
         }}
       >
-        👥 {t('share')}
+        
+        <Icon source="👥" size="1em" /> {t('share')}
         {collaborators.length > 0 && (
-          <span style={{ ...badge, background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)' }}>
+          <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
             {collaborators.length}
           </span>
         )}
@@ -435,7 +438,7 @@ function SharePanel({
       {open && (
         <div style={{ padding: 16, paddingTop: 0, display: 'grid', gap: 12 }}>
           {!canEdit && (
-            <p style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', margin: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
               {doc.myAccess === 'viewer' ? t('accessViewerNote') : t('accessReadOnlyNote')}
             </p>
           )}
@@ -443,19 +446,19 @@ function SharePanel({
             {data?.owner && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                 <span>{data.owner.name}</span>
-                <span style={{ ...badge, background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)' }}>
+                <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
                   {t('owner')}
                 </span>
               </div>
             )}
             {collaborators.length === 0 && (
-              <div style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)' }}>{t('noCollaborators')}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noCollaborators')}</div>
             )}
             {collaborators.map((cc) => (
               <div key={cc.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                 <span>{cc.name}</span>
                 <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ ...badge, background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)' }}>
+                  <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
                     {t(cc.role === 'viewer' ? 'roleViewer' : 'roleEditor')}
                   </span>
                   {canEdit && (
@@ -463,7 +466,7 @@ function SharePanel({
                       type="button"
                       onClick={() => remove(cc.userId)}
                       disabled={busy}
-                      style={{ background: 'none', border: 'none', color: 'var(--error-text, #f87171)', cursor: 'pointer' }}
+                      style={{ background: 'none', border: 'none', color: 'var(--error-text, var(--error))', cursor: 'pointer' }}
                       aria-label={t('remove')}
                     >
                       ×
@@ -476,18 +479,18 @@ function SharePanel({
 
           {canEdit && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <select value={pick} onChange={(e) => setPick(e.target.value)} style={inputStyle}>
+              <Select value={pick} onChange={(e) => setPick(e.target.value)} style={inputStyle}>
                 <option value="">{t('selectMember')}</option>
                 {candidates.map((m) => (
                   <option key={m.userId} value={m.userId}>
                     {m.name}
                   </option>
                 ))}
-              </select>
-              <select value={role} onChange={(e) => setRole(e.target.value as CollaboratorRole)} style={inputStyle}>
+              </Select>
+              <Select value={role} onChange={(e) => setRole(e.target.value as CollaboratorRole)} style={inputStyle}>
                 <option value="editor">{t('roleEditor')}</option>
                 <option value="viewer">{t('roleViewer')}</option>
-              </select>
+              </Select>
               <button type="button" onClick={invite} disabled={busy || !pick} style={btnPrimary}>
                 {busy ? t('inviting') : t('invite')}
               </button>
@@ -513,8 +516,8 @@ function PresenceBar({
         style={{
           width: 8,
           height: 8,
-          borderRadius: 999,
-          background: collab.connected ? 'var(--success-text, #4ade80)' : 'var(--text-muted, #9ca3af)',
+          borderRadius: 'var(--radius-full)',
+          background: collab.connected ? 'var(--success-text)' : 'var(--text-muted)',
         }}
       />
       <div style={{ display: 'flex' }}>
@@ -525,15 +528,15 @@ function PresenceBar({
             style={{
               width: 22,
               height: 22,
-              borderRadius: 999,
+              borderRadius: 'var(--radius-full)',
               background: p.color,
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               fontSize: 11,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               marginLeft: -6,
-              border: '2px solid var(--surface, #1a1a1a)',
+              border: '2px solid var(--surface)',
             }}
           >
             {p.name.slice(0, 1).toUpperCase()}
@@ -541,7 +544,7 @@ function PresenceBar({
         ))}
       </div>
       {collab.peers.length > 0 && (
-        <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{t('editingNow')}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('editingNow')}</span>
       )}
     </div>
   );
@@ -622,15 +625,15 @@ function AcknowledgeBanner({
         gap: 12,
         padding: '12px 16px',
         margin: '16px 0',
-        borderRadius: 10,
-        border: '1px solid var(--border, #333)',
-        background: current ? 'var(--success-bg, #0f3d2e)' : 'var(--surface-2, #1a1a1a)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        background: current ? 'var(--success-bg)' : 'var(--surface-2)',
       }}
     >
       <div style={{ fontSize: 14 }}>
         {current ? (
           <span>
-            ✓ {t('youAcknowledged')}
+            <Icon name="check" size={14} /> {t('youAcknowledged')}
             {doc.myAcknowledgement?.acknowledgedAt &&
               ` — ${new Date(doc.myAcknowledgement.acknowledgedAt).toLocaleDateString()}`}
           </span>
@@ -694,9 +697,9 @@ function AiAssist({
     <div
       style={{
         margin: '16px 0',
-        borderRadius: 10,
-        border: '1px solid var(--accent, #2563eb)',
-        background: 'var(--surface, #1a1a1a)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--accent)',
+        background: 'var(--surface)',
         overflow: 'hidden',
       }}
     >
@@ -714,11 +717,12 @@ function AiAssist({
           fontWeight: 600,
         }}
       >
-        ✨ {t('aiAssist')} {open ? '▾' : '▸'}
+        
+        <Icon source="✨" size="1em" /> {t('aiAssist')} {open ? '▾' : '▸'}
       </button>
       {open && (
         <div style={{ padding: 16, paddingTop: 0 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', marginTop: 0 }}>{t('aiHint')}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>{t('aiHint')}</p>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -727,9 +731,9 @@ function AiAssist({
               width: '100%',
               minHeight: 70,
               padding: 10,
-              borderRadius: 8,
-              border: '1px solid var(--border, #333)',
-              background: 'var(--surface-2, #111)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border)',
+              background: 'var(--surface-2)',
               color: 'inherit',
               resize: 'vertical',
             }}
@@ -739,15 +743,15 @@ function AiAssist({
               {busy ? t('generating') : t('generate')}
             </button>
           </div>
-          {error && <div style={{ color: 'var(--error-text, #f87171)', marginTop: 8 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--error-text, var(--error))', marginTop: 8 }}>{error}</div>}
           {result && (
             <div style={{ marginTop: 12 }}>
               <div
                 style={{
                   padding: 12,
-                  borderRadius: 8,
-                  border: '1px solid var(--border, #333)',
-                  background: 'var(--surface-2, #111)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
                   maxHeight: 260,
                   overflow: 'auto',
                 }}
@@ -771,9 +775,9 @@ function AiAssist({
 }
 
 function severityColor(severity: string): React.CSSProperties {
-  if (severity === 'high') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' };
-  if (severity === 'medium') return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' };
-  return { background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)' };
+  if (severity === 'high') return { background: 'var(--error-bg)', color: 'var(--error-text, var(--error))' };
+  if (severity === 'medium') return { background: 'var(--warning-bg)', color: 'var(--warning-text, var(--amber-bright))' };
+  return { background: 'var(--surface-2)', color: 'var(--text-muted)' };
 }
 
 function AnalyzePanel({
@@ -807,9 +811,9 @@ function AnalyzePanel({
     <div
       style={{
         margin: '16px 0',
-        borderRadius: 10,
-        border: '1px solid var(--border, #333)',
-        background: 'var(--surface, #1a1a1a)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface)',
         overflow: 'hidden',
       }}
     >
@@ -827,34 +831,35 @@ function AnalyzePanel({
           fontWeight: 600,
         }}
       >
-        🔍 {t('analyzeTitle')} {open ? '▾' : '▸'}
+        
+        <Icon source="🔍" size="1em" /> {t('analyzeTitle')} {open ? '▾' : '▸'}
       </button>
       {open && (
         <div style={{ padding: 16, paddingTop: 0 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', marginTop: 0 }}>{t('analyzeHint')}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>{t('analyzeHint')}</p>
           <button type="button" onClick={run} disabled={busy} style={btnPrimary}>
             {busy ? t('analyzing') : t('analyzeRun')}
           </button>
-          {error && <div style={{ color: 'var(--error-text, #f87171)', marginTop: 8 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--error-text, var(--error))', marginTop: 8 }}>{error}</div>}
           {result && (
             <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
               {result.summary && <p style={{ margin: 0, fontSize: 14 }}>{result.summary}</p>}
               {result.findings.length === 0 ? (
-                <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 13 }}>{t('analyzeNoFindings')}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('analyzeNoFindings')}</div>
               ) : (
                 <div style={{ display: 'grid', gap: 8 }}>
                   {result.findings.map((f, i) => (
                     <div
                       key={i}
-                      style={{ padding: 12, borderRadius: 8, border: '1px solid var(--border, #333)', background: 'var(--surface-2, #111)' }}
+                      style={{ padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface-2)' }}
                     >
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                         <span style={{ ...badge, ...severityColor(f.severity) }}>{t(`severity_${f.severity}`)}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{t(`category_${f.category}`)}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t(`category_${f.category}`)}</span>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>{f.issue}</div>
                       {f.recommendation && (
-                        <div style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', marginTop: 4 }}>
+                        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
                           → {f.recommendation}
                         </div>
                       )}
@@ -868,9 +873,9 @@ function AnalyzePanel({
                   <div
                     style={{
                       padding: 12,
-                      borderRadius: 8,
-                      border: '1px solid var(--border, #333)',
-                      background: 'var(--surface-2, #111)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface-2)',
                       maxHeight: 220,
                       overflow: 'auto',
                     }}
@@ -939,7 +944,7 @@ function PublishBar({
         margin: '20px 0',
         flexWrap: 'wrap',
         paddingTop: 16,
-        borderTop: '1px solid var(--border, #333)',
+        borderTop: '1px solid var(--border)',
       }}
     >
       <input
@@ -951,7 +956,7 @@ function PublishBar({
       <button type="button" onClick={publish} disabled={busy} style={btnPrimary}>
         {busy ? t('publishing') : doc.versionNumber > 0 ? t('publishNewVersion') : t('publish')}
       </button>
-      <button type="button" onClick={remove} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, #f87171)' }}>
+      <button type="button" onClick={remove} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, var(--error))' }}>
         {t('deleteDoc')}
       </button>
     </div>
@@ -1017,22 +1022,22 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
         flexWrap: 'wrap',
       }}
     >
-      <span style={{ fontSize: 13, fontWeight: 600 }}>🏪 {t('marketplaceTitle')}</span>
+      <span style={{ fontSize: 13, fontWeight: 600 }}><Icon source="🏪" size="1em" /> {t('marketplaceTitle')}</span>
       {listing ? (
         <>
-          <span style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
             {t('listedFor', { price: (listing.priceCents / 100).toFixed(2) })} · {t('installs', { count: listing.installCount })}
           </span>
           <button type="button" onClick={list} disabled={busy} style={btnGhost}>
             {busy ? t('saving') : t('updateListing')}
           </button>
-          <button type="button" onClick={unlist} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, #f87171)' }}>
+          <button type="button" onClick={unlist} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, var(--error))' }}>
             {t('unlist')}
           </button>
         </>
       ) : (
         <>
-          <label style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
             {t('priceLabel')}
             <input
               type="number"
@@ -1073,15 +1078,15 @@ function VersionHistory({ docId, t }: { docId: string; t: ReturnType<typeof useT
       </button>
       {open && (
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-          {versions.length === 0 && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('noVersions')}</div>}
+          {versions.length === 0 && <div style={{ color: 'var(--text-muted)' }}>{t('noVersions')}</div>}
           {versions.map((v) => (
             <div
               key={v.id}
-              style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border, #333)', background: 'var(--surface, #1a1a1a)' }}
+              style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface)' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <strong>v{v.versionNumber}</strong>
-                <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {new Date(v.createdAt).toLocaleString()}
                 </span>
               </div>
@@ -1143,13 +1148,14 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
   }
 
   return (
-    <section style={{ marginTop: 28, paddingTop: 16, borderTop: '1px solid var(--border, #333)' }}>
+    <section style={{ marginTop: 28, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: 16, padding: 0 }}
       >
-        🎓 {t('trainingAndAudit')} {open ? '▾' : '▸'}
+        
+        <Icon source="🎓" size="1em" /> {t('trainingAndAudit')} {open ? '▾' : '▸'}
       </button>
       {open && (
         <div style={{ marginTop: 14, display: 'grid', gap: 18 }}>
@@ -1159,12 +1165,12 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
               style={{
                 maxHeight: 180,
                 overflow: 'auto',
-                border: '1px solid var(--border, #333)',
-                borderRadius: 8,
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
                 padding: 8,
               }}
             >
-              {members.length === 0 && <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 13 }}>{t('noMembers')}</div>}
+              {members.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('noMembers')}</div>}
               {members.map((m) => (
                 <label key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={selected.has(m.userId)} onChange={() => toggle(m.userId)} />
@@ -1173,7 +1179,7 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)' }}>{t('dueDate')}</label>
+              <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('dueDate')}</label>
               <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} style={inputStyle} />
               <button type="button" onClick={assign} disabled={busy || selected.size === 0} style={btnPrimary}>
                 {busy ? t('assigning') : `${t('assign')}${selected.size ? ` (${selected.size})` : ''}`}
@@ -1187,7 +1193,7 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
                 {t('readStatus')} — {compliance.summary.percent}% ({compliance.summary.acknowledged}/{compliance.summary.required})
               </h3>
               {compliance.rows.length === 0 ? (
-                <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 13 }}>{t('noReadersRequired')}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('noReadersRequired')}</div>
               ) : (
                 <div style={{ display: 'grid', gap: 4 }}>
                   {compliance.rows.map((r) => (
@@ -1200,10 +1206,10 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
                         style={{
                           ...badge,
                           ...(r.state === 'acknowledged'
-                            ? { background: 'var(--success-bg, #0f3d2e)', color: 'var(--success-text, #4ade80)' }
+                            ? { background: 'var(--success-bg)', color: 'var(--success-text)' }
                             : r.state === 'overdue'
-                              ? { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' }
-                              : { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' }),
+                              ? { background: 'var(--error-bg)', color: 'var(--error-text, var(--error))' }
+                              : { background: 'var(--warning-bg)', color: 'var(--warning-text, var(--amber-bright))' }),
                         }}
                       >
                         {t(`state_${r.state}`)}

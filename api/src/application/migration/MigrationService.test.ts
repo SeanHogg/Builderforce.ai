@@ -76,6 +76,12 @@ function makeStore() {
     async insertTicketLink(input) { inserts.links.push({ ...input }); },
     async hasMemberOrInvite() { return false; },
     async insertInvitation(input) { inserts.invitations.push({ ...input }); },
+    async rollbackImport(runId) {
+      const remove = (rows: any[]) => { const before = rows.length; rows.splice(0, rows.length, ...rows.filter((row) => row.importRunId !== runId)); return before - rows.length; };
+      const removed = { tasksRemoved: remove(inserts.tasks), connectionsRemoved: remove(inserts.connections), projectsRemoved: remove(inserts.projects) };
+      Object.assign(runs.get(runId), { status: 'rolled_back', summary: { ...(runs.get(runId)?.summary ?? {}), ...removed }, errorMessage: null });
+      return removed;
+    },
   };
 
   return { store, inserts, runs };
@@ -175,5 +181,24 @@ describe('MigrationService', () => {
     expect(inserts.links).toHaveLength(0);
     // Only the non-skipped project's 2 items become tasks.
     expect(inserts.tasks).toHaveLength(2);
+  });
+
+  it('rolls back only artifacts carrying the completed run lineage', async () => {
+    const { store, inserts } = makeStore();
+    const svc = new MigrationService(store);
+    const { run } = await svc.startRun(meta, makeProvider());
+    const factory: ProviderForBoard = () => makeProvider();
+    await svc.stageItems(run.id, 1, factory);
+    await svc.commit(run.id, 1, factory);
+    inserts.tasks.push({ id: 9999, title: 'unrelated', importRunId: 'another-run' });
+
+    const rolledBack = await svc.rollback(run.id, 1);
+
+    expect(rolledBack.status).toBe('rolled_back');
+    expect(inserts.tasks).toEqual([{ id: 9999, title: 'unrelated', importRunId: 'another-run' }]);
+    expect(inserts.connections).toHaveLength(0);
+    expect(inserts.projects).toHaveLength(0);
+    expect(rolledBack.summary).toMatchObject({ tasksRemoved: 4, connectionsRemoved: 2, projectsRemoved: 2 });
+    await expect(svc.rollback(run.id, 1)).rejects.toThrow(/completed migration/i);
   });
 });

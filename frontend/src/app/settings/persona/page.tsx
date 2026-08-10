@@ -1,22 +1,22 @@
 'use client';
 
 /**
- * /settings/persona — the lens-persona settings surface. Standalone route (a new
- * file) so it works without editing the shared SettingsClient; the integration
- * note carries the one-line PillTab snippet to also surface it as a ?sub=persona
- * tab inside Settings.
+ * The old home of the insight lens, kept as a redirect.
+ *
+ * PRD 21 §7 decision 1: "Persona" (this lens) and "Personality" (the user's
+ * psychometric profile) sat one index row apart and read as the same word. The
+ * operator renamed this one to **Viewpoint**, and the page moved with the name.
+ * Every link ever shared — and the `psychometricPersona` feature-gate entry that
+ * still keys on the old path — resolves here and lands on the real page.
  */
 
-import { useTranslations } from 'next-intl';
-import PageContainer from '@/components/PageContainer';
-import PersonaSelector from '@/components/settings/PersonaSelector';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function PersonaSettingsPage() {
-  const t = useTranslations('personaLens');
-  return (
-    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>{t('pageTitle')}</h1>
-      <PersonaSelector />
-    </PageContainer>
-  );
+export const runtime = 'edge';
+
+export default function PersonaSettingsRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/settings/viewpoint'); }, [router]);
+  return null;
 }

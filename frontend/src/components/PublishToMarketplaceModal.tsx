@@ -10,18 +10,19 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
 import { publishTicket, type PostingType, type EngagementType, type TicketPosting } from '@/lib/freelancerApi';
 
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
-  borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
+  borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' };
 const btn = (primary: boolean): React.CSSProperties => ({
-  padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  padding: '8px 16px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
   border: primary ? 'none' : '1px solid var(--border-subtle)',
   background: primary ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-elevated)',
-  color: primary ? '#fff' : 'var(--text-primary)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-primary)',
 });
 
 const POSTING_TYPES: PostingType[] = ['project_bid', 'design', 'fte'];
@@ -76,15 +77,15 @@ export function PublishToMarketplaceModal({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           <div>
             <label style={labelStyle} htmlFor="mkt-posting">{t('publish.postingType')}</label>
-            <select id="mkt-posting" style={input} value={postingType} onChange={(e) => pickPosting(e.target.value as PostingType)}>
+            <Select id="mkt-posting" style={input} value={postingType} onChange={(e) => pickPosting(e.target.value as PostingType)}>
               {POSTING_TYPES.map((v) => <option key={v} value={v}>{t(`postingType.${v}`)}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label style={labelStyle} htmlFor="mkt-engagement">{t('publish.engagementType')}</label>
-            <select id="mkt-engagement" style={input} value={engagementType} onChange={(e) => setEngagementType(e.target.value as EngagementType)} disabled={postingType === 'fte'}>
+            <Select id="mkt-engagement" style={input} value={engagementType} onChange={(e) => setEngagementType(e.target.value as EngagementType)} disabled={postingType === 'fte'}>
               {ENGAGEMENT_TYPES.map((v) => <option key={v} value={v}>{t(`engagementType.${v}`)}</option>)}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -105,15 +106,15 @@ export function PublishToMarketplaceModal({
           </div>
           <div>
             <label style={labelStyle} htmlFor="mkt-vis">{t('publish.visibility')}</label>
-            <select id="mkt-vis" style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}>
+            <Select id="mkt-vis" style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}>
               <option value="public">{t('visibility.public')}</option>
               <option value="private">{t('visibility.private')}</option>
-            </select>
+            </Select>
           </div>
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('publish.rateHint')}</p>
 
-        {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button type="button" style={btn(false)} onClick={onClose}>{t('publish.cancel')}</button>

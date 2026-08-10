@@ -2,7 +2,7 @@
 #
 # `next.config.js` headers() are honoured by `next dev`, but @cloudflare/next-on-pages
 # does NOT reliably emit them for the deployed worker/assets. Without these the
-# /ide document is not cross-origin isolated, so `self.crossOriginIsolated` is
+# Canvas Builder document is not cross-origin isolated, so `self.crossOriginIsolated` is
 # false, SharedArrayBuffer can't be transferred to the WebContainer worker, and
 # clicking Run fails with:
 #   DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated
@@ -13,15 +13,15 @@
 # Keep this in sync with next.config.js headers().
 #
 # NOTE: this file (and next.config headers()) only reliably cover STATIC /
-# prerendered routes under next-on-pages. The dynamically-rendered IDE route
-# `/ide/[id]` is SSR, so _headers does not apply to it — its COOP/COEP are set
+# prerendered routes under next-on-pages. Dynamically-rendered Canvas routes are
+# SSR, so _headers does not apply to them — their COOP/COEP are set
 # in src/middleware.ts (withCoi). Keep all three in sync.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
 
 # The WebContainer connect handshake tab must NOT be cross-origin isolated, or
-# the preview can't complete its postMessage handshake with the IDE. BOTH COOP
+# the preview can't complete its postMessage handshake with Canvas Builder. BOTH COOP
 # and COEP must be relaxed — COOP:same-origin (from /* above) severs the opener
 # bridge setupConnect needs, not just COEP.
 # @see https://github.com/stackblitz/webcontainer-core/issues/1725

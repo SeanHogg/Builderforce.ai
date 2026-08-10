@@ -4,26 +4,29 @@
  * sweep ({@link ./staleExecutionReaper}) so both surface the *same* actionable
  * message for the same root cause.
  *
- * A cloud run can die two very different ways, and the message MUST reflect which:
+ * Both surviving cloud executors (the alarm-ticked durable CloudRunnerDO and the
+ * Cloudflare Container) are long-lived and heartbeat `updated_at` as they work, but a
+ * run can still die two very different ways, and the message MUST reflect which:
  *
- *   1. The interim Worker (serverless) loop runs in a Cloudflare `waitUntil`
- *      background task, which the platform stops shortly after the HTTP response
- *      returns (~30s observed). A multi-step agent loop physically cannot outlast
- *      that, so the guidance is "use a long-lived runtime". → CLOUD_ORPHAN_REASON.
+ *   1. It died EARLY — before it ever heartbeated past the ~30s serverless wall. It
+ *      never demonstrated it could sustain a multi-step run, so the actionable
+ *      guidance is "this surface didn't get going; use a self-hosted or durable
+ *      runtime and re-run". → CLOUD_ORPHAN_REASON.
  *
- *   2. A long-lived executor — the durable CloudRunnerDO (alarm-ticked) or a
- *      Cloudflare Container — heartbeats `updated_at` as it works and legitimately
- *      runs for minutes. When one of THOSE goes silent it ran well past the ~30s
- *      wall first, so it did NOT hit a serverless timeout: its process crashed, a
- *      tool call hung, or the heartbeat was lost. → CLOUD_LONG_LIVED_ORPHAN_REASON.
+ *   2. It died LATE — it heartbeated for minutes, then went silent. It provably ran
+ *      well past the ~30s wall, so no serverless limit was involved: its process
+ *      crashed, a tool call hung, or the heartbeat was lost.
+ *      → CLOUD_LONG_LIVED_ORPHAN_REASON.
  *
- * Stamping the serverless "~30s, downgrade to a durable runtime" message on a
- * container/durable run that ran 60-90s is doubly wrong (it never hit 30s, and the
- * container is already MORE capable than durable). {@link cloudOrphanReason} picks
- * the right one from how long the run actually made progress.
+ * Stamping the early "background-execution limit" message on a run that ran 60-90s is
+ * simply false (it never hit any such wall). {@link cloudOrphanReason} picks the right
+ * one from how long the run actually made progress.
  */
+/** A cloud run that went silent EARLY — it never heartbeated past the ~30s serverless
+ *  wall, so it stopped before proving it could sustain a multi-step task (a failed
+ *  kickoff, an immediate crash, or an executor that never really started). */
 export const CLOUD_ORPHAN_REASON =
-  'This cloud (serverless) run exceeded the background-execution time limit (~30s) before reporting completion, so it was stopped — only the steps above ran. Serverless cloud runs can perform just a few quick steps; for a multi-step coding task, assign a self-hosted agent (or a durable cloud runtime) and re-run, and it will run to completion.';
+  'This cloud run stopped reporting progress almost immediately and never reached the point of running as a sustained multi-step task, so it was marked failed — only the steps above ran. Re-run the task; if it keeps dying this early, assign a self-hosted agent, which is the most reliable surface for long multi-step work.';
 
 /** A long-lived cloud executor (durable CloudRunnerDO or Cloudflare Container) that
  *  ran past the serverless wall and then went silent — a crash / hung tool / lost
@@ -33,23 +36,17 @@ export const CLOUD_ORPHAN_REASON =
 export const CLOUD_LONG_LIVED_ORPHAN_REASON =
   'This run executed on a long-lived cloud runtime (durable Object / container) and went silent mid-run after running well past the ~30s serverless wall — a process crash, a hung tool call, or a lost heartbeat, not a serverless timeout. Only the steps above ran. Re-run the task; if a container run keeps dying here the image is likely unstable, and a self-hosted agent is the most reliable surface for long multi-step work.';
 
-/** Worker `waitUntil` wall (~30s observed) + margin for the terminal-status write
- *  and clock skew. A cloud run whose last progress (`updated_at`) is more than this
- *  past its start could NOT have been the serverless Worker loop — it heartbeated on
- *  a long-lived executor and then stalled. */
+/** Cloudflare's `waitUntil` background wall (~30s observed) + margin for the
+ *  terminal-status write and clock skew. A cloud run whose last progress
+ *  (`updated_at`) is more than this past its start demonstrably survived well beyond
+ *  any serverless limit, so it died LATE (crash / hung tool / lost heartbeat) rather
+ *  than early — which is exactly the distinction {@link cloudOrphanReason} makes. */
 export const SERVERLESS_WALL_MS = 45_000;
 
 /**
- * Silence ceiling for the in-request serverless 'worker' loop: it runs in Cloudflare
- * `waitUntil` (stopped ~30s after the response) and NEVER heartbeats `updated_at`
- * mid-run, so 90s = that wall + margin is the right fast-fail. Kept in lockstep with
- * {@link ../runtime/staleExecutionReaper.CLOUD_RUNNING_DEADLINE_MS}.
- */
-export const CLOUD_SERVERLESS_SILENCE_MS = 90_000;
-
-/**
- * Silence ceiling for a long-lived executor — the durable CloudRunnerDO or a
- * Cloudflare Container. These heartbeat `updated_at` exactly ONCE per alarm tick, and
+ * Silence ceiling for a cloud executor. BOTH of them — the durable CloudRunnerDO and
+ * the Cloudflare Container — are long-lived, so this is the only ceiling. They
+ * heartbeat `updated_at` exactly ONCE per alarm tick, and
  * a tick legitimately spans a single LLM step: a slow free coder (or a funded-backstop
  * failover chain) routinely runs 60-90s+ for ONE completion (observed 93s on
  * `@cf/moonshotai/kimi-k2.7-code`, execution #136). At the old 90s ceiling that live,
@@ -60,15 +57,73 @@ export const CLOUD_SERVERLESS_SILENCE_MS = 90_000;
 export const CLOUD_LONG_LIVED_SILENCE_MS = 5 * 60_000;
 
 /**
- * Pick the silence ceiling from the executor the run landed on (stamped on the payload
- * by dispatch; see {@link ../runtime/cloudDispatch.parseExecutor}). Only the serverless
- * 'worker' loop gets the tight 90s wall; 'durable'/'container' — and an UNKNOWN executor
- * (older/unstamped payloads) — get the long-lived ceiling, because reaping a live tick
- * mid-completion (false positive) is far worse than a few extra minutes before failing a
- * genuinely dead run (false negative).
+ * A GitHub Actions run is QUEUED before it is running: after `workflow_dispatch`
+ * returns, GitHub must schedule a runner, boot it, check out the repo and install
+ * Node before our runner script can send its first heartbeat. On a busy queue (or
+ * a repo at its concurrency cap) that gap routinely exceeds five minutes with the
+ * run perfectly healthy.
+ *
+ * So the long-lived ceiling would reap essentially every Actions run before it
+ * ever started. This surface gets its own, much larger ceiling covering the
+ * schedule + boot + checkout window plus a real step. The asymmetry is the whole
+ * reason {@link cloudSilenceCeilingMs} takes an executor.
  */
-export function cloudSilenceCeilingMs(executor: string | null | undefined): number {
-  return executor === 'worker' ? CLOUD_SERVERLESS_SILENCE_MS : CLOUD_LONG_LIVED_SILENCE_MS;
+export const CLOUD_GITHUB_ACTIONS_SILENCE_MS = 20 * 60_000;
+
+/**
+ * ── GitHub Actions: reconciled (not reaped) failures ─────────────────────────
+ *
+ * Every reason above is INFERRED from silence — the reaper knows only that
+ * nothing reported in. On the Actions surface we can do materially better: GitHub
+ * will tell us whether it ever scheduled a runner, and what happened to it. The
+ * reconcile sweep ({@link ./githubActionsReconcile}) asks, so these reasons name
+ * the actual root cause instead of the generic "this run went silent".
+ *
+ * They live here with the reaper's reasons for the same reason those do: one
+ * place decides what a user is told about a run that never finished, so the
+ * reconcile sweep and the 20-minute backstop can never contradict each other.
+ */
+
+/** GitHub accepted the `workflow_dispatch` (204) but never scheduled a run for it.
+ *  The overwhelmingly common causes are Actions disabled for the repo/org, a
+ *  spending limit reached, or a `workflow_dispatch` trigger that is not present on
+ *  the DEFAULT branch (GitHub only honours the trigger definition there). */
+export const GITHUB_ACTIONS_NEVER_SCHEDULED_REASON =
+  'GitHub accepted the workflow dispatch but never scheduled a run for it, so no agent ever started. That almost always means Actions is disabled for this repository or organisation, the account has hit its Actions spending limit, or the Builderforce agent workflow is missing its workflow_dispatch trigger on the DEFAULT branch (GitHub only honours the trigger defined there). Check the repository\'s Actions tab, then re-run "Enable GitHub agent runs" from the project\'s Source control settings and re-run the task.';
+
+/** We could not even LIST the repo's workflow runs — the credential lost access, or
+ *  Actions is administratively disabled (GitHub answers 403 for both). */
+export function githubActionsUnreachableReason(detail: string): string {
+  const trimmed = (detail || '').trim();
+  return `This run was queued on GitHub Actions, but Builderforce can no longer read the repository's Actions runs to confirm it started: ${trimmed || 'access denied'}. Either the linked credential lost access to the repository or Actions is disabled for it. Re-connect the repository credential (it needs the "workflow" scope, or "workflows: write" on the GitHub App installation), then re-run the task.`;
+}
+
+/** GitHub DID schedule the run and it reached a terminal state without the agent
+ *  ever checking in — the job died in checkout/setup, was cancelled, or timed out.
+ *  The run URL is the single most useful thing to hand over here: the failure is
+ *  in GitHub's log, not ours. */
+export function githubActionsRunEndedReason(conclusion: string | null, htmlUrl: string | null): string {
+  const outcome = (conclusion || 'ended').trim();
+  const where = htmlUrl ? ` See the run log: ${htmlUrl}` : '';
+  return `The GitHub Actions job for this run ${outcome === 'success' ? 'finished' : `ended as "${outcome}"`} without the Builderforce agent ever checking in, so no steps were executed. The job stopped before or during checkout/setup — a cancelled or timed-out job, a runner that could not start, or a failing step ahead of the agent.${where} Fix the job on GitHub and re-run the task, or switch the agent to the durable cloud surface to run it on Builderforce infrastructure instead.`;
+}
+
+/**
+ * The silence ceiling for the executor a run landed on (stamped on the payload by
+ * dispatch; see {@link ../runtime/cloudDispatch.parseExecutor}).
+ *
+ * `durable` and `container` share {@link CLOUD_LONG_LIVED_SILENCE_MS}: both are
+ * already-running processes, so silence really does mean "crashed or hung".
+ * `github_actions` cannot assume that — see
+ * {@link CLOUD_GITHUB_ACTIONS_SILENCE_MS}.
+ *
+ * Reaping a live run (false positive) is far worse than a few extra minutes
+ * before failing a genuinely dead one (false negative), so the generous
+ * long-lived ceiling remains the default for an UNKNOWN executor (older or
+ * unstamped payloads).
+ */
+export function cloudSilenceCeilingMs(executor?: string | null): number {
+  return executor === 'github_actions' ? CLOUD_GITHUB_ACTIONS_SILENCE_MS : CLOUD_LONG_LIVED_SILENCE_MS;
 }
 
 /**
@@ -102,6 +157,61 @@ export function cloudCrashReason(detail: string): string {
   return `This cloud run's runtime crashed before reporting completion: ${trimmed || 'unknown error'}. Only the steps above ran. The run is re-queued once on the durable executor automatically; if it still fails, re-run the task — and if a container run keeps crashing here, the image or a tool call is unstable.`;
 }
 
+/**
+ * How long a run PAUSED on an `ask_human` question may wait for an answer before it
+ * is failed and its ticket unblocked.
+ *
+ * A paused run is legitimately long — the agent asked a real question and a human
+ * answers it when they next sit down — so this must NOT be aggressive: 72h clears a
+ * long weekend, so a question raised on Friday evening is still answerable Monday
+ * morning. But it cannot be infinite either: `evaluateTaskAutoRun` and
+ * `laneRequirementGate` both COUNT a paused run as LIVE, while nothing (neither
+ * `RuntimeService.isOrphaned` nor the cron reaper) ever reaped one — so a single
+ * unanswered question permanently blocked EVERY future auto-run on that ticket.
+ *
+ * Kept here with the other orphan policy so the read-path repair and the cron sweep
+ * apply the identical deadline and message.
+ */
+export const PAUSED_DEADLINE_MS = 72 * 60 * 60_000; // 72h
+
+/** A run that paused on an agent question nobody ever answered. Failing it is what
+ *  releases the ticket: a paused run counts as LIVE for auto-run, so leaving it
+ *  parked forever blocks all further autonomy on that ticket. */
+export const PAUSED_ORPHAN_REASON =
+  'This run paused on a question for a human and no answer arrived within 72 hours, so it was closed out and the ticket released for autonomy. Nothing was lost — re-run the task (answering the agent question inline) and it will continue from a fresh run.';
+
 /** A self-hosted host run that lost its process/connection mid-run. */
 export const HOST_ORPHAN_REASON =
   'Run did not report completion in time and was marked failed (orphaned run — the agent host stopped before writing a terminal status). Re-run the task.';
+
+/**
+ * True when a run's error is the PLATFORM evicting the executor, not the run doing
+ * anything wrong: a Durable Object reset because a deploy replaced its code, an
+ * isolate torn down mid-request, an overloaded/relocated DO.
+ *
+ * WHY THIS IS A DISTINCT CLASS. Cloudflare resets every live Durable Object when a
+ * new Worker version is published, so an ordinary deploy interrupts every in-flight
+ * cloud run at once. Those interruptions used to be written as terminal failures
+ * carrying the raw platform message, and each one counted toward the ticket's
+ * consecutive-failure breaker ({@link ../swimlane/evaluateAutoRun.trailingUnproductiveStreak},
+ * 3 strikes) — so shipping three times in an hour could halt autonomy on a perfectly
+ * healthy ticket. Measured on task 683: three of its five failures were this exact
+ * message inside one 47-minute deploy window.
+ *
+ * The run's cursor is already persisted every tick, so the correct response is to
+ * re-arm and continue — see `CloudRunnerDO.alarm`. This predicate is the shared
+ * definition both that handler and the breaker read, so "a deploy is not a failure"
+ * is decided in one place.
+ */
+export function isInfrastructureEviction(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /durable object reset|code was updated|durable object is overloaded|isolate (was )?(reset|evicted|destroyed)|execution context was (cancelled|canceled)|new version rollout|runtime signalled (?:the container to )?exit[^.]*\b143\b/i.test(
+    message,
+  );
+}
+
+/** Told to a human when a deploy interrupted their run and it could not be resumed
+ *  in place. Distinct from the orphan reasons above: nothing crashed, and re-running
+ *  is guaranteed to be worth it rather than merely likely. */
+export const INFRA_EVICTION_REASON =
+  'This run was interrupted by a platform restart (the cloud runtime was replaced mid-run, which happens when Builderforce deploys a new version). Nothing went wrong with the task itself and only the steps above ran — re-run it and it will continue normally.';

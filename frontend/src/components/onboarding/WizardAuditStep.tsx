@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { toolsApi } from '@/lib/builderforceApi';
+import { toolsApi, securityAgentApi } from '@/lib/builderforceApi';
 import type { SystemAuditSummary } from '@/lib/tools';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Onboarding step: kick off system-level audits (SOC 2, Architecture, Quality,
@@ -23,6 +24,24 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [running, setRunning] = useState(false);
   const [ranAny, setRanAny] = useState(false);
+
+  // Instant website scan — the lowest-friction first-value moment (no repo needed).
+  const [siteUrl, setSiteUrl] = useState('');
+  const [webStatus, setWebStatus] = useState<Status>('idle');
+  const [webResult, setWebResult] = useState<{ score: number; filed: number } | null>(null);
+
+  const scanSite = async () => {
+    const url = siteUrl.trim();
+    if (!url) return;
+    setWebStatus('running'); setWebResult(null);
+    try {
+      const res = await securityAgentApi.runWebScan(url);
+      setWebResult({ score: res.score, filed: res.recorded });
+      setWebStatus('done');
+    } catch {
+      setWebStatus('error');
+    }
+  };
 
   useEffect(() => {
     let live = true;
@@ -65,6 +84,56 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
 
   return (
     <div>
+      {/* Instant website scan — real findings in seconds, no repo required. */}
+      <div style={{
+        marginBottom: 18, padding: 14, borderRadius: 'var(--radius-lg)',
+        background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+      }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{t('webHeading')}</div>
+        <p style={{ margin: '4px 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>{t('webIntro')}</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            type="url"
+            value={siteUrl}
+            onChange={(e) => setSiteUrl(e.target.value)}
+            placeholder={t('webPlaceholder')}
+            aria-label={t('webHeading')}
+            onKeyDown={(e) => { if (e.key === 'Enter' && webStatus !== 'running') void scanSite(); }}
+            style={{
+              flex: '1 1 220px', minWidth: 0, padding: '9px 12px', fontSize: 13,
+              background: 'var(--bg-base)', color: 'var(--text-primary)',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+            }}
+          />
+          <button
+            type="button"
+            onClick={scanSite}
+            disabled={webStatus === 'running' || !siteUrl.trim()}
+            style={{
+              padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', color: 'var(--text-on-accent)',
+              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+              cursor: webStatus === 'running' || !siteUrl.trim() ? 'not-allowed' : 'pointer',
+              opacity: webStatus === 'running' || !siteUrl.trim() ? 0.6 : 1, flexShrink: 0,
+            }}
+          >
+            {webStatus === 'running' ? t('webScanning') : t('webButton')}
+          </button>
+        </div>
+        {webStatus === 'done' && webResult && (
+          <div style={{ marginTop: 10, fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+              {t('webResult', { score: webResult.score, count: webResult.filed })}
+            </span>
+            <button type="button" onClick={() => router.push('/security?sub=webscan')} style={{
+              background: 'transparent', border: 'none', color: 'var(--coral-bright)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0,
+            }}>{t('webView')}</button>
+          </div>
+        )}
+        {webStatus === 'error' && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--error-text)' }}>{t('webError')}</div>
+        )}
+      </div>
+
       <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' }}>{t('intro')}</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -79,18 +148,18 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
               disabled={running}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', width: '100%',
-                padding: '12px 14px', borderRadius: 10,
+                padding: '12px 14px', borderRadius: 'var(--radius-lg)',
                 background: isSel ? 'rgba(244,114,110,0.1)' : 'var(--bg-elevated)',
                 border: `1px solid ${isSel ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                 cursor: running ? 'default' : 'pointer',
               }}
             >
-              <span style={{ fontSize: 22, lineHeight: 1 }}>{a.icon}</span>
+              <span><Icon source={a.icon} size={22} /></span>
               <span style={{ flex: 1 }}>
                 <span style={{ display: 'block', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{a.name}</span>
                 <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{a.blurb}</span>
               </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: st === 'done' ? '#22c55e' : st === 'error' ? 'var(--error-text, #e74c3c)' : st === 'running' ? 'var(--coral-bright)' : isSel ? 'var(--coral-bright)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: st === 'done' ? 'var(--success)' : st === 'error' ? 'var(--error-text)' : st === 'running' ? 'var(--coral-bright)' : isSel ? 'var(--coral-bright)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {st === 'running' ? t('running') : st === 'done' ? t('started') : st === 'error' ? t('failed') : isSel ? '✓' : ''}
               </span>
             </button>
@@ -104,7 +173,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
           onClick={runSelected}
           disabled={running || selected.size === 0}
           style={{
-            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', color: '#fff',
+            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-lg)', border: 'none', color: 'var(--text-on-accent)',
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
             cursor: running || selected.size === 0 ? 'not-allowed' : 'pointer', opacity: running || selected.size === 0 ? 0.6 : 1,
           }}
@@ -113,7 +182,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
         </button>
         {ranAny && (
           <button type="button" onClick={viewReports} style={{
-            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 10,
+            padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-lg)',
             background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', cursor: 'pointer',
           }}>{t('viewReports')}</button>
         )}

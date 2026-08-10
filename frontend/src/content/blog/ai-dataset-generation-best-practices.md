@@ -106,4 +106,4 @@ Always export your final dataset as a JSONL file before training. This gives you
 
 Name your exports semantically: `typescript-refactor-v1.jsonl`, `typescript-refactor-v2-more-edge-cases.jsonl`, and so on.
 
-Happy dataset building! If you have questions or want to share your best prompts, post them in the [community forum](https://github.com/SeanHogg/Builderforce.ai/discussions). 🎯
+Happy dataset building! If you have questions or want to share your best prompts, join the [Discord community](https://discord.gg/9gUsc2sNG6). 🎯

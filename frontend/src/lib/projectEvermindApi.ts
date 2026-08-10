@@ -23,6 +23,11 @@ export interface ProjectEvermindHead {
   /** ISO timestamp of the last merged contribution, or null if never learned. */
   lastLearnedAt: string | null;
   seeded: boolean;
+  /** ISO timestamp the head was AUTO-QUARANTINED (inference force-disabled after a
+   *  streak of incoherent replies), or null when healthy. */
+  quarantinedAt?: string | null;
+  /** Human-readable reason for the quarantine, shown to the operator. */
+  quarantineReason?: string | null;
 }
 
 /** One inspectable contribution the coordinator merged into a version. */
@@ -37,10 +42,26 @@ export interface ProjectEvermindRecentEntry {
   at: number;
   /** FedAvg sample weight. */
   weight: number;
+  /** True when this contribution's weights were fitted into the merge — i.e. it moved
+   *  the neocortex, which is what earns it a place in the Knowledge Map's Neocortex
+   *  region. Absent on ring rows written before the flag existed (all of which were
+   *  fitted), so read it as `fitted !== false` — never `fitted === true`. */
+  fitted?: boolean;
   /** Readable snippet of the task prompt (text-path only). */
   prompt?: string;
-  /** Readable snippet of the run/exemplar text learned (text-path only). */
+  /** Readable snippet of the run/exemplar text learned (text-path only). Absent when a
+   *  pinned teacher failed on a teach-a-task — see `skipReason`. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen — an `EvermindTeacherSkipReason`. */
+  skipReason?: string;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The pinned teacher model that failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
 }
 
 /** The 8 affective (limbic) state dimensions the runtime models. Mirrors
@@ -118,6 +139,44 @@ export interface ProjectEvermindContributions {
   eval: ProjectEvermindEvalPoint | null;
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
+  /**
+   * True when this payload describes the PARENT container project's Evermind rather
+   * than one belonging to the requested project. Non-`evermind` IDE builds (video,
+   * voice, designer, finetune) deliberately have no Evermind of their own and inherit
+   * their container's; the console renders read-only in that case, because reads
+   * inherit but writes keep exact-id semantics.
+   */
+  inherited?: boolean;
+  /** The container project whose Evermind is shown (present when `inherited`). */
+  inheritedFromProjectId?: number;
+  /** ISO timestamp this head auto-quarantined after a streak of incoherent serves
+   *  (null when healthy) — drives the console's quarantine badge + reason. */
+  quarantinedAt?: string | null;
+  /** The probe-failure reason behind `quarantinedAt` (null when healthy). */
+  quarantineReason?: string | null;
+}
+
+/** One Evermind a project targets (self or an IDE build under it). Mirrors api `targetsCore`. */
+export interface ProjectEvermindTarget {
+  projectId: number;
+  ref: string | null;
+  version: number;
+  name: string;
+  mode: ProjectEvermindMode;
+  inferenceEnabled: boolean;
+  seeded: boolean;
+}
+
+/**
+ * List every Evermind this project targets — its own head plus the heads of the IDE
+ * builds grouped under it. Read-only; drives the console's "Everminds under this
+ * project" list. Ordered [self, …builds].
+ */
+export async function listProjectEvermindTargets(projectId: number): Promise<ProjectEvermindTarget[]> {
+  const res = await apiRequest<{ targets: ProjectEvermindTarget[] }>(
+    `/api/projects/${projectId}/evermind/targets`,
+  );
+  return res.targets ?? [];
 }
 
 export async function getProjectEvermindHead(projectId: number): Promise<ProjectEvermindHead> {
@@ -266,17 +325,28 @@ export async function seedProjectEvermindFromModel(
   );
 }
 
-/** Toggle whether the project's agent runs EXECUTE on its Evermind. */
+/**
+ * Toggle whether the project's agent runs EXECUTE on its Evermind.
+ *
+ * ENABLING is benchmark-gated server-side: a head that fails the coherence probe is
+ * REFUSED with a 422 (it can't be promoted to serve while it produces gibberish).
+ * 422 is listed as an expected error so it surfaces as a normal thrown Error (the
+ * message is the server's plain-language reason) for the caller to render inline —
+ * NOT a global system-fault toast / support prompt. `force` bypasses the probe
+ * (deliberate operator override).
+ */
 export async function setProjectEvermindInference(
   projectId: number,
   enabled: boolean,
+  opts?: { force?: boolean },
 ): Promise<{ ok: boolean; inferenceEnabled: boolean }> {
   return apiRequest<{ ok: boolean; inferenceEnabled: boolean }>(
     `/api/projects/${projectId}/evermind/inference`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
+      body: JSON.stringify({ enabled, ...(opts?.force ? { force: true } : {}) }),
+      expectedErrors: [422],
     },
   );
 }
@@ -292,6 +362,169 @@ export async function setProjectEvermindTeacher(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
+    },
+  );
+}
+
+/** One graded test-bench generation (mirrors api `EvermindProbeResult` samples). */
+export interface ProjectEvermindProbeSample {
+  prompt: string;
+  /** The raw text the model generated — shown verbatim. */
+  text: string;
+  /** Whether this output would be served to a user, or refused as unusable. */
+  coherent: boolean;
+  /** The signal that rejected it (`repetition`, `non-words`, …); null when it passed. */
+  failure: string | null;
+  /** Plain-language explanation of `failure` (empty when coherent). */
+  detail: string;
+}
+
+/** A test-bench run: the operator's prompt, or the fixed readiness suite. */
+export interface ProjectEvermindProbeResult {
+  version: number;
+  projectId: number;
+  mode: 'readiness' | 'prompt';
+  ready: boolean;
+  passRate: number;
+  samples: ProjectEvermindProbeSample[];
+}
+
+/**
+ * TEST BENCH — generate from the project's Evermind and grade the output with the same
+ * rule the serve path applies. With a `prompt`, runs that prompt; without one, runs the
+ * fixed readiness suite that gates enabling inference.
+ *
+ * This is what makes "what will this model produce?" answerable BEFORE a user finds out:
+ * `validate` only previews which learned MEMORIES would be recalled and generates
+ * nothing. Manager-gated server-side; 409 when the model isn't set up and 422 when the
+ * artifact can't be run, both surfaced as ordinary inline errors rather than a system fault.
+ */
+export async function probeProjectEvermind(
+  projectId: number,
+  prompt?: string,
+): Promise<ProjectEvermindProbeResult> {
+  return apiRequest<ProjectEvermindProbeResult>(
+    `/api/projects/${projectId}/evermind/probe`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prompt ? { prompt } : {}),
+      expectedErrors: [409, 422],
+    },
+  );
+}
+
+/**
+ * REPLACE the model's weights with a fresh base, as a new version — from a published
+ * Studio model (`slug`) or a clean starter base when omitted. The repair path for a
+ * model that has trained itself into gibberish. Inference is left OFF: the new base has
+ * to pass a readiness check before it may serve again.
+ */
+export async function reseedProjectEvermind(
+  projectId: number,
+  slug?: string,
+): Promise<{ ok: boolean; version: number; inferenceEnabled: boolean }> {
+  return apiRequest<{ ok: boolean; version: number; inferenceEnabled: boolean }>(
+    `/api/projects/${projectId}/evermind/reseed`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(slug ? { slug } : {}),
+    },
+  );
+}
+
+/** Recompute every learned memory's recall embedding against the CURRENT model, so
+ *  retrieval stops drifting as the model learns. */
+export async function reindexProjectEvermind(
+  projectId: number,
+): Promise<{ ok: boolean; reindexed: number; skipped: number; version: number }> {
+  return apiRequest<{ ok: boolean; reindexed: number; skipped: number; version: number }>(
+    `/api/projects/${projectId}/evermind/reindex`,
+    { method: 'POST', expectedErrors: [409, 503] },
+  );
+}
+
+/** Discard queued-but-unmerged contributions and purge cached answers. Never touches
+ *  what the model has already learned. */
+export async function cleanupProjectEvermind(
+  projectId: number,
+): Promise<{ ok: boolean; discarded: number; cachedAnswers: number }> {
+  return apiRequest<{ ok: boolean; discarded: number; cachedAnswers: number }>(
+    `/api/projects/${projectId}/evermind/cleanup`,
+    { method: 'POST' },
+  );
+}
+
+/** What a knowledge audit concluded about one learned memory. */
+export type ProjectEvermindKnowledgeVerdict = 'ok' | 'incoherent' | 'incorrect' | 'outdated' | 'unusable' | 'redundant';
+
+/** One audited memory + (where repairable) the correction that would replace it. */
+export interface ProjectEvermindKnowledgeFinding {
+  id: number;
+  verdict: ProjectEvermindKnowledgeVerdict;
+  issue: string;
+  prompt?: string;
+  excerpt: string;
+  correction?: string;
+  source: 'coherence-gate' | 'frontier';
+}
+
+/** A read-only knowledge audit. */
+export interface ProjectEvermindKnowledgeAnalysis {
+  version: number;
+  analyzed: number;
+  /** The frontier model that graded, or null when only the local coherence screen ran. */
+  model: string | null;
+  findings: ProjectEvermindKnowledgeFinding[];
+  /** Present when the frontier review couldn't run — local findings are still returned. */
+  warning?: string;
+}
+
+/** What applying findings actually changed. */
+export interface ProjectEvermindKnowledgeRepair {
+  corrected: number;
+  forgotten: number;
+  merged: number;
+  version: number;
+  skipped: Array<{ id: number; reason: string }>;
+}
+
+/**
+ * ANALYZE — read back what the Evermind has learned and have it checked for mistakes,
+ * stale facts and nonsense. Read-only: nothing changes until findings are applied.
+ * Frontier-gated server-side (402 when the plan can't reach a frontier model).
+ */
+export async function analyzeProjectEvermind(
+  projectId: number,
+): Promise<ProjectEvermindKnowledgeAnalysis> {
+  return apiRequest<ProjectEvermindKnowledgeAnalysis>(
+    `/api/projects/${projectId}/evermind/analyze`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      expectedErrors: [402],
+    },
+  );
+}
+
+/**
+ * APPLY an audit's findings: forget the bad memories and re-teach the corrections in
+ * their place (write-through — update == replace), then merge so the fixes are real
+ * weights rather than a queued intention.
+ */
+export async function applyProjectEvermindFindings(
+  projectId: number,
+  findings: ProjectEvermindKnowledgeFinding[],
+): Promise<ProjectEvermindKnowledgeRepair> {
+  return apiRequest<ProjectEvermindKnowledgeRepair>(
+    `/api/projects/${projectId}/evermind/analyze`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apply: true, findings }),
+      expectedErrors: [400, 402],
     },
   );
 }

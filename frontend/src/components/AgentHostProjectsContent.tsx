@@ -14,12 +14,12 @@ interface AgentHostProjectsContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'var(--cyan-bright, #00e5cc)',
+  active: 'var(--cyan-bright, var(--cyan-bright))',
   completed: 'var(--text-muted)',
   archived: 'var(--text-muted)',
   on_hold: 'var(--text-muted)',
@@ -98,7 +98,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               background: showAssign ? 'var(--bg-base)' : 'var(--surface-interactive)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -119,7 +119,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
             }}
           >
             <option value="">Select a project…</option>
@@ -135,10 +135,10 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               padding: '8px 14px',
               fontSize: 13,
               fontWeight: 600,
-              background: 'var(--coral-bright, #f4726e)',
-              color: '#fff',
+              background: 'var(--coral-bright)',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: !selectedProjectId || assigning ? 'not-allowed' : 'pointer',
               opacity: !selectedProjectId || assigning ? 0.5 : 1,
             }}
@@ -188,7 +188,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     padding: '3px 8px',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm)',
                     background: 'var(--bg-elevated)',
                     color: STATUS_COLORS[project.status] ?? 'var(--text-muted)',
                     flexShrink: 0,
@@ -206,7 +206,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                   background: 'var(--bg-elevated)',
                   color: 'var(--text-secondary)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   textDecoration: 'none',
                   flexShrink: 0,
                 }}
@@ -221,9 +221,9 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                   fontSize: 11,
                   fontWeight: 600,
                   background: 'none',
-                  color: 'var(--coral-bright, #f4726e)',
+                  color: 'var(--coral-bright)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                   flexShrink: 0,
                 }}

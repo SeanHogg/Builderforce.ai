@@ -27,6 +27,8 @@
  * State is owned by the caller (session-only `useState`); this component is
  * purely presentational so each page keeps control over its own default.
  */
+import { useTranslations } from 'next-intl';
+
 export type ViewMode = 'card' | 'table';
 
 /** Every mode the canonical toggle knows how to render, in display order. */
@@ -39,15 +41,14 @@ export interface ViewOption<T extends string> {
   icon?: React.ReactNode;
 }
 
-/** Canonical order + default labels — the single source of truth for the toggle. */
+/** Canonical order — the single source of truth for the toggle.
+ *
+ *  The LABELS live in the catalogs (`common.viewMode.*`), not here. They were
+ *  five hardcoded English strings inside the shared control, so all thirty-one
+ *  surfaces that render it said "Card / List" in every locale — the one place a
+ *  fix reaches every one of them is this component. A call site that needs
+ *  different words still passes `cardLabel` / `tableLabel` / `options`. */
 const CANONICAL_ORDER: CanonicalViewMode[] = ['board', 'card', 'table', 'calendar', 'gantt'];
-const CANONICAL_LABELS: Record<CanonicalViewMode, string> = {
-  board: 'Board',
-  card: 'Card',
-  table: 'List',
-  calendar: 'Calendar',
-  gantt: 'Gantt',
-};
 
 /** Shared chrome for every mode glyph — stroke-based 24×24, sized down inline. */
 const iconBase: React.CSSProperties = {
@@ -138,10 +139,10 @@ const buttonStyle = (active: boolean): React.CSSProperties => ({
   fontSize: '0.8rem',
   fontWeight: 600,
   border: 'none',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   cursor: 'pointer',
   background: active ? 'var(--coral-bright)' : 'transparent',
-  color: active ? '#fff' : 'var(--text-secondary)',
+  color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 
 export function ViewToggle<T extends string = ViewMode>({
@@ -157,6 +158,7 @@ export function ViewToggle<T extends string = ViewMode>({
   tableLabel,
   className,
 }: ViewToggleProps<T>) {
+  const t = useTranslations('common.viewMode');
   const enabled: Record<CanonicalViewMode, boolean> = { board: !!board, card: !!card, table: !!table, calendar: !!calendar, gantt: !!gantt };
   // No flags set → the common Card | List pair (with optional label overrides).
   const anyFlag = CANONICAL_ORDER.some((m) => enabled[m]);
@@ -168,7 +170,7 @@ export function ViewToggle<T extends string = ViewMode>({
   const labelFor = (mode: CanonicalViewMode): string => {
     if (mode === 'card' && cardLabel) return cardLabel;
     if (mode === 'table' && tableLabel) return tableLabel;
-    return CANONICAL_LABELS[mode];
+    return t(mode);
   };
 
   const opts: ViewOption<T>[] =
@@ -178,12 +180,12 @@ export function ViewToggle<T extends string = ViewMode>({
     <div
       className={className}
       role="group"
-      aria-label="View mode"
+      aria-label={t('groupLabel')}
       style={{
         display: 'flex',
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         padding: 2,
       }}
     >
@@ -191,6 +193,9 @@ export function ViewToggle<T extends string = ViewMode>({
         <button
           key={opt.value}
           type="button"
+          // A stable hook for the MODE, so a test or a QA script targets what the
+          // button does rather than the words it happens to say in one locale.
+          data-view-mode={opt.value}
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
           style={{ ...buttonStyle(value === opt.value), display: 'inline-flex', alignItems: 'center', gap: 6 }}

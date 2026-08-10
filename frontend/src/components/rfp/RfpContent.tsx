@@ -21,12 +21,22 @@ import type { Project } from '@/lib/types';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
+/**
+ * The proposal DOCUMENT's palette, not this app's.
+ *
+ * These five colours are written into a standalone `.html` the customer opens
+ * outside BuilderForce (see `DocumentSection`: it renders into an isolated
+ * `srcDoc` iframe and downloads as a file), so a token here resolves to nothing
+ * — which is what had happened: `text` was `var(--bg-elevated)`, i.e. WHITE ink
+ * on a white page anywhere the variable did resolve, and invalid where it did
+ * not. Literals are correct here, and only here.
+ */
 const DEFAULT_BRAND: BrandPalette = {
-  primary: '#334155', secondary: '#64748b', accent: '#0ea5e9', text: '#111827', background: '#ffffff', logoUrl: '',
+  primary: '#334155', secondary: '#64748b', accent: '#0ea5e9', text: '#0f172a', background: '#ffffff', logoUrl: '',
 };
 
 const EMPTY: RfpRequestInput = {
@@ -102,7 +112,7 @@ export default function RfpContent() {
       </div>
 
       {loading && <div style={card}>{t('loading')}</div>}
-      {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && !error && (
         rows.length === 0 ? (
@@ -128,7 +138,7 @@ export default function RfpContent() {
                     {r.latestResponse ? t('quoted', { price: money(r.latestResponse.quotedPriceUsdCents) }) : t('notGenerated')}
                   </span>
                   {r.latestResponse?.scanRefreshed && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent, #0ea5e9)' }}>{t('scanFresh')}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)' }}>{t('scanFresh')}</span>
                   )}
                 </div>
               </button>
@@ -182,7 +192,7 @@ export default function RfpContent() {
 
           <div>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('field.economics')}</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 6 }}>
               <PctField label={t('field.margin')} value={draft.marginPct} onChange={(v) => setDraft({ ...draft, marginPct: v })} />
               <PctField label={t('field.marketing')} value={draft.marketingPct} onChange={(v) => setDraft({ ...draft, marketingPct: v })} />
               <PctField label={t('field.contingency')} value={draft.contingencyPct} onChange={(v) => setDraft({ ...draft, contingencyPct: v })} />
@@ -215,7 +225,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 34, height: 34, padding: 0, border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'transparent' }} aria-label={label} />
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 34, height: 34, padding: 0, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent' }} aria-label={label} />
         <input className="input" value={value} onChange={(e) => onChange(e.target.value)} style={{ minWidth: 0 }} />
       </div>
     </label>

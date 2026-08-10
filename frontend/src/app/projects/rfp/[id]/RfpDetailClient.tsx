@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useRole, hasMinRole } from '@/lib/rbac';
+import { downloadText } from '@/lib/download';
 import {
   rfpApi, type RfpRequestRow, type RfpResponseRow, type RfpResponseBody, type RfpCostModel, type RfpPhase,
 } from '@/lib/builderforceApi';
@@ -17,15 +18,15 @@ import {
  */
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16, marginBottom: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16,
 };
 const h2: React.CSSProperties = { fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 10px' };
 const muted: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 13 };
 
 // Chart series palette — saturated fills readable on both themes (white text on top).
-const PHASE_COLORS = ['#6366f1', '#0ea5e9', '#14b8a6', '#f59e0b', '#ec4899', '#84cc16'];
+const PHASE_COLORS = ['var(--indigo-bright)', 'var(--sky-bright)', 'var(--teal-bright)', 'var(--warning)', 'var(--pink-bright)', 'var(--yellow-bright)'];
 const COST_COLORS: Record<string, string> = {
-  build: '#6366f1', agentic: '#0ea5e9', marketing: '#14b8a6', contingency: '#f59e0b', margin: '#22c55e',
+  build: 'var(--indigo-bright)', agentic: 'var(--sky-bright)', marketing: 'var(--teal-bright)', contingency: 'var(--warning)', margin: 'var(--success)',
 };
 
 const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
@@ -79,7 +80,7 @@ export default function RfpDetailClient() {
       </button>
 
       {loading && <div style={card}>{t('loading')}</div>}
-      {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && request && (
         <>
@@ -108,9 +109,9 @@ export default function RfpDetailClient() {
                 <div style={{ ...card, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{
                     fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
-                    padding: '3px 9px', borderRadius: 999,
+                    padding: '3px 9px', borderRadius: 'var(--radius-full)',
                     background: latest.scanRefreshed ? 'rgba(34,197,94,0.15)' : 'rgba(139,92,246,0.15)',
-                    color: latest.scanRefreshed ? '#16a34a' : '#7c3aed',
+                    color: latest.scanRefreshed ? 'var(--success)' : 'var(--violet-bright)',
                     border: `1px solid ${latest.scanRefreshed ? 'rgba(34,197,94,0.3)' : 'rgba(139,92,246,0.3)'}`,
                   }}>
                     {latest.scanRefreshed ? t('scanRefreshed') : t('scanCurrent')}
@@ -151,7 +152,7 @@ export default function RfpDetailClient() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {body.portfolioMatches.map((m) => (
                       <div key={m.projectId} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--accent, #0ea5e9)', minWidth: 44 }}>{Math.round(m.score * 100)}%</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent)', minWidth: 44 }}>{Math.round(m.score * 100)}%</span>
                         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</span>
                         <span style={muted}>— {m.rationale}</span>
                       </div>
@@ -182,7 +183,7 @@ function CapabilitySection({ body, t }: { body: RfpResponseBody; t: T }) {
       {r.valueProps.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
           {r.valueProps.map((v, i) => (
-            <span key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 999, padding: '2px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>{v}</span>
+            <span key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-full)', padding: '2px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>{v}</span>
           ))}
         </div>
       )}
@@ -228,8 +229,8 @@ function CostSection({ cost, t }: { cost: RfpCostModel; t: T }) {
         {cost.lineItems.map((li, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ minWidth: 160, fontSize: 13, color: 'var(--text-secondary)' }}>{li.label}</span>
-            <div style={{ flex: 1, background: 'var(--bg-elevated)', borderRadius: 6, height: 18, overflow: 'hidden', minWidth: 60 }}>
-              <div style={{ width: `${Math.max((li.amountUsd / max) * 100, 1)}%`, background: COST_COLORS[li.category] ?? 'var(--accent, #0ea5e9)', height: '100%' }} />
+            <div style={{ flex: 1, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', height: 18, overflow: 'hidden', minWidth: 60 }}>
+              <div style={{ width: `${Math.max((li.amountUsd / max) * 100, 1)}%`, background: COST_COLORS[li.category] ?? 'var(--accent)', height: '100%' }} />
             </div>
             <span style={{ minWidth: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--text-primary)' }}>{usd(li.amountUsd)}</span>
           </div>
@@ -262,10 +263,10 @@ function GanttSection({ phases, timeline, t }: { phases: RfpPhase[]; timeline: R
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ minWidth: 150, fontSize: 13, color: 'var(--text-secondary)' }}>{p.name}</span>
-              <div style={{ flex: 1, position: 'relative', height: 22, background: 'var(--bg-elevated)', borderRadius: 6, minWidth: 80 }}>
+              <div style={{ flex: 1, position: 'relative', height: 22, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', minWidth: 80 }}>
                 <div
                   title={`${p.startDate} → ${p.endDate}`}
-                  style={{ position: 'absolute', left: `${left}%`, width: `${Math.max(width, 2)}%`, top: 3, bottom: 3, background: PHASE_COLORS[i % PHASE_COLORS.length], borderRadius: 4, color: '#fff', fontSize: 10, display: 'flex', alignItems: 'center', paddingLeft: 6, overflow: 'hidden', whiteSpace: 'nowrap' }}
+                  style={{ position: 'absolute', left: `${left}%`, width: `${Math.max(width, 2)}%`, top: 3, bottom: 3, background: PHASE_COLORS[i % PHASE_COLORS.length], borderRadius: 'var(--radius-sm)', color: 'var(--text-on-accent)', fontSize: 10, display: 'flex', alignItems: 'center', paddingLeft: 6, overflow: 'hidden', whiteSpace: 'nowrap' }}
                 >
                   {p.milestones[0]?.name ?? ''}
                 </div>
@@ -280,7 +281,7 @@ function GanttSection({ phases, timeline, t }: { phases: RfpPhase[]; timeline: R
 }
 
 function RisksSection({ body, t }: { body: RfpResponseBody; t: T }) {
-  const sevColor: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#22c55e' };
+  const sevColor: Record<string, string> = { high: 'var(--error)', medium: 'var(--warning)', low: 'var(--success)' };
   return (
     <div style={card}>
       <h2 style={h2}>{t('sec.risks')}</h2>
@@ -289,9 +290,9 @@ function RisksSection({ body, t }: { body: RfpResponseBody; t: T }) {
           {body.risks.map((r, i) => (
             <div key={i}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 999, background: sevColor[r.severity] ?? '#999' }} />
+                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: sevColor[r.severity] ?? 'var(--text-muted)' }} />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{r.title}</span>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: sevColor[r.severity] ?? '#999' }}>{t(`severity.${r.severity}`)}</span>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: sevColor[r.severity] ?? 'var(--text-muted)' }}>{t(`severity.${r.severity}`)}</span>
               </div>
               <p style={{ ...muted, margin: '2px 0 0 16px' }}>{r.mitigation}</p>
             </div>
@@ -326,13 +327,7 @@ function DependenciesSection({ body, t }: { body: RfpResponseBody; t: T }) {
 function DocumentSection({ docHtml, title, t }: { docHtml: string | null; title: string; t: T }) {
   const download = () => {
     if (!docHtml) return;
-    const blob = new Blob([docHtml], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadText(docHtml, `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.html`, 'text/html');
   };
   if (!docHtml) return null;
   return (
@@ -341,7 +336,7 @@ function DocumentSection({ docHtml, title, t }: { docHtml: string | null; title:
         <h2 style={{ ...h2, margin: 0 }}>{t('sec.document')}</h2>
         <button type="button" className="btn btn-secondary btn-sm" onClick={download}>{t('downloadDoc')}</button>
       </div>
-      <iframe title={t('sec.document')} srcDoc={docHtml} style={{ width: '100%', height: 520, border: '1px solid var(--border-subtle)', borderRadius: 8, background: '#fff' }} />
+      <iframe title={t('sec.document')} srcDoc={docHtml} style={{ width: '100%', height: 520, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: '#fff' }} />
     </div>
   );
 }

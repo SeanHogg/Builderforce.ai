@@ -101,9 +101,9 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
             fontSize: 12,
             fontWeight: 600,
             background: 'var(--coral-bright)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
           }}
         >
@@ -111,7 +111,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
         </button>
       </div>
 
-      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
@@ -126,7 +126,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
               padding: '8px 10px',
               fontSize: 13,
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-deep)',
               color: 'var(--text-primary)',
             }}
@@ -146,7 +146,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
                   padding: '8px 12px',
                   background: 'var(--bg-base)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -161,9 +161,9 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
                     fontSize: 11,
                     fontWeight: 600,
                     background: 'var(--coral-bright)',
-                    color: '#fff',
+                    color: 'var(--text-on-accent)',
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     flexShrink: 0,
                   }}
@@ -190,7 +190,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
                 padding: '8px 12px',
                 background: 'var(--bg-base)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
               }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -205,9 +205,9 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
                   fontSize: 11,
                   fontWeight: 600,
                   background: 'rgba(239,68,68,0.1)',
-                  color: '#ef4444',
+                  color: 'var(--error-text)',
                   border: '1px solid rgba(239,68,68,0.3)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                   flexShrink: 0,
                 }}

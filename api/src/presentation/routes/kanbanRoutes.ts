@@ -19,10 +19,12 @@ import { TicketAuditService, type SignoffVerdict, type SignoffContribution } fro
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { isAgentRefRoleCapable, humanIsRoleCapable, resolveMemberDisplayName } from '../../application/kanban/roleCapability';
 import { BUILTIN_ROLES } from '../../application/kanban/roleCatalog';
-import { loadAssignableWorkforce } from '../../application/kanban/assignableWorkforce';
+import { loadAssignableWorkforce, assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
 import { loadAssigneeProfiles, assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
+import { coordinateTicket } from '../../application/manager/coordinateTicket';
+import { buildRuntimeService } from '../../buildRuntimeService';
 
 /** Create a child work-item task under a parent ticket — injected from the composition
  *  root (needs TaskService's key allocation). Absent ⇒ materialize endpoint 503s. */
@@ -51,7 +53,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   // agents (incl. marketplace-hired) + human members + active hires, in one read.
   router.get('/assignable', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const key = `kanban:assignable:t:${tenantId}`;
+    const key = assignableWorkforceCacheKey(tenantId);
     const data = await getOrSetCached(env(c), key, () => loadAssignableWorkforce(db, tenantId), {
       kvTtlSeconds: 60, l1TtlMs: 15_000,
     });
@@ -241,12 +243,14 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       const memberKind = body.memberKind === 'agent' || body.memberKind === 'human' ? body.memberKind : 'human';
       const userId = (c.get('userId') as string) || null;
       const memberRef = body.memberRef?.trim() || userId;
+      const [taskScope] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!taskScope) return c.json({ error: 'task not found' }, 404);
 
       // RBAC (default-deny, AC-6): only a member ROLE-CAPABLE of roleKey may sign off as
       // it. Agents check capability; humans pass if manager, pinned, or discipline-matched.
       const capable = memberKind === 'agent'
-        ? await isAgentRefRoleCapable(db, tenantId, memberRef, body.roleKey)
-        : (isManager(c) || await humanIsRoleCapable(db, tenantId, memberRef, body.roleKey));
+        ? await isAgentRefRoleCapable(db, tenantId, memberRef, body.roleKey, taskScope.projectId)
+        : (isManager(c) || await humanIsRoleCapable(db, tenantId, memberRef, body.roleKey, taskScope.projectId));
       if (!capable) return c.json({ error: `not authorized to sign off as role '${body.roleKey}'` }, 403);
 
       const memberName = await resolveMemberDisplayName(db, tenantId, memberKind, memberRef);
@@ -265,14 +269,17 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       // Keep the participation manifest in step with the ledger.
       await participantsService.syncStates(env(c), tenantId, taskId);
       await participantsService.invalidate(env(c), taskId);
+      // Sign-off may be the final missing requirement for this stage. Hand control
+      // back to the ticket's Coordinator, which alone verifies + advances managed
+      // tickets and dispatches the next role.
+      await coordinateTicket(env(c), db, buildRuntimeService(env(c), db), { tenantId, taskId }).catch(() => null);
 
       // Emit the accountability trail on the HTTP path too (previously MCP-only).
-      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
       const actor = memberKind === 'agent'
         ? cloudAgentActor(memberRef ?? 'agent', memberName ?? memberRef ?? 'agent')
         : await resolveHumanActor(env(c), db, tenantId, memberRef ?? userId ?? '');
       await recordActivity(env(c), db, {
-        tenantId, projectId: proj?.projectId ?? null, actor,
+        tenantId, projectId: taskScope.projectId, actor,
         verb: verdict === 'approved' || verdict === 'waived' ? 'ticket.role.completed' : 'ticket.signed_off',
         targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
         summary: `${roleLabel(body.roleKey)} ${verdict.replace('_', ' ')}${body.summary ? `: ${body.summary}` : ''}`.slice(0, 300),
@@ -295,6 +302,18 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   router.get('/projects/:projectId/participants-summary', async (c) =>
     c.json({ summary: await participantsService.projectSummary(env(c), c.get('tenantId') as number, Number(c.req.param('projectId'))) }));
 
+  // Force a Coordinator tick — derive the manifest + dispatch the next required role.
+  router.post('/tasks/:taskId/coordinate', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const result = await coordinateTicket(env(c), db, buildRuntimeService(env(c), db), {
+      tenantId: c.get('tenantId') as number, taskId: Number(c.req.param('taskId')),
+      // An explicit manager click IS the approval — the role asks override the failure
+      // breaker the same way "Run now" does, so the button works on a halted ticket.
+      force: true,
+    });
+    return c.json({ result });
+  });
+
   // Resource Assessment — add a role the ticket needs beyond the template (designer,
   // security engineer, …). Manager-gated. An unstaffed add surfaces as a resource gap.
   router.post('/tasks/:taskId/participants', async (c) => {
@@ -316,6 +335,35 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       });
     }
     return c.json({ participant });
+  });
+
+  // Staff an existing manifest role. This is deliberately distinct from Resource
+  // Assessment above: assignment never invents another participant row.
+  router.patch('/tasks/:taskId/participants/assign', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    const body = await c.req.json<{ roleKey?: string; assigneeRef?: string; assigneeKind?: 'agent' | 'user' }>();
+    try {
+      const result = await participantsService.assignParticipant(env(c), tenantId, taskId, {
+        roleKey: body.roleKey ?? '',
+        assigneeRef: body.assigneeRef ?? '',
+        assigneeKind: body.assigneeKind as 'agent' | 'user',
+      });
+      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      await recordActivity(env(c), db, {
+        tenantId, projectId: proj?.projectId ?? null,
+        actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
+        verb: 'ticket.participant.assigned', targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
+        summary: `Assigned ${body.assigneeKind} ${body.assigneeRef} to role ${roleLabel(body.roleKey ?? '')}`.slice(0, 300),
+        metadata: { roleKey: body.roleKey, assigneeRef: body.assigneeRef, assigneeKind: body.assigneeKind, updated: result.updated },
+      });
+      return c.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = /not found|not a tenant member/.test(message) ? 404 : 400;
+      return c.json({ error: message }, status);
+    }
   });
 
   router.delete('/tasks/:taskId/participants/:participantId', async (c) => {

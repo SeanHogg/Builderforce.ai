@@ -18,12 +18,13 @@ import RfpContent from '@/components/rfp/RfpContent';
 import { RoleGate } from '@/components/RoleGate';
 import { usePublishNavCount } from '@/lib/navCounts';
 import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
+import { signInHref } from '@/lib/auth';
 
 type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies' | 'templates' | 'rfp';
 
 /**
  * Projects — the single destination for all project work. Its sub-views are
- * tabs (rendered by the shared <SectionTabs> bar in the app shell, driven by
+ * tabs (rendered by the shared <ShellIndex> in the app shell, driven by
  * lib/navGroups), so none of them is a separate menu item:
  *   - Projects   : the project list.
  *   - Tasks      : the task board/list (`?project=<id>` scopes it).
@@ -42,14 +43,14 @@ export default function ProjectsTasksPage() {
   const { currentProjectId } = useProjectScope();
   const brain = useOptionalBrainContext();
   // ProjectsContent fetches the list and reports the count up; we publish it to
-  // the shared nav-counts store so the shell <SectionTabs> bar shows the badge on
+  // the shared nav-counts store so the shell <ShellIndex> shows the badge on
   // the Projects tab (the tab bar lives in the app shell, not this page).
   const [projectCount, setProjectCount] = useState<number | null>(null);
   usePublishNavCount(PROJECTS_COUNT_KEY, projectCount);
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/projects');
+      router.replace(signInHref('/projects'));
     } else if (!hasTenant) {
       router.replace('/tenants?next=/projects');
     }

@@ -36,8 +36,14 @@ export type ProvenanceAccount = 'own' | 'shared' | 'shared_byo_unused';
 export interface MessageProvenance {
   /** The model the gateway ACTUALLY used (resolved, post-failover). */
   model: string;
-  /** Which account served it — see {@link ProvenanceAccount}. */
-  account: ProvenanceAccount;
+  /**
+   * Which account served it — see {@link ProvenanceAccount}. OPTIONAL: the
+   * gateway reports it via `x-builderforce-account`, which an older gateway (or a
+   * CORS setup that doesn't expose the header) omits. Requiring it used to drop
+   * the whole record, so a turn's MODEL — the thing users most need when output
+   * quality collapses — went unreported too. Absent = "model known, account not".
+   */
+  account?: ProvenanceAccount;
   /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
    *  in tooltips ("your connected Claude account"). */
   vendor?: string;
@@ -56,23 +62,21 @@ export function isConnectedAccountUnused(prov: MessageProvenance | null | undefi
 }
 
 /** Parse a message's persisted provenance, or `null` when it carries none (older
- *  turns, or turns whose gateway didn't report an account). Defensive: a malformed
- *  or partial blob yields `null` rather than throwing. */
+ *  turns). The MODEL is the only required field — a turn whose gateway didn't
+ *  report an account still names the model that answered. Defensive: a malformed
+ *  blob yields `null` rather than throwing. */
 export function parseMessageProvenance(msg: { metadata?: string | null }): MessageProvenance | null {
   if (!msg.metadata) return null;
   try {
     const p = (JSON.parse(msg.metadata) as { provenance?: Partial<MessageProvenance> }).provenance;
-    if (
-      p &&
-      typeof p.model === 'string' &&
-      p.model.length > 0 &&
-      (p.account === 'own' || p.account === 'shared' || p.account === 'shared_byo_unused')
-    ) {
+    if (p && typeof p.model === 'string' && p.model.length > 0) {
       const ev = (p as { evermind?: { version?: unknown } }).evermind;
       const evermind = ev && typeof ev.version === 'number' && ev.version >= 1 ? { version: ev.version } : undefined;
+      const account =
+        p.account === 'own' || p.account === 'shared' || p.account === 'shared_byo_unused' ? p.account : undefined;
       return {
         model: p.model,
-        account: p.account,
+        ...(account ? { account } : {}),
         ...(typeof p.vendor === 'string' ? { vendor: p.vendor } : {}),
         ...(evermind ? { evermind } : {}),
       };

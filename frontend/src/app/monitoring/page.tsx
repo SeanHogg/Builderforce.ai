@@ -1,19 +1,19 @@
-import { Suspense } from 'react';
-import { pageMetadata } from '@/lib/seo';
-import MonitoringPageClient from './MonitoringPageClient';
+import { redirect } from 'next/navigation';
 
 export const runtime = 'edge';
 
-export const metadata = pageMetadata({
-  title: 'Active Monitoring',
-  description: 'Overlay monitor pins on an architecture diagram; a breach opens an incident. Plus incident + monitor reporting.',
-  path: '/monitoring',
-});
-
-export default function MonitoringPage() {
-  return (
-    <Suspense fallback={null}>
-      <MonitoringPageClient />
-    </Suspense>
-  );
+/**
+ * Monitoring was consolidated into the Reliability destination — it is now the
+ * "Monitors" and "Reporting" tabs of the incidents page. This route only survives
+ * for old bookmarks / deep links: bare /monitoring → the Monitors board canvas,
+ * and the retired ?tab=reporting → the Reporting tab.
+ */
+export default async function MonitoringPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolved = await searchParams;
+  const tab = resolved?.tab === 'reporting' ? 'reporting' : 'monitors';
+  redirect(`/incidents?tab=${tab}`);
 }

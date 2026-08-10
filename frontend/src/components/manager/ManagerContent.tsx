@@ -2,10 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
+import { Icon } from '@/components/ui/Icon';
 import { usePermission } from '@/lib/rbac';
+import {
+  ManagerAutonomyControls, ManagerEffectiveSummary, ManagerKillSwitch,
+  type ManagerAutonomyValue,
+} from '@/components/manager/ManagerAutonomyControls';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
+import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
+import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
+import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
+import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
+import { ManagerChatPanel } from '@/components/manager/ManagerChatPanel';
+import { ManagerCanvas } from '@/components/manager/ManagerCanvas';
+import { ticketHref } from '@/lib/ticketHref';
+import { isManagerActionType, managerActionIcon } from '@/lib/managerActions';
 import {
   managerApi,
   agentHosts,
@@ -14,15 +30,13 @@ import {
   type ManagerOverview,
   type ManagerConfigPatch,
   type ManagerAction,
-  type ManagerActionType,
   type ManagerBacklogItem,
   type ManagerRunTask,
-  type PrMergePolicy,
-  type TaskPriority,
   type AgentHost,
 } from '@/lib/builderforceApi';
 import type { CloudAgentTarget, TeamMember } from '@/lib/taskAssignee';
-import { assigneeName } from '@/lib/taskAssignee';
+import { assigneeName, parseAssigneeSelectValue } from '@/lib/taskAssignee';
+import { TASK_PRIORITIES_DESC, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import {
   tableWrapStyle,
   tableStyle,
@@ -39,44 +53,70 @@ import {
  * lets a manager designate who runs the backlog and how (auto-score value,
  * auto-assign, auto-prioritize, PR-merge policy), and triggers a run on demand.
  *
+ * The Policy sub-view edits the PROJECT tier of a three-tier policy (built-in default ←
+ * workspace defaults ← this project). It renders the shared <ManagerAutonomyControls> —
+ * the same control set /settings?sub=manager uses for the workspace tier — and displays
+ * the SERVER-resolved effective policy rather than folding the tiers itself.
+ *
+ * The surface is split into sub-views by the shared <DestinationIndex> (the same
+ * secondary nav Settings / Security use), driven by `?sub=` so each view is
+ * deep-linkable: Overview ('') · Backlog · Activity · Policy. The header and the
+ * data/polling effects live above the switch so a run keeps streaming whichever
+ * sub-view is open.
+ *
  * Access to EDIT the policy / trigger a run is gated on `manager.manage`
  * (manager role); the server is the real authority. Everything else is readable
  * by anyone in the workspace. Fully localized + themed (light/dark) + responsive.
  */
 
-const PRIORITY_BADGE: Record<TaskPriority, string> = {
-  low: 'badge-gray',
-  medium: 'badge-blue',
-  high: 'badge-yellow',
-  urgent: 'badge-red',
-};
-const PRIORITIES: TaskPriority[] = ['urgent', 'high', 'medium', 'low'];
-const PR_POLICIES: PrMergePolicy[] = ['immediate', 'on_green', 'queue'];
-const ACTION_ICON: Record<ManagerActionType, string> = {
-  prioritize: '📊',
-  assign: '👤',
-  score_value: '💎',
-  dispatch: '🚀',
-  merge_pr: '🔀',
-  flag: '🚩',
-};
+const PRIORITIES = TASK_PRIORITIES_DESC;
+
+/**
+ * Translate a patch from the shared (tri-state) control set into the project config patch
+ * the API takes.
+ *
+ * Only `allowAutoMerge` is nullable on a project row, so a `null` on any other field would
+ * be a write the column cannot hold — dropped here rather than coerced, because coercing
+ * `null` to `false` on e.g. `enabled` would silently pause a project the user was trying
+ * to leave alone.
+ */
+function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): ManagerConfigPatch {
+  const out: ManagerConfigPatch = {};
+  if (patch.allowAutoMerge !== undefined) out.allowAutoMerge = patch.allowAutoMerge;
+  if (typeof patch.enabled === 'boolean') out.enabled = patch.enabled;
+  if (typeof patch.requireSignoffToComplete === 'boolean') out.requireSignoffToComplete = patch.requireSignoffToComplete;
+  if (typeof patch.autoAssign === 'boolean') out.autoAssign = patch.autoAssign;
+  if (typeof patch.autoBusinessValue === 'boolean') out.autoBusinessValue = patch.autoBusinessValue;
+  if (typeof patch.autoPrioritize === 'boolean') out.autoPrioritize = patch.autoPrioritize;
+  if (typeof patch.autoSchedule === 'boolean') out.autoSchedule = patch.autoSchedule;
+  if (patch.prMergePolicy != null) out.prMergePolicy = patch.prMergePolicy;
+  // Ceremony autonomy (0365) is tri-state at the PROJECT tier too — these columns are
+  // new, so `null` genuinely means "inherit the workspace answer" and must pass through
+  // rather than being narrowed to a boolean like the 0265 columns above.
+  if (patch.allowUnattendedCeremonies !== undefined) out.allowUnattendedCeremonies = patch.allowUnattendedCeremonies;
+  if (patch.allowAgentReassignment !== undefined) out.allowAgentReassignment = patch.allowAgentReassignment;
+  if (patch.allowAutoStaffLanes !== undefined) out.allowAutoStaffLanes = patch.allowAutoStaffLanes;
+  if (patch.agentReassignIdleHours !== undefined) out.agentReassignIdleHours = patch.agentReassignIdleHours;
+  if (patch.agentReassignMaxPerSession !== undefined) out.agentReassignMaxPerSession = patch.agentReassignMaxPerSession;
+  return out;
+}
 
 // ── Shared inline styles (all colours from theme vars → light + dark safe) ──
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
 const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
 const controlStyle: CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', minWidth: 220, maxWidth: '100%',
 };
 const primaryBtn: CSSProperties = {
-  padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: '#fff', fontWeight: 700, fontSize: '0.85rem',
+  padding: '9px 16px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: '0.85rem',
 };
 
 export interface ManagerContentProps {
@@ -87,6 +127,15 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const t = useTranslations('manager');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('manager.manage');
+  // Sub-view is URL state (`?sub=`), not local state, so every view is
+  // deep-linkable and the back button works — same convention as /settings.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const sub = searchParams.get('sub') ?? '';
+  // A question handed over from the Overview's starter row (`?q=`). URL state, not a
+  // prop drilled through the sub-view switch, so the deep link is shareable and a
+  // reload re-asks rather than landing on an empty chat.
+  const askQuestion = searchParams.get('q');
 
   const [data, setData] = useState<ManagerOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -191,7 +240,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }, [projectId]);
 
   const runNow = useCallback(async () => {
-    if (projectId == null || running) return;
+    if (projectId == null || running || data?.policy.enabled === false) return;
     setError(null);
     setRunning(true);
     const baseline = data?.stats.lastRunAt ?? null;
@@ -260,8 +309,38 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }
   if (!data) return null;
 
-  const { policy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
+  const { config, policy, tenantPolicy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
+  const workspaceManagerDisabled = !tenantPolicy.enabled;
+  const projectManagerEnabled = config?.enabled === true;
+  const managerRunDisabled = !policy.enabled || data.managed === false;
   const managerValue = policy.managerRef ?? '';
+  const managerAssignee = parseAssigneeSelectValue(managerValue);
+
+  // The opinions stored at the PROJECT tier, as the shared control set reads them.
+  //
+  // Merge authority is the raw stored value so "inherit the workspace answer" (null) stays
+  // distinguishable from "this project says no". The rest bind to the RESOLVED policy
+  // because their columns are NOT NULL (0265): a project with no row yet has no separate
+  // stored value to show, and the first write to any of them materialises the row with
+  // exactly the values on screen.
+  const projectAutonomy: ManagerAutonomyValue = {
+    enabled: policy.enabled,
+    allowAutoMerge: config ? config.allowAutoMerge : null,
+    requireSignoffToComplete: policy.requireSignoffToComplete,
+    prMergePolicy: policy.prMergePolicy,
+    autoAssign: policy.autoAssign,
+    autoBusinessValue: policy.autoBusinessValue,
+    autoPrioritize: policy.autoPrioritize,
+    autoSchedule: policy.autoSchedule,
+    // Read from the CONFIG ROW, not the resolved policy: these columns are nullable at
+    // the project tier, so "not set / inherit" is a real stored state that the resolved
+    // policy cannot express (it would report the inherited answer as this project's own).
+    allowUnattendedCeremonies: config ? config.allowUnattendedCeremonies : null,
+    allowAgentReassignment: config ? config.allowAgentReassignment : null,
+    allowAutoStaffLanes: config ? config.allowAutoStaffLanes : null,
+    agentReassignIdleHours: config ? config.agentReassignIdleHours : null,
+    agentReassignMaxPerSession: config ? config.agentReassignMaxPerSession : null,
+  };
   const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
   const activeDirectives = directives.filter((d) => d.status === 'active');
 
@@ -282,34 +361,90 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     value: backlog.filter((b) => b.priority === p).length,
   })).filter((d) => d.value > 0);
 
+  // Sub-views. Policy is only offered to a manager (the panels inside it are
+  // `manager.manage`-gated anyway, and the server is the real authority — a
+  // deep link to ?sub=policy still renders RoleGate's block notice).
+  const href = (id: string) => (id ? `/projects?tab=manager&sub=${id}` : '/projects?tab=manager');
+  const subTabs: IndexItem[] = [
+    { id: '', label: t('subnav.overview'), icon: '📊', href: href('') },
+    { id: 'backlog', label: t('subnav.backlog'), icon: '📋', href: href('backlog') },
+    { id: 'stuck', label: t('subnav.stuck'), icon: '🚧', href: href('stuck') },
+    { id: 'ask', label: t('subnav.ask'), icon: '💬', href: href('ask') },
+    { id: 'activity', label: t('subnav.activity'), icon: '📡', href: href('activity') },
+    ...(canManage ? [{ id: 'policy', label: t('subnav.policy'), icon: '⚙️', href: href('policy') }] : []),
+  ];
+  // Unknown/stale `?sub=` values fall back to Overview rather than a blank page.
+  const activeSub = subTabs.some((s) => s.id === sub) ? sub : '';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span aria-hidden>🧭</span> {t('title')}
+            <span aria-hidden><Icon source="🧭" size="1em" /></span> {t('title')}
           </h1>
           <p style={{ margin: '6px 0 0', ...mutedStyle, maxWidth: 640 }}>{t('subtitle')}</p>
           <p style={{ margin: '4px 0 0', ...mutedStyle }}>
             {stats.lastRunAt ? t('lastManaged', { when: relative(stats.lastRunAt) }) : t('neverManaged')}
           </p>
         </div>
-        <RoleGate capability="manager.manage">
-          <button
-            type="button"
-            style={{ ...primaryBtn, opacity: running ? 0.7 : 1 }}
-            disabled={running}
-            onClick={runNow}
-          >
-            {running ? t('running') : t('runNow')}
-          </button>
-        </RoleGate>
+        {/* Run, then capture why nothing changed — the two actions a person alternates
+            between. Copy diagnostics used to live inside the Stuck panel, reachable from
+            one sub-tab, even though most of what it reports (policy tiers, pass outcomes,
+            autonomy health, the decision feed) lives on the others. It is not role-gated:
+            reading the state is not managing it, and the person diagnosing a dead board is
+            often not the one who may run a pass. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {projectId != null && <ManagerCopyDiagnostics projectId={projectId} overview={data} />}
+          <RoleGate capability="manager.manage">
+            <button
+              type="button"
+              style={{ ...primaryBtn, opacity: running || managerRunDisabled ? 0.55 : 1, cursor: running || managerRunDisabled ? 'not-allowed' : 'pointer' }}
+              disabled={running || managerRunDisabled}
+              title={managerRunDisabled ? t('disabledNotice') : undefined}
+              onClick={runNow}
+            >
+              {running ? t('running') : t('runNow')}
+            </button>
+          </RoleGate>
+        </div>
       </div>
 
       {error && data && (
-        <div style={{ ...panelStyle, borderColor: 'var(--danger, #dc2626)', color: 'var(--danger, #dc2626)', fontSize: '0.85rem' }}>
+        <div style={{ ...panelStyle, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '0.85rem' }}>
           {error}
+        </div>
+      )}
+
+      {/* NOT MANAGED — the project never opted in, so the scheduled sweep does not
+          select it and "Run manager now" returns skipped=unconfigured. This has to be
+          stated on the surface rather than inferred from the policy table, because that
+          table reads "enabled: yes" for exactly this project: a project with no config
+          row of its own folds to the built-in default. `managed` comes from the server's
+          shared predicate; `=== false` because an older API omits the field entirely. */}
+      {data.managed === false && (
+        <div
+          role="alert"
+          style={{
+            ...panelStyle,
+            display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
+            borderColor: 'var(--danger-text)',
+            background: 'var(--danger-bg, rgba(220, 38, 38, 0.08))',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}><Icon source="🚫" size="1em" /></span>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-text)' }}>
+              {t('notConfigured.title')}
+            </div>
+            <div style={{ ...mutedStyle, marginTop: 4 }}>{t('notConfigured.body')}</div>
+          </div>
+          <RoleGate capability="manager.manage">
+            <Link href={href('policy')} style={{ ...primaryBtn, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              {t('notConfigured.cta')}
+            </Link>
+          </RoleGate>
         </div>
       )}
 
@@ -323,13 +458,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10,
-            borderColor: 'var(--warning-fg, #b45309)',
+            borderColor: 'var(--warning-text)',
             background: 'var(--warning-bg, rgba(180, 83, 9, 0.08))',
           }}
         >
-          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>⏸️</span>
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}><Icon source="⏸️" size="1em" /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-fg, #b45309)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-text)' }}>
               {t('autonomyPaused.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>
@@ -339,12 +474,68 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         </div>
       )}
 
-      {/* ── Stats tiles + priority chart ── */}
+      {/* ── Secondary nav (the ONE shared index, same as /settings) ── */}
+      <DestinationIndex items={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
+
+      {activeSub === '' && (
+      <>
+      <ManagerCanvas
+        overview={data}
+        managerName={managerValue ? memberName(managerAssignee.assignedUserId, managerAssignee.assignedAgentRef, managerAssignee.assignedAgentHostId) : t('policy.manager.system')}
+        managerType={currentType ? typeLabel(currentType) : t('title')}
+        lastManaged={stats.lastRunAt ? t('lastManaged', { when: relative(stats.lastRunAt) }) : t('neverManaged')}
+        running={running}
+        canManage={canManage && !managerRunDisabled}
+        onRun={runNow}
+        relative={relative}
+        actionLabel={(action) => isManagerActionType(action.actionType)
+          ? t(`action.${action.actionType}`)
+          : action.actionType}
+        labels={{
+          canvas: t('title'), live: t('activity.working'), open: t('subnav.overview'),
+          run: t('runNow'), running: t('running'), policy: t('subnav.policy'),
+          policyDescription: t('policy.subtitle'), backlog: t('subnav.backlog'),
+          backlogDescription: t('backlog.title'), stuck: t('subnav.stuck'),
+          stuckDescription: t('stalls.caption', { maxAttempts: 3 }), ask: t('subnav.ask'),
+          askDescription: t('ask.caption'), today: t('today.title'), todayDescription: t('today.decisions.title'), activity: t('subnav.activity'),
+          activityDescription: t('activity.title'), total: t('stat.total'),
+          unscored: t('stat.unscored'), unowned: t('stat.unowned'), flagged: t('stat.flagged'),
+          runTasks: t('runTasks.title'), actions: t('activity.title'), directives: t('coaching.activeTitle'),
+          autoAssign: t('policy.autoAssign.label'), autoMerge: t('policy.allowAutoMerge.label'),
+          openPullRequests: t('stat.openPullRequests'), blockedPullRequests: t('stalls.cause.merge_withheld'),
+          enabled: t('policy.effective.managingOn'), paused: t('policy.effective.managingOff'), emptyActivity: t('activity.empty'),
+        }}
+      />
+      {/* ── TODAY leads. ──
+          The tiles below describe the board's standing STATE — 679 tickets, 373
+          coverage gaps — which barely moves day to day and answers no question a
+          person actually arrives with. Backlog health is a real question; it is the
+          SECOND one, so it now sits underneath the day's accomplishments rather than
+          in front of them. */}
+      <div id="manager-today"><ManagerTodayDigest projectId={projectId} /></div>
+
+      {/* The question those numbers provoke, one click from the numbers themselves.
+          A starter navigates to the Ask view carrying the question, which the chat
+          panel puts to the manager on arrival — so "why didn't anything ship?" is a
+          click, not something a person has to think to type. */}
+      <div style={panelStyle}>
+        <ManagerChatPanel
+          projectId={projectId}
+          compact
+          onAsk={(question) => router.push(`${href('ask')}&q=${encodeURIComponent(question)}`)}
+        />
+      </div>
+
+      {/* ── Backlog health: stats tiles + priority chart ── */}
+      <div style={{ ...sectionTitleStyle, marginTop: 4 }}>{t('health.title')}</div>
+      <div style={{ ...mutedStyle, marginTop: -8 }}>{t('health.caption')}</div>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
         <StatTile label={t('stat.total')} value={stats.total} />
         <StatTile label={t('stat.unscored')} value={stats.unscored} tone={stats.unscored > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.unranked')} value={stats.unranked} tone={stats.unranked > 0 ? 'warn' : undefined} />
+        <StatTile label={t('stat.undated')} value={stats.undated} tone={stats.undated > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.unowned')} value={stats.unowned} tone={stats.unowned > 0 ? 'warn' : undefined} />
+        <StatTile label={t('stat.flagged')} value={stats.flagged} tone={stats.flagged > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.openPullRequests')} value={stats.openPullRequests} />
       </div>
 
@@ -357,17 +548,43 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           <div style={mutedStyle}>{t('chart.empty')}</div>
         )}
         {(stats.unscored > 0 || stats.unranked > 0) && (
-          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
-            💡 {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
+          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
+            
+            <Icon source="💡" size="1em" /> {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
+          </div>
+        )}
+        {stats.flagged > 0 && (
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
+            
+            <Icon source="🚩" size="1em" /> {t('coverageNudge', { flagged: stats.flagged })}
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {activeSub === 'policy' && (
+      <>
+      {workspaceManagerDisabled && (
+        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-text)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-text)', fontWeight: 600, fontSize: '0.85rem' }}>
+          {t('disabledNotice')}
+        </div>
+      )}
+      <fieldset disabled={workspaceManagerDisabled} style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, margin: 0, padding: 0, border: 0, opacity: workspaceManagerDisabled ? 0.58 : 1 }}>
       {/* ── Policy panel ── */}
       <RoleGate capability="manager.manage" variant="block">
         <div style={panelStyle}>
-          <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('policy.title')}</div>
-          <div style={{ ...mutedStyle, marginBottom: 16 }}>{t('policy.subtitle')}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div style={{ minWidth: 0, flex: '1 1 360px' }}>
+              <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('policy.title')}</div>
+              <div style={mutedStyle}>{t('policy.subtitle')}</div>
+            </div>
+            <ManagerKillSwitch
+              checked={projectManagerEnabled}
+              disabled={saving || workspaceManagerDisabled}
+              onChange={(enabled) => savePatch({ enabled })}
+            />
+          </div>
 
           {/* Designate the manager */}
           <div style={{ marginBottom: 20 }}>
@@ -377,7 +594,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('policy.manager.help')}</div>
             <Select
               value={managerValue}
-              disabled={saving}
+              disabled={saving || workspaceManagerDisabled}
               onChange={(e) => savePatch({ managerRef: e.target.value })}
               style={controlStyle}
             >
@@ -414,7 +631,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('type.help')}</div>
             <Select
               value={policy.managerType}
-              disabled={saving}
+              disabled={saving || workspaceManagerDisabled}
               onChange={(e) => savePatch({ managerType: e.target.value as typeof policy.managerType })}
               style={controlStyle}
             >
@@ -432,60 +649,23 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             )}
           </div>
 
-          {/* Toggles */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 20 }}>
-            <ToggleRow
-              label={t('policy.enabled.label')} help={t('policy.enabled.help')}
-              checked={policy.enabled} disabled={saving}
-              onChange={(v) => savePatch({ enabled: v })}
-            />
-            <ToggleRow
-              label={t('policy.autoBusinessValue.label')} help={t('policy.autoBusinessValue.help')}
-              checked={policy.autoBusinessValue} disabled={saving}
-              onChange={(v) => savePatch({ autoBusinessValue: v })}
-            />
-            <ToggleRow
-              label={t('policy.autoPrioritize.label')} help={t('policy.autoPrioritize.help')}
-              checked={policy.autoPrioritize} disabled={saving}
-              onChange={(v) => savePatch({ autoPrioritize: v })}
-            />
-            <ToggleRow
-              label={t('policy.autoAssign.label')} help={t('policy.autoAssign.help')}
-              checked={policy.autoAssign} disabled={saving}
-              onChange={(v) => savePatch({ autoAssign: v })}
-            />
-          </div>
+          {/* What the manager will actually do once the workspace defaults and this
+              project's settings are combined — server-resolved, never re-derived here. */}
+          <ManagerEffectiveSummary effective={policy} />
 
-          {/* PR-merge policy segmented control */}
-          <div>
-            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: 4 }}>
-              {t('policy.prMerge.label')}
-            </div>
-            <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('policy.prMerge.help')}</div>
-            <div role="radiogroup" style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4 }}>
-              {PR_POLICIES.map((p) => {
-                const active = policy.prMergePolicy === p;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    disabled={saving}
-                    onClick={() => savePatch({ prMergePolicy: p })}
-                    title={t(`policy.prMerge.${p}.help`)}
-                    style={{
-                      padding: '7px 12px', borderRadius: 7, border: 'none', cursor: saving ? 'default' : 'pointer',
-                      background: active ? 'var(--accent, #2563eb)' : 'transparent',
-                      color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
-                    }}
-                  >
-                    {t(`policy.prMerge.${p}.label`)}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ ...mutedStyle, marginTop: 8 }}>{t(`policy.prMerge.${policy.prMergePolicy}.help`)}</div>
+          {/* The autonomy control set — the SAME component the workspace-defaults panel
+              in /settings renders, at the project scope. */}
+          <ManagerAutonomyControls
+            tier="project"
+            value={projectAutonomy}
+            effective={policy}
+            inherited={tenantPolicy}
+            disabled={saving || workspaceManagerDisabled}
+            showEnabled={false}
+            onChange={(patch) => savePatch(autonomyPatchToConfigPatch(patch))}
+          />
+          <div style={{ ...mutedStyle, marginTop: 12, fontSize: '0.72rem' }}>
+            {t('policy.workspaceDefaultsHint')}
           </div>
         </div>
       </RoleGate>
@@ -499,7 +679,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
 
           {/* Mode — standing directive vs a one-off task the manager executes once. */}
-          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4, marginBottom: 10 }}>
+          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 4, marginBottom: 10 }}>
             {(['directive', 'task'] as const).map((m) => {
               const active = coachMode === m;
               return (
@@ -510,9 +690,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                   aria-checked={active}
                   onClick={() => setCoachMode(m)}
                   style={{
-                    padding: '7px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                    background: active ? 'var(--accent, #2563eb)' : 'transparent',
-                    color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
+                    padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer',
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
                   }}
                 >
                   {t(`coaching.mode${m === 'task' ? 'Task' : 'Directive'}`)}
@@ -574,10 +754,10 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                     key={d.id}
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
-                      border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)',
+                      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)',
                     }}
                   >
-                    <span aria-hidden style={{ flexShrink: 0 }}>🎯</span>
+                    <span aria-hidden style={{ flexShrink: 0 }}><Icon source="🎯" size="1em" /></span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{d.directive}</div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -596,7 +776,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                         title={t('coaching.markDone')}
                         aria-label={t('coaching.markDone')}
                         style={{
-                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
                         }}
                       >
@@ -608,7 +788,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                         title={t('coaching.dismiss')}
                         aria-label={t('coaching.dismiss')}
                         style={{
-                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
                         }}
                       >
@@ -622,8 +802,12 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         </div>
       </RoleGate>
+      </fieldset>
+      </>
+      )}
 
-      {/* ── Ranked backlog ── */}
+      {activeSub === 'backlog' && (
+      /* ── Ranked backlog ── */
       <div>
         <div style={{ ...sectionTitleStyle, marginBottom: 8 }}>{t('backlog.title')}</div>
         {backlog.length === 0 ? (
@@ -658,7 +842,30 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      )}
 
+      {/* ── Ask: hold the manager to account, in its own conversation ── */}
+      {activeSub === 'ask' && projectId != null && (
+        <ManagerChatPanel projectId={projectId} initialQuestion={askQuestion} />
+      )}
+
+      {/* ── Stuck: what the manager cannot finish, and what it has tried ── */}
+      {/* The overview goes down with it: the register's "Copy diagnostics" handover needs
+          the policy tiers, autonomy health, pass cards and decision feed that live here,
+          and re-fetching the same endpoint in the child would be a pure duplicate. */}
+      {activeSub === 'stuck' && projectId != null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* The census leads: the register below is per-ticket and bounded by what deep
+              triage has diagnosed, so reading it FIRST invites mistaking a sample for the
+              whole picture — which is exactly how a 313-ticket cohort stayed invisible
+              behind a 44-row register. Scale and root cause first, then the detail. */}
+          <ManagerStallCensus projectId={projectId} />
+          <ManagerStallRegister projectId={projectId} />
+        </div>
+      )}
+
+      {activeSub === 'activity' && (
+      <>
       {/* ── Manager tasks (the manager's own backlog-management passes) ── */}
       <div>
         <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('runTasks.title')}</div>
@@ -699,13 +906,12 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={sectionTitleStyle}>{t('activity.title')}</span>
           {running && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)' }}>
               <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', animation: 'bf-pulse 1.2s ease-in-out infinite' }} />
               {t('activity.working')}
             </span>
           )}
         </div>
-        <style>{'@keyframes bf-pulse{0%,100%{opacity:.35}50%{opacity:1}}'}</style>
         {actions.length === 0 ? (
           <div style={{ ...panelStyle, ...mutedStyle }}>{t('activity.empty')}</div>
         ) : (
@@ -716,6 +922,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -739,41 +947,11 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
   return (
     <div style={{ ...panelStyle, padding: 14 }}>
-      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-fg, #b45309)' : 'var(--text-primary)' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
         {value.toLocaleString()}
       </div>
       <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
     </div>
-  );
-}
-
-function ToggleRow({ label, help, checked, disabled, onChange }: {
-  label: string; help: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void;
-}) {
-  return (
-    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', cursor: disabled ? 'default' : 'pointer' }}>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        style={{
-          flexShrink: 0, marginTop: 2, width: 40, height: 22, borderRadius: 999, border: 'none', position: 'relative',
-          cursor: disabled ? 'default' : 'pointer', transition: 'background 0.2s',
-          background: checked ? 'var(--accent, #2563eb)' : 'var(--border-subtle)',
-        }}
-      >
-        <span style={{
-          position: 'absolute', top: 2, left: checked ? 20 : 2, width: 18, height: 18, borderRadius: '50%',
-          background: '#fff', transition: 'left 0.2s',
-        }} />
-      </button>
-      <span>
-        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{label}</span>
-        <span style={{ display: 'block', ...mutedStyle }}>{help}</span>
-      </span>
-    </label>
   );
 }
 
@@ -783,8 +961,8 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={rationale || noRationale}>
       <span style={{ fontWeight: 700, fontSize: '0.82rem', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
-      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 4 }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent, #2563eb)', borderRadius: 4 }} />
+      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 'var(--radius-sm)' }} />
       </div>
     </div>
   );
@@ -802,7 +980,7 @@ function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip 
       <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.key}</td>
       <td style={tdStyle}>{item.title}</td>
       <td style={tdStyle}>
-        <span className={PRIORITY_BADGE[item.priority]} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
           {priorityLabel}
         </span>
       </td>
@@ -827,9 +1005,9 @@ function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 
 
 /** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
 const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
-  in_progress: 'var(--accent, #2563eb)',
-  done: 'var(--success-fg, #15803d)',
-  blocked: 'var(--warning-fg, #b45309)',
+  in_progress: 'var(--accent)',
+  done: 'var(--success-text, var(--success))',
+  blocked: 'var(--warning-text)',
   open: 'var(--text-secondary)',
 };
 
@@ -845,7 +1023,7 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
       <td style={tdStyle}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
-          color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: '2px 9px',
+          color: tone, border: `1px solid ${tone}`, borderRadius: 'var(--radius-full)', padding: '2px 9px',
         }}>
           <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
           {statusLabel}
@@ -861,8 +1039,16 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
 function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeLabel: string; when: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span aria-hidden style={{ flexShrink: 0, fontSize: '1rem', lineHeight: '1.3rem' }}>{ACTION_ICON[action.actionType] ?? '•'}</span>
+      <span aria-hidden style={{ flexShrink: 0 }}><Icon source={managerActionIcon(action.actionType)} size={18} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
+        {action.taskId != null && (
+          <Link
+            href={ticketHref(action.taskId)}
+            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
+          >
+            {action.ticketKey ?? `#${action.taskId}`}{action.ticketTitle ? ` · ${action.ticketTitle}` : ''}
+          </Link>
+        )}
         <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{action.summary}</div>
         {action.detail && <div style={{ ...mutedStyle, marginTop: 2 }}>{action.detail}</div>}
       </div>

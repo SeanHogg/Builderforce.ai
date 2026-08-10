@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { diagnosticScoreColor, orderDiagnostics } from '@/lib/diagnosticScore';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * ProjectDiagnosticsStrip — the SINGLE surface for showing the diagnostics a
@@ -72,9 +73,9 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
     return d.gapCount > 0 ? { label: gapText(d), tone: 'warn' } : { label: `✓ ${t('noGaps')}`, tone: 'good' };
   };
   const BADGE_TONE: Record<BadgeTone, { fg: string; bg: string; border: string }> = {
-    good: { fg: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
-    progress: { fg: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
-    warn: { fg: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
+    good: { fg: 'var(--success)', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
+    progress: { fg: 'var(--coral-bright)', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
+    warn: { fg: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
   };
 
   // ── chips: dense score pills for the project card / list row ────────────────
@@ -89,11 +90,11 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
           // (green), outstanding gaps read as "attention" (coral); otherwise none.
           const remState = d.remediation?.state ?? 'none';
           const dot = (remState === 'pr_open' || remState === 'resolved')
-            ? { color: '#22c55e', title: remediationBadge(d).label }
+            ? { color: 'var(--success-text)', title: remediationBadge(d).label }
             : d.gapCount > 0 ? { color: 'var(--coral-bright)', title: gapText(d) } : null;
           const chip = (
             <>
-              <span aria-hidden style={{ fontSize: 13 }}>{d.icon}</span>
+              <span aria-hidden><Icon source={d.icon} size={14} /></span>
               <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
                 {d.score == null ? '—' : d.score.toFixed(1)}
               </span>
@@ -101,7 +102,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
                 <span
                   aria-hidden
                   title={dot.title}
-                  style={{ width: 6, height: 6, borderRadius: 999, background: dot.color, flexShrink: 0 }}
+                  style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: dot.color, flexShrink: 0 }}
                 />
               )}
             </>
@@ -110,7 +111,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 11, lineHeight: 1,
             background: 'var(--bg-base)', border: `1px solid ${d.score == null ? 'var(--border-subtle)' : color + '66'}`,
-            borderRadius: 999, padding: '4px 9px', color: 'var(--text-secondary)',
+            borderRadius: 'var(--radius-full)', padding: '4px 9px', color: 'var(--text-secondary)',
           };
           return onOpen ? (
             <button key={d.toolId} type="button" title={ariaFor(d)} aria-label={ariaFor(d)}
@@ -141,7 +142,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
               <MiniGauge score={d.score} label={d.scoreLabel} />
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, width: '100%' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
-                  <span aria-hidden style={{ fontSize: 14 }}>{d.icon}</span>
+                  <span aria-hidden><Icon source={d.icon} size={15} /></span>
                   <span style={{
                     fontSize: 12, fontWeight: 700, color: 'var(--text-primary)',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -154,7 +155,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
                       color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}`,
-                      borderRadius: 999, padding: '3px 9px', maxWidth: '100%',
+                      borderRadius: 'var(--radius-full)', padding: '3px 9px', maxWidth: '100%',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {badge.label}
@@ -167,7 +168,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
           const cardStyle: React.CSSProperties = {
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
             padding: 14, textAlign: 'center', width: '100%',
-            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
           };
           return onOpen ? (
             <button key={d.toolId} type="button" aria-label={ariaFor(d)}

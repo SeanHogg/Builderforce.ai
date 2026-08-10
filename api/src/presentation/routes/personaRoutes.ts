@@ -12,8 +12,10 @@
  *   GET  /api/personas/public        Browse public personas (q/category/sort, cached)
  *   GET  /api/personas/:slug         Public persona detail
  *
- * AUTH (tenant JWT):
+ * OPTIONAL AUTH (tenant JWT):
  *   GET  /api/personas/psychometric/catalog            Framework catalog (Pro-aware)
+ *
+ * AUTH (tenant JWT):
  *   POST /api/personas/psychometric/score|import       Pure scoring helpers (universal)
  *   GET  /api/personas/mine          This tenant's personas (any visibility)
  *   POST /api/personas               Publish / create a persona (tenant-scoped)
@@ -30,7 +32,7 @@
  */
 import { Hono } from 'hono';
 import { and, desc, eq, ilike, ne, or, sql as dsql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { requiredPlanForFeature } from '../../domain/tenant/planFeatures';
 import {
@@ -162,14 +164,17 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   // GET /api/personas/psychometric/catalog
   // The full framework suite + questionnaire bank. Static constant — every
-  // authenticated user may read it (so the editor can render the locked state).
+  // visitor may read it (public marketplace cards need the dimension labels).
+  // Authentication only enriches the response with the tenant's entitlement.
   // -------------------------------------------------------------------------
-  router.get('/psychometric/catalog', authMiddleware, async (c) => {
-    const tenantId = c.get('tenantId') as number;
+  router.get('/psychometric/catalog', optionalAuthMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number | undefined;
     const userId = c.get('userId') as string | undefined;
     // `entitled` here gates ATTACHING a profile to an agent/persona (the editor's
     // locked state). Superadmin- and premium-override-aware via the shared gate.
-    const entitled = await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona');
+    const entitled = tenantId == null
+      ? false
+      : await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona');
     return c.json({
       entitled,
       requiredPlan: requiredPlanForFeature('psychometricPersona'),

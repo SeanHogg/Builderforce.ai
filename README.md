@@ -77,14 +77,12 @@ Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https:
 - **Multi-workspace** — users belong to multiple tenants; `bf_default_tenant_id` auto-selects on login
 - **Admin observability** — `/admin` surface for platform admins (superadmin flag); `logs/global-errors.txt` in R2; `/observability` LLM usage metrics
 
-### Billing & Subscriptions (Provider-Agnostic)
-- **PaymentProvider abstraction** — `src/infrastructure/payment/PaymentProvider.ts` defines the interface; swap providers by changing one env var
-- **ManualProvider** (default) — no external processor; subscription activates immediately; suits manual invoicing or internal deployments
-- **StripeProvider** — Stripe Checkout + Billing; hosted payment page; webhook-activated subscriptions
-- **HelcimProvider** — Helcim HelcimPay.js; webhook-activated; stub ready for implementation
-- **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` returns either a redirect URL (hosted providers) or `null` (manual, activates immediately)
-- **Webhook handler** — `POST /api/webhooks/payment` receives provider events; HMAC-verified; activates/cancels subscriptions via normalised `WebhookEvent`
-- **Switching providers** — set `PAYMENT_PROVIDER=stripe|helcim|manual` + provider credentials; no application code changes required
+### Billing & Subscriptions (Stripe)
+- **Stripe only** — `src/infrastructure/payment/StripeProvider.ts` (Stripe Checkout + Billing, hosted payment page, webhook-activated). There is deliberately no provider switch and no manual fallback: a fallback that activated plans without charging meant an unconfigured deploy handed out paid plans for free.
+- **PaymentProvider interface** — `src/infrastructure/payment/PaymentProvider.ts` keeps `TenantService` off the concrete Stripe client and lets tests inject a fake; it is not a provider-swap seam.
+- **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` always returns a hosted `checkoutUrl`. The plan activates only when the signed webhook confirms payment — never from the request itself.
+- **Webhook handler** — `POST /api/webhooks/payment` receives Stripe events; HMAC-verified with a 5-minute replay window; activates/cancels subscriptions via normalised `WebhookEvent`
+- **Configuration** — set the `STRIPE_*` Worker secrets (see `src/infrastructure/payment/index.ts`). They are validated lazily: absent secrets return **503** from the billing routes and never break Worker boot.
 
 ### Dev Analytics & Team Intelligence
 - **Contributor profiles** — cross-platform developer identity reconciliation (GitHub, Jira, Bitbucket); `GET /api/contributors`
@@ -155,6 +153,30 @@ Move off a competitor tracker without fear, or just sync data in — a **staged*
 
 ### Consumption Metering (mig 0218)
 - **Meter on consumption, not visibility** — one framework (`/api/consumption`) reports month-to-date usage for `ai_tokens`, `ingestion` (bytes), and `error_events` against the plan allowance, using the **same accountants the gateway and ingestion gate enforce** — so the "% used" a member sees equals the cap that's enforced. Cached 60s, keyed per tenant + calendar month.
+
+### Coordinated Role Participation & Accountability (mig 0334)
+- **The right role does the work** — first-class agent↔role capability (`ide_agents.role_keys`) drives role-aware assignment: a producer stage resolves the role from the ticket's `action_type` and dispatches a role-capable agent/human, never a mis-assigned one. Stops the "a Product Manager was dispatched to write code" class of failure.
+- **A participation manifest per ticket** — `ticket_participants` derives the required roles from the board's swimlane requirements, resolves each slot by capability, and tracks per-participant state (pending / assigned / in_progress / completed / changes_requested / waived / unstaffed).
+- **An immutable Accountability Report** — an append-only `ticket_role_signoffs` ledger records Who / When / Verdict / Comments / Contribution per role; default-deny RBAC (only role-capable members may sign off as a role); every sign-off emits to the unified activity log. A **Resource Assessment** control adds a needed role beyond the template — an unresolved add surfaces as a blocking resource gap.
+- **Endpoints** — `GET /api/kanban/tasks/:id/accountability`, `/participants`, `POST /participants` (assess) / `/materialize`, plus MCP `kanban.participants` / `kanban.accountability` / `kanban.assess_resource`. Surface: the ticket-drawer **Accountability** tab + a board `X/Y` participants chip.
+
+### Pre-Sales RFP / RFQ Response (mig 0335)
+- **Turn a repo into a proposal** — CTO + Product Owner built-in agents generate a branded, costed proposal from a project's analyzed capabilities: cost / P&L, a phase Gantt, risks, dependencies, and a capability roster matched to the ask.
+- **Co-branded output** — the requester's palette + logo blend with the responder's for a branded, self-contained proposal document (print-to-PDF / download), with freshness-gated grounding (a >5-day-stale scan re-runs the deterministic system audits before answering).
+- **Surface** — a Projects **RFP tab** (list / create) + `/projects/rfp/[id]` detail; `/api/rfp` routes.
+
+### Incident Management & Active Monitoring (mig 0292)
+- **Incidents close the loop** — a Help-Desk / Incident-Manager agent, a Freshdesk connector, on-call rotations, timed escalation, Teams / Slack / email paging, and a per-incident war-room feed. On resolution the RCA is published to Knowledge **and** fed to the project's Evermind, so the workforce learns and stops repeating causes.
+- **A monitoring canvas** — pin heartbeat / HTTP / webhook / metric monitors onto an uploaded architecture diagram; a `*/5` sweep evaluates them and a breach **auto-starts the on-call investigation** (monitor → signal → incident → paging), with reporting on the timeline.
+
+### Meetings & Live Collaboration (mig 0292, 0330)
+- **Video / audio meetings with agents in the room** — mesh WebRTC over a `CeremonyRoomDO` relay; agent attendees speak live via a caption / transcript bridge; recording + transcription produce **AI minutes**. Google / Microsoft calendar sync. Surface: `/meetings`.
+
+### AI Managers — Types & Coaching (mig 0327)
+- **Typed managers tied to the role catalog** — Dev / QA / Service-Desk / DevOps manager types map to `roleCatalog` (custom roles become `role:<key>` types); a human → manager **Coaching Session** carries directive | task modes with expiry / done state, steering how a manager agent runs its reports.
+
+### Memory-First Answering — skip the paid LLM
+- **Answer from the project's own memory before spending a model call** — the web and VS Code webview Brain consult the project's `project_facts` fact tier + its Evermind SSM first and short-circuit the LLM on a confident hit (an exact-repeat Q&A cache + opt-in Evermind-first inference), single-sourced in `resolveMemoryAnswer`. Learning fans out to **every** Evermind under a project (its own head + its IDE builds' heads) via one shared `contributeTextToProjectEverminds`. Endpoints: `GET/POST /api/projects/:id/answer`, `GET /api/projects/:id/evermind/targets`.
 
 ---
 
@@ -549,7 +571,7 @@ cd api && npm run secrets:from-env && npm run deploy
 
 **Required secrets:** `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `NEON_DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`. (SDK publishing uses npm Trusted Publishing OIDC — no `NPM_TOKEN` secret needed; see below.)
 
-**SDK publishing:** the [release.yml](.github/workflows/release.yml) `publish-sdk` job runs `npm publish --provenance --access public` on every push to `main`, guarded by an inline `npm view ...` check so the publish is skipped when `sdk/package.json` `version` matches what's already on npm (re-runs idempotent). Auth is via npm Trusted Publishing OIDC — configure once on the *package* (not the account) at https://www.npmjs.com/package/@seanhogg/builderforce-sdk/access → Publishing access → Add trusted publisher → GitHub Actions / Organization `SeanHogg` / Repository `Builderforce.ai` / Workflow `release.yml`. The workflow grants `id-token: write` so npm CLI 11.15+ mints the OIDC token automatically; no long-lived token in repo secrets. Bump the version in `sdk/package.json`, push to `main`, new version lands on npm.
+**Releases:** [release.yml](.github/workflows/release.yml) runs four independent jobs in parallel: npm packaging, API deployment, frontend deployment, and help-site deployment. The `package-npm` job builds, tests, and publishes each public package only when its `package.json` version is absent from npm, making re-runs idempotent. Auth uses npm Trusted Publishing OIDC (with `NPM_TOKEN` as an optional bootstrap fallback). Configure each package's trusted publisher for Organization `SeanHogg`, Repository `Builderforce.ai`, and Workflow `release.yml`.
 
 **Optional OAuth secrets** (add only the providers you want):
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`
@@ -626,7 +648,7 @@ The default. Runs the Claude Agent SDK tool loop fully in the cloud across Durab
 - Per-tick overhead (alarm scheduling, state rehydrate) makes it less efficient for a single very long, chatty session than a persistent process.
 - Requires a tenant Anthropic key wired through the Gateway.
 
-> When the `CloudRunnerDO` binding is absent, an **interim Worker executor** (`runCloudExecution`) runs the whole loop inline. It works but dies at the ~30s `waitUntil` wall on long runs — it exists only as a fallback until the DO is deployed.
+> When the `CloudRunnerDO` binding is absent there is **no fallback executor** — dispatch resolves to `unavailable` and the run fails fast with that reason. An in-request Worker executor used to be documented here as an interim fallback, but it could not survive the ~30s `waitUntil` wall on a multi-step run, so it was never selectable and has been removed: a clear "no executor bound" error beats a run that silently dies mid-task and gets orphan-reaped.
 
 ### Cloud Agent (Node/Container) — surface `container`
 
@@ -913,6 +935,64 @@ CoderClaw CLI
 
 ---
 
+## Avatar Filter
+
+The Avatar Filter is a user-facing feature that provides visibility into project status across multiple dimensions—primarily through a red-amber-green (RAG) status indicator per project. This feature enables stakeholders to quickly assess project health and prioritize work appropriately.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Project Status Indicators** | Projects display a color-coded status: <br>• 🟢 **Green** – Healthy, on track, or resolved  <br>• 🟡 **Amber** – At risk, delayed, or needs attention  <br>• 🔴 **Red** – Blocked, critical, or requires immediate action |
+| **Audit Trail** | Every status change is logged to the `audit_log`, providing transparency into who made changes and when |
+| **List & Detail Views** | Projects can be filtered and sorted by status across list, table, and detail views; the project detail page exposes the reason and timestamp for each status change, with per-project audit entries viewable from the detail panel |
+| **Portfolio Widget** | A portfolio-level widget surfaces aggregate RAG status summaries for all projects under a portfolio, enabling high-level program health review across the entire portfolio |
+| **Notifications** | Configurable notifications can target projects by RAG status segment — e.g., notify when a project turns Amber or Red, or alert on all projects at risk — with user opt-in and retention policies |
+
+### How It Works
+
+1. **Status assignment:** Projects receive a RAG status based on configurable business rules. The default status is Green. Status is updated via manual action (with a documented reason) or through automated rules.
+2. **Audit recording:** Every status change populates the `audit_log` with `project_id`, `old_status`, `new_status`, `changed_by`, `reason`, and a timestamp for full traceability.
+3. **Presentation:** Portfolio widgets and board list/detail views expose the current status and recent status transitions, with per-status filtering and sorting.
+4. **Notifications:** Segments (e.g., at-risk projects) can be selected for proactive alerts when a project's status changes below a threshold, subject to user notification preferences.
+
+### Configuration Options
+
+- **Default project status:** Green (configurable per portfolio or tenant).
+- **Compliance flags (360 indicators):** Controls whether 360 "Direction" health tracks and surfaces the RAG status meta indicator.
+- **Sentiment threshold:** Rules that determine when a project transitions to Amber vs. Red (e.g., number of recent issues, deviation from plan, or overdue tasks).
+- **Retention:** Configure how long audit log entries for status changes are retained (per tenant / row-level policy).
+
+### Implementation Stages
+
+1. **Schema enrichment:** Extend project and audit_log records to include RAG status fields and reason for change.
+2. **Business rules & weights:** Define the logic for converting project signals (issues, deviations, overdue tasks) into a RAG status.
+3. **Status change workflow:** Provide UI widgets for manual status change with required reason capture, and automated rule-based transitions.
+4. **Depth of audit detail:** Configure how granular each status audit entry is — normalized fields, change summaries, or free-form notes.
+5. **Portfolio & board surfaces:** Build list/detail views and portfolio widgets showing aggregate RAG distribution with drill-down filtering.
+6. **Notifications by segment:** Implement per-trigger notification segments for at-risk program alerts.
+
+### Project Health Dashboard
+
+- **List and detail views** show a status pill (Green/Amber/Red) with per-status filters and sorting.
+- **Project detail pages** expose the last status change (who changed it, when, and the reason) along with the complete audit entry history.
+- **Portfolio widget** surfaces aggregate counts by RAG status and supports drill-down to filtered project lists.
+- **Notifications** can target groups of projects organized by RAG status for proactive health monitoring.
+
+### Status Transitions
+
+- Projects flagged as Amber can be downgraded to Green upon creation of an actionable remediation subtask or resolution of the triggering event.
+- Projects flagged as Red can return to Green after the blocking condition is resolved and the resolution is approved through the standard workflow.
+- All transitions are recorded in the audit log with the change reason, ensuring a complete lineage of project health decisions.
+
+---
+
+## Contributing
+
+Please see **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the full contribution guidelines, including the branch naming convention, PR template, code quality gates, and the pull request lifecycle.
+
+---
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project is licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for details.

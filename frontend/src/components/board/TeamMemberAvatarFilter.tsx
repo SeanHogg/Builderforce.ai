@@ -2,6 +2,7 @@
 
 import { useMemo, type MouseEvent } from 'react';
 import { Avatar } from '@/components/Avatar';
+import { Icon } from '@/components/ui/Icon';
 import type { TeamMember } from '@/lib/taskAssignee';
 import type { CloudAgentTarget } from '@/lib/taskAssignee';
 import type { AgentHost } from '@/lib/builderforceApi';
@@ -153,12 +154,12 @@ export function TeamMemberAvatarFilter({
           justifyContent: 'center',
           height: 32,
           padding: '0 10px',
-          borderRadius: 16,
+          borderRadius: 'var(--radius-xl)',
           fontSize: 12,
           fontWeight: 600,
-          border: `1px solid ${allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
-          background: allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--bg-deep)',
-          color: allSelected ? '#fff' : 'var(--text-muted)',
+          border: `1px solid ${allSelected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+          background: allSelected ? 'var(--coral-bright)' : 'var(--bg-deep)',
+          color: allSelected ? 'var(--text-on-accent)' : 'var(--text-muted)',
           cursor: disableAll ? 'not-allowed' : 'pointer',
           flexShrink: 0,
           opacity: disableAll ? 0.5 : 1,
@@ -198,7 +199,7 @@ export function TeamMemberAvatarFilter({
             paddingRight: 0,
           }}
         >
-          ✕
+          <Icon name="close" size={14} />
         </button>
       )}
 
@@ -238,7 +239,7 @@ export function TeamMemberAvatarFilter({
             fontSize: 11,
             color: 'var(--text-muted)',
             background: 'var(--bg-deep)',
-            borderRadius: 14,
+            borderRadius: 'var(--radius-lg)',
             flexShrink: 0,
           }}>
             +{assignees.length - 8} more

@@ -19,12 +19,22 @@ import {
   DEFAULT_EVERMIND_LABELS,
   type EvermindConsoleAdapter,
   type EvermindConsoleLabels,
+  type EvermindTarget,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
-import { getToken, onRefresh, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
+import { fetchIsPaidPlan } from './accountPlan';
+import { getToken, onRefresh, refreshToken, request, type InitData, type LabelBundle } from './vscodeBridge';
+
+/** Host reply to `evermind.pickMemory` — the parsed, learnable snapshot entries (or null
+ *  when the user cancels the file picker). */
+interface PickedMemory { path: string; fileName: string; entries: Array<{ key: string; text: string; prompt?: string }> }
+/** Gateway reply from POST …/extract-memories. */
+interface ExtractResponse { absorbed: string[]; skipped: Array<{ key: string; reason: string }>; merged: number; version: number }
 
 interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
-interface LlmModelsResponse { codingModels?: string[]; premium?: boolean; effectivePlan?: string }
+/** Only the coder catalog is read from this payload — the plan/tier fields it also
+ *  carries are deliberately not consumed here (see `fetchIsPaidPlan`). */
+interface LlmModelsResponse { codingModels?: string[] }
 
 /** One row from GET /api/ide-projects — an IDE build. An LLM build's Evermind lives
  *  on its backing `storageProjectId`; `containerProjectId` is the Project it's grouped under. */
@@ -52,6 +62,22 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
     'teachPromptPlaceholder', 'teachTextPlaceholder', 'teachCta', 'teaching', 'taught',
     'flushCta', 'flushing', 'flushedNone', 'inspectTitle', 'inspectEmpty', 'kindText',
     'kindDelta', 'deltaEntry', 'refresh', 'errorGeneric',
+    'importTitle', 'importHint', 'importCta', 'importing', 'importNothing',
+    'quarantinedBadge', 'targetsTitle', 'targetsHint', 'targetsEmpty', 'targetSelfBadge',
+    'targetBuildBadge', 'targetUnseeded', 'targetInferenceOn', 'targetConnected', 'targetFrozen',
+    // Test bench / maintenance / knowledge analyzer.
+    'testTitle', 'testHint', 'testPlaceholder', 'testRunCta', 'testReadinessCta', 'testRunning',
+    'testResultPrompt', 'testServable', 'testRefused', 'testEmptyOutput', 'testVerdictReady',
+    'testVerdictNotReady',
+    'maintenanceTitle', 'maintenanceHint', 'reseedLabel', 'reseedHint', 'reseedCta',
+    'reseedConfirm', 'reseedStarterOption', 'reindexLabel', 'reindexHint', 'reindexCta',
+    'cleanupLabel', 'cleanupHint', 'cleanupCta', 'cleanupConfirm',
+    'analyzeTitle', 'analyzeHint', 'analyzeCta', 'analyzing', 'analyzeCorrectionLabel',
+    'analyzeSelectAll', 'analyzeSelectNone', 'analyzeApplying',
+    // Tabs + the diagnostics export controls.
+    'tabsLabel', 'tabTeach', 'tabTest', 'tabCheck', 'tabMaintain',
+    'diagnosticsTitle', 'diagnosticsHint', 'diagnosticsCta', 'diagnosticsCopied',
+    'diagnosticsShow', 'diagnosticsHide', 'diagnosticsManualHint',
   ];
   for (const k of keys) {
     const v = s(k);
@@ -62,6 +88,15 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
   if (seeded) out.statusSeeded = (version) => seeded.replace('{version}', String(version));
   const flushedN = s('flushedN');
   if (flushedN) out.flushedN = (merged, version) => flushedN.replace('{merged}', String(merged)).replace('{version}', String(version));
+  const importDone = s('importDone');
+  if (importDone) out.importDone = (absorbed, version, compacted, savedKb) =>
+    importDone.replace('{absorbed}', String(absorbed)).replace('{version}', String(version)).replace('{compacted}', String(compacted)).replace('{savedKb}', savedKb);
+  const quarantinedHint = s('quarantinedHint');
+  if (quarantinedHint) out.quarantinedHint = (reason) => quarantinedHint.replace('{reason}', reason);
+  const targetSeeded = s('targetSeeded');
+  if (targetSeeded) out.targetSeeded = (version) => targetSeeded.replace('{version}', String(version));
+  const targetProjectId = s('targetProjectId');
+  if (targetProjectId) out.targetProjectId = (id) => targetProjectId.replace('{id}', String(id));
   return out;
 }
 
@@ -112,8 +147,15 @@ export function EvermindScreen({ init }: { init: InitData }) {
           .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
       },
       loadTeacherOptions: async () => {
-        const r = await req<LlmModelsResponse>('/llm/v1/models');
-        return { models: r.codingModels ?? [], isPaid: r.premium === true || (r.effectivePlan != null && r.effectivePlan !== 'free') };
+        // Models come from the gateway (it owns the coder catalog); the PAID verdict
+        // comes from the shared plan predicate, not from this payload — see
+        // `fetchIsPaidPlan` for why `premium`/`effectivePlan` here can't be trusted
+        // for that question.
+        const [r, isPaid] = await Promise.all([
+          req<LlmModelsResponse>('/llm/v1/models'),
+          fetchIsPaidPlan(req),
+        ]);
+        return { models: r.codingModels ?? [], isPaid };
       },
       seedFromModel: (slug) => req(`${base}/seed-from-model`, { method: 'POST', body: JSON.stringify({ slug }) }).then(() => undefined),
       setInference: (enabled) => req(`${base}/inference`, { method: 'PATCH', body: JSON.stringify({ enabled }) }).then(() => undefined),
@@ -122,6 +164,45 @@ export function EvermindScreen({ init }: { init: InitData }) {
       teach: (text, prompt) => req(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) }).then(() => undefined),
       flush: () => req<{ merged?: number; version?: number }>(`${base}/flush`, { method: 'POST' }).then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
       validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
+      // Read-only list of every Evermind under this project (self + IDE builds).
+      loadTargets: () => req<{ targets?: EvermindTarget[] }>(`${base}/targets`).then((r) => r.targets ?? []),
+      // Test bench: generate from the model and grade it — the sidebar gets the SAME
+      // "what will this actually produce?" answer as the web console, not a lesser one.
+      probe: (prompt) => req(`${base}/probe`, { method: 'POST', body: JSON.stringify(prompt ? { prompt } : {}) }),
+      // Maintenance: replace the weights / rebuild the recall index / clean up.
+      reseed: (slug) => req<{ version?: number }>(`${base}/reseed`, { method: 'POST', body: JSON.stringify(slug ? { slug } : {}) })
+        .then((r) => ({ version: r.version ?? 0 })),
+      reindex: () => req<{ reindexed?: number; skipped?: number; version?: number }>(`${base}/reindex`, { method: 'POST' })
+        .then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
+      cleanup: () => req<{ discarded?: number; cachedAnswers?: number }>(`${base}/cleanup`, { method: 'POST' })
+        .then((r) => ({ discarded: r.discarded ?? 0, cachedAnswers: r.cachedAnswers ?? 0 })),
+      // Knowledge audit + repair.
+      analyze: () => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({}) }),
+      applyFindings: (findings) => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({ apply: true, findings }) }),
+      // Diagnostics export goes through the HOST clipboard: a webview is not reliably
+      // granted the Clipboard API, and the console's own fallback (reveal + select the
+      // report) is a worse experience than `vscode.env.clipboard`, which always works.
+      copyText: (text) => request<null>('evermind.copyText', { text }).then(() => undefined),
+      // Import: host reads the snapshot (fs) → gateway absorbs the entries → host compacts
+      // the absorbed ones to stubs. The three steps split by capability (fs on the host,
+      // authed fetch in the webview), so no single layer needs powers it lacks.
+      importMemory: async () => {
+        const picked = await request<PickedMemory | null>('evermind.pickMemory');
+        if (!picked || picked.entries.length === 0) return null;
+        const res = await req<ExtractResponse>(`${base}/extract-memories`, { method: 'POST', body: JSON.stringify({ entries: picked.entries }) });
+        const comp = await request<{ compacted: number; bytesSaved: number }>('evermind.compactMemory', {
+          path: picked.path, absorbedKeys: res.absorbed, version: res.version,
+        });
+        return {
+          fileName: picked.fileName,
+          absorbed: res.absorbed.length,
+          skipped: res.skipped.length,
+          merged: res.merged,
+          version: res.version,
+          compacted: comp.compacted,
+          bytesSaved: comp.bytesSaved,
+        };
+      },
     };
   }, [init.baseUrl, storageId]);
 
@@ -176,6 +257,9 @@ export function EvermindScreen({ init }: { init: InitData }) {
           canManage={!!init.canManage}
           projectName={selected?.name}
           labels={labels}
+          // Stamped into the diagnostics export — the two surfaces fail differently, and
+          // "which one was this from?" is the first question asked of a pasted report.
+          host="vscode"
           // The inline `↻` moved to the VS Code view title bar; drive reloads from there.
           showHeaderRefresh={false}
           refreshSignal={refreshSignal}

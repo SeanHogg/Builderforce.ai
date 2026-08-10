@@ -91,7 +91,7 @@ const panelDrawerStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -166,9 +166,9 @@ export function AgentHostSlideOutPanel({
   const slug = agentHost.slug;
   const statusColor =
     statusLabel === 'active'
-      ? 'var(--surface-success-soft, rgba(34,197,94,0.15))'
+      ? 'var(--success-bg, rgba(34,197,94,0.15))'
       : statusLabel === 'suspended'
-        ? 'var(--surface-danger-soft, rgba(239,68,68,0.15))'
+        ? 'var(--danger-bg, rgba(239,68,68,0.15))'
         : 'var(--bg-elevated)';
 
   // Chat tab needs full height; other tabs scroll naturally
@@ -214,7 +214,7 @@ export function AgentHostSlideOutPanel({
               alignItems: 'center',
               justifyContent: 'center',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               cursor: 'pointer',
@@ -240,7 +240,7 @@ export function AgentHostSlideOutPanel({
               fontWeight: 600,
               textTransform: 'uppercase',
               padding: '4px 8px',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               background: statusColor,
               color: 'var(--text-secondary)',
             }}
@@ -253,9 +253,9 @@ export function AgentHostSlideOutPanel({
                 fontSize: 11,
                 fontWeight: 600,
                 padding: '4px 8px',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))',
-                color: 'var(--coral-bright, #f4726e)',
+                color: 'var(--coral-bright)',
               }}
             >
               {t('default')}
@@ -274,7 +274,7 @@ export function AgentHostSlideOutPanel({
                   background: 'var(--bg-base)',
                   color: 'var(--text-secondary)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   cursor: savingDefault ? 'wait' : 'pointer',
                 }}
               >
@@ -292,7 +292,7 @@ export function AgentHostSlideOutPanel({
                   background: 'var(--surface-interactive)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   cursor: savingDefault ? 'wait' : 'pointer',
                 }}
               >
@@ -308,10 +308,10 @@ export function AgentHostSlideOutPanel({
               padding: '6px 12px',
               fontSize: 12,
               fontWeight: 600,
-              background: 'var(--surface-danger-soft, rgba(239,68,68,0.12))',
-              color: 'var(--danger, #ef4444)',
+              background: 'var(--danger-bg, rgba(239,68,68,0.12))',
+              color: 'var(--danger)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: deleting ? 'wait' : 'pointer',
             }}
           >
@@ -438,7 +438,7 @@ export function AgentHostSlideOutPanel({
                     background: 'var(--surface-interactive)',
                     color: 'var(--text-primary)',
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     textDecoration: 'none',
                   }}
                 >
@@ -453,7 +453,7 @@ export function AgentHostSlideOutPanel({
                     background: 'var(--surface-interactive)',
                     color: 'var(--text-primary)',
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     textDecoration: 'none',
                   }}
                 >

@@ -121,4 +121,91 @@ describe('buildSpine', () => {
     const task = r.nodes.find((n) => n.key === 'task:30')!;
     expect(task.cost.humanUsd).toBeCloseTo(100, 5); // 2h * $50
   });
+
+  // ── sequence + derived windows (0364) ──────────────────────────────────────
+
+  it('surfaces task precedence edges as dependsOn', () => {
+    const r = buildSpine({
+      portfolios: [], objectives: [], initiatives: [], projects: [{ id: 1, initiativeId: null }],
+      tasks: [baseTask({ id: 1 }), baseTask({ id: 2 })],
+      links: [], taskLlm: [], memberRates: [],
+      taskDeps: [{ predecessorTaskId: 1, successorTaskId: 2, depType: 'finish_to_start' }],
+    });
+    expect(r.nodes.find((n) => n.key === 'task:2')!.dependsOn).toEqual(['task:1']);
+    // The predecessor itself depends on nothing.
+    expect(r.nodes.find((n) => n.key === 'task:1')!.dependsOn).toEqual([]);
+  });
+
+  it('resolves an edge that points at an EPIC, not just a task', () => {
+    const r = buildSpine({
+      portfolios: [], objectives: [], initiatives: [], projects: [{ id: 1, initiativeId: null }],
+      tasks: [baseTask({ id: 5, taskType: 'epic' }), baseTask({ id: 6 })],
+      links: [], taskLlm: [], memberRates: [],
+      taskDeps: [{ predecessorTaskId: 5, successorTaskId: 6, depType: 'finish_to_start' }],
+    });
+    expect(r.nodes.find((n) => n.key === 'task:6')!.dependsOn).toEqual(['epic:5']);
+  });
+
+  it('drops an edge whose endpoint was pruned rather than dangling', () => {
+    const r = buildSpine({
+      portfolios: [], objectives: [], initiatives: [], projects: [{ id: 1, initiativeId: null }],
+      tasks: [baseTask({ id: 7 })],
+      links: [], taskLlm: [], memberRates: [],
+      taskDeps: [{ predecessorTaskId: 999, successorTaskId: 7, depType: 'finish_to_start' }],
+    });
+    expect(r.nodes.find((n) => n.key === 'task:7')!.dependsOn).toEqual([]);
+  });
+
+  it('derives an undated container window from the span of its children', () => {
+    const r = buildSpine({
+      portfolios: [],
+      objectives: [],
+      // The initiative carries NO dates of its own — the state that rendered a parent
+      // as "no dates" above a fully scheduled subtree.
+      initiatives: [{ id: 'i1', name: 'Init', status: 'active', startDate: null, targetDate: null, portfolioId: null, costClass: null, costClassSource: 'inherited' }],
+      projects: [{ id: 1, initiativeId: 'i1' }],
+      tasks: [
+        baseTask({ id: 10, startDate: new Date('2026-03-02T00:00:00Z'), dueDate: new Date('2026-03-06T00:00:00Z') }),
+        baseTask({ id: 11, startDate: new Date('2026-03-09T00:00:00Z'), dueDate: new Date('2026-03-13T00:00:00Z') }),
+      ],
+      links: [], taskLlm: [], memberRates: [],
+    });
+    const init = r.nodes.find((n) => n.key === 'initiative:i1')!;
+    expect(init.startDate).toBe(new Date('2026-03-02T00:00:00Z').toISOString());
+    expect(init.endDate).toBe(new Date('2026-03-13T00:00:00Z').toISOString());
+    // Flagged, so the UI can show it as inferred rather than committed.
+    expect(init.datesDerived).toBe(true);
+  });
+
+  it('never overwrites a container window someone actually set', () => {
+    const declaredStart = new Date('2026-01-05T00:00:00Z');
+    const declaredEnd = new Date('2026-12-31T00:00:00Z');
+    const r = buildSpine({
+      portfolios: [],
+      objectives: [],
+      initiatives: [{ id: 'i2', name: 'Init', status: 'active', startDate: declaredStart, targetDate: declaredEnd, portfolioId: null, costClass: null, costClassSource: 'inherited' }],
+      projects: [{ id: 1, initiativeId: 'i2' }],
+      tasks: [baseTask({ id: 12, startDate: new Date('2026-03-02T00:00:00Z'), dueDate: new Date('2026-03-06T00:00:00Z') })],
+      links: [], taskLlm: [], memberRates: [],
+    });
+    const init = r.nodes.find((n) => n.key === 'initiative:i2')!;
+    expect(init.startDate).toBe(declaredStart.toISOString());
+    expect(init.endDate).toBe(declaredEnd.toISOString());
+    expect(init.datesDerived).toBe(false);
+  });
+
+  it('rolls a derived window all the way up through an undated grandparent', () => {
+    const r = buildSpine({
+      portfolios: [{ id: 'p1', name: 'Port', status: 'active', costClass: null, costClassSource: 'inherited' }],
+      objectives: [],
+      initiatives: [{ id: 'i3', name: 'Init', status: 'active', startDate: null, targetDate: null, portfolioId: 'p1', costClass: null, costClassSource: 'inherited' }],
+      projects: [{ id: 1, initiativeId: 'i3' }],
+      tasks: [baseTask({ id: 13, startDate: new Date('2026-04-01T00:00:00Z'), dueDate: new Date('2026-04-10T00:00:00Z') })],
+      links: [], taskLlm: [], memberRates: [],
+    });
+    const port = r.nodes.find((n) => n.key === 'portfolio:p1')!;
+    expect(port.startDate).toBe(new Date('2026-04-01T00:00:00Z').toISOString());
+    expect(port.endDate).toBe(new Date('2026-04-10T00:00:00Z').toISOString());
+    expect(port.datesDerived).toBe(true);
+  });
 });

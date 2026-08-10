@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useRolePreview } from '@/lib/RolePreviewContext';
 
 /**
@@ -16,7 +17,7 @@ export default function RolePreviewBar() {
 
   return (
     <div className="role-preview-bar" role="banner" aria-label="Role preview active">
-      <span className="role-preview-bar__icon" aria-hidden="true">👁</span>
+      <span className="role-preview-bar__icon" aria-hidden="true"><Icon source="👁" size="1em" /></span>
       <span className="role-preview-bar__info">
         Previewing as role: <strong>{previewRole}</strong>
         &nbsp;— this is a frontend-only preview. No API calls are affected.

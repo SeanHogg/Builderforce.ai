@@ -14,10 +14,12 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
+import { nativeOptionStyle } from '../optionStyle';
+import { resolveRunGate } from './runGate';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
-  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType,
+  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType, type ChatQuestionVM,
 } from './types';
 
 export interface ChatTicketsPanelProps {
@@ -59,7 +61,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
-  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge'>(null);
+  const [questions, setQuestions] = useState<ChatQuestionVM[]>([]);
+  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge' | 'questions'>(null);
   const [lineageKey, setLineageKey] = useState<string | null>(null);
   const [lineage, setLineage] = useState<LineageVM[]>([]);
   const [runKey, setRunKey] = useState<string | null>(null);
@@ -71,14 +74,16 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const userCollapsed = useRef(false);
 
   const load = useCallback(async () => {
-    const [tk, ag, mem] = await Promise.all([
+    const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => [] as TicketLinkVM[]),
       adapter.listAgents(chatId).catch(() => [] as ChatAgentVM[]),
       adapter.listMembers(chatId).catch(() => [] as ChatMemberVM[]),
+      adapter.listQuestions(chatId).catch(() => [] as ChatQuestionVM[]),
     ]);
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    setQuestions(qs);
     // Auto-collapse a long list on first load; never override a user's own choice.
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
@@ -100,6 +105,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setLineageKey(key);
     setLineage(await adapter.listTicketChats(tk.kind, tk.ref).catch(() => []));
   };
+
+  // Ask the host whether run dispatch is permitted (see resolveRunGate for why an
+  // absent probe means "permitted" rather than "refuse").
+  const runGate = resolveRunGate(adapter);
 
   const runTicket = async (tk: TicketLinkVM, agentRef: string) => {
     setBusy(true);
@@ -169,16 +178,27 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
                   <button type="button" title={`${labels.open} · ${tk.label}`} onClick={() => onOpenTicket(tk)} style={S.icon}>↗</button>
                 )}
                 {RUNNABLE.has(tk.kind) && tk.exists && (
-                  <button type="button" title={labels.run} onClick={() => setRunKey(runKey === key ? null : key)} style={S.icon}>▶</button>
+                  <button
+                    type="button"
+                    // Disabled + explained, not hidden: a viewer should see that
+                    // running exists and why they can't, matching every other
+                    // dispatch control. Previously this always looked live and
+                    // failed at click time with a role error.
+                    disabled={!runGate.allowed}
+                    aria-disabled={!runGate.allowed}
+                    title={runGate.allowed ? labels.run : (runGate.reason ?? labels.run)}
+                    onClick={() => setRunKey(runKey === key ? null : key)}
+                    style={runGate.allowed ? S.icon : { ...S.icon, opacity: 0.45, cursor: 'not-allowed' }}
+                  >▶</button>
                 )}
                 <button type="button" title={labels.lineage} onClick={() => void openLineage(tk)} style={S.icon}>⑃</button>
                 <button type="button" title={labels.unlink} disabled={busy} onClick={() => void unlink(tk)} style={S.icon}>✕</button>
               </div>
               {runKey === key && (
                 <select aria-label={labels.pickAgent} value="" onChange={(e) => { if (e.target.value) void runTicket(tk, e.target.value); }} style={S.select}>
-                  <option value="">{labels.pickAgent}</option>
-                  {agents.map((a) => <option key={a.id} value={a.agentRef}>★ {poolName(a.agentRef)}</option>)}
-                  {pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => <option key={p.ref} value={p.ref}>{p.name}</option>)}
+                  <option style={S.option} value="">{labels.pickAgent}</option>
+                  {agents.map((a) => <option style={S.option} key={a.id} value={a.agentRef}>★ {poolName(a.agentRef)}</option>)}
+                  {pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => <option style={S.option} key={p.ref} value={p.ref}>{p.name}</option>)}
                 </select>
               )}
             </div>
@@ -211,6 +231,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         <button type="button" onClick={() => setPanel(panel === 'agents' ? null : 'agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
         <button type="button" onClick={() => setPanel(panel === 'people' ? null : 'people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
         <button type="button" onClick={() => setPanel(panel === 'merge' ? null : 'merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
+        {questions.length > 0 && <button type="button" onClick={() => setPanel(panel === 'questions' ? null : 'questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
       </div>
 
@@ -233,6 +254,37 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       {panel === 'merge' && <MergeSection chatId={chatId} chatList={chatList} labels={labels}
         onMerge={async (ids) => { setBusy(true); try { await adapter.consolidate(chatId, ids); flash(labels.mergedN(ids.length)); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
+
+      {panel === 'questions' && <QuestionsSection questions={questions} labels={labels}
+        onAnswer={async (id, answer) => { await adapter.answerQuestion(id, answer); await load(); onChanged?.(); }} />}
+    </div>
+  );
+}
+
+function QuestionsSection({ questions, labels, onAnswer }: {
+  questions: ChatQuestionVM[];
+  labels: ChatTicketsLabels;
+  onAnswer: (id: string, answer: string) => Promise<void>;
+}) {
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState<string | null>(null);
+  return (
+    <div style={S.drawer}>
+      {questions.length === 0 ? <span style={S.muted}>{labels.noQuestions}</span> : questions.map((q, index) => {
+        const value = answers[q.id] ?? '';
+        return <div key={q.id} style={{ padding: '10px 0', borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : undefined }}>
+          <div style={{ color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: 'pre-wrap', marginBottom: 8 }}>{q.description}</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <textarea value={value} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+              placeholder={labels.answerPlaceholder} rows={2} disabled={sending === q.id}
+              style={{ ...S.select, flex: 1, resize: 'vertical', minHeight: 54, fontFamily: 'inherit' }} />
+            <button type="button" disabled={!value.trim() || sending === q.id} style={S.pill(true)} onClick={() => {
+              setSending(q.id);
+              void onAnswer(q.id, value.trim()).finally(() => setSending(null));
+            }}>{sending === q.id ? labels.answering : labels.submitAnswer}</button>
+          </div>
+        </div>;
+      })}
     </div>
   );
 }
@@ -293,7 +345,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }: {
   return (
     <div style={S.section}>
       <select aria-label={labels.kindLabel} value={kind} onChange={(e) => { setKind(e.target.value as TicketKind); setRef(''); setQuery(''); }} style={S.select}>
-        {TICKET_KINDS.map((k) => <option key={k} value={k}>{labels.kind[k]}</option>)}
+        {TICKET_KINDS.map((k) => <option style={S.option} key={k} value={k}>{labels.kind[k]}</option>)}
       </select>
       <input
         type="search"
@@ -304,16 +356,16 @@ function LinkForm({ search, projectId, existing, labels, onLink }: {
         style={{ ...S.select, minWidth: 150 }}
       />
       <select aria-label={labels.pickTicket} value={ref} onChange={(e) => setRef(e.target.value)} style={{ ...S.select, minWidth: 200 }}>
-        <option value="">{labels.pickTicket}</option>
-        {shown.map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
+        <option style={S.option} value="">{labels.pickTicket}</option>
+        {shown.map((o) => <option style={S.option} key={o.ref} value={o.ref}>{o.label}</option>)}
       </select>
       {loading ? <span style={S.muted}>{labels.searching}</span>
         : shown.length === 0 ? <span style={S.muted}>{labels.noMatches}</span>
         : atCap ? <span style={S.muted}>{labels.refine}</span>
         : null}
       <select aria-label={labels.linkTypeLabel} value={linkType} onChange={(e) => setLinkType(e.target.value as LinkType)} style={S.select}>
-        <option value="linked">{labels.linkTypeLinked}</option>
-        <option value="created">{labels.linkTypeCreated}</option>
+        <option style={S.option} value="linked">{labels.linkTypeLinked}</option>
+        <option style={S.option} value="created">{labels.linkTypeCreated}</option>
       </select>
       <button type="button" onClick={() => void submit()} disabled={busy || !ref} style={S.pill(true)}>{busy ? '…' : labels.linkAction}</button>
     </div>
@@ -339,8 +391,8 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }: {
         ))}
       </div>
       <select aria-label={labels.inviteAgent} value="" onChange={(e) => { const p = pool.find((x) => x.ref === e.target.value); if (p) void onInvite(p.ref, p.kind); }} style={{ ...S.select, maxWidth: 260 }}>
-        <option value="">{labels.inviteAgent}</option>
-        {uninvited.map((p) => <option key={p.ref} value={p.ref}>{p.name} — {p.meta}</option>)}
+        <option style={S.option} value="">{labels.inviteAgent}</option>
+        {uninvited.map((p) => <option style={S.option} key={p.ref} value={p.ref}>{p.name} — {p.meta}</option>)}
       </select>
       <span style={{ fontSize: 11, ...S.muted }}>{labels.agentsHint}</span>
     </div>
@@ -473,6 +525,9 @@ const S = {
   // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
   // in the editor's active scheme even where the token background doesn't reach.
   select: { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit' } as React.CSSProperties,
+  // The option popup is drawn by the OS and does NOT inherit `select`'s background,
+  // so each option needs its own opaque pair — see nativeOptionStyle.
+  option: nativeOptionStyle,
   icon: { fontSize: 12, lineHeight: 1, padding: '2px 4px', cursor: 'pointer', background: 'transparent', border: 'none', color: V.muted } as React.CSSProperties,
   pill: (active: boolean): React.CSSProperties => ({
     fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',

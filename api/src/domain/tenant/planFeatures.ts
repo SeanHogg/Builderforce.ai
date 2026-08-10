@@ -127,6 +127,77 @@ export function evaluateFrontierAccess(input: FrontierAccessInput): FrontierAcce
   return { entitled: false, reason: 'not_entitled' };
 }
 
+// ---------------------------------------------------------------------------
+// Premium-MODEL access — a THIRD axis, distinct from both the boolean PlanFeature
+// flags AND frontier access. "May this tenant SELECT any paid OpenRouter model
+// (billed at OpenRouter cost + a flat 1¢/request)?" is unlocked by a VALIDATED
+// card on file, independently of the tenant's subscription plan —
+// a card we ran an explicit validation (SetupIntent / $0 auth) against — so the
+// per-request metered spend has a funding instrument behind it. A superadmin or a
+// comped premium override bypasses (operators/betas never hit the wall). BYO does
+// NOT unlock premium selection: BYO routes on the tenant's OWN key (frontier
+// access covers that); premium routes on OUR metered OpenRouter key, so it needs a
+// validated card regardless of any connected provider. One evaluator so the picker,
+// the gateway gate, and the /v1/models flag can never drift.
+// ---------------------------------------------------------------------------
+
+export type PremiumModelReason =
+  | 'superadmin'
+  | 'premium_override'
+  | 'paid_card'
+  | 'card_required';
+
+export interface PremiumModelAccessInput {
+  /** The tenant's effective (trial/billing-resolved) plan. */
+  effectivePlan: TenantPlan;
+  /** Comped / beta premium override on the tenant. */
+  premiumOverride: boolean;
+  /** The CALLER is a platform superadmin — always bypasses the gate. */
+  isSuperadmin: boolean;
+  /** A card has been through the explicit validation flow (card_validated_at set). */
+  cardValidated: boolean;
+}
+
+export interface PremiumModelAccess {
+  entitled: boolean;
+  reason: PremiumModelReason;
+  /** What the tenant must do to unlock, when not entitled. */
+  unlock?: 'validate_card';
+}
+
+/**
+ * THE premium-model-access evaluator. Pure. Unlocked (in priority order) by:
+ * superadmin → premium override → validated card. Plan tier is intentionally not
+ * part of this decision: a Free tenant may add billing details and a card without
+ * buying a subscription, then pay only for metered OpenRouter usage.
+ */
+export function evaluatePremiumModelAccess(input: PremiumModelAccessInput): PremiumModelAccess {
+  if (input.isSuperadmin) return { entitled: true, reason: 'superadmin' };
+  if (input.premiumOverride) return { entitled: true, reason: 'premium_override' };
+  if (!input.cardValidated) return { entitled: false, reason: 'card_required', unlock: 'validate_card' };
+  return { entitled: true, reason: 'paid_card' };
+}
+
+/**
+ * The standardized premium-model **402** body.
+ *
+ * Lives here (pure domain) rather than in the route middleware because BOTH the gateway
+ * (`llmRoutes`, which owns `resolveTenantPlan` and so cannot import the middleware back
+ * without a cycle) and `featureGate.requirePremiumModelAccess` must answer with the
+ * identical envelope.
+ */
+export function premiumModelGateBody(access: PremiumModelAccess) {
+  return {
+    error: 'Premium models (any paid OpenRouter model, billed at OpenRouter cost + 1¢ per request) require billing details and a validated card on file. Add them on the Pricing page; no plan upgrade is required.',
+    code: 'premium_model_not_allowed' as const,
+    feature: 'premiumModels' as const,
+    reason: access.reason,
+    unlock: access.unlock,
+    requiredPlan: TenantPlan.FREE,
+    upgrade: false,
+  };
+}
+
 /** THE evaluator. Pure — same inputs always yield the same verdict. */
 export function evaluateFeatureEntitlement(input: FeatureEntitlementInput): FeatureEntitlement {
   const base = {

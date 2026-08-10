@@ -28,10 +28,13 @@ import { useBrainConfig } from './config';
 import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
+import type { ReasoningIntent } from './effort';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
+import type { ChatErrorAction } from './chatError';
+import type { ChatMode } from './chatMode';
 import {
   startRun,
   stopRun,
@@ -59,6 +62,28 @@ export interface UseBrainConversationOptions {
   systemPrompt?: string;
   /** Override the model (e.g. run the Brain as a specific assigned agent). */
   model?: string;
+  /** True when `model` came from a deliberate user pick. */
+  modelStrict?: boolean;
+  /** Gateway-owned routing or the tenant's ordered BYO pool. */
+  routingMode?: 'auto' | 'byo_pool';
+  /**
+   * Pick the next model when the current one burns its stall budget without emitting
+   * a tool call. Hosts pass `(tried) => nextFallbackModel(surface, tried)` using the
+   * `/llm/v1/models` surface they already cache. Omit to keep the run on one model
+   * and stop with an explanation instead of switching.
+   */
+  pickFallbackModel?: (tried: readonly string[]) => string | undefined;
+  /**
+   * `max_tokens` for this conversation's completions — the host's Effort control
+   * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
+   */
+  maxTokens?: number;
+  /**
+   * Vendor-neutral reasoning intent (the host's Thinking toggle). Build it with
+   * `reasoningForRun({ effort, thinking })` so the level tracks Effort. Omit /
+   * `undefined` ⇒ no `reasoning` field on the wire at all.
+   */
+  reasoning?: ReasoningIntent;
   /** Tool specs from the page-action registry. */
   toolSpecs?: BrainToolSpec[];
   /** Dispatch a tool call to the registry. */
@@ -100,6 +125,13 @@ export interface UseBrainConversationOptions {
    * personality block is enough.
    */
   augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+  /**
+   * The active chat's MODE — `chat` (answer the question) or `work` (create, staff,
+   * link AND dispatch the work). Read from the chat row by the host so the choice
+   * follows the conversation rather than the browser. Omit to keep the pre-mode
+   * always-execute behaviour.
+   */
+  chatMode?: ChatMode;
 }
 
 export interface UseBrainConversation {
@@ -109,6 +141,13 @@ export interface UseBrainConversation {
   reloadMessages: () => void;
   sending: boolean;
   error: string;
+  /**
+   * What the user can DO about {@link error}: reconnect an expired session, upgrade
+   * a plan, or add a card. Decided ONCE from the gateway's structured error body
+   * (see `chatErrorAction`), so an error banner renders the fix without
+   * pattern-matching the message text. Null when only dismissing applies.
+   */
+  errorAction: ChatErrorAction | null;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
   streamingText: string;
   copiedMessageId: number | null;
@@ -187,6 +226,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     extraSystem,
     systemPrompt,
     model,
+    modelStrict,
+    routingMode,
+    pickFallbackModel,
+    maxTokens,
+    reasoning,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -195,6 +239,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     onFirstUserTurn,
     evermind,
     augmentSystemPrompt,
+    chatMode,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
@@ -244,6 +289,34 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     return () => { cancelled = true; };
   }, [persistence, chatId, reloadNonce]);
 
+  // Agent lifecycle messages are written outside this browser's run store. Subscribe
+  // to the host's chat invalidation channel and re-read durable state on each push.
+  useEffect(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
+
+  // Mark the OPEN chat read up to its newest message, so the unread badge a
+  // background chat shows (an execution milestone / teammate turn that landed while
+  // you were elsewhere) clears the moment you view it — on BOTH surfaces, since it
+  // marks the same server chat. Fires whenever the mounted chat's high-water seq
+  // advances (initial load, each `changed` push, an in-run append). Only ever moves
+  // forward (ref guard) so it doesn't spam the endpoint on every re-render.
+  const lastMarkedRef = useRef<{ chatId: number; seq: number } | null>(null);
+  useEffect(() => {
+    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
+    let maxSeq = 0;
+    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
+    if (maxSeq <= 0) return;
+    const prev = lastMarkedRef.current;
+    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
+    lastMarkedRef.current = { chatId, seq: maxSeq };
+    void persistence.markChatRead(chatId, maxSeq).catch(() => {
+      // Best-effort: a failed mark just means the badge clears on the next open.
+      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
+    });
+  }, [persistence, chatId, messages]);
+
   // A run (possibly started in another, now-unmounted Brain instance) persisted
   // assistant messages — splice them in without a refetch. The store delivers
   // the FULL run-appended list (narration turns + final answer), not just the
@@ -284,6 +357,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
+      modelStrict,
+      routingMode,
+      pickFallbackModel,
+      maxTokens,
+      reasoning,
       runTool,
       needsConfirm,
       stream,
@@ -294,8 +372,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       seed,
       userTurn,
       projectId,
+      chatMode,
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode],
   );
 
   const send = useCallback(
@@ -516,6 +595,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
+    /** What the user can DO about `error` (reconnect / upgrade / add a card), when
+     *  the failure was actionable. Only meaningful for a RUN error — a local error
+     *  (e.g. a failed rename) has no gateway verdict behind it. */
+    errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,

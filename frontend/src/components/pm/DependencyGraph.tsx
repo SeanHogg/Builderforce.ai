@@ -1,18 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
-  Controls,
   MarkerType,
   useNodesState,
   useEdgesState,
   type Node,
   type Edge,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -34,8 +38,8 @@ import { useConfirm } from '@/components/ConfirmProvider';
  */
 
 const STATUS_COLOR: Record<string, string> = {
-  done: '#16a34a', shipped: '#16a34a', in_progress: '#2563eb',
-  in_review: '#7c3aed', blocked: '#dc2626', backlog: '#6b7280',
+  done: 'var(--success)', shipped: 'var(--success)', in_progress: 'var(--info)',
+  in_review: 'var(--violet-bright)', blocked: 'var(--error)', backlog: 'var(--text-muted)',
 };
 
 const COL_W = 230;
@@ -105,6 +109,9 @@ function cycleEdgeKeys(deps: DependencyEdge[]): Set<string> {
 /** The dependency graph for ONE project. `readOnly` hides the editor (rollup use). */
 function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number; readOnly?: boolean }) {
   const t = useTranslations('pm');
+  // The app's own confirmation, not the browser's: `window.confirm` is blocked in
+  // embeds, unstyled, and untranslatable.
+  const confirm = useConfirm();
   const tasksQ = usePmData<Task[]>(() => tasksApi.list(projectId), [projectId]);
   const depsQ = usePmData<DependencyEdge[]>(() => tasksApi.dependencies(projectId), [projectId]);
 
@@ -115,6 +122,11 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   const [depType, setDepType] = useState<DepType>('finish_to_start');
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+  const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+  /** The board's own box — the arrange command lays out for the shape it measures here. */
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const threeD = useCanvasThreeD();
 
   const tasks = tasksQ.data;
   const deps = depsQ.data;
@@ -129,8 +141,8 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       position: pos.get(t.id) ?? { x: 0, y: 0 },
       data: { label: `${t.key} · ${t.title}` },
       style: {
-        borderRadius: 8,
-        border: `2px solid ${STATUS_COLOR[t.status] ?? '#6b7280'}`,
+        borderRadius: 'var(--radius-md)',
+        border: `2px solid ${STATUS_COLOR[t.status] ?? 'var(--text-muted)'}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
         fontSize: 12,
@@ -146,7 +158,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
         target: String(d.successorTaskId),
         animated: !onCycle,
         markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: onCycle ? '#dc2626' : 'var(--coral-bright, #f97316)', strokeWidth: 2 },
+        style: { stroke: onCycle ? 'var(--error)' : 'var(--coral-bright)', strokeWidth: 2 },
         label: onCycle ? t('depCycle') : d.depType !== 'finish_to_start' ? DEP_TYPE_CODE[d.depType] : undefined,
         data: { edgeId: d.id },
       };
@@ -158,7 +170,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
         id: `epic-${t.parentTaskId}-${t.id}`,
         source: String(t.parentTaskId),
         target: String(t.id),
-        style: { stroke: 'var(--text-muted, #9ca3af)', strokeWidth: 1.5, strokeDasharray: '4 4' },
+        style: { stroke: 'var(--text-muted)', strokeWidth: 1.5, strokeDasharray: '4 4' },
         markerEnd: { type: MarkerType.Arrow },
       }));
     return { flowNodes, edges: [...epicEdges, ...depEdges] };
@@ -167,6 +179,34 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   useEffect(() => {
     if (built) { setNodes(built.flowNodes); setEdges(built.edges); }
   }, [built, setNodes, setEdges]);
+
+  const cleanLayout = useCanvasCleanLayout({ boardRef, instanceRef: flowRef, setNodes, edges });
+
+  /**
+   * How a task reads in the 3D space.
+   *
+   * This graph exists to answer "what is blocked behind what", and on a flat board
+   * that answer is traced arrow by arrow. Stacked on the dependency axis it is the
+   * first thing the eye gets: precedence depth becomes distance, and epic children
+   * sit a plane behind their parent. Status is the other axis, for reading the same
+   * graph as "where is everything up to".
+   */
+  const taskById = useMemo(() => new Map((tasks ?? []).map((task) => [String(task.id), task])), [tasks]);
+  const describeThreeD = useCallback((node: Node): Canvas3DDescriptor => {
+    const task = taskById.get(node.id);
+    if (!task) return { label: node.id, group: t('epicStatus.backlog') };
+    return {
+      label: task.title,
+      sublabel: task.key,
+      group: t(`epicStatus.${task.status}` as 'epicStatus.backlog'),
+      accent: STATUS_COLOR[task.status] ?? STATUS_COLOR.backlog!,
+      depthOffset: canvas3dDepthOffset(node),
+    };
+  }, [t, taskById]);
+  const moveThreeD = useCallback(
+    (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
+    [setNodes],
+  );
 
   if (tasksQ.error || depsQ.error) return <PmError message={tasksQ.error ?? depsQ.error ?? 'error'} />;
   if (!tasks || !deps) return <PmEmpty message={t('depLoading')} />;
@@ -200,7 +240,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   };
 
   const selectStyle: React.CSSProperties = {
-    padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+    padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
     background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13,
   };
 
@@ -224,27 +264,48 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
             type="button"
             onClick={addEdge}
             disabled={busy}
-            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+            style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
           >
             {t('depAddButton')}
           </button>
-          {formError && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{formError}</span>}
+          {formError && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{formError}</span>}
         </div>
       )}
-      <div style={{ height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onEdgeClick={onEdgeClick}
-          fitView
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background color="var(--border-subtle)" gap={18} />
-          <Controls />
-        </ReactFlow>
-      </div>
+      <Canvas3DControlsProvider>
+        {/* The scene fills this box, so it has to be the box it is positioned
+            against — see `.scene` in Canvas3DView.module.css. */}
+        <div ref={boardRef} style={{ position: 'relative', height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onEdgeClick={onEdgeClick}
+            onInit={(instance) => { flowRef.current = instance; }}
+            fitView
+            fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }}
+            minZoom={CANVAS_FIT_MIN_ZOOM}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background color="var(--border-subtle)" gap={18} />
+            <CanvasCommands
+              minimapOpen={minimapOpen}
+              setMinimapOpen={setMinimapOpen}
+              onCleanLayout={cleanLayout}
+              minimapNodeColor="var(--coral-bright)"
+              minimapMaskColor="rgba(5, 10, 20, .72)"
+              {...threeD.commandProps}
+            />
+          </ReactFlow>
+          {threeD.active && <Canvas3DView
+            nodes={nodes}
+            edges={edges.map((edge) => ({ source: edge.source, target: edge.target }))}
+            describe={describeThreeD}
+            onMove={moveThreeD}
+            onExit={threeD.exit}
+          />}
+        </div>
+      </Canvas3DControlsProvider>
       {!readOnly && (
         <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
           {t('depLegend')}
@@ -256,7 +317,6 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
 
 export function DependencyGraph() {
   const t = useTranslations('pm');
-  const confirm = useConfirm();
   const { projectId } = usePmScope();
   // Optional: present in the app shell, absent in embed (which scopes explicitly).
   const scope = useOptionalProjectScope();

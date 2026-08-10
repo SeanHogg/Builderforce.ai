@@ -45,7 +45,7 @@
 - Node remains supported for running built output (`dist/*`) and production installs.
 - Mac packaging (dev): `scripts/package-mac-app.sh` defaults to current arch. Release checklist: `docs/platforms/mac/release.md`.
 - Type-check/build: `pnpm build`
-- TypeScript checks: `pnpm tsgo`
+- TypeScript checks: `pnpm typecheck`
 - Lint/format: `pnpm check`
 - Format check: `pnpm format` (oxfmt --check)
 - Format fix: `pnpm format:fix` (oxfmt --write)

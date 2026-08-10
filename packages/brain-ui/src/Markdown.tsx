@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { splitThinkSegments } from './thinkBlocks';
 
 export interface MarkdownLabels {
   copy: string;
@@ -86,53 +87,59 @@ function CodeBlock({
  */
 function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps) {
   const lab = useMemo(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
+  const segments = useMemo(() => splitThinkSegments(content), [content]);
+  const components = {
+    a({ href, children, ...rest }: React.ComponentProps<'a'>) {
+      const target = href ?? '';
+      if (target && !isExternal(target) && onInternalLink) {
+        return (
+          <a
+            href={target}
+            onClick={(e) => {
+              e.preventDefault();
+              onInternalLink(target);
+            }}
+            {...rest}
+          >
+            {children}
+          </a>
+        );
+      }
+      return (
+        <a href={target} target="_blank" rel="noopener noreferrer" {...rest}>
+          {children}
+        </a>
+      );
+    },
+    code(props: React.ComponentProps<'code'>) {
+      const { className, children } = props;
+      const raw = String(children ?? '');
+      const text = raw.replace(/\n$/, '');
+      // react-markdown gives language fences a className and every fenced block
+      // (including an unlabeled one-line fence) a trailing newline.
+      const isBlock = className != null || raw.endsWith('\n');
+      if (!isBlock) return <code className="bf-md__inline">{children}</code>;
+      return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;
+    },
+    pre({ children }: React.ComponentProps<'pre'>) {
+      // CodeBlock already emits its own <pre>; passthrough avoids double-wrapping.
+      return <>{children}</>;
+    },
+  };
   return (
     <div className="bf-md">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a({ href, children, ...rest }) {
-            const target = href ?? '';
-            if (target && !isExternal(target) && onInternalLink) {
-              return (
-                <a
-                  href={target}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onInternalLink(target);
-                  }}
-                  {...rest}
-                >
-                  {children}
-                </a>
-              );
-            }
-            return (
-              <a href={target} target="_blank" rel="noopener noreferrer" {...rest}>
-                {children}
-              </a>
-            );
-          },
-          code(props) {
-            const { inline, className, children } = props as {
-              inline?: boolean;
-              className?: string;
-              children?: React.ReactNode;
-            };
-            const text = String(children ?? '').replace(/\n$/, '');
-            if (inline || (!className && !text.includes('\n'))) {
-              return <code className="bf-md__inline">{children}</code>;
-            }
-            return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;
-          },
-          pre({ children }) {
-            // CodeBlock already emits its own <pre>; passthrough avoids double-wrapping.
-            return <>{children}</>;
-          },
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+      {segments.map((segment, index) => segment.kind === 'thought' ? (
+        <details className="bf-md__think" key={`${segment.kind}-${index}`}>
+          <summary>Thought</summary>
+          <div className="bf-md__think-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{segment.content}</ReactMarkdown>
+          </div>
+        </details>
+      ) : (
+        <ReactMarkdown key={`${segment.kind}-${index}`} remarkPlugins={[remarkGfm]} components={components}>
+          {segment.content}
+        </ReactMarkdown>
+      ))}
     </div>
   );
 }

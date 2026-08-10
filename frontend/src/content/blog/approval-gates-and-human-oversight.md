@@ -48,7 +48,7 @@ The key property: **execution is genuinely blocked**. The agent does not proceed
 
 ## The Approvals Page
 
-Navigate to [/approvals](/approvals) to see your team's pending, approved, and rejected gates.
+Navigate to [Workforce approvals](/workforce?tab=approvals) to see your team's pending, approved, and rejected gates.
 
 Each approval request shows:
 
@@ -125,7 +125,7 @@ You can manage team roles from [Settings → Members](/settings).
 
 When an approval request arrives, the manager sees it in three places:
 
-1. **The portal** — the [Approvals](/approvals) badge updates in the sidebar in real time
+1. **The portal** — the [Workforce approvals](/workforce?tab=approvals) badge updates in the sidebar in real time
 2. **The relay** — if a browser session is open on the relevant agentHost's chat view, an `approval.request` event arrives immediately
 3. **Messaging channels** (coming in Phase 2) — Slack, Telegram, email notifications for approval requests
 
@@ -170,6 +170,6 @@ The default BuilderForce Agents timeout is 10 minutes for interactive agent requ
 
 ## Next Steps
 
-- Open [Approvals](/approvals) to see any pending gates on your team's agentHosts
+- Open [Workforce approvals](/workforce?tab=approvals) to see any pending gates on your team's agentHosts
 - Read [Task Execution and the Portal](/blog/task-execution-and-observability) to understand how approvals interact with the execution lifecycle
 - See [Multi-Agent Orchestration](/blog/multi-agent-orchestration) for patterns that combine approval gates with multi-step workflows

@@ -351,7 +351,7 @@ export function Select({
               background: 'var(--panel-drawer-bg, var(--bg-elevated))',
               color: 'var(--text-primary)',
               border: '1px solid var(--border)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
               zIndex: 100000,
               padding: 4,
@@ -362,7 +362,7 @@ export function Select({
                 return (
                   <div
                     key={`g-${i}`}
-                    style={{ padding: '6px 10px 2px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}
+                    style={{ padding: '6px 10px 2px', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}
                   >
                     {row.label}
                   </div>
@@ -387,8 +387,8 @@ export function Select({
                   }}
                   style={{
                     padding: '7px 10px',
-                    fontSize: 13,
-                    borderRadius: 4,
+                    fontSize: 'var(--font-size-small)',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: opt.disabled ? 'not-allowed' : 'pointer',
                     color: opt.disabled ? 'var(--text-muted)' : 'var(--text-primary)',
                     background: isSel

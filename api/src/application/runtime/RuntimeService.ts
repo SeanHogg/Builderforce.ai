@@ -1,4 +1,6 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
+import { isIncidentTriagePayload } from '../incident/incidentTriageMarker';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
@@ -9,19 +11,26 @@ import {
   AuditEventType, ExecutionStatus,
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
-import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
-import { cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON } from './orphanReasons';
-import { parseExecutor } from './cloudDispatch';
-import type { RunMilestonePhase } from '../brain/ChatTicketService';
+import { NotFoundError, ForbiddenError, ServiceUnavailableError } from '../../domain/shared/errors';
+import {
+  cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON,
+  PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON,
+} from './orphanReasons';
+import { parseExecutor, parseActAsRole, parseCloudAgentRef, isRoleAttributedRun } from './cloudDispatch';
+import type { PolicyGate } from '@builderforce/agent-tools';
+import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTicketService';
 
 export interface SubmitTaskDto {
   taskId:      number;
   agentId?:    number;
+  agentRegistrationId?: string;
   agentHostId?:     number | null;
   tenantId:    number;
   submittedBy: string;
   sessionId?:  string | null;
   payload?:    string;
+  /** Trusted execution surface, assigned by server routing/auth context. */
+  source?:     'agent' | 'vscode' | 'brain';
 }
 
 export interface UpdateExecutionDto {
@@ -42,6 +51,7 @@ function parseLaneKey(payload: string | null): string | undefined {
     return undefined;
   }
 }
+
 
 /**
  * RuntimeService — the execution engine.
@@ -78,10 +88,16 @@ export class RuntimeService {
      * the ticket-metrics layer ({@link syncExecutionTaskLifecycle}) so agent lane
      * moves record transitions exactly like a human PATCH and a terminal run
      * stamps the work-stopped signal. Best-effort by contract.
+     *
+     * Carries the RUNNING agent's identity (`actorAgentRef` / `actorAgentHostId`, from
+     * the execution row) so the transition log names WHICH agent hopped the lane. The
+     * execution has always known this; not passing it is why every agent move in the
+     * log read as an anonymous 'system' write.
      */
     private readonly onTaskStatusSync?: (info: {
       tenantId: number; taskId: number; projectId: number;
       fromStatus: string; toStatus: string; terminal: boolean;
+      actorAgentRef: string | null; actorAgentHostId: number | null;
     }) => Promise<void>,
     /**
      * Optional cloud-orphan self-heal. Invoked for a stale CLOUD run BEFORE it is
@@ -136,31 +152,212 @@ export class RuntimeService {
       agentRef: string | null; executionId: number;
       phase: RunMilestonePhase;
       toStatus?: string | null; resultText?: string | null; errorMessage?: string | null;
+      /** The `ask_human` question (paused phase) so the chat shows WHAT the agent needs. */
+      questionText?: string | null;
+      /** Uniquifies repeatable phases (paused/resumed once per question cycle) in the
+       *  idempotency key — the approval id at the ask_human/answer sites. */
+      eventNonce?: string | null;
     }) => Promise<void>,
+    /**
+     * Optional attribution sink invoked when a run reaches a TERMINAL status — so the
+     * Coordinated Role Participation manifest can record that "role X participated"
+     * (linked to the execution it ran as) and mark it completed when evidence lands.
+     * Wired at the composition root to the manifest attribution handler. Best-effort:
+     * called after all lane/metrics side-effects and must never block them.
+     */
+    private readonly onRunFinalized?: (info: {
+      tenantId: number; taskId: number; projectId: number; executionId: number;
+      status: 'completed' | 'failed'; actAsRole: string | null; laneServed: string | null;
+    }) => Promise<void>,
+    /** Managed-board coordination seam. When it returns managed=true, the
+     * Coordinator owns every task-status transition for this execution and the
+     * legacy RuntimeService lane writer is bypassed. */
+    private readonly onManagedRunStatus?: (info: {
+      tenantId: number; taskId: number; projectId: number; executionId: number;
+      status: 'running' | 'completed' | 'failed'; fromStatus: string;
+      actAsRole: string | null; laneServed: string | null;
+    }) => Promise<{ managed: boolean; toStatus: string }>,
+    /**
+     * Governance-gate resolver. `submit` is the ONE funnel every execution passes
+     * through — board auto-run, a manual dispatch, an agent handoff, the workflow
+     * relay — so stamping the tenant's effective {@link PolicyGate}s onto the
+     * payload HERE is what makes an authored policy pack reach the engine's
+     * `evaluatePolicyGate` seam on every real run, without each dispatch call site
+     * remembering to resolve them. Wired at the composition root to
+     * {@link resolvePolicyGates} (read-through cached). Best-effort by contract:
+     * a resolver failure must never block a dispatch — it degrades to today's
+     * ungated behaviour, exactly as if no pack were authored.
+     */
+    private readonly resolvePolicyGates?: (scope: {
+      tenantId: number; projectId: number | null; agentRef: string | null;
+    }) => Promise<PolicyGate[]>,
+    /** Canonical registry lookup. Appended to preserve constructor compatibility in tests. */
+    private readonly resolveAgentRegistration?: (
+      id: string,
+      tenantId: number,
+    ) => Promise<{ active: boolean } | null>,
+    /** Authoritative workspace kill switch. Appended to preserve constructor
+     * compatibility; production always wires it at the composition root. */
+    private readonly isAgentExecutionEnabled?: (tenantId: number) => Promise<boolean>,
   ) {}
 
   /**
-   * Post a `paused` | `cancelled` lifecycle milestone for an execution whose row is
-   * written DIRECTLY (the ask_human pause in `cloudAgentEngine` and {@link cancel}),
-   * bypassing {@link update}'s milestone emission. Resolves the ticket + project the
-   * same way `update` does, then fans out via {@link onRunMilestone}. Best-effort —
-   * never throws (chat narration must never break the run's terminal write).
+   * Run one idempotent lifecycle side effect in isolation. A failure is retried,
+   * logged with correlation fields, and recorded as a tenant audit event without
+   * preventing later effects from running.
    */
-  async postLifecycleMilestone(execution: Execution, phase: 'paused' | 'cancelled'): Promise<void> {
+  private async runEffect<T>(
+    name: string,
+    context: { tenantId: number; executionId: number; taskId?: number; projectId?: number },
+    effect: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await effect();
+      } catch (error) {
+        lastError = error;
+        reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "runEffect", context: { logMessage: '[runtime-effect] failed', details: {
+          effect: name,
+          attempt,
+          maxAttempts: 3,
+          ...context,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        } } });
+      }
+    }
+
+    try {
+      await this.audit.save(AuditEvent.create({
+        tenantId: asTenantId(context.tenantId),
+        userId: null,
+        eventType: 'execution_effect_failed' as AuditEventType,
+        resourceType: 'execution_effect',
+        resourceId: String(context.executionId),
+        metadata: JSON.stringify({
+          effect: name,
+          attempts: 3,
+          taskId: context.taskId ?? null,
+          projectId: context.projectId ?? null,
+          error: lastError instanceof Error ? `${lastError.name}: ${lastError.message}` : String(lastError),
+        }),
+      }));
+    } catch (auditError) {
+      reportCaughtError(auditError, { source: "application/runtime/RuntimeService.ts", operation: "runEffect", context: { logMessage: '[runtime-effect] failure audit write threw', details: {
+        effect: name,
+        ...context,
+        error: auditError instanceof Error ? `${auditError.name}: ${auditError.message}` : String(auditError),
+      } } });
+    }
+    return fallback;
+  }
+
+  /**
+   * Stamp the effective governance gates onto a dispatch payload. Returns the
+   * payload unchanged when nothing resolves or when the resolver is unwired. A
+   * wired resolver that fails is fail-closed: an agent run must not start without
+   * knowing which governance policy applies.
+   * the caller ALREADY carried gates (a `deploy()`-and-dispatch run compiles its
+   * own onto the spec — the explicit spec wins over the ambient tenant policy).
+   */
+  private async withPolicyGates(
+    payload: string | undefined,
+    tenantId: number,
+    projectId: number | null,
+  ): Promise<string | undefined> {
+    if (!this.resolvePolicyGates) return payload;
+    try {
+      let obj: Record<string, unknown> = {};
+      if (payload) {
+        try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+      }
+      if (Array.isArray(obj.policyGates) && obj.policyGates.length > 0) return payload;
+
+      const gates = await this.resolvePolicyGates({
+        tenantId, projectId, agentRef: parseCloudAgentRef(payload) ?? null,
+      });
+      if (gates.length === 0) return payload;
+      obj.policyGates = gates;
+      return JSON.stringify(obj);
+    } catch (error) {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "withPolicyGates", context: { logMessage: '[runtime-policy] policy gate resolution failed; dispatch blocked', details: {
+        tenantId,
+        projectId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+      throw new ServiceUnavailableError(
+        'Agent execution is temporarily paused because governance policy could not be resolved. Try again shortly.',
+      );
+    }
+  }
+
+  /**
+   * Post a lifecycle milestone for an execution whose row is written DIRECTLY —
+   * bypassing {@link update}'s milestone emission: the ask_human pause + resume in
+   * `CloudRunnerDO`, {@link cancel}, and the orphan reap ({@link reapIfOrphaned}).
+   * Resolves the ticket + project the same way `update` does, then fans out via
+   * {@link onRunMilestone}. Best-effort — never throws (chat narration must never
+   * break the run's terminal write).
+   */
+  async postLifecycleMilestone(
+    execution: Execution,
+    phase: 'paused' | 'resumed' | 'cancelled' | 'failed',
+    opts?: { errorMessage?: string | null; questionText?: string | null; eventNonce?: string | null },
+  ): Promise<void> {
     try {
       const task = await this.tasks.findById(asTaskId(execution.taskId));
       if (!task) return;
       const plain = task.toPlain() as { projectId?: number; taskType?: string };
-      const taskType = plain.taskType === 'epic' || plain.taskType === 'gap' ? plain.taskType : 'task';
       await this.onRunMilestone?.({
         tenantId: execution.tenantId, taskId: Number(execution.taskId),
-        projectId: plain.projectId ?? 0, taskType,
+        projectId: plain.projectId ?? 0, taskType: ticketKindForTaskType(plain.taskType),
         agentRef: execution.cloudAgentRef, executionId: Number(execution.id), phase,
+        errorMessage: opts?.errorMessage ?? null,
+        questionText: opts?.questionText ?? null,
+        eventNonce: opts?.eventNonce ?? null,
       });
-    } catch { /* best-effort: never block the direct write */ }
+    } catch (error) {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "postLifecycleMilestone", context: { logMessage: '[runtime-milestone] lifecycle milestone failed', details: {
+        executionId: Number(execution.id),
+        tenantId: Number(execution.tenantId),
+        phase,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+    }
+  }
+
+  /**
+   * {@link postLifecycleMilestone} addressed by execution id — for direct-write
+   * sites that hold only the id (the durable runner's pause/resume endpoints).
+   * Loads the row WITHOUT the orphan-reap read path (narrating must never trigger
+   * a repair write). Best-effort — never throws.
+   */
+  async postLifecycleMilestoneById(
+    executionId: number,
+    phase: 'paused' | 'resumed' | 'cancelled' | 'failed',
+    opts?: { errorMessage?: string | null; questionText?: string | null; eventNonce?: string | null },
+  ): Promise<void> {
+    try {
+      const e = await this.executions.findById(asExecutionId(executionId));
+      if (e) await this.postLifecycleMilestone(e, phase, opts);
+    } catch (error) {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "postLifecycleMilestoneById", context: { logMessage: '[runtime-milestone] lifecycle milestone lookup failed', details: {
+        executionId,
+        phase,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+    }
   }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
+    const source = dto.source ?? 'agent';
+    if (source === 'agent' && this.isAgentExecutionEnabled && !(await this.isAgentExecutionEnabled(dto.tenantId))) {
+      throw new ForbiddenError(
+        'Agent execution is disabled for this workspace. A manager must re-enable it in Settings.',
+      );
+    }
+
     const task = await this.tasks.findById(asTaskId(dto.taskId));
     if (!task) throw new NotFoundError('Task', dto.taskId);
 
@@ -169,16 +366,30 @@ export class RuntimeService {
       if (!agent) throw new NotFoundError('Agent', dto.agentId);
       if (!agent.isActive) throw new ForbiddenError('Agent is not active');
     }
+    if (dto.agentRegistrationId !== undefined) {
+      const registration = await this.resolveAgentRegistration?.(dto.agentRegistrationId, dto.tenantId);
+      if (!registration) throw new NotFoundError('Agent registration', dto.agentRegistrationId);
+      if (!registration.active) throw new ForbiddenError('Agent registration is not active');
+    }
+
+    // Governance: stamp the tenant's effective policy gates onto the payload so the
+    // engine's `evaluatePolicyGate` seam enforces them. Done here — the single
+    // execution funnel — so EVERY dispatch path is gated, not just the ones that
+    // remembered to ask.
+    const projectId = (task.toPlain() as { projectId?: number }).projectId ?? null;
+    const payload = await this.withPolicyGates(dto.payload, dto.tenantId, projectId);
 
     const execution = await this.executions.save(
       Execution.create({
         taskId:      asTaskId(dto.taskId),
         agentId:     dto.agentId != null ? asAgentId(dto.agentId) : null,
+        agentRegistrationId: dto.agentRegistrationId ?? null,
         agentHostId:      dto.agentHostId != null ? asAgentHostId(dto.agentHostId) : null,
         tenantId:    asTenantId(dto.tenantId),
         submittedBy: dto.submittedBy,
         sessionId:   dto.sessionId ?? null,
-        payload:     dto.payload ?? null,
+        payload:     payload ?? null,
+        source,
       }),
     );
 
@@ -191,8 +402,10 @@ export class RuntimeService {
       metadata:     JSON.stringify({
         taskId: dto.taskId,
         agentId: dto.agentId,
+        agentRegistrationId: dto.agentRegistrationId ?? null,
         agentHostId: dto.agentHostId ?? null,
         sessionId: dto.sessionId ?? null,
+        source,
       }),
     }));
 
@@ -230,16 +443,16 @@ export class RuntimeService {
    * process to recover, so once a run exceeds a per-kind ceiling we mark it failed
    * on read.
    *
-   * Cloud ceiling is PER-SURFACE ({@link cloudSilenceCeilingMs}, keyed off the executor
-   * stamped on the payload at dispatch): the interim Worker loop runs in `waitUntil`,
-   * which Cloudflare stops shortly after the HTTP response returns (observed ~30s), so
-   * it keeps the tight 90s wall + margin — a genuinely-dead serverless run surfaces in
-   * ~1.5 min. A long-lived executor (durable CloudRunnerDO / Cloudflare Container)
-   * heartbeats `updatedAt` once per alarm tick, and a tick legitimately spans one slow
-   * LLM step (60-90s+), so it gets the larger long-lived ceiling — measured from last
-   * activity below — and only a SILENT (crashed/hung) long-lived run is reaped;
-   * {@link orphanReason} then reports it as a crash, not a 30s timeout. A self-hosted
-   * host has a real long-lived process and keeps a far larger ceiling still.
+   * The cloud ceiling comes from {@link cloudSilenceCeilingMs} (keyed off the executor
+   * stamped on the payload at dispatch). BOTH cloud executors — the durable
+   * CloudRunnerDO and the Cloudflare Container — are long-lived: each heartbeats
+   * `updatedAt` once per alarm tick, and a tick legitimately spans one slow LLM step
+   * (60-90s+), so both get the generous long-lived ceiling, measured from last activity
+   * below, and only a SILENT (crashed/hung) run is reaped. {@link orphanReason} then
+   * reports it as a crash rather than a timeout. (There used to be a second, tight 90s
+   * ceiling for an in-request Worker loop; that executor was unreachable and has been
+   * removed.) A self-hosted host has a real long-lived process and keeps a far larger
+   * ceiling still.
    *
    * Read-path repair (no cron needed): the stream's reconciliation poll calls
    * `getExecution` every few seconds, so an orphan self-heals on next view.
@@ -252,6 +465,16 @@ export class RuntimeService {
   }
 
   private isOrphaned(e: Execution, nowMs: number): boolean {
+    // A run PAUSED on an `ask_human` question is live-but-idle: no executor is
+    // burning time, so the silence ceilings below would be nonsense. It gets its own
+    // GENEROUS deadline instead ({@link PAUSED_DEADLINE_MS}) — but it does get one.
+    // Both `evaluateTaskAutoRun` and `laneRequirementGate` count 'paused' as a LIVE
+    // run, and nothing used to reap one, so an unanswered question blocked every
+    // future auto-run on that ticket forever.
+    if (e.status === ExecutionStatus.PAUSED) {
+      const idleSince = (e.updatedAt ?? e.startedAt ?? e.createdAt).getTime();
+      return nowMs - idleSince > PAUSED_DEADLINE_MS;
+    }
     const live = e.status === ExecutionStatus.PENDING
       || e.status === ExecutionStatus.SUBMITTED
       || e.status === ExecutionStatus.RUNNING;
@@ -282,6 +505,7 @@ export class RuntimeService {
    *  crashed — so it must NOT be told to "downgrade to a durable runtime". Host runs
    *  lost their process/connection. */
   private orphanReason(e: Execution): string {
+    if (e.status === ExecutionStatus.PAUSED) return PAUSED_ORPHAN_REASON;
     if (!this.isCloudRun(e)) return HOST_ORPHAN_REASON;
     const startedMs = (e.startedAt ?? e.createdAt)?.getTime();
     const lastActivityMs = (e.updatedAt ?? e.createdAt)?.getTime();
@@ -298,7 +522,13 @@ export class RuntimeService {
         if ((await this.onCloudOrphan(e)) === 'requeued') {
           return (await this.executions.findById(asExecutionId(e.id))) ?? e;
         }
-      } catch { /* fall through to fail */ }
+      } catch (error) {
+        reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "reapIfOrphaned", context: { logMessage: '[runtime-orphan] cloud self-heal threw; marking run failed', details: {
+          executionId: Number(e.id),
+          tenantId: Number(e.tenantId),
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        } } });
+      }
     }
     try {
       const failed = e.markFailed(this.orphanReason(e));
@@ -313,8 +543,18 @@ export class RuntimeService {
       }));
       // Surface the orphan failure on the Logs/Timeline (telemetry-only views).
       await this.onTerminalFailure?.(saved);
+      // …and into the ticket's linked Brain chats: a human driving the conversation
+      // must hear that the run died, not just watch the board stop moving. Idempotent
+      // (run:{id}:failed), so racing the cron reaper's own narration is harmless.
+      await this.postLifecycleMilestone(saved, 'failed', { errorMessage: this.orphanReason(e) });
       return saved;
-    } catch {
+    } catch (error) {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "reapIfOrphaned", context: { logMessage: '[runtime-orphan] failed to persist orphan transition', details: {
+        executionId: Number(e.id),
+        tenantId: Number(e.tenantId),
+        priorStatus: e.status,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
       return e; // best-effort — never block a read on the repair
     }
   }
@@ -368,7 +608,8 @@ export class RuntimeService {
         throw new ForbiddenError(`Cannot transition to status '${dto.status}' via this endpoint`);
     }
 
-    const saved = await this.executions.update(execution);
+    let saved = await this.executions.update(execution);
+    let movedTicket = false;
 
     // sync task status based on execution state --------------------------------
     // Each lane move here is an AGENT moving a ticket — recorded into the ticket-
@@ -388,12 +629,54 @@ export class RuntimeService {
         // in_review and re-triggers a review (the completion loop). Record the terminal
         // signal for metrics but leave the ticket exactly where it is.
         const isReviewRun = isValidatorReviewPayload(execution.payload);
+        // An incident-triage run works the bridged INCIDENT ticket (classify/page/notes,
+        // no code) and likewise must not move its lane — the lane mirrors the incident's
+        // own status (IncidentService.updateIncident), not the run's completion.
+        const isIncidentTriageRun = isIncidentTriagePayload(execution.payload);
+        // A ROLE-ATTRIBUTED run (a reviewer asked for a verdict, or a producer asked for
+        // this stage's deliverable) likewise runs against an already-open ticket. Its
+        // VERDICT is what advances the stage — the run merely completing is not — so it
+        // must not move the lane. Omitting this is why a 20-second sign-off run pushed
+        // task 387 out of `in_review` 1.5 seconds after finishing, whatever it decided,
+        // and it is half of the `in_review → ready` churn (the other half is the
+        // Coordinator rewind). The manifest attribution below still runs, so the run's
+        // evidence lands on its slot exactly as before.
+        const isRoleRun = isRoleAttributedRun(execution.payload);
+        // All three classes run against an already-open ticket and hold its lane.
+        const holdsLane = isReviewRun || isIncidentTriageRun || isRoleRun;
+        const effectContext = {
+          tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
+        };
+        // Holding the lane and coordinating the lifecycle are separate decisions.
+        // Role-attributed runs must not take the legacy RUNNING→in_progress /
+        // COMPLETED→next-lane path, but their terminal event MUST reach the managed
+        // callback: that callback first persists the role's evidence/verdict, then
+        // immediately evaluates whether the stage can advance. Suppressing it here
+        // left completed role work waiting for the periodic manager sweep (observed as
+        // a 108-minute developer→reviewer hand-off gap on task 1377).
+        const mayCoordinateManagedLifecycle = !isReviewRun && !isIncidentTriageRun;
+        const managedResult = mayCoordinateManagedLifecycle && this.onManagedRunStatus
+          && (dto.status === ExecutionStatus.RUNNING || terminal)
+          ? await this.runEffect('managed_run_status', effectContext, () => this.onManagedRunStatus!({
+              ...effectContext,
+              status: dto.status === ExecutionStatus.RUNNING ? 'running' : dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+              fromStatus, actAsRole: parseActAsRole(execution.payload) ?? null,
+              laneServed: parseLaneKey(execution.payload) ?? fromStatus,
+            }), { managed: false, toStatus: fromStatus })
+          : undefined;
+        const coordinatorOwnsTransition = managedResult?.managed === true;
+        if (coordinatorOwnsTransition) toStatus = managedResult.toStatus;
 
-        if (!isReviewRun && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
+        if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
           toStatus = TaskStatus.IN_PROGRESS;
-          await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
+          await this.runEffect(
+            'task_status_running',
+            effectContext,
+            () => this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS })),
+            task,
+          );
         }
-        if (!isReviewRun && dto.status === ExecutionStatus.COMPLETED) {
+        if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED) {
           const resultText = dto.result ?? '';
           // Default advance is the board's NEXT swimlane by configured order — so a
           // custom board (renamed / re-ordered lanes) flows correctly instead of
@@ -404,14 +687,53 @@ export class RuntimeService {
           if (resultText.includes('[auto-approve]')) {
             newStatus = TaskStatus.DONE;
           } else {
-            const nextKey = await this.resolveNextStatus?.({ projectId, fromStatus }).catch(() => null);
+            const nextKey = this.resolveNextStatus
+              ? await this.runEffect(
+                  'resolve_next_status',
+                  effectContext,
+                  () => this.resolveNextStatus!({ projectId, fromStatus }),
+                  null,
+                )
+              : null;
             if (nextKey) newStatus = nextKey;
           }
           toStatus = newStatus;
-          await this.tasks.update(task.update({ status: newStatus }));
+          await this.runEffect(
+            'task_status_completed',
+            effectContext,
+            () => this.tasks.update(task.update({ status: newStatus })),
+            task,
+          );
         }
 
-        await this.onTaskStatusSync?.({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal });
+        if (this.onTaskStatusSync) {
+          await this.runEffect(
+            'task_status_sync',
+            effectContext,
+            () => this.onTaskStatusSync!({
+              tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal,
+              // WHO moved it: the agent this execution ran as. A cloud run carries its
+              // published/ide agent ref; an on-prem run carries its host id.
+              actorAgentRef: execution.cloudAgentRef,
+              actorAgentHostId: execution.agentHostId != null ? Number(execution.agentHostId) : null,
+            }),
+            undefined,
+          );
+        }
+
+        // Manifest attribution (PRD §5.6): a terminal run records that the role it ran
+        // AS participated on the ticket (linked to this execution), and — with producer
+        // evidence — completes that role's manifest slot. Best-effort, never blocks.
+        if (terminal && !coordinatorOwnsTransition) {
+          if (this.onRunFinalized) {
+            await this.runEffect('run_finalized', effectContext, () => this.onRunFinalized!({
+              ...effectContext,
+              status: dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+              actAsRole: parseActAsRole(execution.payload) ?? null,
+              laneServed: parseLaneKey(execution.payload) ?? fromStatus,
+            }), undefined);
+          }
+        }
 
         // Autonomous chaining: this agent just advanced the ticket into a NEW
         // non-terminal lane. Fire the same lane auto-run trigger a human board-drag
@@ -419,11 +741,13 @@ export class RuntimeService {
         // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
         // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
         // both are excluded here (the trigger also dedupes/no-ops defensively).
-        if (!isReviewRun && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
-          await this.onLaneEntry?.({
-            tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
-            originLaneKey: parseLaneKey(execution.payload),
-          });
+        if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+          if (this.onLaneEntry) {
+            await this.runEffect('lane_entry_dispatch', effectContext, () => this.onLaneEntry!({
+              tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
+              originLaneKey: parseLaneKey(execution.payload),
+            }), undefined);
+          }
         }
 
         // Narrate the run's progress back into the ticket's linked Brain chats (started ▸
@@ -432,23 +756,52 @@ export class RuntimeService {
         // milestone failure can't block the lane sync/chaining above; the hook is itself
         // best-effort + per-execution+phase idempotent.
         if (!isReviewRun) {
-          const taskType = (task.toPlain() as { taskType?: string }).taskType ?? 'task';
-          const phase = dto.status === ExecutionStatus.RUNNING
-            ? (toStatus === TaskStatus.IN_PROGRESS && fromStatus !== TaskStatus.IN_PROGRESS ? 'started' as const : null)
+          const taskType = (task.toPlain() as { taskType?: string }).taskType;
+          // `started` fires on EVERY RUNNING transition, not only when the lane flips to
+          // in_progress — a re-run on a ticket already in progress and a Coordinator-managed
+          // lane both start silently otherwise. The per-execution+phase idempotency key
+          // (run:{id}:started) collapses repeats (heartbeat re-marks, resume) to one post.
+          const phase = dto.status === ExecutionStatus.RUNNING ? 'started' as const
             : dto.status === ExecutionStatus.COMPLETED ? 'completed' as const
             : dto.status === ExecutionStatus.FAILED ? 'failed' as const : null;
           if (phase) {
-            await this.onRunMilestone?.({
-              tenantId, taskId: Number(execution.taskId), projectId,
-              taskType: taskType === 'epic' || taskType === 'gap' ? taskType : 'task',
-              agentRef: execution.cloudAgentRef, executionId: Number(saved.id), phase,
-              toStatus, resultText: dto.result ?? null, errorMessage: dto.errorMessage ?? null,
-            });
+            if (this.onRunMilestone) {
+              await this.runEffect('run_milestone', effectContext, () => this.onRunMilestone!({
+                tenantId, taskId: Number(execution.taskId), projectId,
+                taskType: ticketKindForTaskType(taskType),
+                agentRef: execution.cloudAgentRef, executionId: Number(saved.id), phase,
+                toStatus, resultText: dto.result ?? null, errorMessage: dto.errorMessage ?? null,
+              }), undefined);
+            }
           }
         }
+        movedTicket = dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus;
       }
-    } catch {
-      // ignore task sync errors to avoid blocking runtime flow
+    } catch (error) {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "update", context: { logMessage: '[runtime-update] lifecycle orchestration failed outside an isolated effect', details: {
+        executionId: Number(saved.id),
+        tenantId: Number(execution.tenantId),
+        taskId: Number(execution.taskId),
+        status: dto.status,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+    }
+
+    // A lane advance is a durable product of the run just as much as a commit or PR.
+    // `finalizeCloudRun` stamps repository artifacts before this lifecycle transition;
+    // complete the verdict here, after the authoritative from/to statuses are known.
+    // Without this, a legitimate no-code workflow that advances a ticket is counted as
+    // an empty completion and can trip the unproductive-run breaker.
+    if (dto.status === ExecutionStatus.COMPLETED && movedTicket && saved.produced !== true) {
+      try {
+        saved = await this.executions.update(saved.markProduced(true));
+      } catch (error) {
+        reportCaughtError(error, {
+          source: 'application/runtime/RuntimeService.ts',
+          operation: 'markProducedFromLaneMove',
+          context: { executionId: Number(saved.id), taskId: Number(saved.taskId) },
+        });
+      }
     }
 
     const auditType = dto.status === ExecutionStatus.RUNNING

@@ -12,6 +12,7 @@
  * PATCH  /api/migrations/:id/mappings Set project/type/user/item maps   (MANAGER+)
  * POST   /api/migrations/:id/stage    Pull items into staging           (MANAGER+)
  * POST   /api/migrations/:id/commit   Promote staged data (import)      (MANAGER+)
+ * POST   /api/migrations/:id/rollback Remove artifacts from this run    (MANAGER+)
  * DELETE /api/migrations/:id          Discard a run                     (MANAGER+)
  */
 
@@ -28,11 +29,11 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 
 const MODES: readonly ImportMode[] = ['migrate', 'sync', 'both'];
 
-export function createMigrationRoutes(db: Db): Hono<HonoEnv> {
+export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   const manager = requireRole(TenantRole.MANAGER);
-  const service = new MigrationService(createMigrationStore(db));
+  const service = new MigrationService(createMigrationStore(db, env));
 
   const verKey = (tenantId: number) => `migrations:${tenantId}`;
   const bump = (c: { env: Env }, tenantId: number) => bumpCacheVersion(c.env, verKey(tenantId));
@@ -132,6 +133,18 @@ export function createMigrationRoutes(db: Db): Hono<HonoEnv> {
       return c.json(result);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Import failed' }, 502);
+    }
+  });
+
+  // POST /api/migrations/:id/rollback — lineage-scoped, atomic rollback.
+  router.post('/:id/rollback', manager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    try {
+      const result = await service.rollback(c.req.param('id'), tenantId);
+      await bump(c, tenantId);
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'Rollback failed' }, 400);
     }
   });
 

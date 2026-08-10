@@ -57,12 +57,13 @@ export async function mintTenantSessionToken(
     userAgent?: string | null;
     ipAddress?: string | null;
     expiresIn?: number;
+    clientSurface?: 'vscode';
   },
 ): Promise<{ token: string; expiresIn: number }> {
   const expiresIn = opts.expiresIn ?? 3600;
   const role = opts.role ?? (await resolveMemberRole(db, opts.userId, opts.tenantId));
   const token = await signJwt(
-    { sub: opts.userId, tid: opts.tenantId, role },
+    { sub: opts.userId, tid: opts.tenantId, role, ...(opts.clientSurface ? { src: opts.clientSurface } : {}) },
     jwtSecret,
     expiresIn,
   );

@@ -78,16 +78,16 @@ export function ConfirmDialog({
           width: '100%',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           padding: 24,
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
+          <h2 style={{ margin: '0 0 8px', fontSize: 'var(--font-size-card-title)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
         )}
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'var(--text-primary)' }}>{message}</p>
+        <p style={{ margin: 0, fontSize: 'var(--font-size-small)', lineHeight: 1.5, color: 'var(--text-primary)' }}>{message}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
           <button
             type="button"
@@ -95,7 +95,7 @@ export function ConfirmDialog({
             style={{
               padding: '8px 14px',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               cursor: 'pointer',
@@ -110,9 +110,9 @@ export function ConfirmDialog({
             style={{
               padding: '8px 14px',
               border: `1px solid ${accent}`,
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               background: accent,
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               cursor: 'pointer',
               fontWeight: 600,
             }}

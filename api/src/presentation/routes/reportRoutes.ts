@@ -39,7 +39,8 @@ import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
-import { TenantRole, TaskStatus } from '../../domain/shared/types';
+import { TenantRole } from '../../domain/shared/types';
+import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -335,15 +336,6 @@ async function generateInactiveContributorsReport(db: Db, tenantId: number, inac
 // ---------------------------------------------------------------------------
 // Completed-by-assignee rollup (gap [1253])
 // ---------------------------------------------------------------------------
-
-/**
- * Lane keys that count a task as "completed". A board lane is free-form text
- * (tasks.status is a varchar), but `done` is the canonical terminal lane the
- * domain transitions to (Task.markDone → TaskStatus.DONE). Kept as a set so a
- * tenant that adds e.g. a `released` lane can be folded in later without
- * touching the grouping logic.
- */
-export const DONE_CLASS_STATUSES: readonly string[] = [TaskStatus.DONE];
 
 /** Window (days) clamp — guards against unbounded scans / silly query params. */
 const COMPLETED_WINDOW_MIN_DAYS = 1;

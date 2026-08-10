@@ -10,7 +10,7 @@ import PageContainer from '@/components/PageContainer';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -62,7 +62,7 @@ export default function DebugPage() {
                 background: 'var(--bg-elevated)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
               }}
             >
               {agentHostList.map((c) => (

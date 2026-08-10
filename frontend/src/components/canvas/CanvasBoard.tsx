@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -142,7 +143,7 @@ export function CanvasBoard({ value, onChange, readOnly = false, height = 600 }:
               {t(`add_${type}`)}
             </button>
           ))}
-          <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)', marginLeft: 'auto' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
             {t('blockCount', { count: model.blocks.length })}
           </span>
         </div>
@@ -158,14 +159,14 @@ export function CanvasBoard({ value, onChange, readOnly = false, height = 600 }:
           position: 'relative',
           height,
           overflow: 'auto',
-          borderRadius: 12,
-          border: '1px solid var(--border, #333)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border)',
           background:
-            'var(--surface-2, #131313) radial-gradient(var(--border, #2a2a2a) 1px, transparent 1px) 0 0 / 22px 22px',
+            'var(--surface-2) radial-gradient(var(--border) 1px, transparent 1px) 0 0 / 22px 22px',
         }}
       >
         {model.blocks.length === 0 && (
-          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted, #9ca3af)', fontSize: 14 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
             {readOnly ? t('emptyReadOnly') : t('emptyHint')}
           </div>
         )}
@@ -215,10 +216,10 @@ function BlockView({
     top: block.y,
     width: block.w,
     height: block.h,
-    borderRadius: 10,
-    border: selected ? '2px solid var(--accent, #2563eb)' : '1px solid var(--border, #333)',
-    background: block.type === 'sticky' ? (block as { color: string }).color : 'var(--surface, #1d1d1d)',
-    color: block.type === 'sticky' ? '#1a1a1a' : 'inherit',
+    borderRadius: 'var(--radius-lg)',
+    border: selected ? '2px solid var(--accent)' : '1px solid var(--border)',
+    background: block.type === 'sticky' ? (block as { color: string }).color : 'var(--surface)',
+    color: block.type === 'sticky' ? 'var(--ink-on-light)' : 'inherit',
     boxShadow: selected ? '0 6px 24px rgba(0,0,0,0.35)' : '0 1px 4px rgba(0,0,0,0.2)',
     display: 'flex',
     flexDirection: 'column',
@@ -244,7 +245,7 @@ function BlockView({
       >
         <span style={{ opacity: 0.8 }}>{t(`type_${block.type}`)}</span>
         {!readOnly && (
-          <button type="button" onClick={onRemove} title={t('remove')} style={{ ...iconBtn, color: block.type === 'sticky' ? '#1a1a1a' : 'inherit' }}>
+          <button type="button" onClick={onRemove} title={t('remove')} style={{ ...iconBtn, color: block.type === 'sticky' ? 'var(--ink-on-light)' : 'inherit' }}>
             ×
           </button>
         )}
@@ -316,7 +317,7 @@ function BlockBody({
                   type="button"
                   onClick={() => onUpdate({ color: c })}
                   title={t('color')}
-                  style={{ width: 14, height: 14, borderRadius: '50%', background: c, border: block.color === c ? '2px solid #1a1a1a' : '1px solid rgba(0,0,0,0.3)', cursor: 'pointer' }}
+                  style={{ width: 14, height: 14, borderRadius: '50%', background: c, border: block.color === c ? '2px solid var(--ink-on-light)' : '1px solid rgba(0,0,0,0.3)', cursor: 'pointer' }}
                 />
               ))}
             </div>
@@ -329,7 +330,7 @@ function BlockBody({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={block.url} alt={block.alt || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', margin: 'auto' }} />
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noImage')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noImage')}</div>
       ) : (
         <input value={block.url} placeholder={t('imageUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value })} style={inlineInput} />
       );
@@ -349,18 +350,19 @@ function BlockBody({
           />
         )
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noVideo')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noVideo')}</div>
       ) : (
         <input value={block.url} placeholder={t('videoUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value.trim() })} style={inlineInput} />
       );
 
     case 'file':
       return block.url ? (
-        <a href={block.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #60a5fa)', fontSize: 13, margin: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>
-          📎 {block.name || block.url}
+        <a href={block.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, var(--info))', fontSize: 13, margin: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>
+          
+          <Icon source="📎" size="1em" /> {block.name || block.url}
         </a>
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noFile')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noFile')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: 'auto 0' }}>
           <input value={block.name ?? ''} placeholder={t('fileNamePlaceholder')} onChange={(e) => onUpdate({ name: e.target.value })} style={inlineInput} />
@@ -370,11 +372,12 @@ function BlockBody({
 
     case 'embed':
       return block.documentId ? (
-        <Link href={`/knowledge/${block.documentId}`} style={{ color: 'var(--accent, #60a5fa)', fontSize: 13, margin: 'auto', textAlign: 'center' }}>
-          📄 {block.title || t('openEmbeddedDoc')}
+        <Link href={`/knowledge/${block.documentId}`} style={{ color: 'var(--accent, var(--info))', fontSize: 13, margin: 'auto', textAlign: 'center' }}>
+          
+          <Icon source="📄" size="1em" /> {block.title || t('openEmbeddedDoc')}
         </Link>
       ) : readOnly ? (
-        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noEmbed')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noEmbed')}</div>
       ) : (
         <input value={block.documentId} placeholder={t('embedIdPlaceholder')} onChange={(e) => onUpdate({ documentId: e.target.value.trim() })} style={inlineInput} />
       );
@@ -449,7 +452,7 @@ function WidgetBody({
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-      <div style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: danger ? 'var(--error-text, #f87171)' : undefined }}>
+      <div style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: danger ? 'var(--error-text, var(--error))' : undefined }}>
         {display}
       </div>
       {!readOnly && (
@@ -469,9 +472,9 @@ function WidgetBody({
 
 const toolBtn: React.CSSProperties = {
   padding: '5px 10px',
-  borderRadius: 8,
-  border: '1px solid var(--border, #333)',
-  background: 'var(--surface, #1a1a1a)',
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface)',
   color: 'inherit',
   cursor: 'pointer',
   fontSize: 12,
@@ -479,9 +482,9 @@ const toolBtn: React.CSSProperties = {
 };
 const miniBtn: React.CSSProperties = {
   padding: '3px 8px',
-  borderRadius: 6,
-  border: '1px solid var(--border, #444)',
-  background: 'var(--surface-2, #222)',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'inherit',
   cursor: 'pointer',
   fontSize: 12,
@@ -498,9 +501,9 @@ const inlineInput: React.CSSProperties = {
   width: '100%',
   margin: 'auto 0',
   padding: '6px 8px',
-  borderRadius: 6,
-  border: '1px solid var(--border, #333)',
-  background: 'var(--surface-2, #111)',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
   color: 'inherit',
   fontSize: 12,
 };

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * openTaskPullRequest — open a PR for a task's accumulated workspace changes and
  * record it. Called when a task is marked Done: the agent host has pushed the
@@ -60,7 +61,9 @@ export async function releaseTaskPrClaim(db: Db, taskId: number): Promise<void> 
     .update(tasks)
     .set({ prOpeningAt: null })
     .where(and(eq(tasks.id, taskId), isNull(tasks.githubPrUrl)))
-    .catch(() => { /* best-effort — a stale claim only blocks an auto-retry, never data */ });
+    .catch((error) => { /* best-effort — a stale claim only blocks an auto-retry, never data */ 
+      reportCaughtError(error, { source: "application/repos/openTaskPullRequest.ts", operation: "releaseTaskPrClaim" });
+    });
 }
 
 export async function openTaskPullRequest(

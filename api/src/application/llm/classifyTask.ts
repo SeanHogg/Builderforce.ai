@@ -28,7 +28,9 @@ const SYSTEM_PROMPT =
   '. Guidance: `sql` = database queries/schema/migrations-as-SQL; `frontend_ui` = UI components, styling, client pages; ' +
   '`backend_api` = server routes, services, API endpoints; `refactor` = restructuring without behaviour change; ' +
   '`bugfix` = fixing a defect; `tests` = adding/fixing tests; `docs` = documentation; `devops_ci` = CI/CD, build, deploy, infra config; ' +
-  '`data_migration` = moving/backfilling data; `other` = none of the above. Respond with JSON only.';
+  '`data_migration` = moving/backfilling data; `analysis` = research or assessment whose output is findings; ' +
+  '`provisioning` = creating/configuring an external resource whose state is the deliverable; `decision` = an explicit approval or written decision; ' +
+  '`other` = none of the above. Respond with JSON only.';
 
 /** The strict JSON-schema the gateway enforces — a closed enum + a 0..1 confidence. */
 const RESPONSE_SCHEMA = {

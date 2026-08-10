@@ -66,5 +66,5 @@ If you only want to reset sessions, delete `agents/<agentId>/sessions/` and `age
 
 ## References
 
-- [https://builderforce.ai/docs/testing](https://builderforce.ai/docs/testing)
+- [https://builderforce.ai/docs/help/testing](https://builderforce.ai/docs/help/testing)
 - [https://builderforce.ai/docs/start/getting-started](https://builderforce.ai/docs/start/getting-started)

@@ -69,6 +69,15 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     const specId = body.id ?? crypto.randomUUID();
     const now = new Date();
 
+    // Cross-tenant upsert guard: the caller supplies body.id and the conflict target
+    // is the global specs.id PK, so without this check a caller could overwrite
+    // another tenant's spec by guessing its id. Only reject on an id that already
+    // exists under a different tenant; a novel id creates a fresh row as normal.
+    if (body.id) {
+      const [existing] = await db.select({ tenantId: specs.tenantId }).from(specs).where(eq(specs.id, specId));
+      if (existing && existing.tenantId !== tenantId) return c.json({ error: 'Spec not found' }, 404);
+    }
+
     await db
       .insert(specs)
       .values({

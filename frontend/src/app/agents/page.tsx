@@ -105,8 +105,8 @@ export default async function AgentsHome() {
           </ul>
           <p className="cc-prose">
             {t.rich('agents.whyLinks', {
-              cmp: (c) => <a href="/docs/agents-vs-alternatives" className="cc-link">{c}</a>,
-              docs: (c) => <a href="/docs" className="cc-link">{c}</a>,
+              cmp: (c) => <Link href="/docs/agents-vs-alternatives" className="cc-link">{c}</Link>,
+              docs: (c) => <Link href="/docs" className="cc-link">{c}</Link>,
             })}
           </p>
         </section>
@@ -136,7 +136,7 @@ export default async function AgentsHome() {
             <span className="cc-cta-label">Discord</span>
             <span className="cc-cta-sub">{t('agents.ctaDiscordSub')}</span>
           </a>
-          <a href="/docs" className="cc-cta">
+          <Link href="/docs" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cc-cta-icon">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -145,8 +145,8 @@ export default async function AgentsHome() {
             </svg>
             <span className="cc-cta-label">{t('agents.ctaDocsLabel')}</span>
             <span className="cc-cta-sub">{t('agents.ctaDocsSub')}</span>
-          </a>
-          <a href="https://github.com/seanhogg/agents" target="_blank" rel="noopener" className="cc-cta">
+          </Link>
+          <a href="https://github.com/SeanHogg/Builderforce.ai" target="_blank" rel="noopener" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="currentColor" className="cc-cta-icon">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
             </svg>
@@ -183,22 +183,22 @@ export default async function AgentsHome() {
           max-width: 760px; margin: 64px auto 0; padding: 0 24px; width: 100%;
         }
         .cc-faq-head {
-          font-family: var(--font-display); font-weight: 700; font-size: 1.5rem;
+          font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section);
           color: var(--text-primary); text-align: center; margin: 0 0 20px;
         }
         .cc-faq-item {
-          border: 1px solid var(--border-subtle); border-radius: 14px;
+          border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
           background: var(--surface-card); padding: 4px 18px; margin-bottom: 10px;
         }
         .cc-faq-q {
           cursor: pointer; list-style: none; padding: 14px 0;
-          font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
+          font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title);
           color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; gap: 12px;
         }
         .cc-faq-q::-webkit-details-marker { display: none; }
-        .cc-faq-q::after { content: '+'; color: var(--coral-bright); font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
+        .cc-faq-q::after { content: '+'; color: var(--coral-bright); font-size: var(--font-size-section); line-height: 1; flex-shrink: 0; }
         .cc-faq-item[open] .cc-faq-q::after { content: '–'; }
-        .cc-faq-a { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
+        .cc-faq-a { margin: 0 0 14px; font-size: var(--font-size-body); color: var(--text-secondary); line-height: 1.6; }
 
         .cc-stars,
         .cc-nebula {
@@ -244,7 +244,7 @@ export default async function AgentsHome() {
         .cc-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(2.25rem, 6vw, 4rem);
+          font-size: var(--font-size-hero);
           margin: 0;
           background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
           -webkit-background-clip: text;
@@ -253,7 +253,7 @@ export default async function AgentsHome() {
         }
         .cc-tagline {
           color: var(--text-secondary);
-          font-size: clamp(1rem, 2vw, 1.2rem);
+          font-size: var(--font-size-lede);
           margin: 16px auto 8px;
           max-width: 720px;
         }
@@ -278,7 +278,7 @@ export default async function AgentsHome() {
         .cc-h2 {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.5rem, 3vw, 2rem);
+          font-size: var(--font-size-section);
           margin-bottom: 24px;
           color: var(--text-primary);
         }
@@ -305,8 +305,8 @@ export default async function AgentsHome() {
           background: rgba(77,158,255,0.1);
           color: var(--coral-bright);
           padding: 1px 6px;
-          border-radius: 4px;
-          font-size: 0.875em;
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-small);
         }
         .cc-features-grid {
           display: grid;
@@ -318,7 +318,7 @@ export default async function AgentsHome() {
           padding: 24px;
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: inherit;
           transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
@@ -335,13 +335,13 @@ export default async function AgentsHome() {
         .cc-feature-title {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: 1.05rem;
+          font-size: var(--font-size-card-title);
           color: var(--text-primary);
           margin: 0 0 6px;
         }
         .cc-feature-desc {
           color: var(--text-secondary);
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
           line-height: 1.55;
           margin: 0;
         }
@@ -372,7 +372,7 @@ export default async function AgentsHome() {
           gap: 6px;
           padding: 18px 20px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           text-decoration: none;
           color: var(--text-primary);
@@ -390,11 +390,11 @@ export default async function AgentsHome() {
         .cc-cta-label {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: 0.95rem;
+          font-size: var(--font-size-body);
         }
         .cc-cta-sub {
           color: var(--text-secondary);
-          font-size: 0.8rem;
+          font-size: var(--font-size-small);
         }
       `}</style>
     </>

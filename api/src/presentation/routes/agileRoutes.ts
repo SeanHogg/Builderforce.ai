@@ -37,10 +37,12 @@ export function createAgileRoutes(db: Db): Hono<HonoEnv> {
   // are hot-write). Read-only — the manual /velocity tracker stays for overrides.
   router.get('/velocity/derived', async (c) => {
     const { tenantId } = scope(c);
+    const rawProjectId = Number(c.req.query('projectId'));
+    const projectId = Number.isInteger(rawProjectId) && rawProjectId > 0 ? rawProjectId : undefined;
     const env = c.env as Env;
     return c.json(await getOrSetCached(
-      env, `agile:velocity-derived:t:${tenantId}`,
-      () => computeVelocityInsights(db, tenantId),
+      env, `agile:velocity-derived:t:${tenantId}:p:${projectId ?? 0}`,
+      () => computeVelocityInsights(db, tenantId, projectId),
       { kvTtlSeconds: 60, l1TtlMs: 15_000 },
     ));
   });

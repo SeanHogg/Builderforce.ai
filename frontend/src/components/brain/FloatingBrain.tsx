@@ -3,14 +3,14 @@
 /**
  * The global Brain: a floating icon (bottom-right) that opens a docked
  * slide-out drawer hosting the shared <BrainPanel>. Mounted once, app-wide, by
- * ConditionalAppShell. Hidden on /brainstorm, where the same Brain UI is
- * already the whole page.
+ * ConditionalAppShell. Hidden where Brain is already the primary surface.
  *
  * It reads ambient page context (active project, modality, open-file system
  * context) from BrainContext, so the IDE (and any page) can steer the Brain
  * without prop-drilling.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -92,9 +92,11 @@ export function FloatingBrain() {
     };
   }, [hasTenant, setOpen, pathname]);
 
-  // On the full Brain Storm page the docked Brain is redundant; on the auth
+  // Brainstorm and Creation Sessions already provide a first-class Brain conversation;
+  // mounting a second launcher there splits context and creates two competing chats.
   // pages a "sign in to use Brain" CTA would be redundant with the form itself.
   if (pathname?.startsWith('/brainstorm')) return null;
+  if (pathname === '/create' || pathname?.startsWith('/create/')) return null;
   if (pathname === '/login' || pathname === '/register') return null;
   // Embedded surfaces render bare inside a host iframe — no floating chrome.
   if (pathname?.startsWith('/embed')) return null;
@@ -114,7 +116,8 @@ export function FloatingBrain() {
             title={tLauncher('title')}
             className="brain-launcher"
           >
-            🧠
+            
+            <Icon source="🧠" size="1em" />
             {counts.awaiting > 0 ? (
               <span
                 className="brain-launcher-badge"
@@ -123,6 +126,18 @@ export function FloatingBrain() {
                 title={tAttn('needsYou', { count: counts.awaiting })}
               >
                 {counts.awaiting}
+              </span>
+            ) : counts.unread > 0 ? (
+              // New messages (execution milestones / teammate turns) landed in a
+              // chat you're not viewing — indigo count, distinct from the amber
+              // "needs an answer" badge and the coral "running" dot.
+              <span
+                className="brain-launcher-badge brain-launcher-badge-unread"
+                role="status"
+                aria-label={tAttn('unread', { count: counts.unread })}
+                title={tAttn('unread', { count: counts.unread })}
+              >
+                {counts.unread > 99 ? '99+' : counts.unread}
               </span>
             ) : counts.running > 0 ? (
               <span
@@ -144,10 +159,10 @@ export function FloatingBrain() {
               border-radius: 50%;
               border: none;
               cursor: pointer;
-              background: linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c2410c));
-              color: #fff;
+              background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
+              color: var(--text-on-accent);
               box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-              font-size: 26px;
+              font-size: var(--font-size-section);
               display: flex;
               align-items: center;
               justify-content: center;
@@ -161,15 +176,21 @@ export function FloatingBrain() {
               min-width: 20px;
               height: 20px;
               padding: 0 5px;
-              border-radius: 10px;
-              background: var(--warning, #d97706);
-              color: #fff;
-              font-size: 11px;
+              border-radius: var(--radius-lg);
+              background: var(--warning);
+              color: var(--text-on-accent);
+              font-size: var(--font-size-eyebrow);
               font-weight: 700;
               line-height: 20px;
               text-align: center;
-              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              box-shadow: 0 0 0 2px var(--bg-base);
               animation: agentPulse 1.4s ease-in-out infinite;
+            }
+            /* "New unread messages" — indigo count, no pulse (informational, not a
+               blocking ask). Distinct hue from the amber answer badge. */
+            .brain-launcher-badge-unread {
+              background: var(--badge-unread);
+              animation: none;
             }
             /* Background activity (something running, nothing blocked) — a quiet
                coral dot, no count. */
@@ -180,8 +201,8 @@ export function FloatingBrain() {
               width: 12px;
               height: 12px;
               border-radius: 50%;
-              background: var(--coral-bright, #f4726e);
-              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              background: var(--coral-bright);
+              box-shadow: 0 0 0 2px var(--bg-base);
               animation: agentPulse 1.4s ease-in-out infinite;
             }
             @media (prefers-reduced-motion: reduce) {

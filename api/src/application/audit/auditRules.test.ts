@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCoverage, requirementUnmetReason, type AuditSignals, type RequirementInput } from './auditRules';
+import { computeCoverage, requirementUnmetReason, verdictSignature, type AuditSignals, type RequirementInput, type UnmetRequirement } from './auditRules';
 
 const emptySignals = (): AuditSignals => ({
   approvedRoles: new Set(),
@@ -55,6 +55,38 @@ describe('requirementUnmetReason', () => {
   });
 });
 
+describe('computeCoverage — reviewer quorum (AC-4)', () => {
+  const rev = (ref: string, quorum?: number): RequirementInput => ({ laneKey: 'in_review', laneName: 'Review', kind: 'review', ref, isRequired: true, quorum });
+
+  it('a 2-of-3 reviewer set advances on the 2nd approval, not the 1st', () => {
+    const reqs = [rev('code-reviewer', 2), rev('architect', 2), rev('team-lead', 2)];
+    const s = emptySignals();
+    // 0 approvals → flagged, needs 2.
+    let r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.requiredCount).toBe(2);       // quorum, not 3
+    // 1 approval → still short.
+    s.approvedRoles.add('code-reviewer');
+    r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.satisfiedCount).toBe(1);
+    // 2 approvals → quorum met, pass (the 3rd is not required).
+    s.approvedRoles.add('architect');
+    r = computeCoverage(reqs, s);
+    expect(r.status).toBe('pass');
+    expect(r.satisfiedCount).toBe(2);
+  });
+
+  it('no quorum set = all reviewers must approve (legacy behaviour)', () => {
+    const reqs = [rev('code-reviewer'), rev('architect')];
+    const s = emptySignals();
+    s.approvedRoles.add('code-reviewer');
+    const r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.requiredCount).toBe(2);
+  });
+});
+
 describe('computeCoverage', () => {
   it('passes when there are no required checks (100% coverage)', () => {
     const r = computeCoverage([req({ isRequired: false })], emptySignals());
@@ -95,5 +127,40 @@ describe('computeCoverage', () => {
     );
     expect(r.status).toBe('pass');
     expect(r.coverage).toBe(100);
+  });
+});
+
+describe('verdictSignature', () => {
+  const unmet = (o: Partial<UnmetRequirement>): UnmetRequirement => ({
+    laneKey: 'ready', laneName: 'Requirements & Design', kind: 'role',
+    ref: 'business-analyst', responsibility: 'owner', reason: 'missing', ...o,
+  });
+
+  it('is stable across re-audits of an unchanged verdict, so the flag is journalled once', () => {
+    const a = verdictSignature('flagged', [unmet({}), unmet({ ref: 'architect' })]);
+    const b = verdictSignature('flagged', [unmet({}), unmet({ ref: 'architect' })]);
+    expect(a).toBe(b);
+  });
+
+  it('ignores the order the unmet checks come back in', () => {
+    expect(verdictSignature('flagged', [unmet({ ref: 'architect' }), unmet({})]))
+      .toBe(verdictSignature('flagged', [unmet({}), unmet({ ref: 'architect' })]));
+  });
+
+  it('changes when a gap is closed, added, or changes reason', () => {
+    const base = verdictSignature('flagged', [unmet({}), unmet({ ref: 'architect' })]);
+    expect(verdictSignature('flagged', [unmet({})])).not.toBe(base);
+    expect(verdictSignature('flagged', [unmet({}), unmet({ ref: 'architect' }), unmet({ ref: 'developer' })])).not.toBe(base);
+    expect(verdictSignature('flagged', [unmet({ reason: 'changes_requested' }), unmet({ ref: 'architect' })])).not.toBe(base);
+  });
+
+  it('distinguishes the same ref on a different lane or responsibility', () => {
+    const base = verdictSignature('flagged', [unmet({})]);
+    expect(verdictSignature('flagged', [unmet({ laneKey: 'in_review' })])).not.toBe(base);
+    expect(verdictSignature('flagged', [unmet({ responsibility: 'reviewer' })])).not.toBe(base);
+  });
+
+  it('separates a passing verdict from a flagged one with no listed gaps', () => {
+    expect(verdictSignature('pass', [])).not.toBe(verdictSignature('flagged', []));
   });
 });

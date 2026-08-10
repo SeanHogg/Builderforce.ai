@@ -4,7 +4,19 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { MermaidDiagram } from './MermaidDiagram';
+import { downloadText } from '@/lib/download';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { splitThinkSegments } from '@seanhogg/builderforce-brain-ui';
+
+/** Fences whose content is a file the user will want to keep, → its extension. */
+const SAVEABLE_FENCE: Record<string, { ext: string; mime: string }> = {
+  csv: { ext: 'csv', mime: 'text/csv' },
+  json: { ext: 'json', mime: 'application/json' },
+  markdown: { ext: 'md', mime: 'text/markdown' },
+  md: { ext: 'md', mime: 'text/markdown' },
+};
 
 /** In-app link: same-origin absolute path (`/tasks`), not protocol-relative (`//host`). */
 function isInternalHref(href: string | undefined): href is string {
@@ -40,65 +52,82 @@ export function ChatMessageContent({
   onCreateFile,
 }: ChatMessageContentProps) {
   const router = useRouter();
+  const t = useTranslations('chatMessage');
+  const segments = splitThinkSegments(content);
   const components: Components = {
     code({ node, className, children, ...props }) {
-      const isBlock = className != null;
+      const raw = String(children ?? '');
+      const isBlock = className != null || raw.endsWith('\n');
       if (isBlock) {
         const match = /language-([\w./-]+)/.exec(className ?? '');
         const lang = match ? match[1] : '';
-        const code = String(children).replace(/\n$/, '');
+        const code = raw.replace(/\n$/, '');
         // Render Mermaid fences as diagrams (benefits Brain/IDE chat too).
         if (lang === 'mermaid') {
           return <MermaidDiagram code={code} />;
         }
         const pathLike = isFilePathLike(lang);
+        // A data fence (the CSV the Spreadsheet capability emits, JSON, markdown)
+        // is a file the user wants to keep — offer it directly, no round-trip.
+        const saveable = SAVEABLE_FENCE[lang.trim().toLowerCase()];
         return (
-          <div style={{ position: 'relative', margin: '8px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ position: 'relative', margin: '8px 0', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-deep)', padding: '4px 10px', flexWrap: 'wrap', gap: 6 }}>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {lang || 'text'}
               </span>
               <div style={{ display: 'flex', gap: 6 }}>
+                {/* Fire-and-forget as before — this fence header has no confirmation state. */}
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard?.writeText(code)}
-                  style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
+                  onClick={() => { void copyTextToClipboard(code); }}
+                  style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}
                 >
-                  Copy
+                  {t('copy')}
                 </button>
+                {saveable && (
+                  <button
+                    type="button"
+                    onClick={() => downloadText(code, `${pathLike ? lang.trim() : `data.${saveable.ext}`}`, saveable.mime)}
+                    title={t('downloadAs', { ext: saveable.ext.toUpperCase() })}
+                    style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}
+                  >
+                    {t('downloadAs', { ext: saveable.ext.toUpperCase() })}
+                  </button>
+                )}
                 {onApplyCode && (
                   <button
                     type="button"
                     onClick={() => onApplyCode(code)}
-                    style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--font-display)', fontWeight: 600 }}
+                    style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-display)', fontWeight: 600 }}
                   >
-                    Apply →
+                    {t('apply')}
                   </button>
                 )}
                 {onCreateFile && pathLike && (
                   <button
                     type="button"
                     onClick={() => onCreateFile(lang.trim(), code)}
-                    style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--font-display)', fontWeight: 600 }}
+                    style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-display)', fontWeight: 600 }}
                   >
-                    Create file
+                    {t('createFile')}
                   </button>
                 )}
               </div>
             </div>
-            <pre style={{ margin: 0, padding: '10px 12px', background: 'var(--bg-elevated)', overflowX: 'auto', fontSize: '0.78rem', fontFamily: "'JetBrains Mono', 'Fira Code', monospace", color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre' }}>
+            <pre style={{ margin: 0, padding: '10px 12px', background: 'var(--bg-elevated)', overflowX: 'auto', fontSize: 'var(--font-size-small)', fontFamily: "'JetBrains Mono', 'Fira Code', monospace", color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre' }}>
               <code {...props}>{children}</code>
             </pre>
           </div>
         );
       }
       return (
-        <code style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '1px 5px', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', color: 'var(--coral-bright)' }} {...props}>
+        <code style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '1px 5px', fontFamily: "'JetBrains Mono', monospace", fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)' }} {...props}>
           {children}
         </code>
       );
     },
-    p: ({ children }) => <p style={{ margin: '6px 0', lineHeight: 1.6, fontSize: '0.82rem' }}>{children}</p>,
+    p: ({ children }) => <p style={{ margin: '6px 0', lineHeight: 1.6, fontSize: 'var(--font-size-small)' }}>{children}</p>,
     ul: ({ children }) => <ul style={{ margin: '6px 0', paddingLeft: 20 }}>{children}</ul>,
     ol: ({ children }) => <ol style={{ margin: '6px 0', paddingLeft: 20 }}>{children}</ol>,
     li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
@@ -127,16 +156,25 @@ export function ChatMessageContent({
           {children}
         </a>
       ),
-    h1: ({ children }) => <h1 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '10px 0 6px', color: 'var(--text-primary)' }}>{children}</h1>,
-    h2: ({ children }) => <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '10px 0 4px', color: 'var(--text-primary)' }}>{children}</h2>,
-    h3: ({ children }) => <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '8px 0 4px', color: 'var(--text-primary)' }}>{children}</h3>,
+    h1: ({ children }) => <h1 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: '10px 0 6px', color: 'var(--text-primary)' }}>{children}</h1>,
+    h2: ({ children }) => <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: '10px 0 4px', color: 'var(--text-primary)' }}>{children}</h2>,
+    h3: ({ children }) => <h3 style={{ fontSize: 'var(--font-size-body)', fontWeight: 600, margin: '8px 0 4px', color: 'var(--text-primary)' }}>{children}</h3>,
   };
 
   return (
     <div style={{ wordBreak: 'break-word' }} className="chat-message-markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
+      {segments.map((segment, index) => segment.kind === 'thought' ? (
+        <details key={`${segment.kind}-${index}`} style={{ margin: '6px 0 10px', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>
+          <summary style={{ cursor: 'pointer', userSelect: 'none', fontStyle: 'italic' }}>Thought</summary>
+          <div style={{ margin: '6px 0 0 12px', paddingLeft: 10, borderLeft: '2px solid var(--border-subtle)' }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{segment.content}</ReactMarkdown>
+          </div>
+        </details>
+      ) : (
+        <ReactMarkdown key={`${segment.kind}-${index}`} remarkPlugins={[remarkGfm]} components={components}>
+          {segment.content}
+        </ReactMarkdown>
+      ))}
     </div>
   );
 }
