@@ -1,21 +1,39 @@
 'use client';
 
+/**
+ * THE diagnostic runner — one component, two surfaces (PRD 21 §11.4.5).
+ *
+ * It used to live in `app/tools/[id]/`, which made the canvas import a ROUTE
+ * folder to render an object on the board. A shared component that two layers
+ * consume belongs in `components/`; a route folder is a presentation leaf, not
+ * a library.
+ *
+ * `surface` is the ONE field that decides its chrome, rather than a `embedded`
+ * boolean that meant three different things at once:
+ *
+ *   `reference` — inside the tool's reference page (public URL signed out, a
+ *                 panel over the board signed in). The PAGE owns the hero, the
+ *                 anchors and the returning-visitor banner; the runner owns the
+ *                 questions, the run and the result.
+ *   `canvas`    — inside a Canvas object. Needs React Flow's `nodrag nowheel`
+ *                 escape so typing an answer does not pan the board, and it
+ *                 restates the tool's own `about` line because the object has no
+ *                 hero above it.
+ */
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import { DataDrivenPanel } from '@/components/tools/DataDrivenPanel';
-import { ReturningVisitorBanner } from '@/components/tools/ReturningVisitorBanner';
 import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 
-const wrap: React.CSSProperties = { maxWidth: 820, margin: '0 auto', padding: '32px 20px' };
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
   padding: '9px 12px', fontSize: 14, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
@@ -30,23 +48,32 @@ const btnSubtle: React.CSSProperties = {
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
-export interface ToolRunnerClientProps {
+export type ToolRunnerSurface = 'reference' | 'canvas';
+
+export interface ToolRunnerProps {
   toolId: string;
-  embedded?: boolean;
+  /** Which chrome this instance wears. Defaults to the reference page. */
+  surface?: ToolRunnerSurface;
   initialInput?: Record<string, number>;
   initialResult?: ToolResult | null;
   onInputChange?: (input: Record<string, number>) => void;
   onRunComplete?: (input: Record<string, number>, result: ToolResult) => void;
+  /** Told the tool's own name/about once loaded, so a host (the reference page)
+   *  can title itself from the API catalog instead of restating it. */
+  onDefinitionLoad?: (definition: ToolDefinition) => void;
 }
 
-export default function ToolRunnerClient({ toolId, embedded = false, initialInput, initialResult = null, onInputChange, onRunComplete }: ToolRunnerClientProps) {
+export default function ToolRunner({
+  toolId, surface = 'reference', initialInput, initialResult = null,
+  onInputChange, onRunComplete, onDefinitionLoad,
+}: ToolRunnerProps) {
   const t = useTranslations('tools');
   const searchParams = useSearchParams();
   // Attribute the run to a project: the global TopBar scope param `?project=` wins,
   // the legacy `?projectId=` is still honoured for old links, and when neither is
   // present we fall back to the global project scope (one picker for the whole
   // app — see ProjectScopeContext). `useOptionalProjectScope` is null outside the
-  // app shell (the public tool runner), where the run is simply tenant-attributed.
+  // app shell (the public tool page), where the run is simply tenant-attributed.
   const scope = useOptionalProjectScope();
   const projectIdParam = searchParams.get('project') ?? searchParams.get('projectId');
   const projectId = projectIdParam != null && /^\d+$/.test(projectIdParam)
@@ -63,14 +90,24 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
 
   const hasWorkspace = !!getStoredTenantToken();
   const isAuthed = !!getStoredUser();
+  const embedded = surface === 'canvas';
 
   useEffect(() => {
+    let active = true;
     toolsApi.get(toolId)
       .then((d) => {
+        if (!active) return;
         setDef(d);
         setInput(initialInput && Object.keys(initialInput).length ? initialInput : defaultInput(d));
+        onDefinitionLoad?.(d);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => { if (active) setError(e.message); });
+    return () => { active = false; };
+    // The definition is keyed by the tool alone. `initialInput` / `onDefinitionLoad`
+    // are deliberately out: both change identity on every host render, and a
+    // definition fetch that re-runs per render is what made the tool card sit on
+    // "Loading…" forever while the board around it moved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolId]);
 
   const setVal = (id: string, v: number) => {
@@ -108,33 +145,19 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
     }
   };
 
-  if (error && !def) return <div style={wrap}><div style={card}>{t('loadError')}: {error}</div></div>;
-  if (!def) return <div style={wrap}><div style={{ color: 'var(--muted)' }}>{t('loading')}</div></div>;
+  if (error && !def) return <div role="alert" style={card}>{t('loadError')}: {error}</div>;
+  if (!def) return <div role="status" style={{ color: 'var(--muted)' }}>{t('loading')}</div>;
 
   const canRun = answersComplete(def, input);
   const answeredAny = Object.keys(input).length > 0;
 
   return (
-    <div className={embedded ? 'nodrag nowheel' : undefined} style={embedded ? undefined : wrap}>
-      {!embedded && <header style={{ marginBottom: 20 }}>
-        <Link href="/tools" style={{ fontSize: 'var(--font-size-small)', color: 'var(--accent)', textDecoration: 'none' }}>← {t('allTools')}</Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 4px' }}>
-          <span><Icon source={def.icon} size={24} /></span>
-          <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 800, color: 'var(--text-strong)', margin: 0 }}>{def.name}</h1>
-        </div>
-        <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: '4px 0' }}>
-          {t('freeNoLogin')}
-        </p>
-        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', maxWidth: 680 }}>{def.about}</p>
-        {projectId != null && (
-          <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--accent)', margin: '6px 0 0' }}>{t('scoringProject')}</p>
-        )}
-      </header>}
-
+    <div className={embedded ? 'nodrag nowheel' : undefined}>
       {embedded && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--canvas-ink-soft)', margin: '0 0 14px' }}>{def.about}</p>}
 
-      {/* Returning visitor — replay their prior result + a targeted sign-up CTA. */}
-      {!embedded && <ReturningVisitorBanner toolId={toolId} />}
+      {projectId != null && !embedded && (
+        <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--accent)', margin: '0 0 12px' }}>{t('scoringProject')}</p>
+      )}
 
       {/* Mode toggle — only for tools that also have a "from your data" provider */}
       {def.hasDataDriven && (
@@ -188,7 +211,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
           {def.questions.map((q) => (
             <section key={q.id} style={card}>
               <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--coral-bright)', marginBottom: 4 }}>{q.dimension}</div>
-              <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{q.text}</h2>
+              <h3 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{q.text}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {q.options.map((o) => {
                   const active = input[q.id] === o.level;
@@ -238,7 +261,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
           </div>
           {def.sections.map((s) => (
             <section key={s.key} style={card}>
-              <h2 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{s.name}</h2>
+              <h3 style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{s.name}</h3>
               <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: '0 0 12px' }}>{s.description}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {s.questions.map((q) => (
@@ -284,7 +307,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
       {/* Result + execute gate */}
       {result && (
         <div style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 14px' }}>{t('yourResult')}</h2>
+          <h3 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 14px' }}>{t('yourResult')}</h3>
           <ToolResultView result={result} />
 
           <div style={{ ...card, marginTop: 18, background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>

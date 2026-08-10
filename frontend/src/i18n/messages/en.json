@@ -1141,6 +1141,39 @@
     "saveMyResult": "Save my result",
     "saveMyResults": "Save my results"
   },
+  "toolReference": {
+    "lede": "A free diagnostic you can run right here — no login required.",
+    "section": {
+      "assess": "Run it",
+      "how": "How it’s scored",
+      "canvas": "On the canvas"
+    },
+    "how": {
+      "title": "How this is scored",
+      "sub": "Three steps, all of them in the open — the same engine that scores it for a signed-in workspace.",
+      "answer": {
+        "title": "Answer it",
+        "body": "Answered right here in your browser — nothing is sent until you ask for a result.",
+        "bodyCounted": "{kind} · {count} questions, answered right here in your browser."
+      },
+      "score": {
+        "title": "Get a rating",
+        "body": "You get a rating, the numbers behind it, and a plan ordered from your weakest area first."
+      },
+      "track": {
+        "title": "Track it",
+        "body": "Sign in to save the run against a project and watch the rating move over time.",
+        "bodyData": "Sign in to save the run — or switch to “From your data” and have it scored from your real delivery data instead of your answers."
+      }
+    },
+    "canvas": {
+      "title": "Run it on the canvas instead",
+      "body": "Every diagnostic is also a Canvas object. Ask Brain for it and it lands on the board already scored, connected to whatever else you are working on — the same engine, the same result, beside your work rather than instead of it.",
+      "prompt": "Add the {name} to my canvas",
+      "cta": "Open the canvas"
+    },
+    "relatedHeading": "Plan how to improve"
+  },
   "notFound": {
     "title": "Page not found",
     "message": "The page you’re looking for doesn’t exist or has moved.",
@@ -15831,7 +15864,7 @@
     },
     "promises": {
       "eyebrow": "The Builderforce difference",
-      "title": "Create freely. Operate clearly. Deliver with control.",
+      "title": "Create freely. Operate clearly. Deliver.",
       "items": [
         {
           "title": "Create from intent",
@@ -15884,7 +15917,7 @@
     },
     "trust": {
       "eyebrow": "Security and trust",
-      "title": "Governance belongs beside the work—not after it.",
+      "title": "Governance is the work—not after it.",
       "body": "Roles, approval paths, credential controls, audit history, privacy workflows, and system evidence are part of the platform architecture, giving teams a clearer route from experimentation to responsible operation.",
       "cta": "Explore trust and audits"
     },

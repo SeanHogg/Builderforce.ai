@@ -1141,6 +1141,39 @@
     "saveMyResult": "Mein Ergebnis speichern",
     "saveMyResults": "Meine Ergebnisse speichern"
   },
+  "toolReference": {
+    "lede": "Eine kostenlose Diagnose, die Sie direkt hier ausführen können — ohne Anmeldung.",
+    "section": {
+      "assess": "Ausführen",
+      "how": "Bewertung",
+      "canvas": "Auf dem Canvas"
+    },
+    "how": {
+      "title": "Wie bewertet wird",
+      "sub": "Drei Schritte, alle offengelegt — dieselbe Engine, die auch einen angemeldeten Workspace bewertet.",
+      "answer": {
+        "title": "Beantworten",
+        "body": "Sie antworten direkt hier im Browser — nichts wird gesendet, bis Sie ein Ergebnis anfordern.",
+        "bodyCounted": "{kind} · {count} Fragen, direkt hier im Browser beantwortet."
+      },
+      "score": {
+        "title": "Bewertung erhalten",
+        "body": "Sie erhalten eine Bewertung, die Zahlen dahinter und einen Plan, der bei Ihrem schwächsten Bereich beginnt."
+      },
+      "track": {
+        "title": "Verfolgen",
+        "body": "Melden Sie sich an, um den Durchlauf einem Projekt zuzuordnen und die Bewertung über die Zeit zu verfolgen.",
+        "bodyData": "Melden Sie sich an, um den Durchlauf zu speichern — oder wechseln Sie zu „Aus Ihren Daten“ und lassen Sie statt Ihrer Antworten Ihre echten Lieferdaten bewerten."
+      }
+    },
+    "canvas": {
+      "title": "Führen Sie sie stattdessen auf dem Canvas aus",
+      "body": "Jede Diagnose ist auch ein Canvas-Objekt. Bitten Sie Brain darum, und sie landet bereits bewertet auf dem Board, verbunden mit allem anderen, woran Sie arbeiten — dieselbe Engine, dasselbe Ergebnis, neben Ihrer Arbeit statt an ihrer Stelle.",
+      "prompt": "Füge {name} zu meinem Canvas hinzu",
+      "cta": "Canvas öffnen"
+    },
+    "relatedHeading": "Planen, wie Sie besser werden"
+  },
   "notFound": {
     "title": "Seite nicht gefunden",
     "message": "Die gesuchte Seite existiert nicht oder wurde verschoben.",
@@ -15830,7 +15863,7 @@
     },
     "promises": {
       "eyebrow": "Der Builderforce-Unterschied",
-      "title": "Frei gestalten. Klar steuern. Kontrolliert liefern.",
+      "title": "Frei gestalten. Klar steuern. Liefern.",
       "items": [
         {
           "title": "Aus Absicht gestalten",
@@ -15883,7 +15916,7 @@
     },
     "trust": {
       "eyebrow": "Sicherheit und Vertrauen",
-      "title": "Governance gehört neben die Arbeit, nicht dahinter.",
+      "title": "Governance ist die Arbeit – nicht das Danach.",
       "body": "Rollen, Freigabewege, Zugangskontrollen, Auditverlauf, Datenschutz-Workflows und Systemnachweise sind Teil der Architektur und schaffen einen klareren Weg vom Experiment zum verantwortungsvollen Betrieb.",
       "cta": "Vertrauen und Audits erkunden"
     },

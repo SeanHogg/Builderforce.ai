@@ -37,7 +37,7 @@ import { CanvasExportActions } from './CanvasExportActions';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
 import { COURSE_EXPORT_STANDARDS, courseFromNode, courseProgress } from '@/lib/courseLms';
-import ToolRunnerClient from '@/app/tools/[id]/ToolRunnerClient';
+import ToolRunner from '@/components/tools/ToolRunner';
 import type { ToolResult } from '@/lib/tools';
 import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websiteWysiwyg';
@@ -1228,9 +1228,9 @@ function CanvasToolBody({ id, data, onEditData }: { id: string; data: CreationNo
   const initialResult = data.toolResult && typeof data.toolResult === 'object' ? data.toolResult as ToolResult : null;
   if (!toolId) return null;
 
-  return <ToolRunnerClient
+  return <ToolRunner
     toolId={toolId}
-    embedded
+    surface="canvas"
     initialInput={initialInput}
     initialResult={initialResult}
     onInputChange={(input) => onEditData?.(id, { toolInput: input, toolResult: null })}

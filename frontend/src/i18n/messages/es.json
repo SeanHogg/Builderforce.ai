@@ -1141,6 +1141,39 @@
     "saveMyResult": "Guardar mi resultado",
     "saveMyResults": "Guardar mis resultados"
   },
+  "toolReference": {
+    "lede": "Un diagnóstico gratuito que puedes ejecutar aquí mismo, sin iniciar sesión.",
+    "section": {
+      "assess": "Ejecutarlo",
+      "how": "Cómo se puntúa",
+      "canvas": "En el lienzo"
+    },
+    "how": {
+      "title": "Cómo se puntúa",
+      "sub": "Tres pasos, todos a la vista: el mismo motor que lo puntúa para un espacio de trabajo con sesión iniciada.",
+      "answer": {
+        "title": "Respóndelo",
+        "body": "Se responde aquí mismo, en tu navegador: no se envía nada hasta que pides un resultado.",
+        "bodyCounted": "{kind} · {count} preguntas, respondidas aquí mismo en tu navegador."
+      },
+      "score": {
+        "title": "Obtén una calificación",
+        "body": "Obtienes una calificación, las cifras que la respaldan y un plan ordenado desde tu área más débil."
+      },
+      "track": {
+        "title": "Haz seguimiento",
+        "body": "Inicia sesión para guardar la ejecución en un proyecto y ver cómo evoluciona la calificación.",
+        "bodyData": "Inicia sesión para guardar la ejecución, o cambia a «Desde tus datos» y púntualo con tus datos reales de entrega en lugar de tus respuestas."
+      }
+    },
+    "canvas": {
+      "title": "Ejecútalo en el lienzo",
+      "body": "Cada diagnóstico es también un objeto del lienzo. Pídeselo a Brain y aparecerá en el tablero ya puntuado, conectado con lo demás en lo que estés trabajando: el mismo motor, el mismo resultado, junto a tu trabajo y no en lugar de él.",
+      "prompt": "Añade {name} a mi lienzo",
+      "cta": "Abrir el lienzo"
+    },
+    "relatedHeading": "Planifica cómo mejorar"
+  },
   "notFound": {
     "title": "Página no encontrada",
     "message": "La página que buscas no existe o se ha movido.",
@@ -15830,7 +15863,7 @@
     },
     "promises": {
       "eyebrow": "La diferencia de Builderforce",
-      "title": "Crea con libertad. Opera con claridad. Entrega con control.",
+      "title": "Crea con libertad. Opera con claridad. Entrega.",
       "items": [
         {
           "title": "Crea desde la intención",
@@ -15883,7 +15916,7 @@
     },
     "trust": {
       "eyebrow": "Seguridad y confianza",
-      "title": "El gobierno debe estar junto al trabajo, no después.",
+      "title": "La gobernanza es el trabajo, no algo posterior.",
       "body": "Roles, aprobaciones, controles de credenciales, historial de auditoría, flujos de privacidad y evidencia del sistema forman parte de la arquitectura para pasar de la experimentación a una operación responsable.",
       "cta": "Explorar confianza y auditorías"
     },

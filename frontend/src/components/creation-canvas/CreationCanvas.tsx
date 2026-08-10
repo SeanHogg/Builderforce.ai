@@ -39,6 +39,7 @@ import { AUTHORED_DRAWING_STROKE, AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, AU
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
 import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
@@ -3124,6 +3125,115 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, object: { id: node.id, kind: 'email', title: message.subject }, message };
     },
   }, {
+    /**
+     * The diagnostics catalog, on the board (PRD 21 §11.4.5).
+     *
+     * `/tools/<id>` is the REFERENCE page for a diagnostic — where you read what
+     * it measures. This pair is where you USE it: the capability reaches the
+     * canvas as a tool Brain can call, not as a canvas mounted on a marketing
+     * URL, which is what it used to be.
+     *
+     * Listed separately from `canvas_add_diagnostic` for the reason
+     * `creative.capabilities` is separate from `creative.compose`: a model that
+     * has to guess an id before it can see the catalog guesses, and a wrong
+     * `toolId` is a 404 the user reads as "the diagnostic does not exist".
+     */
+    name: 'canvas_list_diagnostics',
+    description: 'List the free diagnostics and calculators this platform can run (id, name, what it measures, whether it is a calculator/assessment/quiz, and whether it also has a data-driven mode). Call this BEFORE canvas_add_diagnostic whenever the exact diagnostic id is not already known — for "what can you assess?", "estimate my AI spend", "how mature is our delivery?", "check our DORA metrics", "governance readiness".',
+    parameters: { type: 'object', additionalProperties: false, properties: {} },
+    mutates: false,
+    run: async () => {
+      try {
+        const catalog = await toolsApi.list();
+        return { diagnostics: catalog.map((entry) => ({
+          id: entry.id, name: entry.name, about: entry.tagline,
+          category: entry.category, kind: entry.kind, hasDataDriven: entry.hasDataDriven === true,
+          referencePage: `/tools/${entry.id}`,
+        })) };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'The diagnostics catalog could not be read.' };
+      }
+    },
+  }, {
+    name: 'canvas_add_diagnostic',
+    description: 'Put a diagnostic or calculator on the canvas as a live object the user can answer in place. Pass `answers` (question id → number, as listed by this tool when called without them) to ALSO compute the result and land the object already scored. Use this for "add the AI cost estimator", "run the maturity assessment on the board", "score our delivery". Get the id from canvas_list_diagnostics first.',
+    parameters: {
+      type: 'object', required: ['toolId'], additionalProperties: false,
+      properties: {
+        toolId: { type: 'string', description: 'Catalog id, e.g. from canvas_list_diagnostics.' },
+        answers: { type: 'object', description: 'Question/input id → numeric answer. Omit to place an unanswered object for the user to fill in.', additionalProperties: { type: 'number' } },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { toolId?: string; answers?: Record<string, unknown>; x?: number; y?: number };
+      const toolId = typeof args.toolId === 'string' ? args.toolId.trim() : '';
+      if (!toolId) return { error: 'Say which diagnostic. Call canvas_list_diagnostics for the ids.' };
+
+      let definition: Awaited<ReturnType<typeof toolsApi.get>>;
+      try {
+        definition = await toolsApi.get(toolId);
+      } catch {
+        const catalog = await toolsApi.list().catch(() => []);
+        return { error: catalog.length
+          ? `No diagnostic '${toolId}'. Available: ${catalog.map((entry) => entry.id).join(', ')}.`
+          : `No diagnostic '${toolId}'.` };
+      }
+
+      // Only the questions this diagnostic actually has: a model that invents an
+      // extra key would otherwise get a result scored against a shape the tool
+      // does not define, which is a number that looks computed and is not.
+      const accepted = new Set(questionIds(definition));
+      const answers: Record<string, number> = {};
+      for (const [key, value] of Object.entries(args.answers ?? {})) {
+        if (accepted.has(key) && Number.isFinite(Number(value))) answers[key] = Number(value);
+      }
+      const input = Object.keys(answers).length ? { ...defaultInput(definition), ...answers } : {};
+      const complete = Object.keys(answers).length > 0 && answersComplete(definition, input);
+
+      let result: ToolResult | null = null;
+      if (complete) {
+        try {
+          result = await toolsApi.compute(toolId, input);
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : 'That diagnostic could not be scored.' };
+        }
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('diagnostics', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, 'diagnostics'));
+      node.data = {
+        ...node.data,
+        title: definition.name,
+        subtitle: definition.about,
+        toolId,
+        toolIcon: definition.icon,
+        toolInput: input,
+        ...(result ? {
+          toolResult: result, result,
+          status: result.scoreLabel || result.headline,
+          qualityScore: result.score, qualityLabel: result.scoreLabel, qualityHeadline: result.headline,
+          summary: result.summary,
+          recommendations: result.recommendations,
+          results: result.metrics.map((metric) => ({ title: metric.label, result: metric.value, detail: metric.hint })),
+          gapCount: result.recommendations.length,
+        } : { status: 'Ready to run' }),
+      };
+      node.style = { width: 760 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add diagnostic “${definition.name}”`, node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'diagnostics', title: definition.name },
+        toolId, kind: definition.kind, referencePage: `/tools/${toolId}`,
+        // Unanswered, the model needs the question ids to be able to offer to
+        // fill them in; answered, it needs the score to be able to talk about it.
+        ...(result ? { result } : { questions: [...accepted], awaitingAnswers: true }),
+      };
+    },
+  }, {
     name: 'canvas_add_object',
     description: `Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.`,
     parameters: {
@@ -4540,15 +4650,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
     void exportRef.current(nodeId, action).then(setNotice);
   }, []);
+  /**
+   * The same treatment for `runWorkflow`, which needed it just as badly and was
+   * missed.
+   *
+   * It closes over `resolveWorkflowNode`, which closes over `nodes` AND
+   * `selectedNode` — so it changed identity on every board edit and on every
+   * SELECTION, which handed React Flow a new `nodeTypes` and remounted every
+   * Object on the board each time. Most cards survive a remount because they are
+   * pure functions of their data; the ones that fetch do not. The catalog-tool
+   * card refetches its definition on mount, so clicking around a board with a
+   * diagnostic on it put that card back on "Loading…" indefinitely — one request
+   * per selection, hundreds in a session.
+   */
+  const runWorkflowRef = useRef(runWorkflow);
+  runWorkflowRef.current = runWorkflow;
+  const runWorkflowFromNode = useCallback((nodeId: string) => { runWorkflowRef.current(nodeId); }, []);
   // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onExport={exportFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, runWorkflow, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, runWorkflowFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether

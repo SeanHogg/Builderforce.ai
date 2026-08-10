@@ -4116,7 +4116,7 @@ select.input option {
 /* A full-bleed band whose content sits in the column without an inner wrapper:
    the side padding IS the gutter plus whatever the viewport has over the
    column. Same measure as `.mkt-in`, expressed as padding. */
-.br-domain-features { padding: 72px max(var(--marketing-gutter), calc((100vw - var(--marketing-column)) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
+.br-domain-features { padding: 72px max(var(--marketing-gutter), calc((100% - var(--marketing-column)) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
 .br-domain-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .br-domain-card { padding: 26px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); }
 .br-domain-card__number { color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 800; }

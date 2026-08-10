@@ -17,6 +17,10 @@ import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
 import { TeamBar } from './team/TeamBar';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+// A reference page whose title is DATA (a diagnostic, named by the API catalog)
+// tells the panel what to call it; the provider is the wire between them and has
+// to sit above BOTH the panel and the page it frames.
+import { ReferenceChromeProvider } from '@/lib/referenceChrome';
 import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
 
 const CanvasStage = dynamic(
@@ -72,6 +76,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const onStage = isStageRoute(pathname ?? '');
 
   return (
+    <ReferenceChromeProvider>
     <div className="app-frame">
       <EmulationBar />
       {/* The open beta on offer, if this person has not answered it yet. In flow
@@ -127,5 +132,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <TeamBar />
       <MobileBottomNav />
     </div>
+    </ReferenceChromeProvider>
   );
 }

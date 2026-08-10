@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, ensureLocalToolCreationSession, listLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, writeLocalCreationSession } from './creationSessions';
+import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, listLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, writeLocalCreationSession } from './creationSessions';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
 
 describe('creationGraphFromSnapshot', () => {
@@ -47,26 +47,26 @@ describe('local Creation Session conversation', () => {
   });
 });
 
-describe('local tool canvas', () => {
+describe('legacy tool canvases', () => {
   beforeEach(() => localStorage.clear());
 
-  it('places a catalog tool on a stable, focused canvas', () => {
-    const tool = { id: 'ai-dev-maturity', name: 'AI Development Maturity', about: 'Assess delivery maturity.', icon: '◆' };
-    const first = ensureLocalToolCreationSession(tool);
-    const snapshot = readLocalCreationSession(first.sessionId);
+  /**
+   * `/tools/<id>` is a reference page now (PRD 21 §11.4.5), not a canvas — but a
+   * browser that opened one under the old build still holds a board per
+   * diagnostic. Left there they would show up in the canvas switcher as drafts
+   * the person never made, and be claimed into the tenant on the next sign-in.
+   */
+  it('purges the per-diagnostic boards the old tool route left behind', () => {
+    const legacy = 'local-tool-ai-dev-maturity';
+    localStorage.setItem(creationStorageKey(legacy), JSON.stringify({
+      version: 1, title: 'AI Development Maturity', updatedAt: new Date().toISOString(),
+      nodes: [{ id: 'tool:ai-dev-maturity', type: 'creation', position: { x: 0, y: 0 }, data: { kind: 'diagnostics', title: 'AI Development Maturity', toolId: 'ai-dev-maturity' } }],
+      edges: [],
+    }));
+    const mine = createLocalCreationSession('A board I actually made');
 
-    expect(first).toEqual({ sessionId: 'local-tool-ai-dev-maturity', focusId: 'tool:ai-dev-maturity' });
-    expect(snapshot?.nodes).toHaveLength(1);
-    expect(snapshot?.nodes[0]).toMatchObject({
-      id: first.focusId,
-      data: { kind: 'diagnostics', toolId: tool.id, title: tool.name },
-    });
-    expect(listLocalCreationSessions()).toEqual([]);
-
-    snapshot!.nodes[0]!.data.toolResult = { headline: 'Level 3' };
-    writeLocalCreationSession(first.sessionId, snapshot!);
-    expect(ensureLocalToolCreationSession(tool)).toEqual(first);
-    expect(readLocalCreationSession(first.sessionId)?.nodes[0]?.data.toolResult).toEqual({ headline: 'Level 3' });
+    expect(listLocalCreationSessions().map((entry) => entry.sessionId)).toEqual([mine]);
+    expect(localStorage.getItem(creationStorageKey(legacy))).toBeNull();
   });
 
   it('does not pre-seed website prompts with the generic ecommerce shell', () => {

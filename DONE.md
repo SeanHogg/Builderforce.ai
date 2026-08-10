@@ -1,3 +1,85 @@
+## ✅ RESOLVED 2026-08-09 — `check:design-tokens` + `check:design-scale` are green again
+
+Both had been red on `main` — and a red guard hides every guard behind it, so the whole chain after
+them was invisible. Logged as blocked on an owner decision (the About page's intended geometry and
+type scale, which this work did not own); the operator chose **"retype it onto the nine roles"**,
+which unblocked it.
+
+- **5 undeclared tokens** fixed: `--surface-inverse` / `--text-inverse` now declared in **both**
+  theme blocks in `globals.css`; `--font-size-body-lg` / `--font-size-h4` (`crm/phone`) and
+  `--font-size-h2` (`pricing`) retyped onto the nine roles. An undeclared `var()` renders nothing or
+  locks to one theme, which is why the guard exists.
+- **Literal-hex files 4 → 0**: `AboutPage.module.css` and `EmbeddedCapabilities.module.css` moved to
+  tokens; `components/builder/DevicePreview.tsx` and `QrCode.tsx` are the documented exemption
+  categories (radii computed from device specs, hexes an encoder needs literally) and were entered on
+  the allowlist **with their reasons** rather than tokenized.
+- **Off-scale radii 30 → 6, font sizes 3,955 → 3,929**: the About page's 21 radii and 26 sizes were
+  retyped onto the scale and the nine roles.
+- **The guard itself was wrong in two places:** `check-design-scale.mjs` still exempted
+  `components/ide/{DevicePreview,QrCode}.tsx`, which had been renamed to `components/builder/` — the
+  exemption paths never followed, so the files were silently in violation; and `radiusParts()` did
+  not handle `!important` or ternaries. Fixed both, and lowered the radius baseline 9 → 6 to follow
+  the work down.
+
+---
+
+## ✅ RESOLVED 2026-08-09 — the public site had nine content columns; now it has one
+
+Every marketing page picked its own width, so content jumped left and right as you moved through the
+site — and jumped **within the homepage** from one band to the next — while the header above it never
+moved. The header was 1320, the landing hero 1240, the domain pages 1240, pricing / about / the deck /
+the demo showcase 1180, the homepage sections 1160, the tutorials catalog 1160 and its hero 900,
+`/features` + `/compare` + `/evermind` + `/product` 1100, `/soc2` 1080, the tools hub 980,
+`/book-demo` 960, `/marketplace` full-bleed. There was no container primitive, which is why nobody
+was wrong locally and the site was wrong globally.
+
+- **One measure, in `globals.css`** — `--marketing-max` (1320, the outer box, gutter included),
+  `--marketing-gutter` (24px; 18px under 560), `--marketing-column` (the derived content width, for a
+  band whose gutter is already on an ancestor) and `--marketing-section-padding` (the vertical twin —
+  bands had drifted 9vw / 8vw / 7vw the same way). `.mkt-in` is the primitive; `.mk-in` composes it
+  under the band system's own name; `.mkt-page` adds vertical rhythm for a plain-column page.
+- **`.mh-inner` reads the same two tokens**, so the header IS the measure: a band that uses the column
+  starts under the logo and ends under "Open the canvas", and the site cannot drift from its chrome.
+- **Migrated, with every private number deleted:** the homepage (`HomePatterns` sections, the landing
+  hero + its stage, the card rail's rest position, the Meet carousel, the demo showcase), `/features`
+  and the nine domain pages (`.mk-*`, `.br-domain-*`), `/marketplace` + `/marketplace/[slug]`,
+  `/pricing`, `/about`, `/tutorials`, `/blog`, `/compare` + `/compare/[competitor]`, `/soc2`,
+  `/evermind`, `/integrations` + `/integrations/[tool]`, `/product`, `/book-demo`, `/media`, `/tools`,
+  `/prompts`, `/sell-builderforce`, `/creation-canvas`, the marketing deck and `RouteMarketing`.
+  Reading measures (article 780, legal 750, FAQ, centred CTA copy) stay — those are typography, not
+  columns — and now sit inside the column rather than instead of it.
+- **A band that is deliberately narrower sets `--mkt-width`**, not its own `max-width`: a custom
+  property cannot lose a specificity or source-order fight with the primitive, so the narrow case
+  stays narrow without anyone reasoning about which stylesheet loaded first.
+- **The mega panel is anchored to the column, not to its trigger.** It was `left: 50%` +
+  `translateX(-50%)` on `.mh-item`, and because Learn ▾ sits left of centre it opened ~70px outside
+  the logo. `.mh-item.has-menu:has(> .mh-panel-wide)` drops the trigger's containing block so the
+  panel resolves against `.mh-inner`, pinned to both gutters — it cannot extend past the header's
+  edges at any viewport, for any trigger.
+- **The Meet carousel's arrows moved inside its box.** They sat in 64px of side padding *outside* the
+  card, which made the card 128px narrower than every other band; the card now fills the column and
+  the arrows ride on it, inset into a `--meet-panel-gutter` the panel reserves for them.
+- **Found and fixed on the way past:** `/creation-canvas` — linked from the homepage's "Explore
+  Create" button — was not in `PUBLIC_SHELL_PREFIXES`, so a signed-out visitor who followed that
+  button got the "This is part of Builderforce.ai" teaser instead of the page. Same defect class as
+  the reference surfaces fixed earlier this session.
+- **Localized in the same pass** (the pages were touched, and three were still hardcoded English):
+  new `integrationsIndex`, `integrationDetail` and `marketplaceSkill` namespaces plus `blog.title`,
+  with real translations in all five catalogs. `/marketplace/[slug]`'s eyebrow also stopped saying
+  "Workforce Registry" — the storefront is "Marketplace" everywhere.
+- **Dead code dropped:** `HomePatterns.module.css`'s `.statBand` / `.stat*` block (no callers) and
+  `--content-readable` (only `.mk-in` read it).
+- **Ratchet:** `check:design-scale` gained `publicColumnLiterals`, baselined at **0** — a `max-width`
+  or `width` typed as a literal between 900px and 1500px on a public-surface file is by definition a
+  re-declared column. Breakpoints excluded; measures under 900px stay legal. Verified it bites by
+  putting `1180px` back on `/pricing` and watching it fail.
+- **Verified:** `tsc --noEmit` clean (the two pre-existing `globals.motion.test.ts` regex-flag errors
+  are unchanged), all six guards green, `globals.motion` + `publicMenus` + `unifiedMenu` + `messages`
+  + `MarketingShell` suites pass (97 tests). `globals.motion.test.ts`'s panel test was rewritten to
+  the new contract: it now asserts the panel is gutter-anchored with no `translateX` in either state.
+
+---
+
 ## ✅ RESOLVED 2026-08-09 — the frontend deploy failed on a localized route that was still declared static
 
 **`Deploy frontend` failed after 5m48s** with next-on-pages' `The following routes were not
@@ -7421,3 +7503,22 @@ legacy memory stores, multi-repo leases, contention views, and rehearsal compari
 The retained PRD-21-aligned agentic roadmap is now implemented as bounded backend contexts and one integrated Agent Ops comparison surface. Runs have immutable definition versions, stable/canary/rollback releases, expiring machine principals, scoped capability and repository-credential delegations, an operator halt, and file/repository/spend containment at the actual loop/tool seam. Context inputs are trust-tiered and hashed; commits, PR comments and external/human calls are inspected for credential exfiltration before the effect. Typed immutable claim contracts now cover completion, validation, review, delivery and human messages.
 
 Coordination records and aggregates contention and is readable directly from an execution. Team Memory converges on the governed memory service, knowledge chunks gain tenant/origin/expiry lifecycle, and cloud recall uses semantic embeddings when configured. Rehearsals pin the measured agent version, warn about a missing read-only PRD, sample representative ticket strata, and provide a responsive, localized comparison view. Old executions that never captured a source SHA remain explicitly unpinned—the platform does not invent provenance it cannot recover—and trials remain sequential so evaluation cannot consume live-delivery capacity.
+
+---
+
+## ✅ RESOLVED 2026-08-04 — Creation Canvas assessment gap closure
+
+| Previously missing | Implementation status |
+| --- | --- |
+| Canonical workforce agents in Canvas group chat | Saved Sessions create/link a canonical Brain chat, invite connected `agent:<ref>` participants, persist the user turn, and call the workforce reply runtime. |
+| `@agent`, ask-all, moderator/synthesis routing | Mentions narrow recipients; unaddressed/ask-all turns run the connected group; Brain performs final synthesis and graph changes. |
+| Independent permissions, memory, usage, and provenance | Agent contributions route through the existing canonical reply runtime instead of the Canvas LLM simulation. |
+| Parallel agent participation | Addressed canonical replies execute concurrently and remain individually attributed in both canonical chat and Session timeline. |
+| Real website publishing | Website objects build static assets and call the existing versioned site-publish service; URL and asset validation enter the deliverable manifest. |
+| Real video generation | Video objects call a published Evermind media model and persist frames, preview, model, shape, and usage evidence. |
+| Universal deliverable manifest | Connected adapters have a stable lifecycle, provider/resource, validation, errors, metadata, and correlated outcome rows. |
+| Document/deck export | Shipped through canonical Office export endpoints and retained as delivery adapters. |
+| First-prompt execution | The initial Session prompt automatically invokes Canvas evaluation. |
+| Creation architecture boundary | Canonical group orchestration and delivery construction moved to dedicated libraries; the contract is documented in `docs/design/creation-canvas/DELIVERY-ARCHITECTURE.md`. |
+
+---

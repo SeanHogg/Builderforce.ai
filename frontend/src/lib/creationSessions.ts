@@ -76,14 +76,6 @@ function writeIndex(entries: LocalCreationEntry[]): void {
 /** Upsert one draft into the index, newest first. */
 function indexLocalCreationSession(sessionId: string, title: string, updatedAt: string): void {
   const rest = readIndex().filter((entry) => entry.sessionId !== sessionId);
-  // Catalog-tool canvases are URL-owned surfaces, not user-created drafts. If
-  // they entered the draft index, ResumeWorkBridge would claim one into the
-  // tenant on every signed-in visit and the canvas switcher would fill with
-  // implementation-detail boards the user never created.
-  if (sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX)) {
-    writeIndex(rest);
-    return;
-  }
   writeIndex([{ sessionId, title, updatedAt }, ...rest]);
 }
 
@@ -93,24 +85,36 @@ function indexLocalCreationSession(sessionId: string, title: string, updatedAt: 
  * Self-healing on BOTH sides, because it has to work for drafts that already
  * exist in a real user's browser from before the index did:
  *   - any `builderforce:create:local-*` board with no index row is adopted;
- *   - any index row whose board is gone is dropped.
+ *   - any index row whose board is gone is dropped;
+ *   - any `local-tool-*` board LEFT BEHIND by the build in which `/tools/<id>`
+ *     mounted a whole canvas per diagnostic is deleted (see below).
  */
 export function listLocalCreationSessions(): LocalCreationEntry[] {
   if (typeof localStorage === 'undefined') return [];
   const indexed = new Map(readIndex().map((entry) => [entry.sessionId, entry]));
+  const legacyToolBoards: string[] = [];
 
   try {
     for (let position = 0; position < localStorage.length; position += 1) {
       const key = localStorage.key(position);
       if (!key?.startsWith(`${STORAGE_PREFIX}${LOCAL_CREATION_PREFIX}`)) continue;
       const sessionId = key.slice(STORAGE_PREFIX.length);
-      if (sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX)) continue;
+      if (sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX)) { legacyToolBoards.push(key); continue; }
       if (indexed.has(sessionId)) continue;
       const snapshot = readLocalCreationSession(sessionId);
       if (snapshot) indexed.set(sessionId, { sessionId, title: snapshot.title, updatedAt: snapshot.updatedAt });
     }
   } catch {
     // Enumeration blocked (rare privacy modes) — the stored index still stands.
+  }
+
+  // A one-time cleanup, not a permanent guard. `/tools/<id>` is a reference page
+  // now (PRD 21 §11.4.5) and nothing writes these any more — but a browser that
+  // visited a tool URL under the old build still holds one board per diagnostic,
+  // and left in place they would surface in the canvas switcher as boards the
+  // person never created and be claimed into the tenant on the next sign-in.
+  for (const key of legacyToolBoards) {
+    try { localStorage.removeItem(key); } catch { /* private mode — nothing to purge */ }
   }
 
   const live = [...indexed.values()]
@@ -164,50 +168,6 @@ export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_
   };
   writeLocalCreationSession(sessionId, snapshot);
   return sessionId;
-}
-
-/**
- * Open a catalog tool as a real canvas object while keeping the public tool URL.
- *
- * Tool canvases are stable per browser + tool. Reopening `/tools/<id>` therefore
- * returns to the answers and result already on the board instead of manufacturing
- * another disposable page (or another draft in the canvas switcher) per click.
- */
-export function ensureLocalToolCreationSession(tool: { id: string; name: string; about: string; icon: string }): { sessionId: string; focusId: string } {
-  const sessionId = `${LOCAL_TOOL_CREATION_PREFIX}${encodeURIComponent(tool.id)}`;
-  const saved = readLocalCreationSession(sessionId);
-  const existingTool = saved?.nodes.find((node) => node.data.toolId === tool.id);
-  if (saved && existingTool) {
-    // Rewriting through the canonical writer also removes an index row created
-    // by an older build before tool canvases were excluded from the draft list.
-    writeLocalCreationSession(sessionId, saved);
-    return { sessionId, focusId: existingTool.id };
-  }
-
-  const now = new Date().toISOString();
-  const focusId = `tool:${tool.id}`;
-  writeLocalCreationSession(sessionId, {
-    version: 1,
-    title: tool.name,
-    updatedAt: now,
-    nodes: [{
-      id: focusId,
-      type: 'creation',
-      position: { x: 120, y: 80 },
-      style: { width: 760 },
-      data: {
-        kind: 'diagnostics',
-        title: tool.name,
-        subtitle: tool.about,
-        toolId: tool.id,
-        toolIcon: tool.icon,
-        toolInput: {},
-      },
-    }],
-    edges: [],
-    viewport: { x: 36, y: 32, zoom: 0.9 },
-  });
-  return { sessionId, focusId };
 }
 
 /**

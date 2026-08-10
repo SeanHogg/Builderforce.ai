@@ -231,6 +231,11 @@
 
 .related { margin-top: 48px; }
 
+/* The page already owns the marketing gutter. RelatedArticles normally adds
+   that gutter for standalone/full-bleed placements; keeping it here would
+   inset this band a second time and make it 48px narrower than the plans. */
+.related :global(.related-articles) { padding-inline: 0; }
+
 @media (max-width: 850px) {
   .hero { grid-template-columns: 1fr; padding-bottom: 44px; }
   .planGrid { grid-template-columns: 1fr; }

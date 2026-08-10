@@ -1141,6 +1141,39 @@
     "saveMyResult": "Enregistrer mon résultat",
     "saveMyResults": "Enregistrer mes résultats"
   },
+  "toolReference": {
+    "lede": "Un diagnostic gratuit, exécutable ici même — sans connexion.",
+    "section": {
+      "assess": "Lancer",
+      "how": "Méthode de notation",
+      "canvas": "Sur le canevas"
+    },
+    "how": {
+      "title": "Comment c’est noté",
+      "sub": "Trois étapes, toutes visibles — le même moteur que celui qui note un espace de travail connecté.",
+      "answer": {
+        "title": "Répondre",
+        "body": "Vous répondez ici même, dans votre navigateur : rien n’est envoyé tant que vous ne demandez pas de résultat.",
+        "bodyCounted": "{kind} · {count} questions, auxquelles vous répondez ici même dans votre navigateur."
+      },
+      "score": {
+        "title": "Obtenir une note",
+        "body": "Vous obtenez une note, les chiffres qui la sous-tendent et un plan classé à partir de votre point le plus faible."
+      },
+      "track": {
+        "title": "Suivre",
+        "body": "Connectez-vous pour enregistrer l’exécution sur un projet et suivre l’évolution de la note.",
+        "bodyData": "Connectez-vous pour enregistrer l’exécution — ou passez à « À partir de vos données » pour être noté sur vos données de livraison réelles plutôt que sur vos réponses."
+      }
+    },
+    "canvas": {
+      "title": "Lancez-le plutôt sur le canevas",
+      "body": "Chaque diagnostic est aussi un objet de canevas. Demandez-le à Brain : il arrive sur le tableau déjà noté et connecté au reste de votre travail — même moteur, même résultat, à côté de votre travail plutôt qu’à sa place.",
+      "prompt": "Ajoute {name} à mon canevas",
+      "cta": "Ouvrir le canevas"
+    },
+    "relatedHeading": "Planifier vos améliorations"
+  },
   "notFound": {
     "title": "Page introuvable",
     "message": "La page que vous recherchez n’existe pas ou a été déplacée.",
@@ -15830,7 +15863,7 @@
     },
     "promises": {
       "eyebrow": "La différence Builderforce",
-      "title": "Créez librement. Pilotez clairement. Livrez avec contrôle.",
+      "title": "Créez librement. Pilotez clairement. Livrez.",
       "items": [
         {
           "title": "Créer à partir de l’intention",
@@ -15883,7 +15916,7 @@
     },
     "trust": {
       "eyebrow": "Sécurité et confiance",
-      "title": "La gouvernance doit accompagner le travail, pas le suivre.",
+      "title": "La gouvernance est le travail, pas ce qui vient après.",
       "body": "Rôles, circuits d’approbation, contrôle des identifiants, historique d’audit, workflows de confidentialité et preuves système font partie de l’architecture pour passer de l’expérimentation à une exploitation responsable.",
       "cta": "Explorer la confiance et les audits"
     },

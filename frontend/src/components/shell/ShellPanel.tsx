@@ -31,7 +31,7 @@ import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/navGroups';
 import { seatHueVar } from '@/lib/seats';
 import { ShellIndex, useShellIndex } from './ShellIndex';
-import type { ReferenceSection } from '@/lib/navGroups';
+import { useReferenceChrome, type ReferenceChromeSection } from '@/lib/referenceChrome';
 
 /**
  * The index rail for a reference page opened as a panel (§11.4.5).
@@ -51,10 +51,15 @@ import type { ReferenceSection } from '@/lib/navGroups';
  * It lives here rather than in a file of its own because it has exactly one
  * consumer and this file is already a client component — a second `'use client'`
  * module for forty lines is what the architecture ratchet counts.
+ *
+ * Labels arrive RESOLVED rather than as keys, because the two sources of a rail
+ * key them differently: a registry row carries an i18n key under
+ * `referencePanel.section`, and a page that publishes its own chrome
+ * (`lib/referenceChrome`) has already translated its labels in its own
+ * namespace. One list component, one label type, translated by whoever owns the
+ * copy.
  */
-function ReferenceIndex({ sections }: { sections: ReferenceSection[] }) {
-  const t = useTranslations('referencePanel.section');
-
+function ReferenceIndex({ sections, label }: { sections: ReferenceChromeSection[]; label: string }) {
   // Anchor links rather than router pushes: the target is inside the panel's own
   // scroller, so this is a scroll, not a navigation, and it must not touch the
   // board behind it. `nearest` rather than `start` for the same reason — `start`
@@ -67,7 +72,7 @@ function ReferenceIndex({ sections }: { sections: ReferenceSection[] }) {
   };
 
   return (
-    <nav className="ref-index" aria-label={t('label')}>
+    <nav className="ref-index" aria-label={label}>
       {sections.map((section) => (
         <a
           key={section.id}
@@ -75,7 +80,7 @@ function ReferenceIndex({ sections }: { sections: ReferenceSection[] }) {
           className="ref-index__item"
           onClick={(event) => scrollTo(event, section.id)}
         >
-          {t(section.labelKey)}
+          {section.label}
         </a>
       ))}
     </nav>
@@ -87,6 +92,7 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   const tRoot = useTranslations();
   const tPanel = useTranslations('shellPanel');
   const tRef = useTranslations('referencePanel');
+  const tRefSection = useTranslations('referencePanel.section');
   const pathname = usePathname() || '';
   const router = useRouter();
   const { group, items } = useShellIndex();
@@ -104,6 +110,17 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   const publicRow = publicDestinationFor(pathname);
   const reference = publicRow?.panel ? publicRow : undefined;
 
+  // A reference page whose identity is DATA — `/tools/<id>`, whose members the
+  // API's diagnostics catalog declares — says what it is called rather than the
+  // registry restating a catalog it does not own. Registry rows keep their
+  // static titles; a published one wins for exactly as long as it is mounted.
+  const published = useReferenceChrome();
+  const sections: ReferenceChromeSection[] | undefined = published?.sections?.length
+    ? published.sections
+    : reference?.sections?.length
+      ? reference.sections.map((section) => ({ id: section.id, label: tRefSection(section.labelKey) }))
+      : undefined;
+
   return (
     <SlideOutPanel
       open
@@ -116,15 +133,16 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       accentVar={reference ? seatHueVar(reference.seat) : undefined}
       crumb={reference ? tRef('crumb', { seat: reference.seat }) : tPanel('crumb')}
       title={
-        reference ? tRoot(destTitleKey(reference))
+        published?.title ? published.title
+        : reference ? tRoot(destTitleKey(reference))
         : group ? t(group.labelKey)
         : tPanel('title')
       }
       // An index of one is not a choice, and `DestinationIndex` already returns
       // null for it — so the column is offered only when there is something in it.
       index={
-        reference?.sections?.length
-          ? <ReferenceIndex sections={reference.sections} />
+        sections
+          ? <ReferenceIndex sections={sections} label={tRefSection('label')} />
           : items.length > 1 ? <ShellIndex orientation="vertical" /> : undefined
       }
     >
