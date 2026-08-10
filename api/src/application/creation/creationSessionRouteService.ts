@@ -204,6 +204,19 @@ async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef
   return findObject(db, session.tenantId, 'creation_session', session.id);
 }
 
+/**
+ * Ids are compared the way POSTGRES compares them.
+ *
+ * `UUID_RE` accepts either case (`/i`), and every uniqueness check below used a
+ * case-SENSITIVE `Set` — so `A1B2…` and `a1b2…` passed validation as two
+ * distinct objects, and then hit a `uuid` column that considers them the same
+ * value. The request died on `duplicate key value violates unique constraint
+ * "creation_session_objects_pkey"`, i.e. a 500 for input the validator had
+ * already declared valid. A `uuid` is case-insensitive by definition; the
+ * validator has to agree with the column it is validating for.
+ */
+const uuidKey = (id: string) => id.toLowerCase();
+
 export function validCreationGraph(objects: GraphObjectInput[], connections: GraphConnectionInput[]): string | null {
   if (objects.length > 1_000) return 'A session may contain at most 1,000 objects';
   if (connections.length > 4_000) return 'A session may contain at most 4,000 connections';
@@ -211,15 +224,15 @@ export function validCreationGraph(objects: GraphObjectInput[], connections: Gra
   for (const object of objects) {
     if (!UUID_RE.test(object.id)) return `Invalid object id: ${object.id}`;
     if (!isCreationObjectKind(object.kind)) return `Unsupported object kind: ${object.kind || 'missing'}`;
-    if (ids.has(object.id)) return `Duplicate object id: ${object.id}`;
-    ids.add(object.id);
+    if (ids.has(uuidKey(object.id))) return `Duplicate object id: ${object.id}`;
+    ids.add(uuidKey(object.id));
   }
   const connectionIds = new Set<string>();
   for (const edge of connections) {
     if (!UUID_RE.test(edge.id)) return `Invalid connection id: ${edge.id}`;
-    if (connectionIds.has(edge.id)) return `Duplicate connection id: ${edge.id}`;
-    connectionIds.add(edge.id);
-    if (!ids.has(edge.sourceObjectId) || !ids.has(edge.targetObjectId)) return 'A connection references an object outside this session';
+    if (connectionIds.has(uuidKey(edge.id))) return `Duplicate connection id: ${edge.id}`;
+    connectionIds.add(uuidKey(edge.id));
+    if (!ids.has(uuidKey(edge.sourceObjectId)) || !ids.has(uuidKey(edge.targetObjectId))) return 'A connection references an object outside this session';
     if (edge.kind && !isCreationConnectionKind(edge.kind)) return `Unsupported connection kind: ${edge.kind}`;
   }
   return null;
@@ -237,14 +250,18 @@ export function durableCreationGraph(
   connections: GraphConnectionInput[],
   newId: () => string = () => crypto.randomUUID(),
 ): { objects: GraphObjectInput[]; connections: GraphConnectionInput[] } {
-  const objectIds = new Map(objects.map((object) => [object.id, newId()]));
+  // Keyed case-insensitively for the same reason `validCreationGraph` is: an
+  // edge that spells its endpoint in a different case than the object does is
+  // still pointing at that object, and a case-sensitive map would resolve it to
+  // `undefined` and violate the connection's NOT NULL / foreign key instead.
+  const objectIds = new Map(objects.map((object) => [uuidKey(object.id), newId()]));
   return {
-    objects: objects.map((object) => ({ ...object, id: objectIds.get(object.id)! })),
+    objects: objects.map((object) => ({ ...object, id: objectIds.get(uuidKey(object.id))! })),
     connections: connections.map((edge) => ({
       ...edge,
       id: newId(),
-      sourceObjectId: objectIds.get(edge.sourceObjectId)!,
-      targetObjectId: objectIds.get(edge.targetObjectId)!,
+      sourceObjectId: objectIds.get(uuidKey(edge.sourceObjectId))!,
+      targetObjectId: objectIds.get(uuidKey(edge.targetObjectId))!,
     })),
   };
 }

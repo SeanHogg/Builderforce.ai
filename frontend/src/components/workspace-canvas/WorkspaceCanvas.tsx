@@ -20,6 +20,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { WorkspacePanelList } from './WorkspacePanelList';
 import styles from './WorkspaceCanvas.module.css';
 
 export interface WorkspaceCanvasPanel {
@@ -78,20 +79,6 @@ function WorkspacePanel({ data, selected }: NodeProps<WorkspacePanelNode>) {
       <div className={`${styles.body} nodrag nowheel`}>{panel.content}</div>
     </section>
   );
-}
-
-function MobileWorkspacePanel({ panel, onRemovePanel }: { panel: WorkspaceCanvasPanel; onRemovePanel?: (id: string) => void }) {
-  const t = useTranslations('workspaceCanvas');
-  return <section className={`${styles.node} ${styles.mobileNode}`} aria-label={t('panelLabel', { title: panel.title })}>
-    <header className={styles.header}>
-      <span className={styles.icon} aria-hidden><Icon source={panel.icon ?? '◇'} size={18} /></span>
-      <strong className={styles.title}>{panel.title}</strong>
-      {panel.subtitle && <span className={styles.subtitle}>{panel.subtitle}</span>}
-      <span className={styles.spacer} />
-      {panel.removable && onRemovePanel && <button type="button" className={styles.close} aria-label={t('removePanel', { title: panel.title })} onClick={() => onRemovePanel(panel.id)}>×</button>}
-    </header>
-    <div className={`${styles.body} ${styles.mobileBody}`}>{panel.content}</div>
-  </section>;
 }
 
 const NODE_TYPES: NodeTypes = { workspacePanel: WorkspacePanel };
@@ -173,9 +160,12 @@ export function WorkspaceCanvas({
     [setNodes],
   );
 
+  // A phone has no room to pan a board, so it gets the PAGE rendering — the same
+  // one `/dashboard` uses (`WorkspacePanelList`). It used to be a private copy of
+  // that markup living here, which is two renderers of one model free to drift.
   if (mobile) return <div className={`${styles.canvas} ${styles.mobileCanvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="widgets">
     {toolbar && <div className={styles.mobileToolbar}>{toolbar}</div>}
-    <div className={styles.mobileStack}>{panels.map((panel) => <MobileWorkspacePanel key={panel.id} panel={panel} onRemovePanel={onRemovePanel} />)}</div>
+    <WorkspacePanelList panels={panels} {...(onRemovePanel ? { onRemovePanel } : {})} />
   </div>;
 
   return (

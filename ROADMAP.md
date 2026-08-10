@@ -133,7 +133,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 23 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 25 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 40 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 41 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -154,7 +154,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 23 |
 | 8 | 3 |
 | 9 | 25 |
-| 10 | 40 |
+| 10 | 41 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -683,6 +683,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
 
+- **A `/api/creation-sessions/claim` 500 on `creation_session_objects_pkey` is fixed by inference, not by trace** *(seen 2026-08-10 in an operator screenshot)*. One provable cause of that exact error was found and closed this pass: `validCreationGraph` compared object/connection ids with a case-SENSITIVE `Set` while `UUID_RE` accepts either case and the `uuid` column is case-insensitive, so two ids differing only in case validated as distinct and then collided on the primary key (see DONE.md; `durableCreationGraph` had the mirror bug on edge endpoints). Whether the screenshotted request took that path is unconfirmed. **Blocker: the failing request's payload and the server-side stack are a live production trace I cannot obtain** — `db.batch` on neon-http reports only the PG message, and the route's catch rethrows without logging which statement failed. Fix = attach the failing statement index + object-id count to the claim's catch via `reportCaughtError` before rethrowing, then re-check. Unblocks: knowing whether anonymous boards still fail to claim.
 
 ### Marketplace, talent, freelance
 

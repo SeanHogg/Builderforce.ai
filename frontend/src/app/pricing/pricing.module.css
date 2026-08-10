@@ -174,6 +174,24 @@
 
 .section { padding-top: 28px; }
 
+.pricingControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-elevated);
+}
+.pricingControls > div:first-child { display: grid; gap: 4px; }
+.pricingControls strong { color: var(--text-primary); font-size: var(--font-size-small); }
+.pricingControls span { color: var(--text-muted); font-size: var(--font-size-eyebrow); }
+.billingToggle { display: inline-flex; padding: 4px; border-radius: var(--radius-lg); background: var(--bg-surface); }
+.billingToggle button { padding: 8px 14px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text-muted); font: inherit; font-size: var(--font-size-small); font-weight: 700; cursor: pointer; }
+.billingToggle button[data-active='true'] { background: var(--bg-elevated); color: var(--accent); box-shadow: 0 2px 10px rgba(0, 0, 0, .12); }
+
 .planGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .planCard {
   display: flex;
@@ -189,8 +207,9 @@
   background: linear-gradient(155deg, var(--bg-elevated), var(--accent-subtle));
   box-shadow: 0 20px 55px var(--shadow-coral-mid, rgba(59, 130, 246, .13));
 }
-.planCardTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.planCardTop { display: flex; min-height: 38px; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .planCard h3 { margin: 0; font-size: var(--font-size-card-title); }
+.planCardTop .planButton[data-compact='true'] { width: auto; padding: 7px 11px; white-space: nowrap; }
 .price {
   display: flex;
   min-width: 0;
@@ -204,6 +223,12 @@
 .priceAmount { font-size: var(--font-size-page-title); font-weight: 800; letter-spacing: -.04em; }
 .priceSuffix { max-width: 100%; color: var(--text-primary); font-size: clamp(1rem, 1.7vw, 1.35rem); font-weight: 750; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .priceNote { min-height: 34px; margin: 0; color: var(--text-muted); font-size: var(--font-size-small); }
+.seatScale { display: grid; gap: 8px; margin: 10px 0 16px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-surface); }
+.seatScaleHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: var(--font-size-small); }
+.seatScaleHeader strong { color: var(--info); }
+.seatScale input { width: 100%; accent-color: var(--info); cursor: pointer; }
+.seatCalculation { color: var(--text-muted); font-size: var(--font-size-eyebrow); line-height: 1.4; text-align: center; }
+.savingsNote { margin: 0 0 10px; color: var(--success-text); font-size: var(--font-size-eyebrow); font-weight: 700; }
 .featureList { display: grid; gap: 12px; margin: 24px 0 28px; padding: 20px 0 0; border-top: 1px solid var(--border); list-style: none; }
 .featureList li { display: flex; gap: 10px; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.4; }
 .featureList li::before { color: var(--accent); font-weight: 800; content: '\2713'; }
@@ -238,6 +263,8 @@
 
 @media (max-width: 850px) {
   .hero { grid-template-columns: 1fr; padding-bottom: 44px; }
+  .pricingControls { align-items: stretch; flex-direction: column; }
+  .billingToggle { align-self: flex-start; }
   .planGrid { grid-template-columns: 1fr; }
   .planCard { min-height: 0; }
 }

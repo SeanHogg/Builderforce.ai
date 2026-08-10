@@ -115,10 +115,44 @@
   .toolbar { left: 10px; right: 10px; overflow-x: auto; }
   .mobileCanvas { height:auto; min-height:calc(100vh - 126px); overflow:visible; padding:10px; background:var(--bg-deep); }
   .mobileToolbar { display:flex; gap:8px; margin-bottom:10px; overflow-x:auto; }
-  .mobileStack { display:grid; gap:12px; width:100%; }
-  .mobileNode { height:auto; min-height:0; overflow:visible; border-radius:var(--radius-lg); box-shadow:0 8px 24px rgba(0,0,0,.2); }
-  .mobileNode:has(> .mobileBody:empty) { display:none; }
-  .mobileNode .header { min-height:40px; cursor:default; }
-  .mobileNode .subtitle { display:none; }
-  .mobileBody { overflow:visible; padding:12px; }
+  /* The phone's panel markup moved to `WorkspacePanelList` (`.page*` below),
+     shared with `/dashboard` — these were its private duplicate. */
+}
+
+/* ── The panels, as a PAGE (see WorkspacePanelList) ─────────────────────────
+   The other rendering of the same data: a destination that opens in the
+   slide-out panel must not be a second pannable board inside a drawer. A
+   responsive grid rather than a stack, so the compact metric tiles sit in a row
+   the way they did on the board instead of becoming five full-width bands. */
+.pageStack {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  align-content: start;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+/* A section spans the row; only panels authored as tiles take one cell. */
+.pageNode {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+.pageNode[data-compact='true'] { grid-column: auto; }
+/* A panel whose content gated itself away leaves a titled empty box otherwise. */
+.pageNode:has(> .pageBody:empty) { display: none; }
+.pageNode .header { cursor: default; }
+
+.pageBody {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-4);
 }

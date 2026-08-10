@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { useLocale, useTranslations } from 'next-intl';
 import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
+import { subscriptionCheckoutPayload } from '@/lib/subscriptionCart';
 import {
   marketplacePurchaseApi,
   setMarketplaceToken,
@@ -99,6 +100,9 @@ export default function ShoppingCart() {
   if (!isOpen || !mounted) return null;
 
   const phoneItem = items.find((item) => item.checkoutKind === 'business_phone');
+  const subscriptionItem = items.find((item) => item.checkoutKind === 'plan_subscription');
+  const checkoutReturnPath = '/pricing?checkout=1';
+  const registrationPath = `/tenants?next=${encodeURIComponent(checkoutReturnPath)}`;
   const setupTotal = items.reduce((sum, item) => sum + (item.setupFee ?? 0), 0);
   const recurringTotal = items.filter((item) => item.pricingModel === 'subscription').reduce((sum, item) => sum + item.price, 0);
   const checkout = async () => {
@@ -107,7 +111,22 @@ export default function ShoppingCart() {
     try {
       const marketplaceItems = items.filter((item): item is CartItem & { type: 'skill' | 'persona' | 'content' } =>
         item.type === 'skill' || item.type === 'persona' || item.type === 'content');
-      if (phoneItem && marketplaceItems.length > 0) throw new Error(t('mixedCheckout'));
+      if ((phoneItem || subscriptionItem) && items.length > 1) throw new Error(t('mixedCheckout'));
+
+      if (subscriptionItem) {
+        if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
+        if (!subscriptionItem.targetPlan || !subscriptionItem.billingCycle) throw new Error(t('unsupportedCheckout'));
+        const token = getStoredTenantToken();
+        const response = await fetch(`${AUTH_API_URL}/api/tenants/${tenant.id}/subscription/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(subscriptionCheckoutPayload(subscriptionItem, user.email)),
+        });
+        const body = await response.json() as { checkoutUrl?: string; error?: string };
+        if (!response.ok || !body.checkoutUrl) throw new Error(body.error ?? t('checkoutFailed'));
+        window.location.href = body.checkoutUrl;
+        return;
+      }
 
       if (phoneItem) {
         if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
@@ -291,7 +310,7 @@ export default function ShoppingCart() {
               <span>{t('dueToday')}</span>
               <span>{subtotal + setupTotal === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(subtotal + setupTotal)}</span>
             </div>
-            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}><span>{t('thenMonthly')}</span><span>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(recurringTotal)}</span></div>}
+            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}><span>{subscriptionItem?.billingCycle === 'yearly' ? t('renewsYearly') : t('renewsMonthly')}</span><span>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(recurringTotal)}</span></div>}
 
             {isAuthenticated ? (
               <>
@@ -330,7 +349,7 @@ export default function ShoppingCart() {
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Link
-                    href="/register"
+                    href={`/register?next=${encodeURIComponent(registrationPath)}`}
                     onClick={closeCart}
                     style={{
                       flex: 1,
@@ -347,7 +366,7 @@ export default function ShoppingCart() {
                     {t('createAccount')}
                   </Link>
                   <Link
-                    href="/login"
+                    href={`/login?next=${encodeURIComponent(checkoutReturnPath)}`}
                     onClick={closeCart}
                     style={{
                       flex: 1,

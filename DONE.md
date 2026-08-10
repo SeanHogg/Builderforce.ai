@@ -1,3 +1,48 @@
+## RESOLVED 2026-08-10 - /dashboard is a page in the panel, not a board inside a drawer
+
+`/dashboard` built `WorkspaceCanvasPanel[]` with absolute x/y coordinates and rendered a React Flow
+board. Opened in the slide-out panel - which is where every destination opens (PRD 21 section 0) -
+that meant a second pannable canvas INSIDE a drawer, with its own zoom rail, minimap and dotted
+ground, over a board that was already on the stage. Reading your own metrics meant panning.
+
+**1 - The panels have a second RENDERER, not a second model.** `WorkspacePanelList` renders the same
+`WorkspaceCanvasPanel[]` as an ordinary responsive page. Nothing about a panel is canvas-specific
+except `position`, so a page reads the title, icon and content exactly as a node does.
+`WorkspaceCanvas` already had one of these for phones and kept it private; it is shared now, so the
+phone layout and the page layout cannot drift, and the private `.mobileNode/.mobileBody/.mobileStack`
+rules are deleted rather than left beside the shared ones.
+
+**2 - Width is honoured as a QUESTION, not as pixels.** "Is this a compact tile or a full-width
+section?" - the five 270px metric cards become a responsive row, everything else spans. No new field:
+the answer was already in the data.
+
+**3 - The dashboard names itself in the panel.** It is not a nav group, so `ShellPanel` had been
+calling it "Panel", the generic fallback. It publishes its title and hands over its five tabs as the
+index rail - views rather than anchors, so the rail switches (`usePublishReferenceSelect`, built in
+the /embedded pass). It also opens at `full` rather than `wide`: a wall of panels in a 50% drawer was
+a single column of squeezed cards.
+
+**4 - Localized.** The page carried ~12 hardcoded English strings (panel titles, subtitles, the quota
+alert, the widget nav label) plus a `tabs.create` key that never existed, which is why the tab label
+was typed inline. All five catalogs; the dead `tabs.ide` / `tabs.ideas` keys are deleted.
+
+**Also fixed - a real cause of the `creation_session_objects_pkey` 500.** `UUID_RE` accepts either
+case (`/i`) but every uniqueness check in `validCreationGraph` used a case-SENSITIVE `Set`, so two
+ids differing only in case validated as two distinct objects and then hit a `uuid` column that
+considers them one value - a 500 on input the validator had just declared valid.
+`durableCreationGraph` had the mirror bug: a case-sensitive map resolved an edge endpoint spelled in
+the other case to `undefined`, violating the connection's NOT NULL instead of connecting it. Both
+compare ids the way Postgres does now, with a test for each. Whether the screenshotted request took
+that path is unconfirmed and logged as such - see the Gap Register entry for the blocker.
+
+**Also fixed - `ViewToggle`'s five labels were hardcoded English inside the shared control**, so all
+31 surfaces rendering it said "Card / List" in every locale, and its `aria-label` said "View mode".
+They live in `common.viewMode.*` now. Its buttons carry `data-view-mode` so a test targets the MODE
+rather than the words - `TaskMgmtContent.test.tsx` was matching `/list/i`, i.e. matching on a locale.
+
+**Verification:** `tsgo --noEmit` clean in both packages; eslint clean; six frontend guards green
+(client-file baseline 767 -> 768 for `WorkspacePanelList`); `check-roadmap` green.
+
 ## RESOLVED 2026-08-10 - the phone canvas: the bar stops covering the team, and the prompt stops covering the rail
 
 Reported from a phone: the fixed bottom nav sat on top of the canvas's bottom panel, and the

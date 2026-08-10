@@ -61,10 +61,12 @@ describe('TaskMgmtContent', () => {
       { id: 1, title: 'A', status: 'todo' },
       { id: 2, title: 'B', status: 'todo' },
     ] as any);
-    const { getByText, getAllByRole, getAllByText } = render(<TaskMgmtContent projects={[]} />);
-    // switch to list view
-    const listBtn = getByText(/list/i);
-    fireEvent.click(listBtn);
+    const { container, getByText, getAllByRole, getAllByText } = render(<TaskMgmtContent projects={[]} />);
+    // Switch to list view by the MODE, not by its label — the canonical
+    // `ViewToggle` translates its labels, so matching on the English word was
+    // matching on a locale.
+    const listBtn = container.querySelector('[data-view-mode="table"]');
+    fireEvent.click(listBtn!);
     await waitFor(() => {
       // two checkboxes (one per row) plus header
       const checkboxes = getAllByRole('checkbox');

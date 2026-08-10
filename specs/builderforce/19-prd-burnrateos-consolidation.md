@@ -296,6 +296,28 @@ Each track is **merge-first**: reconcile against the §2 owner, then port only w
 | **B8 · CISO / Governance** | SOC controls + evidence, security incidents, vendors, DPAs, PII data assets, security training, compliance events, DSR (public + internal), data suppression, terms versions + agreements, embed consent | merge onto `soc_controls`/security; **vendors + DPA + PII assets net-new** |
 | **B9 · Platform remainder** | Marketplace + consultants + settlement, AI credits, cart/orders/invoicing, affiliate (§2 row 4), onboarding flows, announcement banners, changelog, user segments, coach marks, agency branding + clients, impersonation, system admin, embeds + widgets, uptime, waitlist, webinars/podcast/learn-video, blog (§2 row 12), guest sessions, free tools | merge-heavy |
 
+### 4.1 · B9 pricing-cart acceptance contract
+
+The BurnRateOS migration includes its self-serve plan-selection journey, not only the
+cart/order tables. Builderforce's published pricing document and subscription checkout endpoint
+remain the system of record; the BurnRateOS UI behavior is merged onto those seams.
+
+- The pricing cards expose monthly and annual billing before a buyer selects a plan. Every shown
+  total, cart line, renewal label, and checkout payload uses the selected interval.
+- Teams exposes its published minimum-seat scale on the card and displays the arithmetic
+  (`per-seat price × seats = recurring total`) before the plan enters the cart.
+- Each card's top action shows either `Current plan` or the applicable upgrade action. Paid-plan
+  actions add one replaceable subscription line to the shared header cart; they do not bypass it.
+- An anonymous cart survives account creation. Registration continues through workspace creation
+  or selection, then returns to `/pricing`, reopens the saved cart, and asks the buyer to confirm
+  secure checkout.
+- Authenticated checkout supplies the selected plan, interval, seat count, retained discount, and
+  account billing email to `POST /api/tenants/:id/subscription/checkout`, then redirects only to
+  the payment-provider URL returned by that endpoint. Plan activation still occurs only from the
+  verified provider webhook.
+- Marketplace artifacts, business phone, and a base-plan subscription cannot be combined in one
+  provider checkout; the cart explains that they must be purchased separately.
+
 ---
 
 ## 5 · Exceptions — decisions, not engineering

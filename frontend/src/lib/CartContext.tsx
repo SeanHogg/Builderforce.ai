@@ -20,7 +20,11 @@ export interface CartItem {
   emoji?: string;
   image?: string;
   setupFee?: number;
-  checkoutKind?: 'business_phone';
+  checkoutKind?: 'business_phone' | 'plan_subscription';
+  targetPlan?: 'pro' | 'teams';
+  billingCycle?: 'monthly' | 'yearly';
+  seats?: number;
+  discountCode?: string;
 }
 
 interface CartContextValue {
@@ -73,7 +77,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback((item: CartItem) => {
     setItems((prev) => {
-      if (prev.some((i) => i.id === item.id)) return prev; // no duplicates
+      if (prev.some((i) => i.id === item.id)) {
+        return prev.map((existing) => existing.id === item.id ? item : existing);
+      }
       return [...prev, item];
     });
     setIsOpen(true);

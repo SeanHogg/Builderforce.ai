@@ -180,7 +180,7 @@ export function ViewToggle<T extends string = ViewMode>({
     <div
       className={className}
       role="group"
-      aria-label="View mode"
+      aria-label={t('groupLabel')}
       style={{
         display: 'flex',
         background: 'var(--bg-elevated)',
@@ -193,6 +193,9 @@ export function ViewToggle<T extends string = ViewMode>({
         <button
           key={opt.value}
           type="button"
+          // A stable hook for the MODE, so a test or a QA script targets what the
+          // button does rather than the words it happens to say in one locale.
+          data-view-mode={opt.value}
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
           style={{ ...buttonStyle(value === opt.value), display: 'inline-flex', alignItems: 'center', gap: 6 }}

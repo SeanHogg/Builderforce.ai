@@ -131,4 +131,32 @@ describe('durableCreationGraph', () => {
     })]);
     expect(objects[0]!.id).toBe('00000000-0000-4000-8000-000000000001');
   });
+
+  it('resolves an edge endpoint whose id differs only in case', () => {
+    // A `uuid` column is case-insensitive; a case-sensitive Map resolved this to
+    // `undefined` and violated the connection's NOT NULL instead of connecting.
+    const objects = [{ id: '00000000-0000-4000-8000-00000000000a', kind: 'dataset' }];
+    const connections = [{
+      id: '00000000-0000-4000-8000-00000000000b',
+      sourceObjectId: '00000000-0000-4000-8000-00000000000A',
+      targetObjectId: '00000000-0000-4000-8000-00000000000a',
+      kind: 'data',
+    }];
+    const ids = ['10000000-0000-4000-8000-00000000000a', '10000000-0000-4000-8000-00000000000b'];
+    const durable = durableCreationGraph(objects, connections, () => ids.shift()!);
+    expect(durable.connections[0]!.sourceObjectId).toBe('10000000-0000-4000-8000-00000000000a');
+    expect(durable.connections[0]!.targetObjectId).toBe('10000000-0000-4000-8000-00000000000a');
+  });
+});
+
+describe('validCreationGraph id uniqueness', () => {
+  it('rejects two objects whose ids differ only in case', () => {
+    // They are ONE row to Postgres. Accepting them produced a 500 on
+    // `creation_session_objects_pkey` for input the validator had passed.
+    const error = validCreationGraph([
+      { id: '00000000-0000-4000-8000-00000000000a', kind: 'dataset' },
+      { id: '00000000-0000-4000-8000-00000000000A', kind: 'chart' },
+    ], []);
+    expect(error).toMatch(/Duplicate object id/);
+  });
 });

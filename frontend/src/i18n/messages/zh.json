@@ -1249,7 +1249,8 @@
       "card": "卡片",
       "table": "列表",
       "calendar": "日历",
-      "gantt": "甘特图"
+      "gantt": "甘特图",
+      "groupLabel": "视图模式"
     }
   },
   "prdCreate": {
@@ -3666,10 +3667,9 @@
     "tabs": {
       "projects": "项目",
       "workforce": "人才 / 团队",
-      "ide": "Builder",
-      "ideas": "想法 / 头脑风暴",
       "quality": "质量",
-      "knowledge": "知识库"
+      "knowledge": "知识库",
+      "create": "创建"
     },
     "ideas": {
       "loading": "正在加载对话……",
@@ -3714,6 +3714,20 @@
         "working": "工作中",
         "workingOn": "正在处理 {task}"
       }
+    },
+    "title": "仪表板",
+    "sessionLimitReached": "已达到已保存会话数量上限。请归档一个会话或升级后再创建。",
+    "widgetsLabel": "仪表板组件",
+    "panel": {
+      "promptSubtitle": "开始一个新的创作会话",
+      "aiUsage": "AI 用量",
+      "pulse": "团队状态",
+      "pulseSubtitle": "当前团队情绪",
+      "create": "创建新内容",
+      "createSubtitle": "选择一个起点，让想法成为现实",
+      "creations": "创作",
+      "creationsSubtitle": "打开并继续你创建的一切",
+      "workspaceWidget": "工作区组件"
     }
   },
   "dashboards": {
@@ -6381,10 +6395,12 @@
     "remove": "移除{name}",
     "dueToday": "今日应付",
     "thenMonthly": "之后每月",
+    "renewsMonthly": "每月续订",
+    "renewsYearly": "每年续订",
     "checkout": "安全结账",
     "redirecting": "正在跳转…",
     "checkoutFailed": "无法启动结账",
-    "mixedCheckout": "市场商品和订阅必须分开结账。",
+    "mixedCheckout": "套餐、附加服务和市场商品必须分开结账。",
     "workspaceRequired": "购买此服务前请选择工作区。",
     "unsupportedCheckout": "一个或多个商品暂时无法通过此结账流程购买。",
     "purchaseComplete": "已完成 {count} 笔购买。",
@@ -6418,6 +6434,22 @@
     "anonBannerDesc": "永久 $0/月 — 1 个 AgentHost、5 个项目、WebGPU LoRA 训练。随时可升级。",
     "anonBannerCta": "创建免费账户",
     "currentPlan": "当前套餐",
+    "billingFrequency": "计费周期",
+    "annualSavingsSummary": "按年计费可享受当前套餐的最高优惠。",
+    "monthlyFlexibility": "按月支付，无需年度承诺。",
+    "cycleAnnualWithSavings": "按年 — 最高节省 20%",
+    "perYear": "/年",
+    "perMonth": "/月",
+    "perSeatYear": "/席位/年",
+    "perSeatMonth": "/席位/月",
+    "teamMembers": "团队成员",
+    "seatCount": "{seats} 个席位",
+    "teamsAnnualCalculation": "每席位每年 ${price} × {seats} = 每年 ${total}",
+    "teamsMonthlyCalculation": "每席位每月 ${price} × {seats} = 每月 ${total}",
+    "planAnnualSaving": "按年计费可节省 {pct}%",
+    "cartPlanName": "{plan} 套餐",
+    "cartPerYear": "/年",
+    "cartPerMonth": "/月",
     "fieldBillingCycle": "计费周期",
     "fieldSeats": "席位",
     "fieldBillingEmail": "账单邮箱",

@@ -1249,7 +1249,8 @@
       "card": "Tarjetas",
       "table": "Lista",
       "calendar": "Calendario",
-      "gantt": "Gantt"
+      "gantt": "Gantt",
+      "groupLabel": "Modo de vista"
     }
   },
   "prdCreate": {
@@ -3666,10 +3667,9 @@
     "tabs": {
       "projects": "Proyectos",
       "workforce": "Talento / Equipo",
-      "ide": "Builder",
-      "ideas": "Ideas / Lluvia de ideas",
       "quality": "Calidad",
-      "knowledge": "Conocimiento"
+      "knowledge": "Conocimiento",
+      "create": "Crear"
     },
     "ideas": {
       "loading": "Cargando chats…",
@@ -3714,6 +3714,20 @@
         "working": "Trabajando",
         "workingOn": "Trabajando en {task}"
       }
+    },
+    "title": "Panel de control",
+    "sessionLimitReached": "Has alcanzado el límite de Sesiones guardadas. Archiva una Sesión o mejora tu plan antes de crear otra.",
+    "widgetsLabel": "Widgets del panel",
+    "panel": {
+      "promptSubtitle": "Inicia una nueva sesión de creación",
+      "aiUsage": "Uso de IA",
+      "pulse": "Pulso del equipo",
+      "pulseSubtitle": "Sentimiento actual del equipo",
+      "create": "Crear algo nuevo",
+      "createSubtitle": "Elige un punto de partida y da vida a una idea",
+      "creations": "Creaciones",
+      "creationsSubtitle": "Abre y continúa todo lo que has creado",
+      "workspaceWidget": "Widget del espacio de trabajo"
     }
   },
   "dashboards": {
@@ -6381,10 +6395,12 @@
     "remove": "Quitar {name}",
     "dueToday": "A pagar hoy",
     "thenMonthly": "Luego cada mes",
+    "renewsMonthly": "Se renueva mensualmente",
+    "renewsYearly": "Se renueva anualmente",
     "checkout": "Pago seguro",
     "redirecting": "Redirigiendo…",
     "checkoutFailed": "No se pudo iniciar el pago",
-    "mixedCheckout": "Los artículos del mercado y las suscripciones deben pagarse por separado.",
+    "mixedCheckout": "Los planes, complementos y artículos del mercado deben pagarse por separado.",
     "workspaceRequired": "Selecciona un espacio de trabajo antes de comprar este servicio.",
     "unsupportedCheckout": "Uno o más artículos aún no se pueden comprar mediante este pago.",
     "purchaseComplete": "{count, plural, one {Compra completada} other {# compras completadas}}.",
@@ -6418,6 +6434,22 @@
     "anonBannerDesc": "$0/mes para siempre — 1 AgentHost, 5 proyectos, entrenamiento LoRA con WebGPU. Mejora tu plan cuando quieras.",
     "anonBannerCta": "Crear cuenta gratis",
     "currentPlan": "Plan actual",
+    "billingFrequency": "Frecuencia de facturación",
+    "annualSavingsSummary": "La facturación anual incluye el mayor ahorro disponible.",
+    "monthlyFlexibility": "Paga mes a mes sin compromiso anual.",
+    "cycleAnnualWithSavings": "Anual — ahorra hasta un 20 %",
+    "perYear": "/año",
+    "perMonth": "/mes",
+    "perSeatYear": "/asiento/año",
+    "perSeatMonth": "/asiento/mes",
+    "teamMembers": "Miembros del equipo",
+    "seatCount": "{seats, plural, one {# asiento} other {# asientos}}",
+    "teamsAnnualCalculation": "${price} por asiento/año × {seats} = ${total}/año",
+    "teamsMonthlyCalculation": "${price} por asiento/mes × {seats} = ${total}/mes",
+    "planAnnualSaving": "Ahorra un {pct} % con facturación anual",
+    "cartPlanName": "Plan {plan}",
+    "cartPerYear": "/año",
+    "cartPerMonth": "/mes",
     "fieldBillingCycle": "Ciclo de facturación",
     "fieldSeats": "Asientos",
     "fieldBillingEmail": "Correo de facturación",

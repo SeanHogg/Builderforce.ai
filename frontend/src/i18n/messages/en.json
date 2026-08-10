@@ -1249,7 +1249,8 @@
       "card": "Card",
       "table": "List",
       "calendar": "Calendar",
-      "gantt": "Gantt"
+      "gantt": "Gantt",
+      "groupLabel": "View mode"
     }
   },
   "prdCreate": {
@@ -3666,10 +3667,9 @@
     "tabs": {
       "projects": "Projects",
       "workforce": "Talent / Workforce",
-      "ide": "Builder",
-      "ideas": "Ideas / Brainstorm",
       "quality": "Quality",
-      "knowledge": "Knowledge"
+      "knowledge": "Knowledge",
+      "create": "Create"
     },
     "ideas": {
       "loading": "Loading chats…",
@@ -3714,6 +3714,20 @@
         "working": "Working",
         "workingOn": "Working on {task}"
       }
+    },
+    "title": "Dashboard",
+    "sessionLimitReached": "Your saved Session limit is reached. Archive a Session or upgrade before creating another.",
+    "widgetsLabel": "Dashboard widgets",
+    "panel": {
+      "promptSubtitle": "Start a new creation session",
+      "aiUsage": "AI usage",
+      "pulse": "Team pulse",
+      "pulseSubtitle": "Current workforce sentiment",
+      "create": "Create something new",
+      "createSubtitle": "Choose a starting point and bring an idea to life",
+      "creations": "Creations",
+      "creationsSubtitle": "Open and continue everything you have created",
+      "workspaceWidget": "Workspace widget"
     }
   },
   "dashboards": {
@@ -6382,10 +6396,12 @@
     "remove": "Remove {name}",
     "dueToday": "Due today",
     "thenMonthly": "Then monthly",
+    "renewsMonthly": "Renews monthly",
+    "renewsYearly": "Renews annually",
     "checkout": "Secure checkout",
     "redirecting": "Redirecting…",
     "checkoutFailed": "Checkout could not be started",
-    "mixedCheckout": "Marketplace items and subscriptions must be checked out separately.",
+    "mixedCheckout": "Plans, add-ons, and marketplace items must be checked out separately.",
     "workspaceRequired": "Select a workspace before purchasing this service.",
     "unsupportedCheckout": "One or more items cannot be purchased through this checkout yet.",
     "purchaseComplete": "{count, plural, one {Purchase complete} other {# purchases complete}}.",
@@ -6419,6 +6435,22 @@
     "anonBannerDesc": "$0/month forever — 1 AgentHost, 5 projects, WebGPU LoRA training. Upgrade any time.",
     "anonBannerCta": "Create free account",
     "currentPlan": "Current Plan",
+    "billingFrequency": "Billing frequency",
+    "annualSavingsSummary": "Annual billing includes the best available plan savings.",
+    "monthlyFlexibility": "Pay month to month with no annual commitment.",
+    "cycleAnnualWithSavings": "Annual — save up to 20%",
+    "perYear": "/year",
+    "perMonth": "/month",
+    "perSeatYear": "/seat/year",
+    "perSeatMonth": "/seat/month",
+    "teamMembers": "Team members",
+    "seatCount": "{seats, plural, one {# seat} other {# seats}}",
+    "teamsAnnualCalculation": "${price} per seat/year × {seats} = ${total}/year",
+    "teamsMonthlyCalculation": "${price} per seat/month × {seats} = ${total}/month",
+    "planAnnualSaving": "Save {pct}% with annual billing",
+    "cartPlanName": "{plan} plan",
+    "cartPerYear": "/year",
+    "cartPerMonth": "/month",
     "fieldBillingCycle": "Billing cycle",
     "fieldSeats": "Seats",
     "fieldBillingEmail": "Billing email",

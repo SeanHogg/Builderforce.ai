@@ -119,6 +119,9 @@ const SHEET_PATTERNS: RegExp[] = [
 ];
 
 const FULL_PATTERNS: RegExp[] = [
+  // The home dashboard is a wall of panels — metrics, the creation launcher and
+  // the library. At `wide` it was a single column of squeezed cards.
+  /^\/dashboard(?:\/|$)/,
   /^\/insights(?:\/|$)/,
   /^\/dashboards(?:\/|$)/,
   /^\/finops(?:\/|$)/,
