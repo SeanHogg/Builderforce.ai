@@ -99,6 +99,7 @@ import { PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from './usageLedger';
 import { catalogEntry, tierForModel, vendorForModel } from './vendors';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
+import { getPullRequestDiffSummary } from '../repos/getPullRequestDiffSummary';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
 export const BUILTIN_EXTENSION_ID = 'builtin';
@@ -2249,6 +2250,20 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'repos.list', mutates: false, description: 'List git repositories linked to a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(projectRepositories).where(and(eq(projectRepositories.tenantId, ctx.tenantId), eq(projectRepositories.segmentId, seg), eq(projectRepositories.projectId, num(a.projectId)))).orderBy(desc(projectRepositories.createdAt)).limit(200); } },
   { tool: 'repos.list_pull_requests', mutates: false, description: 'List pull requests for a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(pullRequests).where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.segmentId, seg), eq(pullRequests.projectId, num(a.projectId)))).orderBy(desc(pullRequests.createdAt)).limit(200); } },
   {
+    tool: 'repos.pull_request_diff_summary', mutates: false,
+    description: 'Summarize a task or pull request diff by file category (code, test, docs, config, migration, asset, other), including per-file additions/deletions, category totals, and docsOnly/codeChanged flags. Prefer taskId; the platform resolves its recorded PR or branch changes.',
+    parameters: obj({ taskId: N, prNumber: N, projectId: N }),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('pull-request diff summary needs the platform environment');
+      return getPullRequestDiffSummary(ctx.db, ctx.env, {
+        tenantId: ctx.tenantId,
+        ...(a.taskId != null ? { taskId: num(a.taskId) } : {}),
+        ...(a.prNumber != null ? { prNumber: num(a.prNumber) } : {}),
+        ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+      });
+    },
+  },
+  {
     tool: 'repos.add', mutates: true,
     description: 'Link a git repository to a project (a plain catalog row). provider: github|gitlab|bitbucket. Pass credentialId to bind an access key.',
     parameters: obj({ projectId: N, provider: S, owner: S, repo: S, defaultBranch: S, isDefault: B, credentialId: S }, ['projectId', 'provider', 'owner', 'repo']),
@@ -3524,6 +3539,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',
+  'repos.pull_request_diff_summary',
   'attachments.read', 'attachments.write',
   'reviews.record', 'tickets.from_delta',
   // Kanban role sign-off — a reviewer agent clears a lane's role/review requirement so
