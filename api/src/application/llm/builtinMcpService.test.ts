@@ -287,6 +287,45 @@ describe('callBuiltinTool', () => {
     expect(taskSvc.updateTask).toHaveBeenCalled();
   });
 
+  it('tasks.get includes implementer activity and stale-delivery evidence', async () => {
+    taskSvc.getTask.mockResolvedValue({ projectId: 4, toPlain: () => ({ id: 9, projectId: 4, status: 'in_review' }) });
+    projectSvc.getProject.mockResolvedValue({ id: 4 });
+    const queryRows = [
+      [{ id: 12, agentRef: 'ada', payload: JSON.stringify({ actAsRole: 'product-manager' }), status: 'completed', produced: true, createdAt: new Date('2026-08-10T10:00:00Z'), completedAt: new Date('2026-08-10T11:00:00Z'), total: 1 }],
+      [{ executionId: 12, path: 'PRD.md' }],
+      [],
+      [{ id: 'pr-1' }],
+    ];
+    let query = 0;
+    const activityDb = {
+      select: vi.fn(() => {
+        const rows = queryRows[query++] ?? [];
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        chain.from = self;
+        chain.innerJoin = self;
+        chain.where = self;
+        chain.orderBy = self;
+        chain.limit = async () => rows;
+        chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(rows).then(resolve);
+        return chain;
+      }),
+    } as never;
+
+    const result = await callBuiltinTool(activityDb, { tenantId: TENANT, tool: 'tasks.get', arguments: { id: 9 } });
+
+    expect(result).toMatchObject({
+      id: 9,
+      activity: {
+        executionsCount: 1,
+        lastExecutionAgentRef: 'ada',
+        lastExecutionRole: 'product-manager',
+        lastCoderRunProducedCode: false,
+        staleImplementation: true,
+      },
+    });
+  });
+
   it('throws on an unknown tool', async () => {
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.nuke', arguments: {} })).rejects.toThrow(/Unknown built-in tool/);
   });

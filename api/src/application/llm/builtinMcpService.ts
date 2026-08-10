@@ -19,7 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Consolidated Gap Register.
  */
 
-import { and, eq, desc, getTableColumns, isNotNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, desc, getTableColumns, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
 import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
 import { advertisedName } from './toolNaming';
@@ -35,6 +35,7 @@ import {
 import { ProjectService } from '../project/ProjectService';
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
+import { summarizeTaskActivity } from '../task/taskActivity';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -46,7 +47,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -865,12 +866,65 @@ const CATALOG: BuiltinTool[] = [
       return listEnvelope('tasks', rows.map(compactTask), clampLimit(a.limit));
     },
   },
-  { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
-    const plain = (await getTenantTask(ctx, num(a.id))).toPlain() as unknown as Record<string, unknown>;
+  { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
+    const id = num(a.id);
+    const plain = (await getTenantTask(ctx, id)).toPlain() as unknown as Record<string, unknown>;
     // A SECURITY ticket is returned MASKED (restricted: true) for a caller without
     // clearance — surfaced, not hidden. Same shared gate as the board.
     const [masked] = await maskSecurityTasks(ctx, [plain]);
-    return masked ?? plain;
+    const visible = masked ?? plain;
+    if (visible.restricted === true) return visible;
+
+    const executionRows = await ctx.db
+      .select({
+        id: executions.id,
+        agentRef: executions.cloudAgentRef,
+        payload: executions.payload,
+        status: executions.status,
+        produced: executions.produced,
+        createdAt: executions.createdAt,
+        completedAt: executions.completedAt,
+        total: sql<number>`count(*) over()`.mapWith(Number),
+      })
+      .from(executions)
+      .where(and(eq(executions.tenantId, ctx.tenantId), eq(executions.taskId, id)))
+      .orderBy(desc(executions.createdAt))
+      .limit(250);
+    const executionIds = executionRows.map((row) => row.id);
+    const fileRows = executionIds.length ? await ctx.db
+      .select({ executionId: taskFileChanges.executionId, path: taskFileChanges.path })
+      .from(taskFileChanges)
+      .where(and(
+        eq(taskFileChanges.tenantId, ctx.tenantId),
+        eq(taskFileChanges.taskId, id),
+        inArray(taskFileChanges.executionId, executionIds),
+      )) : [];
+    const [coderCode] = await ctx.db
+      .select({ id: taskFileChanges.id })
+      .from(taskFileChanges)
+      .innerJoin(executions, and(
+        eq(executions.id, taskFileChanges.executionId),
+        eq(executions.tenantId, ctx.tenantId),
+      ))
+      .where(and(
+        eq(taskFileChanges.tenantId, ctx.tenantId),
+        eq(taskFileChanges.taskId, id),
+        sql`${executions.payload} ~* ${'"(actAsRole|roleKey|role)"\\s*:\\s*"[^"]*(coder|developer|engineer)[^"]*"'}`,
+        sql`not (${taskFileChanges.path} ~* ${'(^|/)(prd\\.md|readme\\.md|roadmap\\.md|done\\.md)$|(^|/)(specs|docs)(/|$)|\\.mdx?$'})`,
+      ))
+      .limit(1);
+    const [pr] = await ctx.db
+      .select({ id: pullRequests.id })
+      .from(pullRequests)
+      .where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.taskId, id)))
+      .limit(1);
+    return {
+      ...visible,
+      activity: summarizeTaskActivity(String(visible.status ?? ''), executionRows, fileRows, Boolean(pr), {
+        executionsCount: executionRows[0]?.total ?? 0,
+        hasCoderCodeEver: Boolean(coderCode),
+      }),
+    };
   } },
   {
     tool: 'tasks.create', mutates: true,

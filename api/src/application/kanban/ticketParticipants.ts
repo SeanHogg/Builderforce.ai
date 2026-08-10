@@ -34,6 +34,8 @@ import { computeAccountabilityGaps, slotKey, type AccountabilityGapSeverity } fr
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { decideParticipantRemoval } from './participantRemovalPolicy';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 // Role display names come from the ONE resolver in `roleCatalog` (this module used to
 // keep its own private copy, and it disagreed with the lane gate's).
@@ -513,9 +515,23 @@ export class TicketParticipantsService {
 
   /** Waive/remove an assessment-added participant (audited elsewhere via sign-off). */
   async removeParticipant(env: Env, tenantId: number, taskId: number, participantId: string): Promise<void> {
+    const rows = await this.db
+      .select({
+        id: ticketParticipants.id,
+        roleKey: ticketParticipants.roleKey,
+        responsibility: ticketParticipants.responsibility,
+        required: ticketParticipants.required,
+        source: ticketParticipants.source,
+      })
+      .from(ticketParticipants)
+      .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.taskId, taskId)));
+    const target = rows.find((row) => row.id === participantId);
+    if (!target) throw new Error('participant not found on task');
+    const decision = decideParticipantRemoval(target, rows);
+    if (!decision.allowed) throw new Error(decision.message);
     await this.db
       .delete(ticketParticipants)
-      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId), inArray(ticketParticipants.source, ['assessment', 'manual'])));
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId)));
     await this.bump(env, taskId);
   }
 
@@ -639,6 +655,72 @@ export class TicketParticipantsService {
     };
   }
 
+  /** Keep the explicit assessment `owner` slot synchronized with the task's actual
+   * coordinator. The task assignment is authoritative; changing it invalidates any
+   * evidence recorded for the previous owner. Invalid/missing assignees remain an
+   * explicit `unstaffed` resource gap rather than resolving to a random role pin. */
+  private async syncOwnerAssignee(env: Env, tenantId: number, taskId: number): Promise<void> {
+    const [task] = await this.db
+      .select({
+        assignedUserId: tasks.assignedUserId,
+        assignedAgentRef: tasks.assignedAgentRef,
+      })
+      .from(tasks)
+      .innerJoin(projects, and(eq(projects.id, tasks.projectId), eq(projects.tenantId, tenantId)))
+      .where(eq(tasks.id, taskId))
+      .limit(1);
+    if (!task) return;
+
+    let assignee: { kind: 'human' | 'agent'; ref: string; name: string } | null = null;
+    if (task.assignedUserId) {
+      const [member] = await this.db
+        .select({ name: users.displayName, email: users.email })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, task.assignedUserId)))
+        .limit(1);
+      if (member) assignee = { kind: 'human', ref: task.assignedUserId, name: member.name ?? member.email };
+    } else if (task.assignedAgentRef) {
+      const [agent] = await this.db
+        .select({ name: ideAgents.name })
+        .from(ideAgents)
+        .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, task.assignedAgentRef), eq(ideAgents.status, 'active')))
+        .limit(1);
+      if (agent) assignee = { kind: 'agent', ref: task.assignedAgentRef, name: agent.name };
+    }
+
+    const owners = await this.db
+      .select({
+        id: ticketParticipants.id,
+        assigneeKind: ticketParticipants.assigneeKind,
+        assigneeRef: ticketParticipants.assigneeRef,
+        assigneeName: ticketParticipants.assigneeName,
+      })
+      .from(ticketParticipants)
+      .where(scopedToTenant(ticketParticipants, tenantId, and(
+        eq(ticketParticipants.taskId, taskId),
+        eq(ticketParticipants.roleKey, 'owner'),
+        eq(ticketParticipants.responsibility, 'owner'),
+      )));
+    let changed = false;
+    for (const owner of owners) {
+      if (owner.assigneeKind === assignee?.kind
+        && owner.assigneeRef === assignee?.ref
+        && owner.assigneeName === assignee?.name) continue;
+      await this.db.update(ticketParticipants).set({
+        assigneeKind: assignee?.kind ?? null,
+        assigneeRef: assignee?.ref ?? null,
+        assigneeName: assignee?.name ?? null,
+        state: assignee ? 'assigned' : 'unstaffed',
+        signoffId: null,
+        evidence: null,
+        updatedAt: new Date(),
+      }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, owner.id)));
+      changed = true;
+    }
+    if (changed) await this.bump(env, taskId);
+  }
+
   /** Cached manifest read; derives on first access when empty. */
   async listParticipants(env: Env, tenantId: number, taskId: number): Promise<ManifestParticipant[]> {
     // Assessment/manual rows do not prove the board-template manifest was derived.
@@ -650,6 +732,7 @@ export class TicketParticipantsService {
     if (!templateRow) {
       await this.deriveManifest(env, tenantId, taskId);
     }
+    await this.syncOwnerAssignee(env, tenantId, taskId);
     const version = await getCacheVersion(env, versionKey(taskId));
     return getOrSetCached(env, `participants:list:${taskId}:v:${version}`, async () => {
       const rows = await this.db
