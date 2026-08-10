@@ -47,6 +47,7 @@ import {
   marketingHeatmapPages,
   marketingHeatmapScreenshots,
   marketingLeads,
+  marketingSessionPrompts,
   marketingSeoPages,
   nurtureFlows,
   pageEmbedVideos,
@@ -108,6 +109,7 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   entity(affiliateReferrals, { readOnly: true }),
   /** Observations and sends: captured by a sweep, not authored. */
   entity(activityFeed, { readOnly: true }),
+  entity(marketingSessionPrompts, { readOnly: true }),
   entity(marketingHeatmapScreenshots, { readOnly: true }),
   entity(eventRemindersSent, { readOnly: true }),
 ]);

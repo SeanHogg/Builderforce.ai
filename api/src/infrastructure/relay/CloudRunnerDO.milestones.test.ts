@@ -50,6 +50,7 @@ vi.mock('../../application/runtime/cloudDispatch', () => ({
   parsePolicyGates: () => null,
   parseReviewRole: () => null,
   parseLaneKey: () => null,
+  parseOriginatingChatId: () => null,
 }));
 vi.mock('@builderforce/agent-tools', () => ({ buildLimbicBlock: () => '' }));
 

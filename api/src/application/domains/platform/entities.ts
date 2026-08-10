@@ -10,6 +10,7 @@ import {
   dashboardLayouts,
   metricThresholds,
   platformPricing,
+  platformPricingConfiguration,
   queueJobToProcess,
   queueJobToResume,
   reportApprovals,
@@ -29,4 +30,6 @@ export const PLATFORM_ENTITIES = defineDomainEntities('platform', [
   entity(uptimeChecks, { readOnly: true }),
   entity(queueJobToProcess, { readOnly: true }),
   entity(queueJobToResume, { readOnly: true }),
+  /** The pricing publisher owns draft/published promotion as one transaction. */
+  entity(platformPricingConfiguration, { readOnly: true }),
 ]);

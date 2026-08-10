@@ -16,6 +16,7 @@ import {
   listItems,
   portfolioCompanies,
   portfolioItems,
+  releaseNoteBetaEnrollments,
   releasePlans,
   signOffs,
   sprintFinancialImpact,
@@ -43,4 +44,7 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
   entity(bottleneckAnalysis, { readOnly: true }),
   entity(capacityHeatmaps, { readOnly: true }),
   entity(sprintFinancialImpact, { readOnly: true }),
+  /** Enrollment records capture a user's beta consent and are changed only by
+   *  the release-note enrollment workflow. */
+  entity(releaseNoteBetaEnrollments, { readOnly: true }),
 ]);
