@@ -45,6 +45,20 @@ export interface TeamMemberAvatarFilterProps {
   disableAll?: boolean;
 }
 
+/** Keep active filters visible when the compact avatar row is capped. */
+export function visibleAssigneeFilters(
+  assignees: FilterableAssignee[],
+  selectedKeys: string[],
+  limit = 8,
+): FilterableAssignee[] {
+  if (limit <= 0) return [];
+  const selected = new Set(selectedKeys);
+  return [
+    ...assignees.filter((assignee) => selected.has(assignee.key)),
+    ...assignees.filter((assignee) => !selected.has(assignee.key)),
+  ].slice(0, limit);
+}
+
 /**
  * Avatar filter row for team members/agents. Renders an "All" chip, optional clear button,
  * and inline avatars (no overflow, fits in a single row with other filters).
@@ -116,6 +130,10 @@ export function TeamMemberAvatarFilter({
 
   // Defensive: ensure selectedAssignees is always an array even if parent passes undefined/null
   const selectedKeys: string[] = selectedAssignees ?? [];
+  const visibleAssignees = useMemo(
+    () => visibleAssigneeFilters(assignees, selectedKeys),
+    [assignees, selectedKeys],
+  );
 
   const allSelected = selectedKeys.length === 0;
 
@@ -215,7 +233,7 @@ export function TeamMemberAvatarFilter({
           minWidth: 0,
         }}
       >
-        {assignees.slice(0, 8).map((a) => { // Limit to 8 avatars for horizontal space (or more if needed)
+        {visibleAssignees.map((a) => {
           const active = selectedKeys.includes(a.key);
           return (
             <Avatar
