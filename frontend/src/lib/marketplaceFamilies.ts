@@ -135,5 +135,5 @@ export function resolveFamily(familyParam: string | null, kindParam: string | nu
     const family = FAMILIES[legacy.family];
     return { family: legacy.family, kind: legacy.kind ?? family.kinds[0] };
   }
-  return { family: 'talent', kind: FAMILIES.talent.kinds[0] };
+  return { family: 'agent', kind: FAMILIES.agent.kinds[0] };
 }

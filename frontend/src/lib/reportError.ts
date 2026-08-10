@@ -31,36 +31,36 @@ export interface ReportErrorInput {
  */
 export async function reportProductError(
   input: ReportErrorInput,
-  config: { apiKey: string; endpoint: string },
+  endpoint: string,
 ): Promise<{ accepted: number }> {
-  if (!config.apiKey) throw new Error('Product error reporting is not configured');
+  return sendProductError({ ...input, source: 'manual' }, endpoint);
+}
 
-  const title = input.title?.trim();
-  const message = input.message.trim();
-  const result = await apiRequest<{ accepted?: number }>('/events', {
+/** Automatically persist a global API failure to the same product project. */
+export async function reportProductApiError(
+  input: ReportErrorInput & { context?: Record<string, unknown> },
+  endpoint: string,
+): Promise<{ accepted: number }> {
+  return sendProductError({ ...input, source: 'api-client' }, endpoint);
+}
+
+async function sendProductError(
+  input: ReportErrorInput & { source: 'manual' | 'api-client'; context?: Record<string, unknown> },
+  endpoint: string,
+): Promise<{ accepted: number }> {
+  const result = await apiRequest<{ accepted?: number }>('/product-report', {
     method: 'POST',
     auth: 'none',
-    baseUrl: config.endpoint.replace(/\/$/, ''),
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify([{
-      type: 'UserReportedError',
-      message: title ? `${title} — ${message}` : message,
-      level: input.level ?? 'error',
-      timestamp: new Date().toISOString(),
-      environment: 'user-report',
-      source: 'native',
-      ...(input.url ? { url: input.url } : {}),
-      tags: { reporter: 'product-ui' },
-      context: { manual: true },
-    }]),
+    baseUrl: endpoint.replace(/\/$/, ''),
+    body: JSON.stringify(input),
     // The panel renders ingest failures itself; do not create another global
     // API-error toast (and another automatic product report) for this request.
-    expectedErrors: [400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504],
+    expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,
   });
 
   if (result.accepted !== 1) throw new Error('Could not record the report');
   return { accepted: result.accepted };
 }
+
+/** Prevent a failed reporting request from recursively reporting itself. */
+export const PRODUCT_REPORT_ERROR_STATUSES = Array.from({ length: 200 }, (_, index) => 400 + index);

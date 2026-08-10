@@ -297,9 +297,8 @@ function MarketingConversionTracker() {
   return null;
 }
 
-function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
+function AppBrainShell({ children, qualityEndpoint }: {
   children: React.ReactNode;
-  qualityErrorApiKey: string;
   qualityEndpoint: string;
 }) {
   const content = useShellContent(children);
@@ -351,7 +350,7 @@ function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
           <CanvasPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
-              <ReportErrorProvider apiKey={qualityErrorApiKey} endpoint={qualityEndpoint}>
+              <ReportErrorProvider endpoint={qualityEndpoint}>
               {content}
               {/* The room, rendered once at shell level so the call is visible —
                   and controllable — from wherever the person has navigated to.
@@ -430,9 +429,8 @@ function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
   );
 }
 
-export default function ConditionalAppShell({ children, qualityErrorApiKey, qualityEndpoint }: {
+export default function ConditionalAppShell({ children, qualityEndpoint }: {
   children: React.ReactNode;
-  qualityErrorApiKey: string;
   qualityEndpoint: string;
 }) {
   // `/embed` is framed cross-origin (VS Code webview / third-party host) and gets a
@@ -444,7 +442,7 @@ export default function ConditionalAppShell({ children, qualityErrorApiKey, qual
   return pathname.startsWith('/embed') ? (
     <EmbedShell>{children}</EmbedShell>
   ) : (
-    <AppBrainShell qualityErrorApiKey={qualityErrorApiKey} qualityEndpoint={qualityEndpoint}>
+    <AppBrainShell qualityEndpoint={qualityEndpoint}>
       {children}
     </AppBrainShell>
   );

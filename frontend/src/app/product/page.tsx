@@ -65,7 +65,7 @@ export default async function ProductPage() {
         }
         .pp-sub { font-size: var(--font-size-lede); color: var(--text-secondary); line-height: 1.7; margin: 0; }
         .pp-stats {
-          max-width: 900px; margin: 28px auto 0; padding: 0 24px;
+          max-width: var(--marketing-column); margin: 28px auto 0;
           display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
           border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); overflow: hidden;
         }
@@ -76,7 +76,7 @@ export default async function ProductPage() {
           color: var(--coral-bright); line-height: 1; margin-bottom: 5px;
         }
         .pp-stat-l { font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.3; white-space: pre-line; }
-        .pp-proof-note { max-width: 760px; margin: 14px auto 0; padding: 0 24px; text-align: center; color: var(--text-muted); font-size: var(--font-size-small); line-height: 1.55; }
+        .pp-proof-note { max-width: 62ch; margin: 14px auto 0; text-align: center; color: var(--text-muted); font-size: var(--font-size-small); line-height: 1.55; }
 
         .pp-sections { max-width: var(--marketing-max); margin: 0 auto; padding: 40px var(--marketing-gutter) 24px; width: 100%; }
         .pp-section { margin-bottom: 56px; }

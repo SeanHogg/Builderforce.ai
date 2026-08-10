@@ -268,6 +268,10 @@ describe('marketplace families — one derivation for label, CTA and flow', () =
     expect(resolveFamily('company', 'model', null)).toEqual({ family: 'company', kind: 'business' });
   });
 
+  it('opens the marketplace on Agents and Builtin by default', () => {
+    expect(resolveFamily(null, null, null)).toEqual({ family: 'agent', kind: 'builtin' });
+  });
+
   it('gives each family its own hue so four filters are four colours', () => {
     const hues = FAMILY_IDS.map((id) => FAMILIES[id].hueVar);
     expect(new Set(hues).size).toBe(FAMILY_IDS.length);

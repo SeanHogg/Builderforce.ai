@@ -15,36 +15,21 @@ describe('reportProductError', () => {
       message: 'Missing Authorization header',
       url: 'https://api.builderforce.test/api/projects',
       level: 'error',
-    }, {
-      apiKey: 'bfq_builderforce_product',
-      endpoint: 'https://api.builderforce.test/api/quality-ingest/',
-    })).resolves.toEqual({ accepted: 1 });
+    }, 'https://api.builderforce.test/api/quality-ingest/')).resolves.toEqual({ accepted: 1 });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, request] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api.builderforce.test/api/quality-ingest/events');
+    expect(url).toBe('https://api.builderforce.test/api/quality-ingest/product-report');
     expect(request).toMatchObject({
       method: 'POST',
-      headers: {
-        Authorization: 'Bearer bfq_builderforce_product',
-        'Content-Type': 'application/json',
-      },
     });
-    const [event] = JSON.parse(String(request?.body));
-    expect(event).toMatchObject({
-      type: 'UserReportedError',
-      message: '401 — Missing Authorization header',
-      environment: 'user-report',
-      source: 'native',
-      context: { manual: true },
+    const report = JSON.parse(String(request?.body));
+    expect(report).toMatchObject({
+      title: '401',
+      message: 'Missing Authorization header',
+      source: 'manual',
     });
-    expect(event).not.toHaveProperty('projectId');
-  });
-
-  it('fails clearly when product reporting is not configured', async () => {
-    await expect(reportProductError({ message: 'Broken' }, {
-      apiKey: '',
-      endpoint: 'https://api.builderforce.test/api/quality-ingest',
-    })).rejects.toThrow('Product error reporting is not configured');
+    expect(report).not.toHaveProperty('projectId');
+    expect(request?.headers).not.toHaveProperty('Authorization');
   });
 });

@@ -1262,6 +1262,50 @@ mean three things.
    made the marketing page ship JavaScript to open a paragraph. Same `aria-expanded` contract, two
    implementations, and the reason is written at both call sites.
 
+#### 11.10.3a The marketing column — added 2026-08-09
+
+Above the band rhythm sits something the spec never named and therefore never got: **one content
+column for the whole public site.**
+
+Every page had picked its own. The header was 1320, the landing hero 1240, the domain pages 1240,
+pricing / about / the deck / the demo showcase 1180, the homepage's own sections 1160, the tutorials
+catalog 1160 and its hero 900, `/features` and `/compare` and `/evermind` and `/product` 1100,
+`/soc2` 1080, the tools hub 980, `/book-demo` 960, `/marketplace` 100%. Nine values plus a
+full-bleed. The visible consequence was not subtle: content jumped left and right as you moved
+through the site, and jumped **within the homepage** between one band and the next, while the header
+above it never moved.
+
+The measure is declared once, in `globals.css`:
+
+| Token | Meaning |
+|---|---|
+| `--marketing-max` | the OUTER box, gutter included — `1320px` |
+| `--marketing-gutter` | `24px`, `18px` under 560px |
+| `--marketing-column` | `--marketing-max` minus both gutters; for a band whose gutter is already on an ancestor |
+| `--marketing-section-padding` | the vertical twin — bands had drifted the same way (9vw / 8vw / 7vw) |
+
+`.mh-inner` reads the same two tokens, which is the whole point: **the header IS the measure**, so a
+band that uses the column starts under the logo and ends under "Open the canvas", and the site
+cannot drift away from its own chrome. `.mkt-in` is the primitive (`.mk-in` composes it under the
+band system's own name); a band that is deliberately narrower sets `--mkt-width` rather than its own
+`max-width`, so the narrow case cannot lose a source-order fight with the primitive.
+
+Two things follow that are worth naming:
+
+1. **The mega panel is anchored to the column, not to its trigger.** It was `left: 50%` +
+   `translateX(-50%)` on `.mh-item`, and because Learn ▾ sits left of centre the panel opened
+   ~70px outside the logo. `.mh-item.has-menu:has(> .mh-panel-wide)` drops its containing block so
+   the panel resolves against `.mh-inner` and is pinned to both gutters — it cannot extend past the
+   header's edges at any viewport, for any trigger position.
+2. **A component's chrome lives inside its box.** The Meet carousel put its arrows in 64px of side
+   padding *outside* the card, so the card was 128px narrower than every other band. The arrows now
+   ride on the card, inset into a `--meet-panel-gutter` the panel reserves for them.
+
+`check:design-scale` carries the ratchet (`publicColumnLiterals`, baselined at **0**): a `max-width`
+or `width` typed as a literal between 900px and 1500px on a public-surface file is, by definition,
+somebody re-declaring the column. Breakpoints are excluded; reading measures below 900px are not
+columns and stay legal.
+
 #### 11.10.4 What this adds to `check:design-tokens`
 
 Three assertions, landing with M0:

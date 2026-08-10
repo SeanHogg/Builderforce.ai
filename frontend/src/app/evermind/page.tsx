@@ -136,11 +136,6 @@ export default async function EvermindPage() {
         .ev-faq details[open] summary { border-bottom: 1px solid var(--border-subtle); }
         .ev-faq p { color: var(--text-secondary); line-height: 1.7; font-size: var(--font-size-body); padding: 14px 0 16px; margin: 0; }
 
-        .ev-cta { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter) 80px; }
-        .ev-cta-box { max-width: 820px; margin-inline: auto; text-align: center; padding: 52px 40px; border-radius: var(--radius-xl); border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px); }
-        .ev-cta-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section); color: var(--text-primary); margin: 0 0 12px; }
-        .ev-cta-desc { font-size: var(--font-size-body); color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
-
         .ev-figure { width: 100%; height: auto; display: block; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: var(--bg-deep); }
         .ev-figcap { font-size: var(--font-size-small); color: var(--text-muted); margin: 0 0 4px; text-align: center; }
         .ev-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; counter-reset: ev-step; }
@@ -170,7 +165,7 @@ export default async function EvermindPage() {
                   the brain animation (bolt.new-clean). */}
               <p className="ev-sub">{t('evermind.tagline')}.</p>
               <div className="ev-actions">
-          <Link href="/register" className="ev-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaStartBuildingFree')}</Link>
+                <Link href="/create/new" className="ev-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaStartBuildingFree')}</Link>
                 <Link href="/product" className="ev-btn-secondary">{t('marketing.ctaTourPlatform')} →</Link>
               </div>
             </div>
@@ -344,19 +339,19 @@ export default async function EvermindPage() {
             </div>
           </section>
 
-          {/* ── CTA ── */}
-          <section className="ev-cta">
-            <div className="ev-cta-box">
-              <h2 className="ev-cta-title">{t('evermind.cta.title')}</h2>
-              <p className="ev-cta-desc">{t('evermind.cta.desc')}</p>
-              <div className="ev-actions" style={{ justifyContent: 'center' }}>
-          <Link href="/register" className="ev-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaGetStartedFree')}</Link>
-                <Link href="/pricing" className="ev-btn-secondary">{t('marketing.ctaSeePricing')} →</Link>
+          <RelatedArticles surface="evermind" heading={t('evermind.relatedHeading')} />
+
+          {/* ── The shared full-width marketing close from PRD 21 §11.10.3. ── */}
+          <section className="mk-band mk-band--grad">
+            <div className="mk-in">
+              <h2>{t('evermind.cta.title')}</h2>
+              <p>{t('evermind.cta.desc')}</p>
+              <div className="mk-actions">
+                <Link href="/create/new" className="mk-cta"><Icon name="automation" size={17} /> {t('marketing.ctaGetStartedFree')}</Link>
+                <Link href="/pricing" className="mk-cta mk-cta--ghost">{t('marketing.ctaSeePricing')} →</Link>
               </div>
             </div>
           </section>
-
-          <RelatedArticles surface="evermind" heading={t('evermind.relatedHeading')} />
         </main>
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>

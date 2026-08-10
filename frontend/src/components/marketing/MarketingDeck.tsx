@@ -90,7 +90,7 @@ export default function MarketingDeck() {
         .mdk-title {
           font-family: var(--font-display); font-weight: 800; letter-spacing: -0.045em;
           font-size: var(--font-size-hero); line-height: .98;
-          color: var(--text-primary); margin: 0 0 22px; max-width: 920px;
+          color: var(--text-primary); margin: 0 0 22px; max-width: 18ch;
         }
         .mdk-tagline {
           font-size: var(--font-size-lede); line-height: 1.65;

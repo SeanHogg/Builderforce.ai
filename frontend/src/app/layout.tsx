@@ -191,7 +191,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                           <ToastProvider>
                             <DemoModeProvider>
                               <ConditionalAppShell
-                                qualityErrorApiKey={QUALITY_ERROR_KEY}
                                 qualityEndpoint={QUALITY_ENDPOINT}
                               >
                                 {children}
@@ -207,13 +206,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </ChunkErrorBoundary>
 
             <GlobalErrorHandler />
-            {QUALITY_ERROR_KEY && (
-              <QualityErrorReporter
-                apiKey={QUALITY_ERROR_KEY}
-                endpoint={QUALITY_ENDPOINT}
-                environment={QUALITY_ENVIRONMENT}
-              />
-            )}
+            <QualityErrorReporter
+              apiKey={QUALITY_ERROR_KEY}
+              endpoint={QUALITY_ENDPOINT}
+              environment={QUALITY_ENVIRONMENT}
+            />
           </ErrorBoundary>
 
           <ChunkErrorRecovery />

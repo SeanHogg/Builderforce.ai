@@ -18,9 +18,8 @@ const ReportErrorContext = createContext<OpenReporter | null>(null);
  * error boundary). Submitting files the error into BuilderForce.ai's fixed
  * product Quality collector, including for visitors without an account.
  */
-export function ReportErrorProvider({ children, apiKey, endpoint }: {
+export function ReportErrorProvider({ children, endpoint }: {
   children: React.ReactNode;
-  apiKey: string;
   endpoint: string;
 }) {
   const t = useTranslations('reportError');
@@ -61,7 +60,7 @@ export function ReportErrorProvider({ children, apiKey, endpoint }: {
     try {
       await reportProductError(
         { message: message.trim(), title: title.trim() || undefined, url, level },
-        { apiKey, endpoint },
+        endpoint,
       );
       toast.success(t('reported'));
       setOpen(false);
@@ -70,11 +69,11 @@ export function ReportErrorProvider({ children, apiKey, endpoint }: {
     } finally {
       setSubmitting(false);
     }
-  }, [message, title, url, level, submitting, apiKey, endpoint, toast, t]);
+  }, [message, title, url, level, submitting, endpoint, toast, t]);
 
   const value = useMemo(() => reportError, [reportError]);
 
-  const canSubmit = apiKey.length > 0 && message.trim().length > 0 && !submitting;
+  const canSubmit = message.trim().length > 0 && !submitting;
 
   return (
     <ReportErrorContext.Provider value={value}>

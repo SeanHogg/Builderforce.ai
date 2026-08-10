@@ -28,7 +28,12 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
  * authed page gets correct chrome without being added to a list [1557]. Keep
  * this list current as marketing/public routes are added.
  */
-const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/crm/phone'];
+// `/creation-canvas` is on this list because the HOMEPAGE links it — the Meet
+// carousel's "Explore Create" button — and as a default app route a signed-out
+// visitor who followed that button got the "This is part of Builderforce.ai"
+// teaser instead of the page the button promised. Same defect class as the
+// reference surfaces above, found while giving it the marketing column.
+const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone'];
 
 /**
  * Routes an ANONYMOUS visitor gets the OPERATOR shell for, not marketing chrome.

@@ -78,7 +78,37 @@ const BASELINE = {
    * the sweep this number now drives, exactly as 2,087 → 9 drove the radii.
    */
   offScaleFontSizes: 3929,
+  /**
+   * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
+   * typed as a number between 900px and 1500px on a marketing file.
+   *
+   * That range is never a reading measure and never a card; it is somebody
+   * re-declaring the site's content column. Nineteen files had done it, at nine
+   * different values — 1320 on the header, 1240 on the landing hero and the
+   * domain pages, 1180 on pricing / about / the deck / the showcase, 1160 on the
+   * homepage sections and the rail, 1112, 1100, 1080, 1040, 1000, 980, 960 — so
+   * the content column moved as you walked through the site, and moved WITHIN
+   * the homepage from one band to the next. `--marketing-max` /
+   * `--marketing-gutter` / `--marketing-column` are the measure now, and this
+   * baseline is 0 so the tenth value cannot land quietly.
+   */
+  publicColumnLiterals: 0,
 };
+
+/**
+ * The public surface — the pages that render under the marketing header, whose
+ * content therefore has to line up with it. Everything else in the app sits in
+ * a shell with a rail and answers to `.page-inner`, not to this column.
+ */
+const MARKETING_FILES = [
+  /^app\/(about|blog|book-demo|compare|demo|evermind|features|integrations|marketplace|media|pricing|product|prompts|sell-builderforce|soc2|tools|tutorials|creation-canvas)\//,
+  /^app\/\[burnrateDomain\]\//,
+  /^components\/(home|marketing|demo)\//,
+  /^components\/(RouteMarketing|MarketingHeader|MarketingShell|AppFooter)\.tsx$/,
+];
+
+/** `max-width: 1180px`, `maxWidth: 1180`, `width: min(1180px, …)`. */
+const COLUMN_WIDTH = /(?:max-width|maxWidth|width)\s*:\s*(?:min\(\s*)?(\d{3,4})px/g;
 
 /**
  * The five documented steps (§2.4), plus 0, the circle/pill values, and
@@ -276,6 +306,7 @@ const files = collect(srcDir);
 const hexFiles = [];
 const offScale = [];
 const offScaleType = [];
+const columnLiterals = [];
 
 for (const file of files) {
   const rel = relative(srcDir, file).split('\\').join('/');
@@ -300,6 +331,17 @@ for (const file of files) {
     }
   }
 
+  if (MARKETING_FILES.some((pattern) => pattern.test(rel)) && !/\.test\.tsx?$/.test(rel)) {
+    for (const match of text.matchAll(COLUMN_WIDTH)) {
+      const px = Number(match[1]);
+      if (px < 900 || px > 1500) continue;
+      // A breakpoint is a question about the viewport, not a column.
+      if (/@(?:media|container)[^{)]*\([^)]*$/.test(text.slice(Math.max(0, match.index - 80), match.index))) continue;
+      const line = text.slice(0, match.index).split('\n').length;
+      columnLiterals.push(`${rel}:${line}  ${match[0]} — use var(--marketing-max) / var(--marketing-column)`);
+    }
+  }
+
   if (RADIUS_EXEMPT.some((pattern) => pattern.test(rel))) continue;
 
   for (const match of text.matchAll(RADIUS)) {
@@ -317,6 +359,7 @@ const measured = {
   literalHexFiles: hexFiles.length,
   offScaleRadii: offScale.length,
   offScaleFontSizes: offScaleType.length,
+  publicColumnLiterals: columnLiterals.length,
 };
 const failures = [];
 const slack = [];
@@ -364,6 +407,16 @@ if (failures.length > 0) {
     console.error('    never reads our CSS — add the file to FONT_SIZE_EXEMPT above WITH');
     console.error('    ITS REASON. The list is the review.');
   }
+  if (measured.publicColumnLiterals > BASELINE.publicColumnLiterals) {
+    console.error('\n  Page-column literals on the public surface:');
+    for (const c of columnLiterals.slice(0, 12)) console.error(`    • ${c}`);
+    console.error('    The public content column is ONE measure, declared in globals.css:');
+    console.error('    --marketing-max (the outer box, gutter included — the header reads');
+    console.error('    the same token), --marketing-gutter, and --marketing-column (the');
+    console.error('    content width, for a band whose gutter is already on an ancestor).');
+    console.error('    A number here means the page has stopped lining up with the header');
+    console.error('    above it, which is exactly how nine different widths accumulated.');
+  }
   console.error('');
   process.exit(1);
 }
@@ -379,6 +432,6 @@ if (slack.length > 0) {
 
 console.log(
   `✅  Design-scale ratchets held — ${measured.literalHexFiles} files with a literal hex, `
-  + `${measured.offScaleRadii} off-scale radii, ${measured.offScaleFontSizes} literal font sizes `
-  + `(all three at baseline).`,
+  + `${measured.offScaleRadii} off-scale radii, ${measured.offScaleFontSizes} literal font sizes, `
+  + `${measured.publicColumnLiterals} public page-column literals (all four at baseline).`,
 );

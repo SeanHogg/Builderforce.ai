@@ -29,9 +29,10 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
         /* ── ARTICLE ── */
         .bpost-main {
           flex: 1;
-          max-width: 780px;
+          max-width: var(--marketing-max);
+          box-sizing: border-box;
           margin: 0 auto;
-          padding: 48px 24px 80px;
+          padding: 48px var(--marketing-gutter) 80px;
           width: 100%;
           animation: bpost-fadeInUp 0.6s ease-out both;
         }
@@ -196,7 +197,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
         }
 
         @media (max-width: 640px) {
-          .bpost-main { padding: 32px 16px 56px; }
+          .bpost-main { padding-block: 32px 56px; }
         }
       `}</style>
 
