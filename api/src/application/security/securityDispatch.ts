@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Security-agent dispatch — kicks off the Security agent to run a SOC 2 audit of a
  * project's codebase, and the recurring sweep that audits each tenant on a cadence.
@@ -25,6 +26,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { SecurityAuditService } from './SecurityAuditService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { advertisedName } from '../llm/toolNaming';
 
 /** A distinct lane key so the audit run isn't confused with board lane-auto-run. */
 const AUDIT_LANE_KEY = '__security_audit__';
@@ -110,7 +112,10 @@ export async function dispatchSecurityAudit(
   const anchor = await taskService.createTask({
     projectId,
     title: 'SOC 2 Security Audit',
-    description: 'Audit this codebase against SOC 2 across all five Trust Service Criteria (Security, Availability, Processing Integrity, Confidentiality, Privacy). File each finding via the security.record_finding tool.',
+    // The tool is named by `advertisedName` — the catalog id appears nowhere in the
+    // agent's tool list, and a model handed a name it cannot find describes the call
+    // instead of making it, silently. See `application/llm/toolNaming.ts`.
+    description: `Audit this codebase against SOC 2 across all five Trust Service Criteria (Security, Availability, Processing Integrity, Confidentiality, Privacy). File each finding via the \`${advertisedName('security.record_finding')}\` tool.`,
     assignedAgentRef: securityRef,
   }, params.tenantId);
   const anchorTaskId = Number(anchor.id);
@@ -130,7 +135,9 @@ export async function dispatchSecurityAudit(
     return auditId;
   } catch {
     // Best-effort — a dispatch failure marks the run failed but never throws.
-    await audits.finishAudit(params.tenantId, auditId, { status: 'failed', summary: 'Audit dispatch failed.' }).catch(() => {});
+    await audits.finishAudit(params.tenantId, auditId, { status: 'failed', summary: 'Audit dispatch failed.' }).catch((error) => {
+      reportCaughtError(error, { source: "application/security/securityDispatch.ts", operation: "dispatchSecurityAudit" });
+    });
     return null;
   }
 }

@@ -21,8 +21,8 @@ import { getProject360 } from '@/lib/project360Api';
  *
  * On the web the improve/workforce actions route into the project workspace (where
  * the Brain + board live) rather than firing a VS Code command. A `brain` action
- * carries a ready-made seed prompt, which we forward as `/ide/:id?prompt=` so the
- * IDE's Brain panel auto-sends it — one-click agent-seed parity with VS Code.
+ * carries a ready-made seed prompt, which we forward to the Canvas build link so the
+ * Builder's Brain panel auto-sends it — one-click agent-seed parity with VS Code.
  */
 export function ProjectHealthPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('project360');
@@ -59,7 +59,7 @@ export function ProjectHealthPanel({ projectId }: { projectId: number }) {
   const onAction = useCallback((action: Project360Action) => {
     // Every action lands the user in the project workspace, where the Brain and
     // board can act on it. A `brain` action carries a seed prompt — forward it as
-    // ?prompt= so the IDE's Brain panel auto-sends it (one-click seed parity).
+    // ?prompt= so the selected Builder object's Canvas Brain auto-sends it.
     // An `open-task` opens a chat ALREADY LINKED to that work item via ?ticket=
     // (parity with the VS Code "open task" flow) — epics/gaps link to their own kind.
     let qs = '';
@@ -69,7 +69,7 @@ export function ProjectHealthPanel({ projectId }: { projectId: number }) {
       const kind = action.task.taskType ?? 'task';
       qs = `?ticket=${encodeURIComponent(`${kind}:${action.task.id}`)}`;
     }
-    router.push(`/ide/${projectId}${qs}`);
+    router.push(`/create/build/${projectId}${qs}`);
   }, [router, projectId]);
 
   return (

@@ -1,0 +1,204 @@
+/**
+ * The wiring that makes the policy-pack store LIVE.
+ *
+ * `evaluatePolicyGate` was already hard-enforced at the engine's tool seam, but it
+ * only ever saw `[]` because nothing put gates on a run's payload. `submit` is the
+ * ONE funnel every execution passes through (board auto-run, manual dispatch, agent
+ * handoff), so it stamps the tenant's resolved gates there. These tests pin that
+ * contract — including explicit spec-compiled gates winning and resolver failure
+ * blocking dispatch rather than silently running without governance.
+ */
+import { describe, it, expect } from 'vitest';
+import { RuntimeService } from './RuntimeService';
+import { Task } from '../../domain/task/Task';
+import { Execution } from '../../domain/execution/Execution';
+import { TaskStatus, TaskPriority, TaskType } from '../../domain/shared/types';
+import { parsePolicyGates } from './cloudDispatch';
+import type { PolicyGate } from '@builderforce/agent-tools';
+import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
+import type { ITaskRepository } from '../../domain/task/ITaskRepository';
+import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
+import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
+
+const PROJECT_ID = 3;
+
+function buildTask(): Task {
+  const now = new Date();
+  return Task.reconstitute({
+    id: 7 as never, projectId: PROJECT_ID as never, key: 'P-001', title: 't', description: null,
+    status: TaskStatus.TODO, priority: TaskPriority.MEDIUM, taskType: TaskType.TASK, parentTaskId: null,
+    assignedAgentType: null, githubIssueNumber: null, githubIssueUrl: null, githubPrUrl: null,
+    githubPrNumber: null, assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null,
+    gitBranch: null, explicitRepoId: null, sprintId: null, releaseId: null, storyPoints: null,
+    businessValue: null, businessValueRationale: null, businessValueSource: null, managerRank: null,
+    reviewCount: 0, lastReviewedAt: null, lastReviewVerdict: null, gapOriginTaskId: null,
+    startDate: null, dueDate: null, decompositionSource: null,
+    persona: null, archived: false, createdAt: now, updatedAt: now,
+  });
+}
+
+type Scope = { tenantId: number; projectId: number | null; agentRef: string | null };
+
+function makeService(
+  resolver?: (s: Scope) => Promise<PolicyGate[]>,
+  registrationResolver?: (id: string, tenantId: number) => Promise<{ active: boolean } | null>,
+  executionEnabled?: (tenantId: number) => Promise<boolean>,
+) {
+  let savedPayload: string | null = null;
+  let saveCount = 0;
+  const scopes: Scope[] = [];
+
+  const executions = {
+    save: async (e: Execution) => {
+      saveCount += 1;
+      savedPayload = (e as unknown as { payload: string | null }).payload;
+      return e;
+    },
+  } as unknown as IExecutionRepository;
+  const tasks = { findById: async () => buildTask() } as unknown as ITaskRepository;
+  const agents = {} as IAgentRepository;
+  const audit = { save: async () => undefined } as unknown as IAuditRepository;
+
+  const wrapped = resolver
+    ? async (s: Scope) => { scopes.push(s); return resolver(s); }
+    : undefined;
+
+  const svc = new RuntimeService(
+    executions, tasks, agents, audit,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    wrapped,
+    registrationResolver,
+    executionEnabled,
+  );
+  return { svc, getPayload: () => savedPayload, getSaveCount: () => saveCount, scopes };
+}
+
+const submit = (svc: RuntimeService, payload?: string) =>
+  svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'system:lane-auto', payload });
+
+describe('RuntimeService.submit — governance gate stamping', () => {
+  it('refuses every submission while the workspace execution kill switch is disabled', async () => {
+    const { svc, getSaveCount } = makeService(undefined, undefined, async () => false);
+
+    await expect(submit(svc)).rejects.toThrow(/disabled for this workspace/i);
+    expect(getSaveCount()).toBe(0);
+  });
+
+  it.each(['vscode', 'brain'] as const)('keeps interactive %s execution available while the switch is disabled', async (source) => {
+    const { svc, getSaveCount } = makeService(undefined, undefined, async () => false);
+
+    await expect(svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'user-1', source })).resolves.toBeDefined();
+    expect(getSaveCount()).toBe(1);
+  });
+
+  it('submits normally while workspace execution is enabled', async () => {
+    const seen: number[] = [];
+    const { svc, getSaveCount } = makeService(undefined, undefined, async (tenantId) => {
+      seen.push(tenantId);
+      return true;
+    });
+
+    await expect(submit(svc)).resolves.toBeDefined();
+    expect(seen).toEqual([1]);
+    expect(getSaveCount()).toBe(1);
+  });
+
+  it('stamps the resolved gates onto the payload so the engine enforces them', async () => {
+    const gate: PolicyGate = { id: 'no-shell', tool: 'run_command', effect: 'block', reason: 'prod safety' };
+    const { svc, getPayload } = makeService(async () => [gate]);
+
+    await submit(svc, JSON.stringify({ cloudAgentRef: 'ada' }));
+
+    // Read back through the SAME parser the cloud loop uses.
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([gate]);
+  });
+
+  it('resolves for the ticket’s project and the run’s agent', async () => {
+    const { svc, scopes } = makeService(async () => []);
+
+    await submit(svc, JSON.stringify({ cloudAgentRef: 'ada' }));
+
+    expect(scopes).toEqual([{ tenantId: 1, projectId: PROJECT_ID, agentRef: 'ada' }]);
+  });
+
+  it('preserves the rest of the payload it augments', async () => {
+    const { svc, getPayload } = makeService(async () => [{ id: 'g', effect: 'block' }]);
+
+    await submit(svc, JSON.stringify({ cloudAgentRef: 'ada', model: 'opus', laneKey: 'in_progress' }));
+
+    expect(JSON.parse(getPayload()!)).toMatchObject({
+      cloudAgentRef: 'ada', model: 'opus', laneKey: 'in_progress',
+    });
+  });
+
+  it('stamps onto a run submitted with NO payload at all', async () => {
+    const { svc, getPayload } = makeService(async () => [{ id: 'g', effect: 'block' }]);
+
+    await submit(svc);
+
+    expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['g']);
+  });
+
+  it('leaves the payload untouched when nothing resolves (the ungated default)', async () => {
+    const { svc, getPayload } = makeService(async () => []);
+    const payload = JSON.stringify({ cloudAgentRef: 'ada' });
+
+    await submit(svc, payload);
+
+    expect(getPayload()).toBe(payload);
+  });
+
+  it('does not override gates a deploy()-compiled spec already carried', async () => {
+    const { svc, getPayload } = makeService(async () => [{ id: 'ambient', effect: 'block' }]);
+    const payload = JSON.stringify({ policyGates: [{ id: 'from-spec', effect: 'require-approval' }] });
+
+    await submit(svc, payload);
+
+    expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['from-spec']);
+  });
+
+  it('fails closed when the policy resolver throws', async () => {
+    const { svc, getPayload, getSaveCount } = makeService(async () => { throw new Error('kv down'); });
+    const payload = JSON.stringify({ cloudAgentRef: 'ada' });
+
+    await expect(submit(svc, payload)).rejects.toThrow(/governance policy could not be resolved/i);
+    expect(getPayload()).toBeNull();
+    expect(getSaveCount()).toBe(0);
+  });
+
+  it('is a no-op when no resolver is wired (unchanged legacy behaviour)', async () => {
+    const { svc, getPayload } = makeService();
+
+    await submit(svc, JSON.stringify({ cloudAgentRef: 'ada' }));
+
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([]);
+  });
+
+  it('accepts an active canonical registration and persists its UUID', async () => {
+    const { svc } = makeService(undefined, async (id, tenantId) =>
+      id === '76e6dc1c-02c4-44be-ac8b-696114aaa1cd' && tenantId === 1 ? { active: true } : null);
+
+    const execution = await svc.submit({
+      taskId: 7,
+      tenantId: 1,
+      submittedBy: 'user-1',
+      agentRegistrationId: '76e6dc1c-02c4-44be-ac8b-696114aaa1cd',
+    });
+
+    expect(execution.agentRegistrationId).toBe('76e6dc1c-02c4-44be-ac8b-696114aaa1cd');
+  });
+
+  it('rejects missing and inactive canonical registrations', async () => {
+    const missing = makeService(undefined, async () => null).svc;
+    const inactive = makeService(undefined, async () => ({ active: false })).svc;
+    const dto = {
+      taskId: 7,
+      tenantId: 1,
+      submittedBy: 'user-1',
+      agentRegistrationId: '76e6dc1c-02c4-44be-ac8b-696114aaa1cd',
+    };
+
+    await expect(missing.submit(dto)).rejects.toThrow(/Agent registration/);
+    await expect(inactive.submit(dto)).rejects.toThrow(/not active/);
+  });
+});

@@ -1,0 +1,59 @@
+name: 'Builderforce — dispatch a cloud agent'
+description: 'File a Builderforce ticket from CI and hand it to a cloud coding agent. Optionally wait for the run and fail the job if it does not finish.'
+author: 'Builderforce'
+branding:
+  icon: 'cpu'
+  color: 'blue'
+
+inputs:
+  api-key:
+    description: 'Builderforce tenant API key (bfk_…). Store it as a repository secret — never inline it.'
+    required: true
+  project-id:
+    description: 'Builderforce project id the ticket belongs to. Required unless task-id is given.'
+    required: false
+  title:
+    description: 'Ticket title. Required unless task-id is given. Creation is idempotent on project + title, so re-running a workflow reuses the ticket instead of duplicating it.'
+    required: false
+  body:
+    description: 'Ticket description — the brief the agent works from.'
+    required: false
+  priority:
+    description: 'low | medium | high | urgent'
+    required: false
+    default: 'medium'
+  task-id:
+    description: 'Dispatch an EXISTING ticket instead of creating one. Mutually exclusive with title/project-id.'
+    required: false
+  endpoint:
+    description: 'Builderforce MCP endpoint. Override only for self-hosted deployments.'
+    required: false
+    default: 'https://api.builderforce.ai/mcp'
+  wait:
+    description: 'Wait for the dispatched run to reach a terminal state.'
+    required: false
+    default: 'false'
+  timeout-minutes:
+    description: 'How long to wait when wait is true.'
+    required: false
+    default: '30'
+  fail-on-error:
+    description: 'When waiting, fail the job if the run ends in a non-successful state.'
+    required: false
+    default: 'true'
+
+outputs:
+  task-id:
+    description: 'The Builderforce ticket id that was created or reused.'
+  task-url:
+    description: 'Link to the ticket.'
+  execution-id:
+    description: 'The dispatched execution id, empty when nothing was dispatched.'
+  status:
+    description: 'Terminal execution status when wait is true, otherwise "dispatched".'
+  deduped:
+    description: '"true" when an existing ticket with this title was reused.'
+
+runs:
+  using: 'node20'
+  main: 'dispatch.mjs'

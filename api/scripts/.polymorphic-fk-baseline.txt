@@ -1,0 +1,5 @@
+# Tables using a (kind, id) pair with nothing to reference (PRD 20 §2). Empties once `objects` exists.
+# Regenerate: node scripts/check-polymorphic-fk.mjs --update
+activity_log.(target_type, target_id)
+creation_session_objects.(resource_type, resource_id)
+proposal_evaluations.(subject_type, subject_id)

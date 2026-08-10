@@ -2,7 +2,7 @@ import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
 
 /**
  * Marketing copy shown to logged-out visitors who land on an authenticated
- * route — so a deep link to /dashboard, /ide, /brainstorm, etc. renders a rich
+ * route — so a deep link to /dashboard, /create, /brainstorm, etc. renders a rich
  * feature page (hero + how-it-works + FAQ + related articles + JSON-LD) instead
  * of a blank gate, redirect, or one-line teaser.
  *
@@ -10,7 +10,7 @@ import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
  * (single source of truth for the product surfaces); `extra` covers authed
  * routes that aren't a marketed surface. The per-route `DETAILS` overlay adds
  * the marketing body, FAQ, SEO description, and the RELATED_ARTICLES surface key
- * used to attach associated blog content. Lookup is longest-prefix so /ide/123
+ * used to attach associated blog content. Lookup is longest-prefix so /create/123
  * and /settings/members resolve.
  */
 export interface RouteHighlight {
@@ -69,9 +69,9 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
   '/brainstorm': {
     relatedSurface: 'brainstorm',
     seoDescription:
-      'Brain Storm is the plain-language front door to Builderforce.ai — describe what you want to build and the Brain turns it into projects, tasks, datasets, and agents, then orchestrates the work across your AI workforce.',
+      'Brain Storm is a plain-language starting point inside Builderforce.ai: explore an idea, shape useful context, and turn it into connected canvas work, projects, tasks, datasets, or agent-assisted execution.',
     highlights: [
-      { title: 'Describe it in plain language', desc: 'Say what you want to build. The Brain assistant turns the idea into structured projects, tasks, and a plan — no forms, no setup.' },
+      { title: 'Describe it in plain language', desc: 'Say what you want to create, then develop the idea before deciding which artifacts, collaborators, or delivery structure it needs.' },
       { title: 'It calls real platform tools', desc: 'The Brain is wired to a tool registry: it can create projects, draft specs, generate datasets, and assign work to agents — not just chat about it.' },
       { title: 'Grounded in your workspace', desc: 'Pin a project and the Brain answers with that context, so ideation continues exactly where your work already lives.' },
     ],
@@ -81,39 +81,17 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
       { question: 'Do I need to set anything up to start brainstorming?', answer: 'No. Sign in, open Brain Storm, and type. You can optionally pin a project so answers are grounded in that codebase and context, but a blank prompt is enough to start turning an idea into a plan.' },
     ],
   },
-  '/ide': {
-    relatedSurface: 'ide',
-    seoDescription:
-      'The Builderforce.ai in-browser IDE is multi-modal: one project builds across Designer (apps & agents), LLM (custom models), Voice (voice cloning), and Video (diffusion) — all on WebGPU, on your own GPU, with a Monaco editor, terminal, AI chat, and real-time collaboration. No local setup, no cloud GPU bill.',
-    highlights: [
-      { title: 'One project, every modality', desc: 'A single project builds across Designer (apps & agents), LLM (custom models), Voice (voice cloning), and Video (diffusion clips) — switch modality without leaving the IDE.' },
-      { title: 'A full IDE in the browser', desc: 'Monaco editor, a real xterm.js terminal on a WebContainer Node.js runtime, file explorer, and live preview — run npm install and dev servers with no local setup.' },
-      { title: 'Runs on your own GPU', desc: 'Training, voice synthesis, and video generation run client-side on WebGPU — zero cloud GPU bill, and your data never leaves the device.' },
-      { title: 'Pair-program with agents', desc: 'A streaming AI chat with full project file context can apply changes and create files directly, so humans and agents co-author the same workspace in real time.' },
-    ],
-    figures: [
-      { src: '/ide/ide-modalities.svg', alt: 'One project building across four modalities — Designer, LLM, Voice, and Video — all in the in-browser IDE on WebGPU', caption: 'One project, many modalities — Designer, LLM, Voice, and Video, all in the same in-browser IDE.' },
-      { src: '/ide/ide-build-loop.svg', alt: 'The same build loop across modalities: describe, generate, run on your GPU, validate, publish, call anywhere', caption: 'The same spine for every modality — describe, generate, run, validate, publish, then call from any agent.' },
-      { src: '/ide/ide-owned-gpu.svg', alt: 'The cloud-GPU way versus the Builderforce way — in-browser on your own GPU, zero GPU bill, your data stays local', caption: 'Every modality runs in your browser on your own GPU — no servers, no GPU bill, your data stays put.' },
-    ],
-    faq: [
-      { question: 'What modalities can the Builderforce.ai IDE build?', answer: 'One project builds across four modalities from the same IDE: Designer (generate and run apps and agents with a live dev server), LLM (design datasets and train a custom model, then chat with it), Voice (clone a voice from a reference sample and synthesize speech), and Video (generate short clips client-side via diffusion). You switch modality in the project without leaving the editor.' },
-      { question: 'Is the Builderforce.ai IDE really running in my browser?', answer: 'Yes. It uses WebContainers to run a full Node.js runtime client-side, with a Monaco editor and a real xterm.js terminal. Training, voice synthesis, and video generation run on your own GPU via WebGPU — so you can build in any modality with no local setup and no cloud GPU bill.' },
-      { question: 'Can AI agents edit code in the IDE?', answer: 'Yes. The IDE\'s AI chat panel has full project file context and can apply code changes and create files directly. It is built for human-AI co-authorship — you and your agents work in the same files in real time, across every modality.' },
-      { question: 'Does it support real-time collaboration?', answer: 'Yes. Multi-file editing is collaborative via Yjs CRDT and the terminal is shared across collaborators, so a team — and its agents — can work on one project simultaneously.' },
-    ],
-  },
   '/training': {
     relatedSurface: 'training',
     seoDescription:
-      'Train custom AI agents in your browser with WebGPU LoRA fine-tuning up to 2B parameters, an AI evaluation engine, and zero cloud GPU bills — then publish them to the Workforce Registry and call them from inside your own agent.',
+      'Use supported WebGPU LoRA fine-tuning on compatible devices, evaluate the result, and publish through the hosted workflow when required.',
     highlights: [
-      { title: 'Fine-tune in the browser', desc: 'WebGPU LoRA training on instruction datasets, up to 2 billion parameters, entirely client-side — zero cloud GPU bills and total privacy.' },
+      { title: 'Fine-tune in the browser', desc: 'Supported WebGPU LoRA training runs on the local device. Hardware limits, remote evaluation, and publishing are disclosed separately.' },
       { title: 'Generate datasets in seconds', desc: 'Author an instruction-tuning dataset from a single capability prompt with streaming progress, then train on it without leaving the page.' },
       { title: 'Evaluate, then publish', desc: 'An independent AI judge scores correctness, reasoning, and hallucination rate. Publish the trained agent to the Workforce Registry and call it from inside your own agent.' },
     ],
     faq: [
-      { question: 'How does in-browser training work without a GPU server?', answer: 'Training runs on your local device through the WebGPU API. Builderforce.ai fine-tunes LoRA adapters on transformer and SSM models up to 2 billion parameters entirely client-side, so there are no cloud GPU bills and your data never leaves your browser during training.' },
+      { question: 'How does in-browser training work without a GPU server?', answer: 'Supported training steps run on a compatible local device through WebGPU. Remote evaluation, collaboration, publishing, and connected services are separate operations with their own data boundaries.' },
       { question: 'What can I do with a trained agent?', answer: 'After the AI evaluation engine scores it, you publish the agent to the Workforce Registry with a profile, skills, and eval score. Then you hire it and call it from inside your own agent — your trained specialists become tools your main agent delegates to.' },
       { question: 'Do I need a dataset before I start?', answer: 'No. The dataset generation wizard creates an instruction-tuning dataset from a single capability prompt in under 30 seconds, which you can refine and then train on in the same workflow.' },
     ],
@@ -124,7 +102,7 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
       'The Builderforce.ai Workflow Builder is a drag-and-drop, IPAAS-style canvas for composing LLM logic — memory, knowledge-base, and training nodes — wired to your agents and run on your agentHosts with approval gates at every step.',
     highlights: [
       { title: 'Compose agents like a flowchart', desc: 'A drag-and-drop canvas wires agents, tools, memory, knowledge-base, and training nodes into repeatable, multi-step workflows.' },
-      { title: 'Approval-gated by design', desc: 'Insert human-in-the-loop approval gates anywhere in the flow, so high-impact steps wait for sign-off and every run is audited.' },
+      { title: 'Configurable approval gates', desc: 'Configured execution paths can pause for human sign-off. Policy resolution fails closed; audit coverage is stated for each instrumented path.' },
       { title: 'Built-in orchestration patterns', desc: 'Planning, feature-dev, bug-fix, refactor, and adversarial-review workflows coordinate seven specialist roles through a dependency DAG.' },
     ],
     faq: [
@@ -152,11 +130,11 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
     highlights: [
       { title: 'A mesh of agent hosts', desc: 'Discover and dispatch work across local and remote AgentHosts, sharing capacity across machines and tenants with HMAC-signed, Bearer-authenticated dispatch.' },
       { title: 'Approvals and chats together', desc: 'Approve human-in-the-loop actions, talk to agents directly, and watch them collaborate — all from the same Workforce surface.' },
-      { title: 'Full observability', desc: 'Every task and workflow emits structured telemetry to a live timeline, so you always know what each agent is doing, costing, and calling.' },
+      { title: 'Instrumented execution', desc: 'Supported task and workflow paths emit structured telemetry to the timeline, including available execution, usage, and tool-call records.' },
     ],
     faq: [
       { question: 'What is the Workforce mesh?', answer: 'The Workforce is where you discover and coordinate your agent hosts. It dispatches work across local and remote AgentHosts — capacity sharing across machines and even tenants — using HMAC-signed, Bearer-authenticated dispatch, with smart routing to the best-matched peer.' },
-      { question: 'Can I see and approve what agents are doing?', answer: 'Yes. The Workforce surface has tabs for approvals (human-in-the-loop sign-off), chats (talk to agents or watch them collaborate), and logs (a live telemetry timeline of every action, token, and tool call).' },
+      { question: 'Can I see and approve what agents are doing?', answer: 'Yes. The Workforce surface brings together approval requests, agent conversations, and the execution telemetry captured by supported platform workflows.' },
       { question: 'Does it work across multiple machines?', answer: 'Yes. Fleet registration, heartbeats, and capability sync let you run a fleet of AgentHosts and route tasks across them, with remote dispatch to a specific host or auto-routing by capability.' },
     ],
   },
@@ -167,11 +145,11 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
     highlights: [
       { title: 'A marketplace of capabilities', desc: 'Browse and install reusable agent skills, or publish your own. 53 skills ship built-in, with a growing community marketplace on top.' },
       { title: 'Assigned, then auto-loaded', desc: 'Assign a skill at tenant or agentHost scope and it loads automatically into running agents at startup — no manual wiring per agent.' },
-      { title: 'Zero commission to publish', desc: 'Publish a skill and keep 100% of any revenue — Builderforce charges no commission on what you list in the marketplace.' },
+      { title: 'Publish under clear terms', desc: 'Publish a skill under the seller terms shown at listing and checkout.' },
     ],
     faq: [
       { question: 'What are skills on Builderforce.ai?', answer: 'Skills are reusable capabilities you can give your agents. There are 53 built-in skills plus a marketplace where you browse, install, or publish more. A skill assigned at tenant or agentHost scope is loaded automatically into running agents at startup.' },
-      { question: 'Can I publish my own skills?', answer: 'Yes — and Builderforce charges zero commission. You publish a skill to the Workforce marketplace and keep 100% of any revenue from it.' },
+      { question: 'Can I publish my own skills?', answer: 'Yes. You can publish a skill to the Workforce marketplace; current fees and payout terms are shown before you list paid content.' },
       { question: 'How do skills get into a running agent?', answer: 'You assign skills at tenant or agentHost scope in the portal; the agent loads its assigned skills automatically when it starts, so capabilities follow your assignment rules without per-agent configuration.' },
     ],
   },
@@ -207,16 +185,16 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
   '/security': {
     relatedSurface: 'security',
     seoDescription:
-      'Builderforce.ai is your AI Security Officer — per-tenant isolation, AES-256-GCM encrypted credentials, role-based access control, device trust, human-in-the-loop approval gates, and a complete audit trail on every agent action.',
+      'Builderforce.ai provides controls for agent-assisted work, including tenant isolation, encrypted integration credentials, role-based access, device trust, configurable approval gates, and retained execution records.',
     highlights: [
-      { title: 'Govern every action', desc: 'Human-in-the-loop approval gates suspend high-impact actions until a person signs off, with every decision recorded in an audit trail.' },
-      { title: 'Encrypted and isolated', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials keep every integration and workspace private and scoped by default.' },
+      { title: 'Keep people accountable', desc: 'Configure human approval gates for consequential actions and retain the resulting decisions as part of the execution record.' },
+      { title: 'Scoped and encrypted', desc: 'Tenant-scoped access controls and AES-256-GCM encryption protect credentials stored for supported integrations.' },
       { title: 'RBAC and device trust', desc: 'Role-based access control, device trust, and HMAC-signed inter-host dispatch mean only the right people and machines can act.' },
     ],
     faq: [
       { question: 'How does Builderforce.ai govern what agents can do?', answer: 'Through human-in-the-loop approval gates: agents request approval before high-impact actions, execution suspends until a person approves or rejects, and every outcome is recorded in a full audit trail. Auto-approval rules let low-risk actions through automatically.' },
       { question: 'How are my credentials and data protected?', answer: 'Integration credentials are encrypted with AES-256-GCM and scoped per tenant. All resources — projects, datasets, models, and agents — are isolated per tenant with no cross-tenant access, and inter-host dispatch is HMAC-signed and Bearer-authenticated.' },
-      { question: 'Can Builderforce.ai run air-gapped?', answer: 'Yes. It is self-hosted and supports air-gapped deployment, and with local models via Ollama the entire agent workforce can run without any code or prompt leaving your network.' },
+      { question: 'Can Builderforce.ai run air-gapped?', answer: 'The MIT-licensed BuilderForce Agents runtime can be deployed on private infrastructure and can use local models. A fully air-gapped environment requires disabling hosted collaboration, publishing, remote evaluation, and other connected services; validate the required workflow against the deployment guide before making a compliance commitment.' },
     ],
   },
   '/contributors': {
@@ -236,11 +214,11 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
   '/dashboard': {
     relatedSurface: 'dashboard',
     seoDescription:
-      'Your Builderforce.ai dashboard is the command center for your AI workforce — workspace health, recent runs, and what every agent is doing right now, in one place.',
+      'Your Builderforce.ai dashboard brings recent creation sessions, active work, and workspace signals into one place so you can resume an idea or follow it into delivery.',
     highlights: [
-      { title: 'Your command center', desc: 'See workspace health, recent runs, and what your AI workforce is doing right now the moment you sign in.' },
-      { title: 'From idea to action', desc: 'A "what should we build?" prompt routes straight into Brain Storm, turning a thought into projects, tasks, and agent work.' },
-      { title: 'Everything one click away', desc: 'Jump to projects, training, the workforce mesh, and approvals from a single home surface.' },
+      { title: 'Return to your creative context', desc: 'Resume recent canvas sessions and see the work, collaborators, and next decisions connected to them.' },
+      { title: 'From idea to action', desc: 'Start with what you want to create, then turn the useful parts into artifacts, projects, tasks, or agent work.' },
+      { title: 'Follow work into delivery', desc: 'Move from the canvas to projects, models, agents, approvals, and operating views without losing the original context.' },
     ],
     faq: [
       { question: 'What is on the Builderforce.ai dashboard?', answer: 'The dashboard is your workspace command center: workspace health, recent runs, and a live view of what your AI workforce is doing. From here you can jump into Brain Storm, projects, training, and the workforce mesh.' },
@@ -253,10 +231,44 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
 const DEFAULT: RouteMarketing = {
   icon: '🔒',
   title: 'This is part of Builderforce.ai',
-  description: 'Sign in to access your AI workforce — build, train, orchestrate, and govern custom AI agents.',
+  description: 'Sign in to continue creating with your team and AI agents, with connected work from the first idea through delivery.',
 };
 
 const REGISTRY: Record<string, RouteMarketing> = { ...fromSurfaces, ...extra };
+
+/**
+ * Registry routes that must NOT be indexed.
+ *
+ * Every authenticated route renders a `RouteMarketing` teaser to a logged-out
+ * visitor (see `ConditionalAppShell`), which makes it a real, crawlable page
+ * whether or not anyone decided it should be. For a marketed surface — Canvas,
+ * projects, workforce — that is the point: it is a demand-capture landing page.
+ * For operator tooling it is not. A "Platform Admin" page in the index invites
+ * exactly the traffic it should never receive, and a workspace switcher has
+ * nothing to rank for.
+ *
+ * These four therefore keep their teaser (so a deep link is still not a dead
+ * end) and are excluded from the sitemap.
+ */
+const NOINDEX_TEASER_ROUTES = new Set(['/admin', '/tenants', '/settings', '/agent-worker']);
+
+/**
+ * The teaser routes that belong in the sitemap, derived from the registry.
+ *
+ * Derived rather than hand-listed on purpose: the previous sitemap named twelve
+ * of these by hand and silently omitted the rest, so adding a surface to the
+ * registry left it unindexed and nobody found out. Now the two cannot drift —
+ * a new marketed surface is indexed by existing, and a new internal one is
+ * excluded by being named above.
+ */
+export function indexableTeaserRoutes(): string[] {
+  return Object.keys(REGISTRY).filter((route) => !NOINDEX_TEASER_ROUTES.has(route)).sort();
+}
+
+/** Should this route tell crawlers to stay away? Consumed by robots metadata. */
+export function isNoindexTeaserRoute(pathname: string): boolean {
+  return NOINDEX_TEASER_ROUTES.has(pathname);
+}
 
 /** Longest-prefix match of `pathname` against a `key → value` map. */
 function longestPrefixMatch<T>(pathname: string, map: Record<string, T>): { key: string; val: T } | null {

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Custom Dashboards + AI-Powered Queries — /api/dashboards/*
  *
@@ -86,7 +87,9 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
         matchedMetric: answer.matchedMetric,
         createdBy: createdBy ?? null,
       });
-    } catch { /* history is non-critical */ }
+    } catch (error) { /* history is non-critical */ 
+      reportCaughtError(error, { source: "presentation/routes/dashboardsRoutes.ts", operation: "createDashboardsRoutes" });
+    }
 
     return c.json(answer);
   });

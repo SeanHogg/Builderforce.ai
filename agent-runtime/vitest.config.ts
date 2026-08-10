@@ -19,6 +19,12 @@ export default defineConfig({
         replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "index.ts"),
       },
       {
+        // Announced-but-untaken tool call recovery, shared with the Brain run loop.
+        // Also a tsconfig path; vitest needs its own.
+        find: "@builderforce/agent-stall",
+        replacement: path.join(repoRoot, "..", "packages", "agent-stall", "src", "index.ts"),
+      },
+      {
         // Render seam (ink/headless renderers). Also a tsconfig path; vitest needs its own.
         find: "@builderforce/tui",
         replacement: path.join(repoRoot, "..", "packages", "tui", "src", "index.ts"),

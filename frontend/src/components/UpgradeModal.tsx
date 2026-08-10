@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PlanLimitError } from '@/lib/planLimitError';
@@ -58,13 +59,14 @@ export function UpgradeModal({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               fontSize: 22,
               flexShrink: 0,
             }}
           >
-            ⚡
+            
+            <Icon source="⚡" size="1em" />
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {t.rich('onPlan', {
@@ -89,7 +91,7 @@ export function UpgradeModal({
               color: 'var(--text-secondary)',
               background: 'var(--bg-base)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               cursor: 'pointer',
             }}
           >
@@ -102,10 +104,10 @@ export function UpgradeModal({
               padding: '9px 20px',
               fontSize: 13,
               fontWeight: 700,
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               cursor: 'pointer',
               boxShadow: '0 4px 14px var(--shadow-coral-mid)',
             }}

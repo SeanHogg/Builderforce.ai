@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type CostClass, type SpineNode, type SpineResult } from '@/lib/builderforceApi';
@@ -16,17 +17,17 @@ import { PmCard, PmEmpty, PmError } from './pmShared';
  * same source as the Gantt, so the books and the timeline never disagree.
  */
 const chip = (color: string): React.CSSProperties => ({
-  display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: '0.7rem',
-  fontWeight: 700, color: '#fff', background: color, whiteSpace: 'nowrap',
+  display: 'inline-block', padding: '2px 9px', borderRadius: 'var(--radius-full)', fontSize: '0.7rem',
+  fontWeight: 700, color: 'var(--text-on-accent)', background: color, whiteSpace: 'nowrap',
 });
 const btn = (active: boolean, color: string): React.CSSProperties => ({
-  padding: '4px 9px', borderRadius: 7, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+  padding: '4px 9px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
   border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
-  background: active ? color : 'transparent', color: active ? '#fff' : 'var(--text-secondary)',
+  background: active ? color : 'transparent', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 const primaryBtn: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
 };
 
 const KIND_ICON: Record<SpineNode['kind'], string> = {
@@ -97,7 +98,7 @@ export function PmoCostReconciliation() {
       {rows.length === 0 ? (
         <PmEmpty message={t('allClear')} />
       ) : (
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           {rows.map((n) => {
             const cls = n.effectiveCostClass;
             const inheritedConflict = n.anomaly;
@@ -106,13 +107,13 @@ export function PmoCostReconciliation() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 240, flex: 1, paddingLeft: n.depth * 14, overflow: 'hidden' }}>
                   <span style={{ fontSize: '0.72rem' }} title={t(`kind.${n.kind}`)}>{KIND_ICON[n.kind]}</span>
                   <span title={n.title} style={{ fontSize: '0.82rem', fontWeight: n.kind === 'task' ? 400 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
-                  {inheritedConflict && <span style={{ color: 'var(--coral-bright)', fontWeight: 700 }} title={t('anomalyTip', { declared: t(n.declaredCostClass ?? 'unclassified'), inherited: t(n.inheritedCostClass ?? 'unclassified') })}>⚠</span>}
+                  {inheritedConflict && <span style={{ color: 'var(--coral-bright)', fontWeight: 700 }} title={t('anomalyTip', { declared: t(n.declaredCostClass ?? 'unclassified'), inherited: t(n.inheritedCostClass ?? 'unclassified') })}><Icon source="⚠" size="1em" /></span>}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 150 }}>
                   {cls ? <span style={chip(COST_CLASS_COLORS[cls])}>{t(cls)}</span> : <span style={{ ...chip('var(--text-muted)'), background: 'transparent', color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)' }}>{t('unclassified')}</span>}
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t(`source.${n.costClassSource}`)}</span>
-                  {(n.kind === 'task' || n.kind === 'epic') && n.costClassVerified && <span title={t('verified')} style={{ color: '#16a34a' }}>✓</span>}
+                  {(n.kind === 'task' || n.kind === 'epic') && n.costClassVerified && <span title={t('verified')} style={{ color: 'var(--success-text)' }}><Icon source="✓" size="1em" /></span>}
                 </div>
 
                 {n.cost.totalUsd > 0 && (
@@ -129,7 +130,7 @@ export function PmoCostReconciliation() {
                   <button type="button" disabled={busy} style={btn(n.declaredCostClass === 'capex', COST_CLASS_COLORS.capex)} onClick={() => setClass(n, 'capex')}>{t('capex')}</button>
                   <button type="button" disabled={busy} style={btn(n.declaredCostClass === 'opex', COST_CLASS_COLORS.opex)} onClick={() => setClass(n, 'opex')}>{t('opex')}</button>
                   {n.declaredCostClass && (
-                    <button type="button" disabled={busy} style={btn(false, 'var(--text-muted)')} onClick={() => setClass(n, null)} title={t('clearTip')}>✕</button>
+                    <button type="button" disabled={busy} style={btn(false, 'var(--text-muted)')} onClick={() => setClass(n, null)} title={t('clearTip')}><Icon source="✕" size="1em" /></button>
                   )}
                 </div>
               </div>

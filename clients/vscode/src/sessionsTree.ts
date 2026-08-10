@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { BfBrainChat, listBrainChats, listAgentPool } from "./bfApi";
+import { BfBrainChat, type BfCreationSessionSummary, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
@@ -15,12 +15,18 @@ import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./atten
  * only that project's chats; with none selected it shows every chat, each labelled with
  * the project it belongs to so the mixed list stays legible.
  */
-export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat> {
+type CreationGroupKind = "recent" | "pinned" | "shared" | "running" | "chats";
+type CreationGroup = { nodeType: "group"; kind: CreationGroupKind; label: string };
+type CreationItem = { nodeType: "creation"; session: BfCreationSessionSummary };
+export type SessionTreeNode = BfBrainChat | CreationGroup | CreationItem;
+
+export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTreeNode> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   // Short-lived cache so an expand + a refresh storm don't refetch per render.
   private cache: { ts: number; chats: BfBrainChat[] } | undefined;
+  private creationCache: { ts: number; sessions: BfCreationSessionSummary[] } | undefined;
   private static readonly TTL = 5_000;
 
   // Set during getChildren so getTreeItem can decide how to label each row: when the
@@ -40,11 +46,31 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
   /** Drop the cache and repaint (call after create / rename / delete / invite / sign-in). */
   refresh(): void {
     this.cache = undefined;
+    this.creationCache = undefined;
     this.poolLoaded = false;
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(chat: BfBrainChat): vscode.TreeItem {
+  getTreeItem(node: SessionTreeNode): vscode.TreeItem {
+    if ("nodeType" in node && node.nodeType === "group") {
+      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
+      item.id = `creation-group:${node.kind}`;
+      item.contextValue = "builderforceSessionGroup";
+      item.iconPath = new vscode.ThemeIcon(node.kind === "running" ? "loading~spin" : node.kind === "pinned" ? "pinned" : node.kind === "shared" ? "organization" : node.kind === "chats" ? "comment-discussion" : "history");
+      return item;
+    }
+    if ("nodeType" in node && node.nodeType === "creation") {
+      const session = node.session;
+      const item = new vscode.TreeItem(session.title || vscode.l10n.t("Untitled Session"), vscode.TreeItemCollapsibleState.None);
+      item.id = `creation:${session.id}`;
+      item.description = `${relativeTime(session.lastActivityAt)}${session.collaboratorCount && session.collaboratorCount > 1 ? ` · ${vscode.l10n.t("{0} people", session.collaboratorCount)}` : ""}`;
+      item.tooltip = new vscode.MarkdownString(`**${session.title}**\n\n${session.pinned ? `${vscode.l10n.t("Pinned")} · ` : ""}${session.unread ? `${vscode.l10n.t("Updated")} · ` : ""}${vscode.l10n.t("{0} revisions", session.revision)}`);
+      item.iconPath = new vscode.ThemeIcon(session.preview?.objects?.some((object) => object.status?.toLowerCase() === "running") ? "loading~spin" : session.unread ? "circle-filled" : "multiple-windows");
+      item.contextValue = "builderforceCreationSession";
+      item.command = { command: "builderforce.openCreationSessionItem", title: vscode.l10n.t("Open Creation Session"), arguments: [session] };
+      return item;
+    }
+    const chat = node;
     const item = new vscode.TreeItem(chat.title || `Chat ${chat.id}`, vscode.TreeItemCollapsibleState.None);
     item.id = String(chat.id);
     const time = relativeTime(chat.updatedAt);
@@ -94,8 +120,29 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
     return item;
   }
 
-  async getChildren(): Promise<BfBrainChat[]> {
+  async getChildren(element?: SessionTreeNode): Promise<SessionTreeNode[]> {
     if (!(await this.secrets.get(SECRET_KEY))) return [];
+    if (!element) {
+      return [
+        { nodeType: "group", kind: "recent", label: vscode.l10n.t("Recent Creation Sessions") },
+        { nodeType: "group", kind: "pinned", label: vscode.l10n.t("Pinned") },
+        { nodeType: "group", kind: "shared", label: vscode.l10n.t("Shared") },
+        { nodeType: "group", kind: "running", label: vscode.l10n.t("Running") },
+        { nodeType: "group", kind: "chats", label: vscode.l10n.t("Chats") },
+      ];
+    }
+    if (!("nodeType" in element) || element.nodeType !== "group") return [];
+    if (element.kind !== "chats") {
+      if (!this.creationCache || Date.now() - this.creationCache.ts >= SessionsTreeProvider.TTL) {
+        this.creationCache = { ts: Date.now(), sessions: await listCreationSessions(this.secrets) };
+      }
+      const sessions = this.creationCache.sessions;
+      const filtered = element.kind === "pinned" ? sessions.filter((session) => session.pinned)
+        : element.kind === "shared" ? sessions.filter((session) => (session.collaboratorCount ?? 1) > 1)
+        : element.kind === "running" ? sessions.filter((session) => session.preview?.objects?.some((object) => object.status?.toLowerCase() === "running"))
+        : sessions.slice(0, 20);
+      return filtered.map((session) => ({ nodeType: "creation" as const, session }));
+    }
     if (!this.cache || Date.now() - this.cache.ts >= SessionsTreeProvider.TTL) {
       this.cache = { ts: Date.now(), chats: await listBrainChats(this.secrets) };
     }

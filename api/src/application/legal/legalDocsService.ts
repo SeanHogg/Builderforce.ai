@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Legal documents service — the SINGLE source of truth for reading, amending,
  * publishing and AI-enhancing the platform's Terms of Use / Privacy Policy.
@@ -14,6 +15,12 @@ import { legalDocuments, legalDocumentVersions } from '../../infrastructure/data
 import type { Env } from '../../env';
 import { ideProxy, newTraceId, readProxyChoice } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
+import { invalidateActiveTermsVersion } from './termsAcceptance';
+import {
+  BUILDERFORCE_PRIVACY_POLICY,
+  BUILDERFORCE_TERMS_OF_USE,
+  LEGAL_POLICY_VERSION,
+} from './defaultLegalDocuments';
 
 export const LEGAL_DOC_TYPES = ['terms', 'privacy'] as const;
 export type LegalDocType = (typeof LEGAL_DOC_TYPES)[number];
@@ -68,8 +75,10 @@ async function recordLegalVersion(
       changeKind,
       changedBy,
     });
-  } catch {
+  } catch (error) {
     // History is an audit convenience; never fail the legal write over it.
+  
+    reportCaughtError(error, { source: "application/legal/legalDocsService.ts", operation: "recordLegalVersion" });
   }
 }
 
@@ -106,16 +115,15 @@ export class LegalDocError extends Error {
 
 const DEFAULT_LEGAL: Record<LegalDocType, Omit<LegalDocResponse, 'documentType'>> = {
   terms: {
-    version: '1.0.0',
-    title: 'Terms of Use',
-    content:
-      'By using Builderforce.ai, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
+    version: LEGAL_POLICY_VERSION,
+    title: 'Terms of Use for BuilderForce.ai',
+    content: BUILDERFORCE_TERMS_OF_USE,
     publishedAt: new Date(0).toISOString(),
   },
   privacy: {
-    version: '1.0.0',
-    title: 'Privacy Policy',
-    content: 'Builderforce.ai processes account, usage, and operational metadata to provide and secure the service.',
+    version: LEGAL_POLICY_VERSION,
+    title: 'Privacy Policy for BuilderForce.ai',
+    content: BUILDERFORCE_PRIVACY_POLICY,
     publishedAt: new Date(0).toISOString(),
   },
 };
@@ -171,6 +179,7 @@ export async function publishLegalDoc(
   docType: LegalDocType,
   input: { version: string; title?: string; content: string },
   publishedBy: string | null,
+  env?: Env,
 ): Promise<LegalDocResponse> {
   const label = LEGAL_DOC_LABELS[docType];
   const version = input.version?.trim();
@@ -203,6 +212,11 @@ export async function publishLegalDoc(
 
   await recordLegalVersion(db, docType, { version, title, content }, 'publish', publishedBy);
 
+  // The auth middlewares read the active terms version from cache on every
+  // request — a publish that skipped this would keep serving the OLD version
+  // until the TTL lapsed, so nobody would be prompted to re-accept.
+  if (docType === 'terms') await invalidateActiveTermsVersion(env);
+
   return getActiveLegalDoc(db, docType);
 }
 
@@ -216,6 +230,7 @@ export async function amendActiveLegalDoc(
   docType: LegalDocType,
   input: { version?: string; title?: string; content: string },
   amendedBy: string | null = null,
+  env?: Env,
 ): Promise<LegalDocResponse> {
   const label = LEGAL_DOC_LABELS[docType];
   const version = input.version?.trim();
@@ -238,6 +253,7 @@ export async function amendActiveLegalDoc(
       docType,
       { version: version || DEFAULT_LEGAL[docType].version, title, content },
       amendedBy,
+      env,
     );
   }
 
@@ -257,6 +273,10 @@ export async function amendActiveLegalDoc(
     .where(eq(legalDocuments.id, active.id));
 
   await recordLegalVersion(db, docType, { version: nextVersion, title, content }, 'amend', amendedBy);
+
+  // An amend can bump the version string, which is exactly what the acceptance
+  // gate compares — invalidate for the same reason publish does.
+  if (docType === 'terms') await invalidateActiveTermsVersion(env);
 
   return getActiveLegalDoc(db, docType);
 }
@@ -286,12 +306,12 @@ export async function enhanceLegalContent(
   const existing = (opts.content ?? '').trim();
 
   const system =
-    `You are a senior technology lawyer drafting the "${label}" for Builderforce.ai, a self-hosted AI coding ` +
+    `You are a senior technology lawyer drafting the "${label}" for Fix Faster LLC, a Michigan limited liability company doing business as BuilderForce.ai, with mailing address 6513 Basswood Dr., Troy, MI 48098, an AI coding ` +
     `agent and B2B AI gateway platform. Produce a clear, professional, plain-English ${label} as GitHub-flavored ` +
     `Markdown. Use a top-level "# ${label}" heading, an "**Effective Date:**" line, then well-structured numbered ` +
     `sections (Definitions, Acceptable Use, Accounts, ${opts.docType === 'privacy' ? 'Data We Collect, How We Use Data, Data Sharing, Retention, Your Rights (GDPR/CCPA), ' : 'Intellectual Property, User Content, Fees, Termination, Disclaimers, Limitation of Liability, '}Governing Law, Contact). ` +
-    `Be specific and legally coherent, cover GDPR and CCPA where relevant, and NEVER leave bracketed placeholders like ` +
-    `"[Your Company Name]" — use "Builderforce.ai" and generic-but-complete language. Output ONLY the Markdown ` +
+    `Be specific and legally coherent, cover GDPR and CCPA where relevant, and NEVER leave drafting placeholders — ` +
+    `use the confirmed company name, Michigan formation, BuilderForce.ai DBA, and Troy mailing address above. Output ONLY the Markdown ` +
     `document: no preamble, no commentary, no code fence.`;
 
   const instruction = opts.instruction?.trim();

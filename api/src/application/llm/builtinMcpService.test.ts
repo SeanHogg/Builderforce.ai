@@ -113,6 +113,33 @@ describe('chat-scoped agent tool subset (@agent addressed-reply loop)', () => {
 describe('listBuiltinTools', () => {
   const tools = listBuiltinTools();
 
+  it('advertises the provider-neutral native creative contract', () => {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    expect(byName.get('builtin_creative_capabilities')?.mutates).toBe(false);
+    expect(byName.get('builtin_creative_compose')?.mutates).toBe(false);
+    expect(byName.get('builtin_creative_compose')?.parameters).toMatchObject({ required: ['kind', 'title'] });
+  });
+
+  it('advertises the chat-invokable Compliance Audit Agent tools', () => {
+    const requirements = tools.find((tool) => tool.tool === 'compliance.requirements');
+    const run = tools.find((tool) => tool.tool === 'compliance.run_audit');
+    expect(requirements?.mutates).toBe(false);
+    expect(run?.mutates).toBe(true);
+    expect(run?.parameters).toMatchObject({ required: ['projectId'] });
+  });
+
+  it('advertises the shared sales canvas CRM toolset', () => {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    expect(byName.get('builtin_sales_workspace_get')?.mutates).toBe(false);
+    for (const name of [
+      'builtin_sales_contacts_create', 'builtin_sales_contacts_update',
+      'builtin_sales_campaigns_create', 'builtin_sales_campaigns_update',
+      'builtin_sales_goals_set', 'builtin_sales_coaching_note_add',
+      'builtin_sales_revenue_plan_set',
+    ]) expect(byName.get(name)?.mutates, `${name} should be an MCP mutation`).toBe(true);
+    expect(byName.get('builtin_meetings_schedule')?.mutates).toBe(true);
+  });
+
   it('advertises projects + tasks as gateway-safe, builtin-tagged tools', () => {
     expect(tools.length).toBeGreaterThanOrEqual(11);
     expect(tools.every((t) => t.extensionId === BUILTIN_EXTENSION_ID)).toBe(true);
@@ -204,6 +231,17 @@ describe('listBuiltinTools', () => {
 });
 
 describe('callBuiltinTool', () => {
+  it('composes a native creative manifest without an external provider', async () => {
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'creative.compose', arguments: { kind: 'model3d', title: 'Gear housing', brief: 'Parametric enclosure', outputFormat: 'STL' } });
+    expect(res).toMatchObject({ kind: 'model3d', capabilityId: 'creative.model3d', mediaKind: 'model3d', provider: 'native', title: 'Gear housing', outputFormat: 'STL', status: 'Draft' });
+    expect(res).not.toHaveProperty('externalProvider');
+  });
+
+  it('rejects unsupported creative kinds and output formats', async () => {
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'creative.compose', arguments: { kind: 'unknown', title: 'Nope' } })).rejects.toThrow(/Unsupported creative kind/);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'creative.compose', arguments: { kind: 'image', title: 'Poster', outputFormat: 'EXE' } })).rejects.toThrow(/Unsupported image output/);
+  });
+
   it('dispatches a read to the service, tenant-scoped', async () => {
     projectSvc.listProjects.mockResolvedValue([{ toPlain: () => ({ id: 1, name: 'P' }) }]);
     const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.list', arguments: {} });
@@ -227,14 +265,14 @@ describe('callBuiltinTool', () => {
 
   it('passes tenant through to createTask', async () => {
     taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 5 }) });
-    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Do it' } });
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Do it', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 3, title: 'Do it' }), TENANT);
   });
 
   it('tasks.create is idempotent — a same-title task on the project is returned, not duplicated', async () => {
     // Existing board already has "Ship OKRs"; a re-run with different casing/spacing must dedup.
-    taskSvc.listTasks.mockResolvedValue([{ toPlain: () => ({ id: 42, title: 'Ship OKRs', projectId: 3 }) }]);
-    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: '  ship   okrs ' } });
+    taskSvc.listTasks.mockResolvedValue([{ toPlain: () => ({ id: 42, title: 'Ship OKRs', projectId: 3, assignedUserId: 'coordinator-1' }) }]);
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: '  ship   okrs ', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).not.toHaveBeenCalled();
     expect(res).toMatchObject({ deduped: true, id: 42, title: 'Ship OKRs' });
   });

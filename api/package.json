@@ -1,21 +1,43 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.84",
+  "version": "2026.7.235",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "db:migrate": "node scripts/migrate.mjs",
-    "deploy": "node scripts/migrate.mjs && npm run deploy:worker",
+    "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional",
+    "deploy": "npm run db:migrate && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
     "db:generate": "npx drizzle-kit@0.30.6 generate",
     "db:push": "npx drizzle-kit@0.30.6 push",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsgo --noEmit && tsc --noEmit",
     "check:schema": "node scripts/check-schema-drift.mjs",
+    "check:db-access": "node scripts/check-db-access.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "check:signature-duplication": "node scripts/check-signature-duplication.mjs",
+    "check:shape-lint": "node scripts/check-shape-lint.mjs",
+    "check:tenant-column": "node scripts/check-tenant-column.mjs",
+    "check:polymorphic-fk": "node scripts/check-polymorphic-fk.mjs",
+    "check:domain-boundary": "node scripts/check-domain-boundary.mjs",
+    "check:model-coverage": "node scripts/check-model-coverage.mjs",
+    "check:layering": "node scripts/check-layering.mjs",
+    "check:roadmap": "node scripts/check-roadmap.mjs",
+    "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
-    "test": "npm run check:schema && npm run check:migrations && npm run check:tracks && vitest run",
-    "typecheck:native": "tsgo --noEmit"
+    "check:source": "node scripts/check-source-text.mjs",
+    "check:silent-catches": "node scripts/check-silent-catches.mjs",
+    "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
+    "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
+    "check:prompt-tools": "node scripts/check-prompt-tool-names.mjs",
+    "check:no-burnrate-runtime": "node scripts/check-no-burnrate-runtime.mjs",
+    "check:burnrate-policy": "node scripts/check-burnrate-cutover-policy.mjs",
+    "audit:burnrate-cutover": "node scripts/audit-burnrate-cutover.mjs",
+    "audit:burnrate-cutover:validate": "node scripts/audit-burnrate-cutover.mjs --validate-only",
+    "audit:burnrate-tenancy": "node scripts/audit-burnrate-tenancy.mjs",
+    "audit:burnrate-tenancy:validate": "node scripts/audit-burnrate-tenancy.mjs --validate-only",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:signature-duplication && npm run check:shape-lint && npm run check:tenant-column && npm run check:polymorphic-fk && npm run check:domain-boundary && npm run check:model-coverage && npm run check:table-adoption && npm run check:layering && npm run check:roadmap && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && npm run check:no-burnrate-runtime && npm run check:burnrate-policy && npm run audit:burnrate-cutover:validate && npm run audit:burnrate-tenancy:validate && vitest run",
+    "typecheck:native": "tsgo --noEmit",
+    "check:table-adoption": "node scripts/check-table-adoption.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
@@ -36,5 +58,10 @@
     "typescript": "^6.0.3",
     "vitest": "^4.0.18",
     "wrangler": "^4.69.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "0.35.3"
+    }
   }
 }

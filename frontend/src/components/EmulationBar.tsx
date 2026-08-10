@@ -1,9 +1,12 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useEmulation } from '@/lib/EmulationContext';
 import { usePermissionDebugger } from '@/lib/PermissionDebuggerContext';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 const ROLES = ['owner', 'manager', 'developer', 'viewer'] as const;
 
@@ -27,6 +30,7 @@ function formatElapsed(startedAt: Date): string {
 export default function EmulationBar() {
   const { emulation, endEmulation, switchRole } = useEmulation();
   const { debuggerActive, toggleDebugger } = usePermissionDebugger();
+  const t = useTranslations('emulationBar');
   const router = useRouter();
   const [elapsed, setElapsed] = useState('');
   const [roleSwitching, setRoleSwitching] = useState(false);
@@ -93,23 +97,26 @@ export default function EmulationBar() {
       `Elapsed: ${elapsed}`,
       `Token: ${emulation.emulationToken}`,
     ].join('\n');
-    await navigator.clipboard.writeText(text).catch(() => undefined);
+    // Fire-and-forget, as before: this bar has no room for a confirmation state, and a
+    // refused clipboard resolves false rather than throwing.
+    await copyTextToClipboard(text);
   }
 
   return (
     <div
       className={`emulation-bar${isExpiringSoon ? ' emulation-bar--expiring' : ''}`}
       role="banner"
-      aria-label="Active emulation session"
+      aria-label={t('barAria')}
     >
-      <span className="emulation-bar__eye" aria-hidden="true">👁</span>
+      <span className="emulation-bar__eye" aria-hidden="true"><Icon source="👁" size="1em" /></span>
 
       <span className="emulation-bar__info">
-        Emulating&nbsp;
-        <strong>{emulation.targetDisplayName ?? emulation.targetEmail}</strong>
-        &nbsp;({emulation.targetEmail})
-        &nbsp;in&nbsp;
-        <strong>{emulation.tenantName}</strong>
+        {t.rich('emulatingWho', {
+          name: emulation.targetDisplayName ?? emulation.targetEmail,
+          email: emulation.targetEmail,
+          tenant: emulation.tenantName,
+          strong: (chunks) => <strong>{chunks}</strong>,
+        })}
       </span>
 
       <span className="emulation-bar__sep" aria-hidden="true">|</span>
@@ -124,10 +131,10 @@ export default function EmulationBar() {
           aria-haspopup="listbox"
           aria-expanded={showRoleMenu}
         >
-          {roleSwitching ? 'Switching…' : emulation.role} ▾
+          {roleSwitching ? t('switching') : emulation.role} ▾
         </button>
         {showRoleMenu && (
-          <ul className="emulation-bar__role-menu" role="listbox" aria-label="Switch role">
+          <ul className="emulation-bar__role-menu" role="listbox" aria-label={t('switchRoleAria')}>
             {ROLES.map((r) => (
               <li
                 key={r}
@@ -148,9 +155,10 @@ export default function EmulationBar() {
       {/* Timer */}
       <span
         className={`emulation-bar__timer${isExpiringSoon ? ' emulation-bar__timer--warn' : ''}`}
-        aria-label={`Session elapsed: ${elapsed}`}
+        aria-label={t('elapsedAria', { elapsed })}
       >
-        ⏱ {elapsed}
+        
+        <Icon source="⏱" size="1em" /> {elapsed}
       </span>
 
       <span className="emulation-bar__sep" aria-hidden="true">|</span>
@@ -160,9 +168,9 @@ export default function EmulationBar() {
         type="button"
         className="emulation-bar__btn"
         onClick={handleCopyContext}
-        title="Copy session context to clipboard"
+        title={t('copyContextTitle')}
       >
-        Copy Context
+        {t('copyContext')}
       </button>
 
       {/* Debugger toggle */}
@@ -170,10 +178,11 @@ export default function EmulationBar() {
         type="button"
         className={`emulation-bar__btn${debuggerActive ? ' emulation-bar__btn--active' : ''}`}
         onClick={toggleDebugger}
-        title="Toggle permission debugger (Ctrl+Shift+P)"
+        title={t('debugTitle')}
         aria-pressed={debuggerActive}
       >
-        🔍 Debug
+        
+        <Icon source="🔍" size="1em" /> {t('debug')}
       </button>
 
       {/* End emulation */}
@@ -183,7 +192,7 @@ export default function EmulationBar() {
         onClick={handleEndEmulation}
         disabled={ending}
       >
-        {ending ? 'Ending…' : 'End Emulation'}
+        {ending ? t('ending') : t('endEmulation')}
       </button>
     </div>
   );

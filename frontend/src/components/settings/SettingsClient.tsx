@@ -1,21 +1,24 @@
 'use client';
 
 /**
- * Account & workspace settings, split into focused sub-views via a <PillTabs> bar
- * (?sub=) so no single view is an endless scroll:
+ * Account & workspace settings, split into focused sub-views (?sub=) via the one
+ * shared <DestinationIndex>, so no single view is an endless scroll:
  *   - Account (default): profile, language, connected accounts, get-hired opt-in
  *   - Personality: the user's own psychometric profile
- *   - Sessions: personal account security (moved here from /security)
+ *   - Email: email language + lifecycle-mail consent (CAN-SPAM surface)
  *   - Workspace: workspace identity + jump-off links (owner tools)
+ *   - Manager: workspace-wide AI Manager autonomy defaults (0363)
+ *   - Spend: per-seat AI spend limits (Teams)
  */
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import PageContainer from '@/components/PageContainer';
-import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
+import { Button } from '@/components/ui';
 import { RoleGate } from '@/components/RoleGate';
 import {
   getStoredUser,
@@ -27,12 +30,18 @@ import {
   getMe,
   updateMyPersonality,
 } from '@/lib/auth';
+import ProfileIdentityCard from '@/components/profile/ProfileIdentityCard';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
-import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
+import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
+import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
+import ManagerDefaults from '@/components/settings/ManagerDefaults';
+import SettingsLogs from '@/components/settings/SettingsLogs';
+import AgentExecutionControl from '@/components/settings/AgentExecutionControl';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
+import NavigationFeaturesSettings from '@/components/settings/NavigationFeaturesSettings';
 
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
@@ -43,11 +52,11 @@ function ApiKeysSettingsLink({ label }: { label: string }) {
   return (
     <RoleGate capability="apiKeys.manage">
       <Link
-        href="/settings/api-keys"
+        href="/settings/integrations"
         style={{
           padding: '6px 12px', fontSize: 12, fontWeight: 600,
           background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+          border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
         }}
       >
         {label} →
@@ -59,7 +68,7 @@ function ApiKeysSettingsLink({ label }: { label: string }) {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -79,9 +88,20 @@ const OAUTH_PROVIDERS = [
 
 export default function SettingsClient() {
   const t = useTranslations('settings');
+  const router = useRouter();
   const sub = useSearchParams().get('sub') ?? '';
   const user = getStoredUser();
   const tenant = getStoredTenant();
+
+  // Account security was reachable TWICE: as this sub-view and as the `/security`
+  // destination the Settings index already lists. `/security` survives (operator
+  // decision, PRD 21 §7 decision 2) because it is a real deep-linkable URL that
+  // `panelWidth()` already routes to a sheet. Every `?sub=sessions` link ever
+  // shared still resolves — a deleted destination that 404s is not a decision,
+  // it is a broken link.
+  useEffect(() => {
+    if (sub === 'sessions') router.replace('/security');
+  }, [router, sub]);
 
   type LinkedAccount = { provider: string; email: string | null; displayName: string | null };
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
@@ -155,25 +175,39 @@ export default function SettingsClient() {
     }
   };
 
-  const subTabs: PillTab[] = [
-    { id: '', label: t('accountTab'), icon: '👤', href: '/settings' },
-    { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality' },
-    { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions' },
-    ...(tenant ? [{ id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' }] : []),
+  // Grouped by the question a person is actually asking — *You* vs *Workspace*
+  // (PRD 21 §3.4). Eight sub-views is past the six a horizontal bar can carry, so
+  // `DestinationIndex` renders this as a vertical index column on its own.
+  const subTabs: IndexItem[] = [
+    { id: '', label: t('accountTab'), icon: '👤', href: '/settings', group: t('groupYou') },
+    { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality', group: t('groupYou') },
+    { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email', group: t('groupYou') },
+    ...(tenant ? [
+      { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace', group: t('groupWorkspace') },
+      { id: 'features', label: t('featuresTab'), icon: '🎛', href: '/settings?sub=features', group: t('groupWorkspace') },
+      // Workspace-scoped like the two around it: the AI Manager autonomy defaults every
+      // project inherits (0363). Role-gated inside the panel, not hidden from the index.
+      { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager', group: t('groupWorkspace') },
+      { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend', group: t('groupWorkspace') },
+      { id: 'logs', label: t('logsTab'), icon: '📜', href: '/settings?sub=logs', group: t('groupWorkspace') },
+    ] : []),
   ];
 
   const renderAccount = () => (
     <>
-      {/* Profile */}
+      {/* Profile — the SAME identity card `/freelancer/profile` renders above its
+          gig-specific fields, so a builder edits their name and avatar here
+          instead of being sent to a page styled like a different product. The
+          two read-only facts that remain are exactly the two nobody can edit. */}
       <div style={{ ...cardStyle, marginBottom: 20 }}>
         <div style={sectionTitle}>{t('profile')}</div>
-        <div style={{ display: 'grid', gap: 10 }}>
+        <ProfileIdentityCard />
+        <div style={{ display: 'grid', gap: 10, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
           {[
             { label: t('email'), value: user?.email },
-            { label: t('displayName'), value: user?.name },
             { label: t('userId'), value: user?.id, mono: true },
           ].filter((r) => r.value).map(({ label, value, mono }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
               <span style={{ color: 'var(--text-muted)' }}>{label}</span>
               <span style={mono ? { fontFamily: 'var(--font-mono)', fontSize: 11 } : {}}>{value}</span>
             </div>
@@ -220,7 +254,7 @@ export default function SettingsClient() {
                     alignItems: 'center',
                     gap: 12,
                     padding: '10px 12px',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)',
                   }}
@@ -228,7 +262,7 @@ export default function SettingsClient() {
                   <span style={{
                     width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontWeight: 700, fontSize: '0.75rem', background: 'var(--bg-surface)',
-                    borderRadius: 6, flexShrink: 0,
+                    borderRadius: 'var(--radius-sm)', flexShrink: 0,
                   }}>{icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
@@ -246,7 +280,7 @@ export default function SettingsClient() {
                       style={{
                         padding: '4px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
                         background: 'none', color: 'var(--text-muted)',
-                        border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                       }}
                     >
                       {unlinking === id ? '…' : t('disconnect')}
@@ -258,7 +292,7 @@ export default function SettingsClient() {
                       style={{
                         padding: '4px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
                         background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-                        border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                       }}
                     >
                       {t('connect')}
@@ -288,17 +322,9 @@ export default function SettingsClient() {
         <PsychometricEditor value={personality} onChange={setPersonality} forceUnlocked />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {personalityNotice && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{personalityNotice}</span>}
-          <button
-            type="button"
-            onClick={savePersonality}
-            disabled={personalitySaving}
-            style={{
-              padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
-              background: 'var(--accent, #6366f1)', color: '#fff', border: 'none', opacity: personalitySaving ? 0.6 : 1,
-            }}
-          >
+          <Button variant="primary" onClick={savePersonality} loading={personalitySaving}>
             {personalitySaving ? t('personalitySaving') : t('personalitySave')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -307,6 +333,7 @@ export default function SettingsClient() {
   const renderWorkspace = () => {
     if (!tenant) return null;
     return (
+      <>
       <div style={cardStyle}>
         <div style={sectionTitle}>{t('workspace')}</div>
         <div style={{ display: 'grid', gap: 10 }}>
@@ -327,7 +354,7 @@ export default function SettingsClient() {
             style={{
               padding: '6px 12px', fontSize: 12, fontWeight: 600,
               background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
             }}
           >
             {t('switchWorkspace')}
@@ -337,7 +364,7 @@ export default function SettingsClient() {
             style={{
               padding: '6px 12px', fontSize: 12, fontWeight: 600,
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
             }}
           >
             {t('manageMemberSessions')} →
@@ -345,22 +372,32 @@ export default function SettingsClient() {
           <ApiKeysSettingsLink label={t('apiKeysLink')} />
         </div>
       </div>
+      <AgentExecutionControl />
+      </>
     );
   };
 
   return (
-    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
+    <PageContainer width={sub === 'logs' ? 'full' : 'readable'} style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>{t('title')}</h1>
 
-      <PillTabs tabs={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
+      <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
 
       {sub === 'personality'
         ? renderPersonality()
-        : sub === 'sessions'
-          ? <AccountSecurityPanel />
-          : sub === 'workspace'
-            ? renderWorkspace()
-            : renderAccount()}
+        : sub === 'email'
+        ? <EmailPreferencesCard />
+        : sub === 'workspace'
+          ? renderWorkspace()
+          : sub === 'features'
+            ? <NavigationFeaturesSettings />
+          : sub === 'manager'
+            ? <ManagerDefaults />
+            : sub === 'spend'
+              ? <TeamSpendLimits />
+              : sub === 'logs'
+                ? <SettingsLogs />
+                : renderAccount()}
     </PageContainer>
   );
 }

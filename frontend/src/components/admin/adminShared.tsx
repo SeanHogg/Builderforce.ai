@@ -4,12 +4,13 @@
  * Shared primitives for the Platform Admin panels.
  *
  * The admin area is one nav destination whose sub-views are TABS in the shell's
- * <SectionTabs> bar (see navGroups `admin`). Each tab body lives in its own
+ * <ShellIndex> (see navGroups `admin`). Each tab body lives in its own
  * self-fetching panel under `components/admin/panels/` — this module is the
  * single source of truth for the chrome + data-loading pattern they all share,
  * so no panel re-invents (and drifts on) the loading / error / header shell.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LlmModelStatus } from '@/lib/adminApi';
@@ -168,14 +169,14 @@ export function ModelPoolBadges({
             key={`${keyPrefix}-${m.model}`}
             style={{
               padding: '4px 8px',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               fontSize: 12,
-              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
+              background: m.available ? 'var(--success-bg)' : 'var(--error-bg)',
               color: m.available ? 'var(--success-text)' : 'var(--error-text)',
             }}
             title={m.cooldownUntil ? t('common.cooldownUntil', { time: new Date(m.cooldownUntil).toLocaleString() }) : m.available ? t('common.available') : t('common.unavailable')}
           >
-            {m.preferred ? '★ ' : ''}{m.model}
+            {m.preferred ? <Icon source="★" size="1em" /> : ''}{m.model}
             {m.cooldownUntil && !m.available ? ` (${t('common.cooldown')})` : ''}
           </span>
         ))}

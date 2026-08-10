@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Anthropic Messages ⇄ OpenAI Chat Completions translation.
  *
@@ -351,6 +352,8 @@ export function pipeOpenAiSseToAnthropic(
         if (outSse) controller.enqueue(textEnc.encode(outSse));
       }
     },
-    cancel() { void reader.cancel().catch(() => { /* already closed */ }); },
+    cancel() { void reader.cancel().catch((error) => { /* already closed */ 
+      reportCaughtError(error, { source: "application/llm/anthropicMessagesBridge.ts", operation: "cancel" });
+    }); },
   });
 }

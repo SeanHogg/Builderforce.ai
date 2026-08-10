@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
+import { Select } from '@/components/Select';
 import { usePermission, type Capability } from '@/lib/rbac';
 import {
   getRdTaxConfig,
@@ -43,7 +44,7 @@ const pct = (n: number) => `${n.toFixed(0)}%`;
 
 const card: React.CSSProperties = {
   background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-  borderRadius: 12, padding: 16,
+  borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const th: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)' };
 const td: React.CSSProperties = { padding: '8px 10px', fontSize: 13, borderBottom: '1px solid var(--border-subtle)' };
@@ -72,9 +73,9 @@ export function FinopsLens({ initialTab = 'rd' }: { initialTab?: FinopsTab }) {
       key={id}
       onClick={() => setTab(id)}
       style={{
-        padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)',
-        background: tab === id ? 'var(--accent, #2563eb)' : 'var(--bg-elevated)',
-        color: tab === id ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+        padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
+        background: tab === id ? 'var(--accent)' : 'var(--bg-elevated)',
+        color: tab === id ? 'var(--text-on-accent)' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: 13,
       }}
     >
       {label}
@@ -142,7 +143,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
     }
   };
 
-  if (error) return <div style={{ ...card, color: 'var(--danger, #ef4444)' }}>{error}</div>;
+  if (error) return <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>;
   if (!config || !report) return <div style={card}>{t('loading')}</div>;
 
   return (
@@ -155,24 +156,24 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
             {t('rd.qualifiedCategories')}
             <input value={cats} onChange={(e) => setCats(e.target.value)} disabled={!canManage}
               placeholder="innovation, tech_debt"
-              style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+              style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </label>
           <label style={{ fontSize: 12 }}>
             {t('rd.blendedRate')}
             <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} disabled={!canManage}
-              style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+              style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </label>
           <label style={{ fontSize: 12, gridColumn: '1 / -1' }}>
             {t('rd.qualifiedActionTypes')}
             <input value={actions} onChange={(e) => setActions(e.target.value)} disabled={!canManage}
-              placeholder="(optional)"
-              style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+              placeholder={t('rd.optionalPh')}
+              style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </label>
         </div>
         <div style={{ marginTop: 12 }}>
           <RoleGate capability={FINOPS_CAP}>
             <button onClick={() => void save()} disabled={saving}
-              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+              style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)', color: 'var(--text-on-accent)', cursor: 'pointer', fontWeight: 600 }}>
               {saving ? t('saving') : t('rd.save')}
             </button>
           </RoleGate>
@@ -264,7 +265,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
     }
   };
 
-  if (error) return <div style={{ ...card, color: 'var(--danger, #ef4444)' }}>{error}</div>;
+  if (error) return <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>;
   if (!coverage) return <div style={card}>{t('loading')}</div>;
 
   return (
@@ -299,14 +300,14 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
                 <td style={td}>{ctrl.category}</td>
                 <td style={td}>
                   <RoleGate capability={FINOPS_CAP}>
-                    <select
+                    <Select
                       value={ctrl.status}
                       disabled={busy || !canManage}
                       onChange={(e) => void patch(ctrl, { status: e.target.value as SocControlStatus })}
-                      style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                      style={{ padding: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
                     >
                       {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{t(`soc.status.${s}`)}</option>)}
-                    </select>
+                    </Select>
                   </RoleGate>
                 </td>
                 <td style={td}>
@@ -316,7 +317,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
                       disabled={busy || !canManage}
                       placeholder="—"
                       onBlur={(e) => { if (e.target.value !== (ctrl.owner ?? '')) void patch(ctrl, { owner: e.target.value }); }}
-                      style={{ width: 110, padding: 4, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                      style={{ width: 110, padding: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
                     />
                   </RoleGate>
                 </td>
@@ -362,20 +363,20 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
         <label style={{ fontSize: 12 }}>
           {t('audit.period')}{' '}
           <input type="month" value={period} onChange={(e) => setPeriod(e.target.value || currentMonth())}
-            style={{ padding: 6, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+            style={{ padding: 6, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
         </label>
         <div style={{ flex: 1 }} />
         <button onClick={() => void downloadAuditReport('csv', period)}
-          style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
           {t('audit.exportCsv')}
         </button>
         <button onClick={() => void downloadAuditReport('json', period)}
-          style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
           {t('audit.exportJson')}
         </button>
       </div>
 
-      {error && <div style={{ ...card, color: 'var(--danger, #ef4444)' }}>{error}</div>}
+      {error && <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>}
       {loading && <div style={card}>{t('loading')}</div>}
 
       {report && !loading && (

@@ -16,9 +16,11 @@
  * panel owns its own mode/input/loading/error/empty states; the host only mounts it.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
+import { Select } from '@/components/Select';
 import { runEvermindBenchmark } from '@/lib/evermind-benchmark';
 import {
   listEvermindModels,
@@ -130,8 +132,8 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
   const accuracyBars: BarDatum[] = useMemo(() => {
     if (!result) return [];
     return [
-      { key: 'top1', label: t('metric.top1'), value: result.top1Accuracy * 100, color: 'var(--coral-bright, #4d9eff)' },
-      { key: 'topk', label: t('metric.topK', { k: result.topK }), value: result.topKAccuracy * 100, color: '#22c55e' },
+      { key: 'top1', label: t('metric.top1'), value: result.top1Accuracy * 100, color: 'var(--coral-bright, var(--coral-bright))' },
+      { key: 'topk', label: t('metric.topK', { k: result.topK }), value: result.topKAccuracy * 100, color: 'var(--success-text)' },
     ];
   }, [result, t]);
 
@@ -149,7 +151,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
     <div
       style={{
         background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-        borderRadius: 10, padding: '10px 12px', minWidth: 0,
+        borderRadius: 'var(--radius-lg)', padding: '10px 12px', minWidth: 0,
       }}
     >
       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -173,9 +175,9 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
       aria-pressed={mode === m}
       style={{
         fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem',
-        background: mode === m ? 'var(--coral-bright, #4d9eff)' : 'var(--bg-elevated)',
-        color: mode === m ? '#fff' : 'var(--text-secondary)',
-        border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 12px',
+        background: mode === m ? 'var(--coral-bright, var(--coral-bright))' : 'var(--bg-elevated)',
+        color: mode === m ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 12px',
         cursor: mode === m ? 'default' : 'pointer',
       }}
     >
@@ -207,14 +209,14 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           {noModels ? (
             <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{t('noModels')}</div>
           ) : (
-            <select
+            <Select
               id="evermind-model-picker"
               value={selectedSlug}
               onChange={(e) => setSelectedSlug(e.target.value)}
               disabled={models === null}
               style={{
                 width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', fontSize: '0.8rem',
+                border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
               }}
             >
               {models === null && <option>{t('running')}</option>}
@@ -223,7 +225,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
                   {m.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
         </div>
       )}
@@ -246,7 +248,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           style={{
             width: '100%', resize: 'vertical', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.76rem',
             lineHeight: 1.5, background: 'var(--bg-deep)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px',
           }}
         />
       </div>
@@ -269,7 +271,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
               onChange={(e) => setEpochs(Math.max(5, Math.min(100, parseInt(e.target.value, 10) || 25)))}
               style={{
                 width: 88, background: 'var(--bg-deep)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px', fontSize: '0.8rem',
+                border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: '0.8rem',
               }}
             />
           </div>
@@ -280,13 +282,13 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           disabled={runDisabled}
           style={{
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem',
-            background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, #4d9eff)',
-            color: running ? 'var(--text-muted)' : '#fff',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 16px',
+            background: running ? 'var(--bg-elevated)' : 'var(--coral-bright, var(--coral-bright))',
+            color: running ? 'var(--text-muted)' : 'var(--text-on-accent)',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
             cursor: runDisabled ? 'default' : 'pointer', opacity: runDisabled ? 0.6 : 1,
           }}
         >
-          {running ? `⏳ ${t('running')}` : `📊 ${mode === 'score' ? t('runScore') : t('run')}`}
+          {running ? `${t('running')}` : `${mode === 'score'? t('runScore') : t('run')}`}
         </button>
         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
           {mode === 'score' ? t('serverNote') : t('onDeviceNote')}
@@ -297,11 +299,12 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
         <div
           role="alert"
           style={{
-            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: '#fca5a5',
-            borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
+            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error)', color: 'var(--error-text)',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          ⚠ {error}
+          
+          <Icon source="⚠" size="1em" /> {error}
         </div>
       )}
 
@@ -333,7 +336,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           {/* Accuracy bars */}
           <div
             style={{
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px 14px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '12px 14px',
             }}
           >
             <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginBottom: 10, fontWeight: 600 }}>
@@ -363,17 +366,18 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
             <div
               style={{
                 background: verdict === 'strong' ? 'rgba(34,197,94,0.12)' : verdict === 'good' ? 'rgba(77,158,255,0.12)' : 'var(--warning-bg, rgba(245,158,11,0.12))',
-                border: `1px solid ${verdict === 'strong' ? '#22c55e' : verdict === 'good' ? 'var(--coral-bright, #4d9eff)' : '#f59e0b'}`,
-                borderRadius: 10, padding: '10px 14px',
+                border: `1px solid ${verdict === 'strong' ? 'var(--success)' : verdict === 'good' ? 'var(--coral-bright, var(--coral-bright))' : 'var(--warning)'}`,
+                borderRadius: 'var(--radius-lg)', padding: '10px 14px',
               }}
             >
               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {verdict === 'strong' ? '🟢 ' : verdict === 'good' ? '🔵 ' : '🟡 '}
+                {verdict === 'strong' ? <Icon source="🟢" size="1em" /> : verdict === 'good' ? <Icon source="🔵" size="1em" /> : <Icon source="🟡" size="1em" />}
                 {t(`verdict.${verdict}`)}
               </div>
               {showNudge && (
                 <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                  💡 {underfit(result) ? t('nudge.underfit') : hasTraining ? t('nudge.weak') : t('nudge.weakScore')}
+                  
+                  <Icon source="💡" size="1em" /> {underfit(result) ? t('nudge.underfit') : hasTraining ? t('nudge.weak') : t('nudge.weakScore')}
                 </div>
               )}
             </div>
@@ -385,7 +389,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
             <div
               style={{
                 fontFamily: "'JetBrains Mono', monospace", fontSize: '0.76rem', color: 'var(--text-primary)',
-                background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px',
+                background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px',
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}
             >

@@ -22,7 +22,7 @@ export function BriefcaseBadge({ tasks, onClick }: { tasks: Task[]; onClick?: ()
         alignItems: 'center',
         gap: 4,
         padding: '2px 8px',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         border: '1px solid var(--border-subtle)',
         background: 'var(--bg-elevated)',
         color: 'var(--text-secondary)',

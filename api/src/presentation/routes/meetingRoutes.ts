@@ -1,10 +1,12 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Meetings — /api/meetings/*
  *
  * A meeting is a live video/audio gathering: a standup / planning / retrospective
  * bound to a project, an ad-hoc call, or a direct 1:1. It carries a media room key;
  * peers exchange WebRTC offers/answers/ICE candidates over the CeremonyRoomDO relay
- * keyed `media:<roomKey>` (mesh P2P — no media flows through the server). When the
+ * keyed `media:<roomKey>`. Media is direct in direct-only mode; relay-fallback
+ * may use configured TURN for encrypted media when P2P traversal fails. When the
  * organizer has a connected calendar, a scheduled meeting is mirrored as a calendar
  * event (invites go to attendee emails).
  *
@@ -27,11 +29,15 @@ import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
 import { loadExternalBusy, mergeBusy } from '../../application/calendar/calendarFreeBusy';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import { findActiveCeremonyForMeeting } from '../../application/ceremony/ceremonyMeeting';
+import { recordCeremonyPresence } from '../../application/ceremony/concludeCeremony';
 import { BrainService } from '../../application/brain/BrainService';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   suggestSlots, normalizeWindows, type Availability, type BusyInterval,
 } from '../../application/calendar/availabilitySolver';
+import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
+
+import { iceServers } from '../../application/meetings/iceServers';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
@@ -39,62 +45,6 @@ const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct'
 const TEAM_CEREMONY_KINDS = new Set(['standup', 'planning', 'retrospective', 'review']);
 
 interface AttendeeInput { kind?: string; ref: string; name: string; email?: string; role?: string; }
-
-/** WebRTC ICE server descriptor (the DOM `RTCIceServer` type is absent in the
- *  Workers lib, so declare the shape we serialize to the client). */
-interface IceServer { urls: string | string[]; username?: string; credential?: string; }
-
-/**
- * Short-lived TURN credentials minted from Cloudflare's TURN service, when a
- * Cloudflare TURN key is configured (`CLOUDFLARE_TURN_KEY_ID` +
- * `CLOUDFLARE_TURN_API_TOKEN`). This turns "provision a TURN relay" into setting
- * two secrets instead of standing up coturn. Cached (creds outlive the cache TTL),
- * best-effort — a failure just omits TURN and mesh falls back to STUN.
- */
-async function cloudflareTurn(env: Env): Promise<IceServer | null> {
-  const keyId = env.CLOUDFLARE_TURN_KEY_ID;
-  const token = env.CLOUDFLARE_TURN_API_TOKEN;
-  if (!keyId || !token) return null;
-  try {
-    return await getOrSetCached<IceServer>(
-      env,
-      `turn:cf:${keyId}`,
-      async () => {
-        const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ttl: 86_400 }),
-        });
-        if (!res.ok) throw new Error(`cloudflare turn ${res.status}`);
-        const d = (await res.json()) as { iceServers?: { urls?: string | string[]; username?: string; credential?: string } };
-        const ice = d.iceServers;
-        if (!ice?.urls) throw new Error('cloudflare turn: no urls');
-        return { urls: ice.urls, username: ice.username, credential: ice.credential };
-      },
-      { kvTtlSeconds: 43_200, l1TtlMs: 3_600_000 },
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** ICE servers for mesh P2P — public STUN, plus a TURN relay when configured
- *  (static `TURN_URL`, and/or Cloudflare-minted short-lived credentials). */
-async function iceServers(env: Env): Promise<IceServer[]> {
-  const servers: IceServer[] = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  ];
-  if (env.TURN_URL) {
-    servers.push({
-      urls: env.TURN_URL.split(',').map((u) => u.trim()).filter(Boolean),
-      username: env.TURN_USERNAME,
-      credential: env.TURN_CREDENTIAL,
-    });
-  }
-  const cf = await cloudflareTurn(env);
-  if (cf) servers.push(cf);
-  return servers;
-}
 
 export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -105,7 +55,11 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   // DO (keyed distinctly per media room). No domain data flows through it.
   r.get('/rooms/:key/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `media:${c.req.param('key')}`));
 
-  r.get('/ice', async (c) => c.json({ iceServers: await iceServers(c.env as Env) }));
+  r.get('/ice', async (c) => {
+    const directOnly = c.req.query('mode') === 'direct-only';
+    const servers = await iceServers(c.env as Env);
+    return c.json(applyMediaPrivacyMode(servers, directOnly));
+  });
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   async function hydrate(tenantId: number, id: string) {
@@ -247,7 +201,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         if (!('error' in resolved)) {
           await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
         }
-      } catch { /* team chat is a nice-to-have on a meeting; never block creation */ }
+      } catch (error) { /* team chat is a nice-to-have on a meeting; never block creation */ 
+        reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
+      }
     }
 
     // Organizer is always attendee #0 (host, auto-accepted). De-dupe by ref.
@@ -286,14 +242,13 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await hydrate(tenantId, meeting.id), 201);
   });
 
-  // ── Detail ─────────────────────────────────────────────────────────────────
-  r.get('/:id', async (c) => {
-    const { tenantId } = scope(c);
-    const detail = await hydrate(tenantId, c.req.param('id'));
-    if (!detail) return c.json({ error: 'Not found' }, 404);
-    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
-    return c.json(detail);
-  });
+  // NOTE: the single-segment DETAIL route `GET /:id` is registered at the BOTTOM of this
+  // file, after every literal single-segment path (`/availability`, `/freebusy`,
+  // `/suggest`). Hono matches in registration order and the first handler to return a
+  // response wins, so a `/:id` registered here swallowed all three: `GET /freebusy` ran
+  // the detail handler, which compared a `uuid` column to the string 'freebusy' and blew
+  // up in Postgres — taking out the meeting-time suggestions the scheduling panel calls.
+  // Two-segment routes like `/:id/transcript` are unaffected and stay where they read best.
 
   // ── Join — returns the room key + ICE config; marks presence + goes live ──────
   r.post('/:id/join', async (c) => {
@@ -327,6 +282,29 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         memberName: body.name || 'Guest', email: body.email ?? null, role: 'attendee', response: 'accepted', joinedAt: now,
       });
     }
+
+    // WRITE THROUGH TO THE CEREMONY (0366). If this meeting is the shell for a live
+    // standup/planning session, joining the call IS attending the ceremony — and the
+    // ceremony, not `meeting_attendees`, is the side that owns attendance and feeds the
+    // rules that can reassign someone's work. Routed through the SAME
+    // `recordCeremonyPresence` the round-table heartbeat uses, so the two surfaces cannot
+    // produce disagreeing records. Best-effort: never cost someone their video call.
+    try {
+      const session = await findActiveCeremonyForMeeting(db, tenantId, id);
+      if (session) {
+        await recordCeremonyPresence(db, {
+          tenantId,
+          segmentId: session.segmentId,
+          sessionId: session.id,
+          memberKind: 'human',
+          memberRef: userId,
+          memberName: mine?.memberName || body.name || 'Guest',
+        });
+      }
+    } catch (err) {
+      reportCaughtError(err, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes", context: { logMessage: `[meeting:join] ceremony presence write-through failed meeting=${id}`, details: err } });
+    }
+
     return c.json({ roomKey: m.roomKey, videoEnabled: m.videoEnabled, iceServers: await iceServers(env), meeting: await hydrate(tenantId, id) });
   });
 
@@ -441,7 +419,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     await db.update(meetings).set({ status: 'ended', endedAt: now, updatedAt: now }).where(eq(meetings.id, res.meeting.id));
     // Auto-generate minutes from the transcript (best-effort: never block ending).
     if (!res.meeting.summary) {
-      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch { /* honest no-op */ }
+      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch (error) { /* honest no-op */ 
+        reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
+      }
     }
     return c.json(await hydrate(tenantId, res.meeting.id));
   });
@@ -582,6 +562,17 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const busy = mergeBusy(appBusy, extBusy);
     const slots = suggestSlots(availability, busy, { fromMs, toMs, durationMinutes, count });
     return c.json({ slots });
+  });
+
+  // ── Detail ─────────────────────────────────────────────────────────────────
+  // LAST on purpose: `/:id` matches any single segment, so registering it above the
+  // literal paths above (`/availability`, `/freebusy`, `/suggest`) made those unreachable.
+  r.get('/:id', async (c) => {
+    const { tenantId } = scope(c);
+    const detail = await hydrate(tenantId, c.req.param('id'));
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
+    return c.json(detail);
   });
 
   return r;

@@ -1,8 +1,9 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
-import ToolRunnerClient from './ToolRunnerClient';
+import ToolReferenceClient from './ToolReferenceClient';
 
 export const runtime = 'edge';
 
@@ -22,7 +23,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   });
 }
 
-export default async function ToolRunnerPage({ params }: { params: Promise<{ id: string }> }) {
+/**
+ * A tool is a REFERENCE page (PRD 21 §11.4.5): signed out it is this page at
+ * this URL with this SEO; signed in the same component mounts in `ShellPanel`
+ * over a board that stays running. `humanize(id)` is the title the crawler and
+ * the first paint get — the catalog's real name replaces it as soon as the
+ * definition loads, and the panel header follows it.
+ */
+export default async function ToolReferencePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
     <>
@@ -33,7 +41,11 @@ export default async function ToolRunnerPage({ params }: { params: Promise<{ id:
           description: `Free ${humanize(id)} diagnostic — instant rating and an improvement plan.`,
         })}
       />
-      <ToolRunnerClient toolId={id} />
+      {/* The runner reads `?project=` to attribute a saved run, so the tree below
+          is search-param dependent and needs its own boundary. */}
+      <Suspense fallback={null}>
+        <ToolReferenceClient toolId={id} fallbackName={humanize(id)} />
+      </Suspense>
     </>
   );
 }

@@ -92,22 +92,6 @@ export const recommendationDismissals = pgTable('recommendation_dismissals', {
   unique('recommendation_dismissals_tenant_id_rec_key_key').on(t.tenantId, t.recKey),
 ]);
 
-/**
- * Persisted feedback (thumbs up/down + free text) — FR-6.
- */
-export const recommendationFeedback = pgTable('recommendation_feedback', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  recKey:      varchar('rec_key', { length: 120 }).notNull(),
-  userId:      varchar('user_id', { length: 36 }).notNull(),
-  actedUp:     integer('acted_up').notNull().default(0), // 1 = thumbs up, 0 = not rated
-  actedDown:   integer('acted_down').notNull().default(0), // 1 = thumbs down
-  reason:      varchar('reason', { length: 500 }),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-}, (t) => [
-  unique('recommendation_feedback_tenant_user_rec_key').on(t.tenantId, t.userId, t.recKey),
-]);
-
 const HOUR_MS = 3_600_000;
 
 export type RecSeverity = 'critical' | 'warning' | 'info';
@@ -147,7 +131,12 @@ const SEVERITY_BASE: Record<RecSeverity, number> = { critical: 1000, warning: 50
 
 /** Severity → base rank + a 0..100 magnitude bump so worse offenders sort first. */
 function ranked(r: Omit<Recommendation, 'rank'>, magnitude = 0): Recommendation {
-  return { ...r, rank: SEVERITY_BASE[r.severity] + clampScore(magnitude) };
+  return {
+    ...r,
+    title: r.title.slice(0, 120),
+    detail: r.detail.slice(0, 300),
+    rank: SEVERITY_BASE[r.severity] + clampScore(magnitude),
+  };
 }
 
 const pctStr = (n: number) => `${n.toFixed(0)}%`;
@@ -283,11 +272,14 @@ export function deriveRecommendations(inp: RuleInputs): Recommendation[] {
   if (isRuleEnabled('quality.model_low_merge')) {
     const eng = inp.engineering;
     const fleetMerge = eng.totals.mergedRatePct;
-    const candidates = eng.byModel.filter((m) => m.runs >= MODEL_MIN_RUNS);
+    const candidates = eng.byModel.filter(
+      (m): m is typeof m & { model: string } => m.runs >= MODEL_MIN_RUNS && typeof m.model === 'string',
+    );
     const best = [...candidates].sort((a, b) => b.mergedRatePct - a.mergedRatePct)[0];
+    const bestModel = best?.model;
     for (const m of candidates) {
       const gap = fleetMerge - m.mergedRatePct;
-      if (gap >= MODEL_MERGE_GAP_PCT && best && best.model !== m.model) {
+      if (gap >= MODEL_MERGE_GAP_PCT && best && bestModel && bestModel !== m.model) {
         out.push(ranked({
           key: `quality.model_low_merge.${m.model}`,
           severity: 'warning',
@@ -295,13 +287,13 @@ export function deriveRecommendations(inp: RuleInputs): Recommendation[] {
           title: `Model "${m.model}" merges at ${pctStr(m.mergedRatePct)} (${gap.toFixed(0)}pts below fleet)`,
           detail: `${m.model} merges at ${pctStr(m.mergedRatePct)} over ${m.runs} runs — ${gap.toFixed(0)}pts below the fleet (${pctStr(fleetMerge)}). ${best.model} merges at ${pctStr(best.mergedRatePct)}.`,
           metric: pctStr(m.mergedRatePct),
-          recommendation: `Shift work from ${m.model} to ${best.model} for this work type, or reserve ${m.model} for tasks where it performs.`,
+          recommendation: `Shift work from ${m.model} to ${bestModel} for this work type, or reserve ${m.model} for tasks where it performs.`,
           action: { label: 'View model details', kind: 'navigate', href: `/insights/engineering?model=${encodeURIComponent(m.model)}` },
           links: [
             { kind: 'model', id: m.model, label: m.model, href: `/insights/engineering?model=${encodeURIComponent(m.model)}`, field: 'engineering.merged_rate_pct' },
-            ...(best ? [{ kind: 'model' as const, id: best.model, label: best.model, href: `/insights/engineering?model=${encodeURIComponent(best.model)}`, field: 'engineering.merged_rate_pct' }] : []),
+            { kind: 'model', id: bestModel, label: bestModel, href: `/insights/engineering?model=${encodeURIComponent(bestModel)}`, field: 'engineering.merged_rate_pct' },
           ],
-          whyItMatters: `Keeping work on low-merge models wastes ${pctStr(gap)} of every dollar spent. Shifting to ${best.model} can recover 85%+ of that lost output.`,
+          whyItMatters: `A ${gap.toFixed(0)}-point merge-rate gap means this model produces fewer accepted changes from comparable runs than ${bestModel}.`,
           dataTrace: [
             { field: 'engineering.model_merged_rate_pct', value: String(m.mergedRatePct), source: 'engineeringInsights' },
             { field: 'engineering.fleet_merged_rate_pct', value: String(fleetMerge), source: 'engineeringInsights' },
@@ -441,7 +433,7 @@ export function deriveRecommendations(inp: RuleInputs): Recommendation[] {
           href: '/insights/dora',
           field: 'dora.mttr_hours',
         }],
-        whyItMatters: 'Long recovery times mean every outage costs more in lost productivity and user trust. Each hour reduction reduces incident cost by ~$X.',
+        whyItMatters: 'Long recovery times extend user impact and keep responders away from planned delivery work.',
         dataTrace: [
           { field: 'dora.mttr_hours', value: String(d.mttrHours), source: 'workforceMetrics' },
         ],
@@ -524,24 +516,6 @@ export async function dismissRecommendation(db: Db, tenantId: number, recKey: st
   await db.insert(recommendationDismissals)
     .values({ tenantId, recKey, dismissedBy })
     .onConflictDoNothing({ target: [recommendationDismissals.tenantId, recommendationDismissals.recKey] });
-}
-
-/** Record feedback (thumbs up/down + optional reason) — FR-6. */
-export async function recordFeedback(
-  db: Db,
-  tenantId: number,
-  recKey: string,
-  userId: string,
-  actedUp: boolean,
-  actedDown: boolean,
-  reason?: string | null,
-): Promise<void> {
-  await db.insert(recommendationFeedback)
-    .values({ tenantId, recKey, userId, actedUp: actedUp ? 1 : 0, actedDown: actedDown ? 1 : 0, reason: reason ?? null })
-    .onConflictDoUpdate({
-      target: [recommendationFeedback.tenantId, recommendationFeedback.userId, recommendationFeedback.recKey],
-      set: { actedUp: actedUp ? 1 : 0, actedDown: actedDown ? 1 : 0, reason: reason ?? null, createdAt: new Date() },
-    });
 }
 
 // ── period helpers (UTC, 'YYYY-MM') ────────────────────────────────────────────

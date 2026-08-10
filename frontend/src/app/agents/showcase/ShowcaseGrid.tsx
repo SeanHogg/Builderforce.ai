@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -75,7 +76,7 @@ export default function ShowcaseGrid({
                 <tr key={t.id} style={trStyle}>
                   <td style={tdStyle}><strong>@{t.author}</strong></td>
                   <td style={tdMutedStyle}>{t.quote}</td>
-                  <td style={tdMutedStyle}>♥ {t.likes}</td>
+                  <td style={tdMutedStyle}><Icon source="♥" size="1em" /> {t.likes}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <a
                       href={`https://x.com/${t.author}/status/${t.id}`}
@@ -106,7 +107,7 @@ export default function ShowcaseGrid({
                 <img src={`https://unavatar.io/x/${t.author}`} alt={t.author} className="cc-avatar" loading="lazy" />
                 <div className="cc-author-info">
                   <span className="cc-author-name">@{t.author}</span>
-                  <span className="cc-likes">♥ {t.likes}</span>
+                  <span className="cc-likes"><Icon source="♥" size="1em" /> {t.likes}</span>
                 </div>
               </div>
               <p className="cc-tweet-quote">{t.quote}</p>
@@ -134,14 +135,14 @@ export default function ShowcaseGrid({
         }
         .cc-filter {
           padding: 8px 16px;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle);
           background: transparent;
           color: var(--text-secondary);
           cursor: pointer;
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: 0.875rem;
+          font-size: var(--font-size-small);
           transition: all 0.15s;
         }
         .cc-filter.active {
@@ -160,7 +161,7 @@ export default function ShowcaseGrid({
           gap: 12px;
           padding: 20px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           text-decoration: none;
           color: var(--text-primary);
@@ -188,18 +189,18 @@ export default function ShowcaseGrid({
         }
         .cc-author-name {
           font-weight: 600;
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
         }
         .cc-likes {
           color: var(--text-secondary);
-          font-size: 0.78rem;
+          font-size: var(--font-size-small);
         }
         .cc-tweet-quote {
           color: var(--text-secondary);
           line-height: 1.55;
           margin: 0;
           white-space: pre-wrap;
-          font-size: 0.92rem;
+          font-size: var(--font-size-body);
         }
         .cc-tweet-images {
           display: grid;
@@ -208,12 +209,12 @@ export default function ShowcaseGrid({
         }
         .cc-tweet-image {
           width: 100%;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           object-fit: cover;
           max-height: 280px;
         }
         .cc-tweet-link {
-          font-size: 0.82rem;
+          font-size: var(--font-size-small);
           color: var(--coral-bright);
           margin-top: auto;
         }

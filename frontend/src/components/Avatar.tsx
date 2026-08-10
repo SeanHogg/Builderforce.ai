@@ -7,9 +7,14 @@ import { useMemo, type MouseEvent } from 'react';
  * Used to give each team member/agent a consistent avatar background.
  */
 export function avatarColor(name: string): string {
+  // Ten distinct categorical identities, all tokens: an avatar drawn from a
+  // fixed literal is the same hue on paper as on slate, so half the wheel used
+  // to wash out in light mode. The ORDER is the contract — a name must keep its
+  // colour — so entries are replaced in place, never reordered.
   const colors = [
-    '#f4726e', '#fb923c', '#fbbf24', '#a3e635', '#34d399',
-    '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#e879f9',
+    'var(--red-bright)', 'var(--orange-bright)', 'var(--amber-bright)', 'var(--yellow-bright)',
+    'var(--emerald-bright)', 'var(--teal-bright)', 'var(--cyan-bright)', 'var(--indigo-bright)',
+    'var(--violet-bright)', 'var(--pink-bright)',
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -81,7 +86,7 @@ export function Avatar({
         height: size,
         borderRadius: '50%',
         background: active ? bgColor : 'var(--bg-elevated)',
-        color: active ? '#fff' : 'var(--text-secondary)',
+        color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
         border: `2px solid ${active ? bgColor : 'var(--border-subtle)'}`,
         cursor: onClick ? 'pointer' : 'default',
         fontWeight: 600,
@@ -101,13 +106,13 @@ export function Avatar({
             position: 'absolute',
             top: -4,
             right: -4,
-            background: 'var(--coral-bright, #f4726e)',
-            color: '#fff',
+            background: 'var(--coral-bright)',
+            color: 'var(--text-on-accent)',
             fontSize: 9,
             fontWeight: 700,
             minWidth: 16,
             height: 16,
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

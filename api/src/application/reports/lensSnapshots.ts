@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Annual-calendar cadence — periodic LENS snapshots (monthly / quarterly / annual
  * reviews) captured on the same cron sweep pattern as {@link runDueReports}.
@@ -198,7 +199,7 @@ export async function dueSnapshots(env: Env, now: Date = new Date()): Promise<{ 
           await captureLensSnapshot(db, tenantId, lens, period, now);
           captured += 1;
         } catch (err) {
-          console.error('[cron:lens-snapshots] capture failed', tenantId, lens, period, err);
+          reportCaughtError(err, { source: "application/reports/lensSnapshots.ts", operation: "dueSnapshots", context: { logMessage: '[cron:lens-snapshots] capture failed', details: tenantId } });
         }
       }
     }

@@ -1,9 +1,8 @@
 'use client';
 
-import { Select } from '@/components/Select';
-
 import { useState, useEffect } from 'react';
-import { useTranslations } from 'next-intl';
+import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -11,8 +10,16 @@ import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
 import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
-import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
+import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
+import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
+import styles from './pricing.module.css';
+import { fetchPublicPricing, type PublicPricingContract, type PublicPricingPlan } from '@/lib/publicPricing';
+import { NAV_GROUPS } from '@/lib/navGroups';
+import { isNavigationFeatureId } from '@/lib/navigationFeatures';
+import { useCart } from '@/lib/CartContext';
+import { calculateSubscriptionLine } from '@/lib/subscriptionCart';
 
 type Plan = 'free' | 'pro' | 'teams';
 
@@ -26,7 +33,6 @@ interface Subscription {
   billingPaymentLast4: string | null;
   billingUpdatedAt: string | null;
   seatCount: number | null;
-  paymentProvider: string;
   pricing: {
     pro: { monthly: number; yearly: number; yearlySavingsPercent: number };
     teams: { perSeatMonthly: number; perSeatYearly: number; yearlySavingsPercent: number; minimumSeats: number };
@@ -34,62 +40,14 @@ interface Subscription {
   };
 }
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
-  padding: 24,
-};
-
-// Non-translatable plan/feature matrix (entitlement booleans). Row LABELS come
-// from the `pricing.planFeatures` catalog array, paired by index — keep the two
-// the same length and order.
-const PLAN_FEATURE_FLAGS: { free: boolean; pro: boolean; teams: boolean }[] = [
-  { free: true,  pro: true,  teams: true  },
-  { free: true,  pro: false, teams: false },
-  { free: false, pro: true,  teams: false },
-  { free: false, pro: false, teams: true  },
-  { free: true,  pro: false, teams: false },
-  { free: false, pro: true,  teams: true  },
-  { free: true,  pro: false, teams: false },
-  { free: false, pro: true,  teams: false },
-  { free: false, pro: false, teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: false, teams: true  },
-  { free: false, pro: false, teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: true,  pro: false, teams: false },
-];
-
 function PlanBadge({ plan }: { plan: Plan }) {
-  const colors: Record<Plan, { bg: string; color: string; label: string }> = {
-    free:  { bg: 'var(--bg-elevated)', color: 'var(--text-muted)', label: 'Free' },
-    pro:   { bg: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)', label: 'Pro' },
-    teams: { bg: 'rgba(96,165,250,0.15)', color: '#60a5fa', label: 'Teams' },
-  };
-  const { bg, color, label } = colors[plan];
-  return (
-    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', background: bg, color }}>
-      {label}
-    </span>
-  );
+  const t = useTranslations('planBadge.tier');
+  const labels: Record<Plan, string> = { free: t('free'), pro: t('pro'), teams: t('teams') };
+  return <span className={styles.planBadge} data-plan={plan}>{labels[plan]}</span>;
 }
 
-function CheckIcon({ checked, color }: { checked: boolean; color: string }) {
-  return (
-    <span style={{ color: checked ? color : 'var(--text-muted)', fontWeight: 700, fontSize: 14 }}>
-      {checked ? '✓' : '—'}
-    </span>
-  );
-}
-
-const PLAN_ACCENT: Record<Plan, string> = {
-  free: 'var(--text-secondary)',
-  pro: 'var(--coral-bright, #f4726e)',
-  teams: '#60a5fa',
+function CheckIcon({ checked }: { checked: boolean }) {
+  return <span className={checked ? styles.check : styles.dash}>{checked ? '✓' : '—'}</span>;
 };
 
 /**
@@ -97,55 +55,68 @@ const PLAN_ACCENT: Record<Plan, string> = {
  * higher tier, or nothing for the Free base tier. Decides its own visibility so
  * the column header and the table footer stay in sync from one definition.
  */
-function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
+function PlanCta({ plan, effectivePlan, onUpgrade, isAnon, label, href, compact = false }: {
   plan: Plan;
   effectivePlan: Plan;
   onUpgrade: (target: 'pro' | 'teams') => void;
   isAnon?: boolean;
+  label?: string;
+  href?: string;
+  compact?: boolean;
 }) {
   const t = useTranslations('pricing');
-  const planName = plan === 'teams' ? 'Teams' : 'Pro';
+  const tierT = useTranslations('planBadge.tier');
+  const planName = plan === 'teams' ? tierT('teams') : tierT('pro');
   // An anonymous visitor has no subscription, so never label a column as their
   // "Current plan"; the free column links them to sign-up instead.
   if (!isAnon && plan === effectivePlan) {
-    return <span style={{ fontSize: 12, color: PLAN_ACCENT[plan], fontWeight: 600 }}>{t('ctaCurrentPlan')}</span>;
+    return <span className={styles.statusText}>{t('ctaCurrentPlan')}</span>;
   }
   if (plan === 'free') {
     if (isAnon) {
       return (
-        <a href="/register" style={{ fontSize: 12, color: PLAN_ACCENT.free, fontWeight: 600, textDecoration: 'none' }}>
-          {t('ctaGetStarted')}
+        <a href={href ?? '/register'} className={styles.planButton} data-plan="free">
+          {label ?? t('ctaGetStarted')}
         </a>
       );
     }
     return null; // Free is the base tier — downgrade lives in the Current Plan card.
   }
+  const rank: Record<Plan, number> = { free: 0, pro: 1, teams: 2 };
+  if (!isAnon && rank[plan] < rank[effectivePlan]) return null;
   return (
-    <button type="button" onClick={() => onUpgrade(plan)}
-      style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: PLAN_ACCENT[plan], color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-      {isAnon ? t('ctaGet', { plan: planName }) : t('ctaUpgradeTo', { plan: planName })}
+    <button type="button" onClick={() => onUpgrade(plan)} className={styles.planButton} data-plan={plan} data-compact={compact}>
+      {isAnon ? (label ?? t('ctaGet', { plan: planName })) : t('ctaUpgradeTo', { plan: planName })}
     </button>
   );
 }
 
 export default function PricingPageClient() {
   const t = useTranslations('pricing');
+  const locale = useLocale();
+  const tierT = useTranslations('planBadge.tier');
+  const navT = useTranslations('nav');
   const confirm = useConfirm();
   const { tenant } = useAuth();
+  const { items, addItem, removeItem, hasItem, openCart } = useCart();
+  const searchParams = useSearchParams();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
+  const selectedModuleIds = Array.from(new Set(
+    (searchParams?.get('features') ?? '').split(',').filter(isNavigationFeatureId),
+  ));
+  const selectedModuleLabels = selectedModuleIds.map((id) => {
+    const group = NAV_GROUPS.find((candidate) => candidate.id === id);
+    return group ? navT(group.labelKey) : id;
+  });
 
   const [sub, setSub] = useState<Subscription | null>(null);
+  const [publicPricing, setPublicPricing] = useState<PublicPricingContract | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [upgradeTarget, setUpgradeTarget] = useState<'pro' | 'teams' | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [billingEmail, setBillingEmail] = useState('');
-  const [seats, setSeats] = useState(3);
-  const [cardBrand, setCardBrand] = useState('visa');
-  const [cardLast4, setCardLast4] = useState('');
-  const [upgrading, setUpgrading] = useState(false);
-  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState('');
+  const [seats, setSeats] = useState(1); // Clamped once the public entitlement contract loads.
   const [downgrading, setDowngrading] = useState(false);
 
   const fetchSub = async () => {
@@ -170,82 +141,78 @@ export default function PricingPageClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSub(); }, [tenantId]);
 
-  // Deep link: /pricing?upgrade=pro|teams pre-opens the upgrade form for a
-  // signed-in tenant; an anonymous visitor is sent to register first (the
-  // checkout is tenant-scoped, so there's nothing to open without a tenant).
-  const searchParams = useSearchParams();
   useEffect(() => {
-    const target = searchParams?.get('upgrade');
-    if (target !== 'pro' && target !== 'teams') return;
-    if (tenantId == null) {
-      window.location.href = `/register?next=${encodeURIComponent(`/pricing?upgrade=${target}`)}`;
+    let active = true;
+    fetchPublicPricing()
+      .then((contract) => { if (active) setPublicPricing(contract); })
+      .catch((cause) => {
+        if (active) setError(t('errorPricingContract', { reason: cause instanceof Error ? cause.message : String(cause) }));
+      });
+    return () => { active = false; };
+  }, [t]);
+
+  useEffect(() => {
+    if (searchParams?.get('success') === '1') {
+      setDiscountCode('');
+      retainDiscountCode('');
+      items.filter((item) => item.checkoutKind === 'plan_subscription').forEach((item) => removeItem(item.id));
       return;
     }
-    setUpgradeTarget(target);
-  }, [searchParams, tenantId]);
+    const captured = searchParams?.get('discountcode') ?? getRetainedDiscountCode();
+    if (captured) {
+      setDiscountCode(captured.toUpperCase());
+      setBillingCycle('yearly');
+      retainDiscountCode(captured);
+    }
+    // Cart mutation callbacks are stable; reacting to items here would re-run the
+    // success cleanup for unrelated marketplace changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
-  const isManualProvider = !sub || sub.paymentProvider === 'manual';
   const effectivePlan = sub?.effectivePlan ?? 'free';
   // Anonymous marketing visitor (no tenant) gets sales-tone copy; a signed-in
   // tenant gets the billing-console framing ("manage your subscription").
   const isAnon = tenantId == null;
 
-  const proMonthly  = sub?.pricing.pro.monthly ?? 29;
-  const proYearly   = sub?.pricing.pro.yearly ?? 290;
-  const teamMonthly = sub?.pricing.teams.perSeatMonthly ?? 20;
-  const teamYearly  = sub?.pricing.teams.perSeatYearly ?? 192;
+  const pricing = publicPricing?.pricing ?? sub?.pricing;
+  const proMonthly  = pricing?.pro.monthly;
+  const proYearly   = pricing?.pro.yearly;
+  const teamMonthly = pricing?.teams.perSeatMonthly;
+  const teamYearly  = pricing?.teams.perSeatYearly;
+  const displayedProPrice = billingCycle === 'yearly' ? proYearly : proMonthly;
+  const displayedTeamUnitPrice = billingCycle === 'yearly' ? teamYearly : teamMonthly;
+  // Teams is volume-priced below Pro per seat, earned by a seat-block minimum.
+  // Surfacing the minimum is what keeps the lower per-seat price from reading as
+  // a typo; the seat input and checkout both clamp to it.
+  const teamMinSeats = pricing?.teams.minimumSeats ?? 1;
 
-  const upgradePrice = upgradeTarget === 'teams'
-    ? (billingCycle === 'yearly' ? teamYearly * seats : teamMonthly * seats)
-    : (billingCycle === 'yearly' ? proYearly : proMonthly);
+  // Keep the seat count at or above the volume minimum whenever it's known —
+  // covers both the initial load and a plan-pricing refresh.
+  useEffect(() => {
+    setSeats((s) => (s < teamMinSeats ? teamMinSeats : s));
+  }, [teamMinSeats]);
 
-  // Single entry point for every upgrade CTA (Current Plan card + comparison
-  // table). With no tenant the checkout can't run, so route to register rather
-  // than opening a modal whose submit would silently return.
-  const openUpgrade = (target: 'pro' | 'teams') => {
-    if (tenantId == null) {
-      window.location.href = `/register?next=${encodeURIComponent(`/pricing?upgrade=${target}`)}`;
-      return;
-    }
-    setUpgradeTarget(target);
-    setUpgradeError(null);
-  };
-
-  const handleUpgrade = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tenantId || upgrading || !upgradeTarget) return;
-    if (!billingEmail.trim()) { setUpgradeError(t('errorBillingEmailRequired')); return; }
-    if (isManualProvider && (!cardLast4.trim() || !/^\d{4}$/.test(cardLast4))) {
-      setUpgradeError(t('errorCardLast4')); return;
-    }
-    setUpgrading(true);
-    setUpgradeError(null);
-    try {
-      const token = getStoredTenantToken();
-      const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/subscription/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({
-          targetPlan: upgradeTarget,
-          billingCycle,
-          billingEmail: billingEmail.trim(),
-          ...(upgradeTarget === 'teams' && { seats }),
-          ...(isManualProvider && { billingPaymentBrand: cardBrand, billingPaymentLast4: cardLast4.trim() }),
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? `${res.status}`);
-      }
-      const result = await res.json() as { checkoutUrl: string | null };
-      if (result.checkoutUrl) { window.location.href = result.checkoutUrl; return; }
-      setUpgradeTarget(null);
-      await fetchSub();
-    } catch (e) {
-      setUpgradeError(e instanceof Error ? e.message : t('errorUpgradeFailed'));
-    } finally {
-      setUpgrading(false);
-    }
+  const addPlanToCart = (target: 'pro' | 'teams') => {
+    if (!pricing) return;
+    const plan = planById(target);
+    if (!plan) return;
+    const { total } = calculateSubscriptionLine(plan, target, billingCycle, seats);
+    items.filter((item) => item.checkoutKind === 'plan_subscription').forEach((item) => removeItem(item.id));
+    addItem({
+      id: `subscription:${target}`,
+      type: 'service',
+      slug: target,
+      name: t('cartPlanName', { plan: plan.name }),
+      price: total,
+      pricingModel: 'subscription',
+      priceUnit: billingCycle === 'yearly' ? t('cartPerYear') : t('cartPerMonth'),
+      checkoutKind: 'plan_subscription',
+      targetPlan: target,
+      billingCycle,
+      ...(target === 'teams' && { seats }),
+      ...(discountCode.trim() && { discountCode: discountCode.trim() }),
+      emoji: target === 'teams' ? 'people' : 'bolt',
+    });
   };
 
   const handleDowngrade = async () => {
@@ -264,270 +231,269 @@ export default function PricingPageClient() {
     finally { setDowngrading(false); }
   };
 
-  const teamsCostNote = upgradeTarget === 'teams'
-    ? billingCycle === 'yearly'
-      ? t('teamsCostNoteYear', { perSeat: teamYearly, total: teamYearly * seats })
-      : t('teamsCostNoteMonth', { perSeat: teamMonthly, total: teamMonthly * seats })
-    : null;
+  const configuredPlans = publicPricing?.plans ?? [];
+  const planById = (id: Plan): PublicPricingPlan | undefined => configuredPlans.find((plan) => plan.id === id);
+  const comparisonFeatures = Array.from(new Set(configuredPlans.flatMap((plan) => [...plan.features, ...plan.excluded])));
+  const formatPrice = (price: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: publicPricing?.currency ?? 'USD', maximumFractionDigits: 0 }).format(price);
+  const formatAddonPrice = (price: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: publicPricing?.currency ?? 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price);
+
+  useEffect(() => {
+    if (!publicPricing) return;
+    const target = searchParams?.get('upgrade');
+    if (target === 'pro' || target === 'teams') addPlanToCart(target);
+    // A cart survives account creation in localStorage. Re-open it on the return
+    // route so the newly authenticated buyer can confirm and continue to Stripe.
+    if (searchParams?.get('checkout') === '1' && items.some((item) => item.checkoutKind === 'plan_subscription')) openCart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicPricing, searchParams, tenantId]);
 
   return (
     <>
-    <JsonLd data={pricingSchema()} />
-    <PageContainer width="readable">
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          {isAnon ? t('titleAnon') : t('titleConsole')}
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
-          {isAnon ? t('subtitleAnon') : t('subtitleConsole')}
-        </p>
-      </div>
+    <JsonLd data={pricingSchema(publicPricing ?? undefined)} />
+    <PageContainer width="full" style={{ padding: 0 }}>
+    <main className={styles.page}>
+      <section className={styles.hero}>
+        <div>
+          <p className={styles.eyebrow}>{t('planComparison')}</p>
+          <h1>{isAnon ? t('titleAnon') : t('titleConsole')}</h1>
+          <p className={styles.lede}>{isAnon ? t('subtitleAnon') : t('subtitleConsole')}</p>
+        </div>
+        <div className={styles.heroPanel}>
+          <span className={styles.heroPanelLabel}>{planById('free')?.name ?? t('anonBannerTitle')}</span>
+          <h2>{t('priceFree')}</h2>
+          <p>{planById('free')?.description ?? t('anonBannerDesc')}</p>
+          <a href={planById('free')?.ctaHref ?? '/register'} className={styles.primaryButton}>{planById('free')?.ctaLabel ?? t('anonBannerCta')}</a>
+        </div>
+      </section>
 
-      {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>{error}</div>}
+      {error && <div className={styles.error}>{error}</div>}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
+        <div className={styles.notice}>{t('loading')}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Anonymous visitor: a sales-tone "get started" banner instead of the
-              billing-console "Current Plan" card (they have no subscription). */}
-          {isAnon ? (
-            <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  {t('anonBannerTitle')}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  {t('anonBannerDesc')}
+        <div className={styles.content}>
+          {!isAnon && (
+          <>
+          {selectedModuleLabels.length > 0 && (
+            <div className={styles.accountCard}>
+              <div className={styles.accountCardBody}>
+                <div className={styles.accountCardTitle}>{t('enabledModulesTitle', { count: selectedModuleLabels.length })}</div>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>{t('enabledModulesDescription')}</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                  {selectedModuleLabels.map((label) => (
+                    <span key={label} style={{ padding: '4px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontSize: 11 }}>{label}</span>
+                  ))}
                 </div>
               </div>
-              <a href="/register"
-                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, textDecoration: 'none' }}>
-                {t('anonBannerCta')}
-              </a>
+              <Link href="/settings?sub=features" className={styles.secondaryButton}>{t('manageEnabledModules')}</Link>
             </div>
-          ) : (
-          <>
+          )}
           {/* Current plan */}
-          <div style={{ ...cardStyle, display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{t('currentPlan')}</div>
+          <div className={styles.accountCard}>
+            <div className={styles.accountCardBody}>
+              <div className={styles.accountCardTitle}>
+                <span>{t('currentPlan')}</span>
                 <PlanBadge plan={sub?.plan ?? 'free'} />
                 {sub?.billingStatus && sub.billingStatus !== 'active' && sub.billingStatus !== 'none' && (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({sub.billingStatus})</span>
+                  <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>({sub.billingStatus})</span>
                 )}
               </div>
               {effectivePlan !== 'free' && sub && (
-                <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                <div className={styles.accountDetails}>
                   {sub.billingCycle && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldBillingCycle')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldBillingCycle')}</span>
                       <span>{sub.billingCycle === 'yearly' ? t('cycleYearlyCap') : t('cycleMonthlyCap')}</span>
                     </div>
                   )}
                   {sub.seatCount != null && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldSeats')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldSeats')}</span>
                       <span>{sub.seatCount}</span>
                     </div>
                   )}
                   {sub.billingEmail && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldBillingEmail')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldBillingEmail')}</span>
                       <span>{sub.billingEmail}</span>
                     </div>
                   )}
                   {sub.billingPaymentBrand && sub.billingPaymentLast4 && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldPaymentMethod')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldPaymentMethod')}</span>
                       <span style={{ textTransform: 'capitalize' }}>{sub.billingPaymentBrand} ···· {sub.billingPaymentLast4}</span>
                     </div>
                   )}
                   {sub.billingUpdatedAt && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldLastUpdated')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldLastUpdated')}</span>
                       <span>{new Date(sub.billingUpdatedAt).toLocaleDateString()}</span>
                     </div>
                   )}
                 </div>
               )}
             </div>
-            {effectivePlan === 'free' ? (
-              <button type="button" onClick={() => openUpgrade('pro')}
-                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+            {effectivePlan === 'free' || sub?.billingStatus !== 'active' ? (
+              <button type="button" onClick={() => addPlanToCart('pro')} className={styles.primaryButton}>
                 {t('upgradePlan')}
               </button>
             ) : (
               <button type="button" onClick={handleDowngrade} disabled={downgrading}
-                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: downgrading ? 'wait' : 'pointer' }}>
+                className={styles.secondaryButton}>
                 {downgrading ? t('downgrading') : t('downgradeToFree')}
               </button>
             )}
           </div>
+
+          {/* Billing details and card validation are independent of upgrades. Free
+              tenants can add a funding instrument here for metered OpenRouter usage. */}
+          <PremiumModelUnlock />
+
+          {/* The after state: the card premium access actually rides on, and the
+              only way to replace it. PremiumModelUnlock covers "no card yet"; this
+              covers pending / validated / failed. Both self-gate, so exactly one
+              renders for any given card status. */}
+          <CardOnFile />
           </>
           )}
 
-          {/* Upgrade checkout — a slide-out panel (opened by any upgrade CTA). Per the
-              app convention only terminal/destructive confirms use a centered modal;
-              everything else, this checkout included, uses SlideOutPanel. */}
-          <SlideOutPanel
-            open={upgradeTarget != null && effectivePlan !== upgradeTarget}
-            onClose={() => { setUpgradeTarget(null); setUpgradeError(null); }}
-            title={t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' })}
-            width="min(560px, 96vw)"
-          >
-            <div style={{ padding: 20 }}>
-              <form onSubmit={handleUpgrade} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelBillingCycle')}</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {(['monthly', 'yearly'] as const).map((c) => {
-                      const saving = upgradeTarget === 'teams'
-                        ? t('saveCycle', { pct: sub?.pricing.teams.yearlySavingsPercent ?? 20 })
-                        : t('saveCycle', { pct: sub?.pricing.pro.yearlySavingsPercent ?? 17 });
-                      const cycleLabel = c === 'yearly' ? t('cycleYearly') : t('cycleMonthly');
-                      return (
-                        <button key={c} type="button" onClick={() => setBillingCycle(c)}
-                          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border-subtle)', background: billingCycle === c ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)', color: billingCycle === c ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)', cursor: 'pointer' }}>
-                          {c === 'yearly' ? t('cycleYearlyWithSaving', { cycle: cycleLabel, saving }) : cycleLabel}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {upgradeTarget === 'teams' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelSeats')}</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="number" min={1} value={seats}
-                        onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                        style={{ width: 80, padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }} />
-                      {teamsCostNote && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{teamsCostNote}</span>}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelBillingEmail')}</label>
-                  <input type="email" required value={billingEmail} onChange={(e) => setBillingEmail(e.target.value)}
-                    placeholder={t('placeholderBillingEmail')}
-                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
-                </div>
-
-                {isManualProvider && (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardBrand')}</label>
-                      <Select value={cardBrand} onChange={(e) => setCardBrand(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
-                        {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
-                          <option key={b} value={b}>{b.charAt(0).toUpperCase() + b.slice(1)}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardLast4')}</label>
-                      <input type="text" required value={cardLast4}
-                        onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        placeholder="4242" maxLength={4}
-                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box', fontFamily: 'var(--font-mono)' }} />
-                    </div>
-                  </div>
-                )}
-
-                {!isManualProvider && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                    {t('redirectNote')}
-                  </div>
-                )}
-
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                  {t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') })}
-                  {upgradeTarget === 'teams' && ` ${t('totalForSeats', { seats })}`}
-                </div>
-
-                {upgradeError && <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)' }}>{upgradeError}</div>}
-
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button type="button" onClick={() => { setUpgradeTarget(null); setUpgradeError(null); }}
-                    style={{ padding: '8px 16px', fontSize: 13, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
-                    {t('cancel')}
-                  </button>
-                  <button type="submit" disabled={upgrading}
-                    style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? '#60a5fa' : 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: upgrading ? 'wait' : 'pointer' }}>
-                    {upgrading
-                      ? (isManualProvider ? t('activating') : t('redirecting'))
-                      : (isManualProvider ? t('activatePlan', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' }) : t('continueToPayment'))}
-                  </button>
-                </div>
-              </form>
+          <section className={styles.section}>
+            <div className={styles.pricingControls}>
+              <div>
+                <strong>{t('billingFrequency')}</strong>
+                <span>{billingCycle === 'yearly' ? t('annualSavingsSummary') : t('monthlyFlexibility')}</span>
+              </div>
+              <div className={styles.billingToggle} role="group" aria-label={t('billingFrequency')}>
+                <button type="button" data-active={billingCycle === 'monthly'} onClick={() => setBillingCycle('monthly')}>{t('cycleMonthlyCap')}</button>
+                <button type="button" data-active={billingCycle === 'yearly'} onClick={() => setBillingCycle('yearly')}>{t('cycleAnnualWithSavings')}</button>
+              </div>
             </div>
-          </SlideOutPanel>
+            <div className={styles.planGrid}>
+              {configuredPlans.map((configured) => {
+                const plan = configured.id;
+                const { unitPrice, total: displayedPrice } = calculateSubscriptionLine(configured, plan, billingCycle, seats);
+                return (
+                <article key={plan} className={styles.planCard} data-featured={plan === 'pro'}>
+                  <div className={styles.planCardTop}>
+                    <h3>{configured.name}</h3>
+                    <PlanCta plan={plan} effectivePlan={effectivePlan} onUpgrade={addPlanToCart} isAnon={isAnon} label={configured.ctaLabel} href={configured.ctaHref} compact />
+                  </div>
+                  <div className={styles.price}>
+                    <span className={styles.priceAmount}>{formatPrice(displayedPrice)}</span>
+                    {displayedPrice !== 0 && <span className={styles.priceSuffix}>{billingCycle === 'yearly' ? t('perYear') : t('perMonth')}</span>}
+                  </div>
+                  {plan === 'teams' && (
+                    <div className={styles.seatScale}>
+                      <div className={styles.seatScaleHeader}>
+                        <label htmlFor="teams-seat-count">{t('teamMembers')}</label>
+                        <strong>{t('seatCount', { seats })}</strong>
+                      </div>
+                      <input id="teams-seat-count" type="range" min={teamMinSeats} max={50} step={1} value={seats} onChange={(event) => setSeats(Number(event.target.value))} />
+                      <div className={styles.seatCalculation}>
+                        {billingCycle === 'yearly'
+                          ? t('teamsAnnualCalculation', { price: unitPrice, seats, total: displayedPrice })
+                          : t('teamsMonthlyCalculation', { price: unitPrice, seats, total: displayedPrice })}
+                      </div>
+                    </div>
+                  )}
+                  {plan === 'pro' && billingCycle === 'yearly' && <p className={styles.savingsNote}>{t('planAnnualSaving', { pct: pricing?.pro.yearlySavingsPercent ?? 0 })}</p>}
+                  {plan === 'teams' && billingCycle === 'yearly' && <p className={styles.savingsNote}>{t('planAnnualSaving', { pct: pricing?.teams.yearlySavingsPercent ?? 0 })}</p>}
+                  <p className={styles.priceNote}>{configured.description}</p>
+                  <ul className={styles.featureList}>
+                    {configured.features.map((feature) => <li key={feature}>{feature}</li>)}
+                    {configured.excluded.map((feature) => <li key={feature} style={{ opacity: 0.6 }}>— {feature}</li>)}
+                  </ul>
+                </article>
+              );})}
+            </div>
+          </section>
+
+          {publicPricing?.businessPhone && (
+            <section className={styles.phoneOffer} aria-labelledby="business-phone-title">
+              <div className={styles.phoneOfferCopy}>
+                <p className={styles.eyebrow}>{t('phone.eyebrow')}</p>
+                <h2 id="business-phone-title">{t('phone.title')}</h2>
+                <p>{t('phone.description')}</p>
+                <ul className={styles.phoneFeatures}>
+                  <li>{t('phone.dedicatedNumber')}</li><li>{t('phone.forwarding')}</li>
+                  <li>{t('phone.allowance', { minutes: publicPricing.businessPhone.includedMinutes, sms: publicPricing.businessPhone.includedSms, mms: publicPricing.businessPhone.includedMms })}</li>
+                </ul>
+                <p className={styles.phoneOverages}>{t('phone.overages', { minute: publicPricing.businessPhone.overagePerMinute, sms: publicPricing.businessPhone.overagePerSms, mms: publicPricing.businessPhone.overagePerMms })}</p>
+                <Link href="/crm/phone" className={styles.secondaryButton}>{t('phone.learnMore')}</Link>
+              </div>
+              <div className={styles.phonePriceCard}>
+                <span>{t('phone.addonFor')}</span>
+                <strong>{formatAddonPrice(publicPricing.businessPhone.monthly)}<small>{t('phone.perMonth')}</small></strong>
+                <p>{t('phone.activation', { price: publicPricing.businessPhone.activation })}</p>
+                <button type="button" className={styles.primaryButton} onClick={() => {
+                  const id = 'service:business-phone';
+                  if (!hasItem(id)) addItem({ id, type: 'service', slug: 'business-phone', name: t('phone.title'), price: publicPricing.businessPhone.monthly, setupFee: publicPricing.businessPhone.activation, pricingModel: 'subscription', priceUnit: t('phone.perMonth'), checkoutKind: 'business_phone', emoji: 'phone' });
+                  else openCart();
+                }}>{hasItem('service:business-phone') ? t('phone.viewCart') : t('phone.addToCart')}</button>
+                <small>{t('phone.eligibility')}</small>
+              </div>
+            </section>
+          )}
 
           {/* Plan comparison table */}
-          <div style={cardStyle}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>{t('planComparison')}</div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <section className={styles.comparisonCard}>
+            <div className={styles.comparisonTitle}>{t('planComparison')}</div>
+            <div className={styles.tableScroll}>
+              <table className={styles.comparisonTable}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>{t('colFeature')}</th>
-                    <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Free<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceFree')}</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
+                    <th>{t('colFeature')}</th>
+                    <th>
+                      {planById('free')?.name ?? tierT('free')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{t('priceFree')}</span>
                     </th>
-                    <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--coral-bright, #f4726e)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceProMonthly', { price: proMonthly })}</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
+                    <th>
+                       {planById('pro')?.name ?? tierT('pro')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{displayedProPrice != null ? `${formatPrice(displayedProPrice)}${billingCycle === 'yearly' ? t('perYear') : t('perMonth')}` : '—'}</span>
                     </th>
-                    <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
-                      Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceTeamsMonthly', { price: teamMonthly })}</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
+                    <th>
+                       {planById('teams')?.name ?? tierT('teams')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{displayedTeamUnitPrice != null ? `${formatPrice(displayedTeamUnitPrice)}${billingCycle === 'yearly' ? t('perSeatYear') : t('perSeatMonth')}` : '—'}</span>
+                      <br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)' }}>{t('teamsVolumeNote', { min: teamMinSeats })}</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(t.raw('planFeatures') as string[]).map((label, i) => {
-                    const flags = PLAN_FEATURE_FLAGS[i];
+                  {comparisonFeatures.map((label) => {
                     return (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-secondary)' }}>{label}</td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.free} color="var(--text-secondary)" /></td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.pro} color="var(--coral-bright, #f4726e)" /></td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.teams} color="#60a5fa" /></td>
+                    <tr key={label}>
+                      <td>{label}</td>
+                      <td><CheckIcon checked={planById('free')?.features.includes(label) === true} /></td>
+                      <td><CheckIcon checked={planById('pro')?.features.includes(label) === true} /></td>
+                      <td><CheckIcon checked={planById('teams')?.features.includes(label) === true} /></td>
                     </tr>
                   );})}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td style={{ padding: '14px 12px' }} />
-                    <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                    <td />
+                    <td>
+                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={addPlanToCart} isAnon={isAnon} label={planById('free')?.ctaLabel} href={planById('free')?.ctaHref} />
                     </td>
-                    <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                    <td>
+                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={addPlanToCart} isAnon={isAnon} label={planById('pro')?.ctaLabel} href={planById('pro')?.ctaHref} />
                     </td>
-                    <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                    <td>
+                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={addPlanToCart} isAnon={isAnon} label={planById('teams')?.ctaLabel} href={planById('teams')?.ctaHref} />
                     </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-            <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-muted)' }}>
+            <p className={styles.addon}>
               {t.rich('managedAddon', {
-                price: sub?.pricing.managedAgentHost.perAgentHostMonthly ?? 49,
+                price: pricing?.managedAgentHost.perAgentHostMonthly ?? '—',
                 b: (c) => <strong>{c}</strong>,
               })}
-            </div>
-          </div>
+            </p>
+          </section>
 
         </div>
       )}
-      {isAnon && <RelatedArticles surface="pricing" heading={t('relatedHeading')} />}
+      {isAnon && <div className={styles.related}><RelatedArticles surface="pricing" heading={t('relatedHeading')} /></div>}
+    </main>
     </PageContainer>
     </>
   );

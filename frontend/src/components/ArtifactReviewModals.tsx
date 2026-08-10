@@ -28,7 +28,7 @@ const cancelBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
 };
 
 const confirmBtnStyle: React.CSSProperties = {
@@ -37,15 +37,15 @@ const confirmBtnStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
   background: 'var(--coral-bright)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   border: 'none',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
 };
 
 function ModalError({ error }: { error?: string | null }) {
   if (!error) return null;
   return (
-    <span style={{ marginRight: 'auto', fontSize: 12, color: 'var(--error-text, #ef4444)' }}>{error}</span>
+    <span style={{ marginRight: 'auto', fontSize: 12, color: 'var(--error-text)' }}>{error}</span>
   );
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "COBIT Governance Readiness for the Agentic Enterprise"
 date: 2026-07-05
-description: A plain-language guide to COBIT IT governance in the age of AI agents — the four core objectives (Govern/EDM, Risk, Resource Optimization, Performance & Compliance), a five-level maturity scale, and how Builderforce.ai instruments every action so governance stops being a spreadsheet exercise. Includes a free COBIT Governance Readiness assessment.
+description: A plain-language guide to COBIT IT governance in the age of AI agents, including where instrumented platform workflows can contribute evidence and where controls still require review.
 tags: [governance, cobit, compliance, audit, risk, enterprise]
 author: Sean Hogg
 ---
@@ -37,12 +37,12 @@ COBIT doesn't grade you pass/fail — it places each objective on a ladder, so y
 
 ## Why agents make governance *easier*, not harder
 
-The instinct is that adding autonomous agents makes governance harder. In practice, a platform where agents run makes the COBIT questions answerable — because every action is already instrumented:
+Adding autonomous agents can make governance harder. Instrumented execution paths can make some COBIT questions easier to answer, provided coverage gaps are disclosed:
 
 - **Decision rights (EDM)** map to workspace roles and **approval gates** — an agent's write can be suspended until a human with the right role signs off.
 - **Risk (APO12)** lives on the same board: risks become tracked items with owners, and policy packs gate what agents may do.
 - **Resourcing (APO07)** is literal here — humans *and* agents are on one roster, with capacity, cost, and performance measured per contributor.
-- **Performance & Compliance (MEA)** is the default: every action lands on an immutable **activity/audit log**, cost is priced at write time, and compliance evidence (versioned SOPs with read-acknowledgement) is produced without a fire drill.
+- **Performance & Compliance (MEA):** supported execution paths can emit activity, usage, and decision records; versioned SOP acknowledgements can contribute evidence but do not constitute certification.
 
 That's the difference between governance you *assert* and governance you can *show*: the same system that does the work keeps the evidence.
 

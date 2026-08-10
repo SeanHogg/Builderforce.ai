@@ -44,13 +44,13 @@ export interface IntegrationCategory {
 }
 
 export const INTEGRATION_CATEGORIES: IntegrationCategory[] = [
-  { id: 'llm', label: 'LLM Platforms', icon: '✨', accent: '#a855f7', order: 1 },
-  { id: 'official', label: 'Core MCP Servers', icon: '🧩', accent: '#38bdf8', order: 2 },
-  { id: 'data-db', label: 'Data & Databases', icon: '🗄️', accent: '#34d399', order: 3 },
-  { id: 'productivity', label: 'Productivity & Docs', icon: '📋', accent: '#fbbf24', order: 4 },
-  { id: 'comms', label: 'Communication', icon: '💬', accent: '#60a5fa', order: 5 },
-  { id: 'marketing-crm', label: 'Marketing & CRM', icon: '📣', accent: '#fb7185', order: 6 },
-  { id: 'analytics-collection', label: 'Analytics & Data Collection', icon: '📊', accent: '#f472b6', order: 7 },
+  { id: 'llm', label: 'LLM Platforms', icon: '✨', accent: 'var(--purple-bright)', order: 1 },
+  { id: 'official', label: 'Core MCP Servers', icon: '🧩', accent: 'var(--sky-bright)', order: 2 },
+  { id: 'data-db', label: 'Data & Databases', icon: '🗄️', accent: 'var(--emerald-bright)', order: 3 },
+  { id: 'productivity', label: 'Productivity & Docs', icon: '📋', accent: 'var(--amber-bright)', order: 4 },
+  { id: 'comms', label: 'Communication', icon: '💬', accent: 'var(--info)', order: 5 },
+  { id: 'marketing-crm', label: 'Marketing & CRM', icon: '📣', accent: 'var(--red-bright)', order: 6 },
+  { id: 'analytics-collection', label: 'Analytics & Data Collection', icon: '📊', accent: 'var(--pink-bright)', order: 7 },
 ];
 
 const CATEGORY_MAP: Record<string, IntegrationCategory> = INTEGRATION_CATEGORIES.reduce(
@@ -96,7 +96,7 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'time', label: 'Time', category: 'official', kind: 'mcp', auth: 'none', icon: '⏰', description: 'Current time lookup and timezone conversion.', operations: [{ id: 'get-current-time', label: 'Get current time' }, { id: 'convert-time', label: 'Convert timezone' }] },
   { id: 'github', label: 'GitHub', category: 'official', kind: 'mcp', auth: 'api-key', icon: '🐙', description: 'Repos, files, issues, and pull requests via the GitHub API.', operations: [{ id: 'create-issue', label: 'Create issue' }, { id: 'create-pull-request', label: 'Create pull request' }, { id: 'search-repositories', label: 'Search repositories' }, { id: 'create-or-update-file', label: 'Create or update file' }] },
   { id: 'gitlab', label: 'GitLab', category: 'official', kind: 'mcp', auth: 'api-key', icon: '🦊', description: 'Projects, files, and merge requests via the GitLab API.', operations: [{ id: 'create-issue', label: 'Create issue' }, { id: 'create-merge-request', label: 'Create merge request' }, { id: 'search-projects', label: 'Search projects' }, { id: 'create-or-update-file', label: 'Create or update file' }] },
-  { id: 'brave-search', label: 'Brave Search', category: 'official', kind: 'trigger', auth: 'api-key', icon: '🦁', description: 'Web and local search via the Brave Search API.', operations: [{ id: 'web-search', label: 'Web search' }, { id: 'local-search', label: 'Local search' }] },
+  { id: 'tavily', label: 'Tavily', category: 'official', kind: 'trigger', auth: 'api-key', icon: '🔎', description: 'Open-web search with page content in the response.', operations: [{ id: 'web-search', label: 'Web search' }] },
   { id: 'google-drive', label: 'Google Drive', category: 'official', kind: 'trigger', auth: 'oauth', icon: '📂', description: 'File access and search across Google Drive.', operations: [{ id: 'search-files', label: 'Search files' }, { id: 'read-file', label: 'Read file' }, { id: 'list-files', label: 'List files' }] },
   { id: 'sqlite', label: 'SQLite', category: 'official', kind: 'mcp', auth: 'connection-string', icon: '🪶', description: 'SQLite database interaction with query execution.', operations: [{ id: 'read-query', label: 'Read query' }, { id: 'write-query', label: 'Write query' }, { id: 'list-tables', label: 'List tables' }, { id: 'create-table', label: 'Create table' }] },
 

@@ -15,7 +15,7 @@ export interface AuthUser {
    *  that sees only the Profile / Find Work / Timecard shell; 'standard' (or
    *  undefined) = the full builder app. Sourced from the web JWT `act` claim /
    *  /api/auth/me. */
-  accountType?: 'standard' | 'freelancer';
+  accountType?: 'standard' | 'freelancer' | 'sales';
   /** True once the user has EXPLICITLY chosen Build vs Hired. False/undefined for an
    *  OAuth/magic-link account that was auto-provisioned and hasn't picked a role yet —
    *  the onboarding gate forces the one-time choice. From /api/auth/me. */
@@ -53,7 +53,7 @@ export interface Project {
   name: string;
   description?: string | null;
   template?: string | null;
-  /** Active IDE modality: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
+  /** Active IDE modality: 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
   modality?: string | null;
   /** Where the project was born — 'ide' | 'imported' | 'external'. Drives the origin badge. */
   origin?: string | null;
@@ -109,13 +109,13 @@ export interface FileEntry {
  * An IDE project (0224) — the buildable artifact you open in the IDE. A
  * first-class child of a Project: many can hang off one container Project
  * (`containerProjectId`, optional + reassignable). Backed by a hidden storage
- * project; you open it at `/ide/{storageProjectPublicId}`.
+ * project; you open its Builder object at `/create/build/{storageProjectPublicId}`.
  */
 export interface IdeProject {
   id: number;
   publicId: string;
   name: string;
-  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. */
   modality: string;
   status: string;
   /** The parent Project this build is grouped under, or null when ungrouped. */
@@ -180,23 +180,13 @@ export interface ModelOption {
   task: string;
   webgpu: boolean;
   maxParams: number;
+  modelConfig?: { dModel: number; numLayers: number; hiddenDim: number };
 }
 
 export const SUPPORTED_MODELS: ModelOption[] = [
-  { id: 'gpt-neox-20m', name: 'GPT-NeoX 20M', parameters: '20M', task: 'Tiny reasoning (browser testing)', webgpu: true, maxParams: 20e6 },
-  { id: 'codeparrot-110m', name: 'CodeParrot 110M', parameters: '110M', task: 'Python coding', webgpu: true, maxParams: 110e6 },
-  { id: 'gpt-neo-125m', name: 'GPT-Neo 125M', parameters: '125M', task: 'General reasoning', webgpu: true, maxParams: 125e6 },
-  { id: 'codeparrot-350m', name: 'CodeParrot 350M', parameters: '350M', task: 'Python coding', webgpu: true, maxParams: 350e6 },
-  { id: 'codegen-350m', name: 'CodeGen 350M', parameters: '350M', task: 'Coding', webgpu: true, maxParams: 350e6 },
-  { id: 'gpt-neo-350m', name: 'GPT-Neo 350M', parameters: '350M', task: 'General reasoning', webgpu: true, maxParams: 350e6 },
-  { id: 'santacoder-1b', name: 'SantaCoder 1B', parameters: '1B', task: 'Coding + reasoning', webgpu: true, maxParams: 1e9 },
-  { id: 'starcoder-1b', name: 'StarCoder 1B', parameters: '1B', task: 'Coding + reasoning', webgpu: true, maxParams: 1e9 },
-  { id: 'mpt-1b', name: 'MPT-1B', parameters: '1B', task: 'Instruction-following & reasoning', webgpu: true, maxParams: 1e9 },
-  { id: 'mpt-1b-instruct', name: 'MPT-1B-Instruct', parameters: '1B', task: 'Instruction-following & reasoning', webgpu: true, maxParams: 1e9 },
-  { id: 'openassistant-1b', name: 'OpenAssistant 1B', parameters: '1B', task: 'Instruction-following, reasoning', webgpu: true, maxParams: 1e9 },
-  { id: 'mpt-1.3b', name: 'MPT-1.3B', parameters: '1.3B', task: 'Instruction-following & reasoning', webgpu: true, maxParams: 1.3e9 },
-  { id: 'codegen-2b', name: 'CodeGen 2B', parameters: '2B', task: 'Full coding capabilities (LoRA/adapter)', webgpu: true, maxParams: 2e9 },
-  { id: 'starcoder-2b', name: 'StarCoder 2B', parameters: '2B', task: 'Coding & reasoning (LoRA)', webgpu: true, maxParams: 2e9 },
+  { id: 'evermind-browser-500k', name: 'Evermind Browser Small', parameters: '~500K', task: 'Private browser adaptation', webgpu: false, maxParams: 500e3, modelConfig: { dModel: 96, numLayers: 2, hiddenDim: 192 } },
+  { id: 'evermind-browser-2m', name: 'Evermind Browser Medium', parameters: '~2M', task: 'Browser LoRA experiments', webgpu: false, maxParams: 2e6, modelConfig: { dModel: 160, numLayers: 3, hiddenDim: 320 } },
+  { id: 'evermind-browser-8m', name: 'Evermind Browser Large', parameters: '~8M', task: 'Higher-capacity browser LoRA', webgpu: false, maxParams: 8e6, modelConfig: { dModel: 256, numLayers: 4, hiddenDim: 512 } },
 ];
 
 export interface TrainingConfig {
@@ -310,8 +300,9 @@ export interface PublishedAgent {
   preferred_runtime?: 'cloud' | 'host' | null;
   /** Agent runtime engine — always the current version (read-only denormalized value). */
   engine?: 'builderforce-v3';
-  /** Cloud execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
-  runtime_surface?: 'durable' | 'container';
+  /** Cloud execution surface (migration 0105): durable DO, long-lived Cloudflare
+   *  Container, or the linked repo's own GitHub Actions runners. */
+  runtime_surface?: 'durable' | 'container' | 'github_actions';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;

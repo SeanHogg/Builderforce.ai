@@ -110,7 +110,6 @@ export interface GenerateDeckInput {
   mode: DeckMode;
   templateId?: string;
   quarter?: string;
-  prompt?: string;
 }
 
 export interface GenerateDeckResult {

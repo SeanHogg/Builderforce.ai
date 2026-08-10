@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Image-vendor registry — single source of truth for which vendor owns which
  * image model, tier classification, and dispatch. Mirrors the chat
@@ -188,9 +189,7 @@ export async function dispatchImageVendor(params: ImageDispatchParams): Promise<
     } catch (err) {
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message });
-        console.warn(
-          `[imageVendors] ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
-        );
+        reportCaughtError(err, { source: "application/llm/imageVendors/registry.ts", operation: "dispatchImageVendor", level: 'warning', context: { logMessage: `[imageVendors] ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)` } });
         continue;
       }
       throw err; // VendorFatalError bubbles

@@ -13,23 +13,16 @@ import { useEffect, useState } from 'react';
 import { psychometric as psychometricApi } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import type { PsychometricCatalog } from '@/lib/psychometric';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
 // Keyed by tenant id: the frameworks/questions are static, but `entitled` is
 // per-tenant, so a tenant switch must NOT reuse another tenant's entitlement.
-const cache = new Map<string, Promise<PsychometricCatalog>>();
+const CACHE_PREFIX = 'psychometric-catalog:';
 
 /** Fetch the catalog once per tenant and reuse it. On failure the entry is cleared
  *  so a later mount can retry. */
 export function loadPsychometricCatalog(tenantKey: string): Promise<PsychometricCatalog> {
-  let p = cache.get(tenantKey);
-  if (!p) {
-    p = psychometricApi.catalog().catch((e) => {
-      cache.delete(tenantKey);
-      throw e;
-    });
-    cache.set(tenantKey, p);
-  }
-  return p;
+  return getOrSetClientCached(`${CACHE_PREFIX}${tenantKey}`, () => psychometricApi.catalog());
 }
 
 export interface UsePsychometricCatalog {

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
@@ -38,13 +39,15 @@ export default function LegalPanel() {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <button type="button" className="btn-ghost" onClick={() => openLegalEditor(dt, 'edit')}>
-                      ✎ {t('common.edit')}
+                      
+                      <Icon source="✎" size="1em" /> {t('common.edit')}
                     </button>
                     <button type="button" className="admin-tab active" onClick={() => openLegalEditor(dt, 'new')}>
                       + {t('legal.newVersion')}
                     </button>
                     <button type="button" className="btn-ghost" onClick={() => setLegalHistory({ docType: dt })}>
-                      🕑 {t('legal.history.button')}
+                      
+                      <Icon source="🕑" size="1em" /> {t('legal.history.button')}
                     </button>
                   </div>
                 </div>

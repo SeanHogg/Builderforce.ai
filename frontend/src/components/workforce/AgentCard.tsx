@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { PublishedAgent } from '@/lib/types';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -37,9 +38,9 @@ import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
  * is always true; on the marketplace it is membership in the purchased set.
  */
 
-const runtimePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
-const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
-const evalPillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'rgba(34,197,94,0.12)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' };
+const runtimePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
+const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
+const evalPillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(34,197,94,0.12)', color: 'var(--success-text)', border: '1px solid rgba(34,197,94,0.3)' };
 
 /** Public eval score (0-1) for an agent, preferring the camelCase contract field
  *  and falling back to the snake_case row column. null when not yet scored. */
@@ -87,7 +88,7 @@ export function AgentCard({
 
   return (
     <WorkforceCard
-      avatar={<span style={{ fontSize: 24 }}>🤖</span>}
+      avatar={<span style={{ fontSize: 'var(--font-size-section)' }}><Icon source="🤖" size="1em" /></span>}
       name={agent.name}
       subtitle={subtitle}
       pill={{ kind: owner ? 'cloud' : 'marketplace', label: t('card.agentPill') }}
@@ -101,13 +102,13 @@ export function AgentCard({
       }
       body={
         <>
-          {agent.bio && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>}
+          {agent.bio && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>}
           <SkillTags skills={agent.skills} max={5} />
           {/* This agent's personality — same read-only readout the human MemberCard
               shows; self-hides when the agent carries no personality. */}
           <PersonalitySummary profile={agent.psychometric ?? undefined} />
           {/* Runtime + price pills — pricing is shown on every card. */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 'var(--font-size-eyebrow)' }}>
             <span style={runtimePillStyle}>
               {RUNTIME_LABELS[agent.runtime_support ?? 'cloud']}
               {owner && agent.runtime_support === 'both' && agent.preferred_runtime ? ` · ${t('card.prefers', { runtime: agent.preferred_runtime })}` : ''}
@@ -126,7 +127,7 @@ export function AgentCard({
       footer={
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>
               {agent.hire_count != null ? t('card.hired', { count: agent.hire_count }) : null}
               {/* "In use" (active holders) is an owner-only signal — never shown to
                   non-owners, who can't see how/whether others are using it. */}

@@ -12,7 +12,7 @@ import { _resetMemoryCooldowns } from '../../infrastructure/auth/cooldownStore';
 // on its FREE daily neuron allowance BEFORE the metered direct-Anthropic floor.
 // Cloudflare (`@cf/...`) is PAID_LEAD_VENDOR and leads CODING_PREMIUM_FALLBACK_MODELS,
 // so when the free coders are saturated the cascade lands on the Cloudflare coder
-// and NEVER reaches `claude-sonnet-4-6` / `claude-opus-4-8` on the operator's
+// and NEVER reaches `claude-sonnet-5` / `claude-opus-4-8` on the operator's
 // CLAUDE_API_KEY. This regression-locks both the wiring (CF env passed through)
 // and the ordering (CF before Anthropic). The metered floor is reached ONLY when
 // Cloudflare is unbound or down — which the health probe surfaces as

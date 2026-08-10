@@ -13,7 +13,7 @@ interface FleetMeshContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -98,7 +98,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               y1={cy}
               x2={x}
               y2={y}
-              stroke={agentHost.online ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)'}
+              stroke={agentHost.online ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--border-subtle)'}
               strokeWidth={hoveredId === agentHost.id ? 2 : 1}
               strokeDasharray={agentHost.online ? undefined : '4 3'}
               opacity={0.5}
@@ -116,7 +116,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
                   y1={ay}
                   x2={bx}
                   y2={by}
-                  stroke="var(--cyan-bright, #00e5cc)"
+                  stroke="var(--cyan-bright, var(--cyan-bright))"
                   strokeWidth={0.5}
                   opacity={0.2}
                 />
@@ -124,8 +124,8 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
             )}
 
           {/* Hub */}
-          <circle cx={cx} cy={cy} r={18} fill="var(--bg-elevated)" stroke="var(--coral-bright, #f4726e)" strokeWidth={2} />
-          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={9} fontWeight={700} fill="var(--coral-bright, #f4726e)">
+          <circle cx={cx} cy={cy} r={18} fill="var(--bg-elevated)" stroke="var(--coral-bright)" strokeWidth={2} />
+          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={9} fontWeight={700} fill="var(--coral-bright)">
             HUB
           </text>
 
@@ -134,7 +134,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
             const online = !!agentHost.online;
             const isSelected = selectedAgentHost?.id === agentHost.id;
             const isHovered = hoveredId === agentHost.id;
-            const nodeColor = online ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)';
+            const nodeColor = online ? 'var(--cyan-bright, var(--cyan-bright))' : 'var(--border-subtle)';
             return (
               <g
                 key={agentHost.id}
@@ -199,7 +199,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
             }}
           >
             <option value="">Select agentHost…</option>
@@ -229,7 +229,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               resize: 'vertical',
               outline: 'none',
               boxSizing: 'border-box',
@@ -255,7 +255,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
                 background: 'var(--bg-elevated)',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
               }}
             >
@@ -265,7 +265,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
         </div>
 
         {dispatchError && (
-          <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginBottom: 10 }}>{dispatchError}</div>
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{dispatchError}</div>
         )}
 
         {dispatchResult && (
@@ -276,7 +276,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               background: 'var(--bg-elevated)',
               color: 'rgba(34,197,94,0.9)',
               padding: '8px 12px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               overflowX: 'auto',
               marginBottom: 10,
               maxHeight: 120,
@@ -296,10 +296,10 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               padding: '8px 18px',
               fontSize: 13,
               fontWeight: 600,
-              background: selectedAgentHost && !dispatching ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-              color: selectedAgentHost && !dispatching ? '#fff' : 'var(--text-muted)',
+              background: selectedAgentHost && !dispatching ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+              color: selectedAgentHost && !dispatching ? 'var(--text-on-accent)' : 'var(--text-muted)',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: !selectedAgentHost || dispatching ? 'not-allowed' : 'pointer',
             }}
           >

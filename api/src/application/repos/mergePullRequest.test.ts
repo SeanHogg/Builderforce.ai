@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mergePullRequest, normalizeMergeMethod, buildMergeRequest } from './mergePullRequest';
+import { mergePullRequest, normalizeMergeMethod, buildMergeRequest, isMergeConflictMessage } from './mergePullRequest';
 import { cloudAutoMergeEnabled, cloudAutoMergeRequiresGreen } from './mergeBranchToBase';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -39,6 +39,14 @@ describe('normalizeMergeMethod', () => {
   });
 });
 
+describe('isMergeConflictMessage', () => {
+  it('recognizes provider conflict messages without confusing policy blockers', () => {
+    expect(isMergeConflictMessage('Pull Request has merge conflicts')).toBe(true);
+    expect(isMergeConflictMessage('Conflicts must be resolved before merging')).toBe(true);
+    expect(isMergeConflictMessage('At least one approving review is required')).toBe(false);
+  });
+});
+
 describe('buildMergeRequest — per-provider endpoints/method/body [1278]', () => {
   const b = { host: null, owner: 'acme', repo: 'app', token: 't', number: 42 } as const;
 
@@ -62,8 +70,14 @@ describe('buildMergeRequest — per-provider endpoints/method/body [1278]', () =
     expect(buildMergeRequest({ ...b, provider: 'bitbucket', method: 'merge' }).body).toMatchObject({ merge_strategy: 'merge_commit' });
     expect(buildMergeRequest({ ...b, provider: 'bitbucket', method: 'rebase' }).body).toMatchObject({ merge_strategy: 'fast_forward' });
   });
-  it('Bitbucket Server (custom host) throws → route maps to 501', () => {
-    expect(() => buildMergeRequest({ ...b, provider: 'bitbucket', host: 'bb.acme.com' })).toThrow();
+  it('Bitbucket Server (custom host): POST the 1.0 pull-requests/:id/merge', () => {
+    // Server has no per-request strategy (it is a repository setting), so the
+    // method is dropped rather than sent and silently ignored.
+    expect(buildMergeRequest({ ...b, provider: 'bitbucket', host: 'bb.acme.com', method: 'squash', commitMessage: 'msg' })).toEqual({
+      method: 'POST',
+      url: 'https://bb.acme.com/rest/api/1.0/projects/acme/repos/app/pull-requests/42/merge?version=-1',
+      body: { message: 'msg' },
+    });
   });
 });
 
@@ -114,13 +128,31 @@ describe('mergePullRequest', () => {
   });
 
   it('maps 405 to not_mergeable and 409 to conflict', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('blocked', { status: 405 })));
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      message: 'Pull Request is not mergeable',
+      documentation_url: 'https://docs.github.com/rest/pulls/pulls#merge-a-pull-request',
+    }, 405)));
     const a = await mergePullRequest({ ...base, provider: 'github' });
     expect(a.ok ? '' : a.code).toBe('not_mergeable');
+    expect(a.ok ? '' : a.reason).toContain('Pull Request is not mergeable');
+    expect(a.ok ? '' : a.reason).toContain("whether 'squash' merges are enabled");
+    expect(a.ok ? '' : a.reason).not.toContain('documentation_url');
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response('head moved', { status: 409 })));
     const b = await mergePullRequest({ ...base, provider: 'github' });
     expect(b.ok ? '' : b.code).toBe('conflict');
+  });
+
+  it('maps GitHub 405 merge-conflict responses to conflict so callers can remediate them', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      message: 'Pull Request has merge conflicts',
+      documentation_url: 'https://docs.github.com/rest/pulls/pulls#merge-a-pull-request',
+    }, 405)));
+
+    const result = await mergePullRequest({ ...base, provider: 'github' });
+
+    expect(result.ok ? '' : result.code).toBe('conflict');
+    expect(result.ok ? '' : result.reason).toBe('merge conflict: Pull Request has merge conflicts');
   });
 
   it('maps other non-OK statuses to provider_error', async () => {

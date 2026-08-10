@@ -68,7 +68,7 @@ export default function PasswordInput({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: 6,
+          borderRadius: 'var(--radius-sm)',
         }}
       >
         {visible ? (

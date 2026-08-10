@@ -152,12 +152,27 @@ describe("BuilderforceTransportAdapter", () => {
       const body = JSON.parse(submitInit.body as string);
       expect(body.taskId).toBe(77);
       expect(body.agentId).toBe(5);
+      expect(body.agentRegistrationId).toBeUndefined();
       expect(body.agentNodeId).toBe(42);
       expect(body.sessionId).toBe("sess-1");
       expect(body.payload).toBe("Create a login component");
 
       const headers = submitInit.headers as Record<string, string>;
       expect(headers.Authorization).toBe("Bearer tenant-jwt");
+    });
+
+    it("submits canonical UUID agent registrations without a legacy numeric id", async () => {
+      const adapter = new BuilderforceTransportAdapter(config);
+      await adapter.submitTask({
+        agentId: "76e6dc1c-02c4-44be-ac8b-696114aaa1cd",
+        description: "Review",
+        input: "Review the change",
+        metadata: { taskId: 77 },
+      });
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(String(init.body));
+      expect(body.agentId).toBeUndefined();
+      expect(body.agentRegistrationId).toBe("76e6dc1c-02c4-44be-ac8b-696114aaa1cd");
     });
 
     it("throws when metadata.taskId is missing", async () => {
@@ -261,36 +276,39 @@ describe("BuilderforceTransportAdapter", () => {
 
   // -------------------------------------------------------------------------
   describe("listAgents", () => {
-    it("maps Builderforce agent_type to BuilderForceAgents AgentInfo id", async () => {
+    it("maps canonical Builderforce registrations to AgentInfo", async () => {
       const agents = [
         {
-          agent_type: "claude",
-          name: "Claude",
-          description: "Anthropic Claude",
-          available: true,
+          id: "76e6dc1c-02c4-44be-ac8b-696114aaa1cd",
+          name: "Claude reviewer",
+          framework: "claude",
+          protocol: "acp",
+          status: "active",
+          healthStatus: "online",
           capabilities: ["code"],
         },
         {
-          agent_type: "ollama",
-          name: "Ollama",
-          description: "Local LLM",
-          available: false,
+          id: "c8f88152-15b6-464a-9154-e00a52a3c648",
+          name: "Offline agent",
+          framework: "custom",
+          protocol: "native-http",
+          status: "inactive",
+          healthStatus: "offline",
           capabilities: ["code"],
         },
       ];
-      fetchMock = mockFetchSequence([agents]);
+      fetchMock = mockFetchSequence([{ agents }]);
       vi.stubGlobal("fetch", fetchMock);
 
       const adapter = new BuilderforceTransportAdapter(config);
       const result = await adapter.listAgents();
 
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("claude");
-      expect(result[0].name).toBe("Claude");
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("76e6dc1c-02c4-44be-ac8b-696114aaa1cd");
+      expect(result[0].name).toBe("Claude reviewer");
       expect(result[0].capabilities).toContain("code");
-      expect(result[1].id).toBe("ollama");
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toContain("/api/agents");
+      expect(url).toContain("/api/agent-registrations");
     });
   });
 

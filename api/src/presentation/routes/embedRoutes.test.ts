@@ -42,7 +42,7 @@ describe('embedRoutes /config', () => {
     const { db } = makeDb({ settings: null, isolationMode: 'single' });
     const res = await createEmbedRoutes(db).request('/config');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       enabled: false,
       capabilities: [],
       consentVersion: null,
@@ -50,13 +50,14 @@ describe('embedRoutes /config', () => {
       consentedBy: null,
       isolationMode: 'single',
       consentRequiredVersion: 1,
+      publicKey: `bf_${TENANT}`,
     });
   });
 
   it('GET reads existing embed config (incl. consent) from tenant settings', async () => {
     const { db } = makeDb({ settings: enabledWithConsent(['product', 'agile']), isolationMode: 'segmented' });
     const res = await createEmbedRoutes(db).request('/config');
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       enabled: true,
       capabilities: ['product', 'agile'],
       consentVersion: 1,
@@ -120,5 +121,37 @@ describe('embedRoutes /config', () => {
     const body = await res.json() as Record<string, unknown>;
     expect(body.enabled).toBe(false);
     expect(body.capabilities).toEqual(['agile']);
+  });
+
+  it('GET returns all migrated customer-site capabilities disabled by default', async () => {
+    const { db } = makeDb({ settings: null });
+    const body = await (await createEmbedRoutes(db).request('/config')).json() as any;
+    expect(body.customerFeatureKeys).toHaveLength(13);
+    expect(body.customerFeatures.feedback_widget).toEqual({
+      enabled: false,
+      consentVersion: null,
+      consentedAt: null,
+      consentedBy: null,
+    });
+    expect(body.customerConsentLog).toEqual([]);
+  });
+
+  it('requires explicit consent when enabling a customer-site capability', async () => {
+    const { db, captured } = makeDb({ settings: null });
+    const router = createEmbedRoutes(db);
+    const rejected = await router.request('/features/feedback_widget', putJson({ enabled: true }));
+    expect(rejected.status).toBe(409);
+    expect(captured.updateSet).toBeUndefined();
+
+    const accepted = await router.request('/features/feedback_widget', putJson({ enabled: true, consentAcknowledged: true }));
+    expect(accepted.status).toBe(200);
+    const written = JSON.parse(captured.updateSet.settings);
+    expect(written.embed.customerFeatures.feedback_widget.enabled).toBe(true);
+    expect(written.embed.customerConsentLog[0]).toMatchObject({
+      feature: 'feedback_widget',
+      action: 'OPT_IN',
+      version: 1,
+      by: USER,
+    });
   });
 });

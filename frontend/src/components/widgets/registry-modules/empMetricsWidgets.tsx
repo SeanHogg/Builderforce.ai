@@ -29,7 +29,7 @@ import { colorAt } from '@/components/charts/chartColors';
 import { int, pct, usd } from '@/components/insights/format';
 
 const METRICS_CAP = 'insights.engineering' as const;
-const DANGER = 'var(--danger, #e5484d)';
+const DANGER = 'var(--danger)';
 
 // ── Shared, deduped data sources (one fetch per source regardless of pins) ──────
 const useAllocation = () => useSharedSource<AllocationHealthResult>('emp:alloc', () => empMetricsApi.allocationHealth());

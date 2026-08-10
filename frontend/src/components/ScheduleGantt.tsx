@@ -78,7 +78,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
 
   if (!range) {
     return (
-      <div style={{ padding: 32, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, color: 'var(--text-secondary)' }}>
+      <div style={{ padding: 32, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', color: 'var(--text-secondary)' }}>
         No scheduled {noun}s yet. Add start or due dates to see them on the timeline.
       </div>
     );
@@ -97,7 +97,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
         <ScheduleLegend />
       </div>
 
-      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: NAME_COL + timelineWidth }}>
             {/* Axis header */}
@@ -187,14 +187,14 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                           background: color,
                           opacity: 0.9,
                           border: 'none',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           padding: '0 8px',
                           fontSize: '0.7rem',
                           fontWeight: 600,
-                          color: '#fff',
+                          color: 'var(--text-on-accent)',
                           overflow: 'hidden',
                           whiteSpace: 'nowrap',
                           zIndex: 2,
@@ -226,7 +226,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                 color: 'var(--text-secondary)',
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 999,
+                borderRadius: 'var(--radius-full)',
                 cursor: 'pointer',
               }}
             >

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Activity + timecard routes.
  *
@@ -8,9 +9,13 @@
  *
  * Worker-facing endpoints use the WEB JWT (a freelancer may have no tenant);
  * employer approval uses the TENANT JWT.
+ *
+ * Data access is Drizzle only (`buildDatabase(c.env)` per handler). Client-visible
+ * rows are selected with explicit snake_case aliases so the `mapCard`/`mapEntry`/
+ * `mapInvoice` shapes are byte-identical to the raw-SQL implementation they replace.
  */
 import { Hono } from 'hono';
-import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { resolveActiveMinutes, type ResolvableSignal } from '../../application/activity/resolveTime';
@@ -20,7 +25,17 @@ import { getActivityLog } from '../../application/activity/activityLog';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { freelancerStatsCacheKey } from './freelancerRoutes';
 import { TenantRole } from '../../domain/shared/types';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import {
+  activitySignals,
+  freelancerEngagements,
+  freelancerInvoices,
+  tenants,
+  timecardEntries,
+  timecards,
+  users,
+} from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 
 const SIGNAL_SOURCES = ['portal', 'vscode', 'agent', 'meeting', 'system'] as const;
@@ -31,23 +46,27 @@ const MAX_BATCH = 100;
  *  signal to an active engagement when one resolves; otherwise stores it for audit.
  *  `defaultTenantId` (VSIX: from the tenant token) backfills a signal's tenantId. */
 async function ingestSignals(
-  // The concrete type `neon(url)` returns — its defaults are <false, false>. Using
-  // `ReturnType<typeof neon>` instead widens to <boolean, boolean>, which an actual
-  // call is NOT assignable to (the params sit in a contravariant transaction position).
-  sql: NeonQueryFunction<false, false>,
+  db: Db,
   userId: string,
   list: unknown[],
   defaultSource: string,
   defaultTenantId: number | null,
 ): Promise<number> {
-  const engRows = await sql`
-    SELECT id, tenant_id, project_id FROM freelancer_engagements
-    WHERE freelancer_user_id = ${userId} AND terminated_at IS NULL
-  ` as unknown as { id: string; tenant_id: number; project_id: number | null }[];
+  const engRows = await db
+    .select({
+      id: freelancerEngagements.id,
+      tenantId: freelancerEngagements.tenantId,
+      projectId: freelancerEngagements.projectId,
+    })
+    .from(freelancerEngagements)
+    .where(and(
+      eq(freelancerEngagements.freelancerUserId, userId),
+      isNull(freelancerEngagements.terminatedAt),
+    ));
   const resolveEngagement = (tenantId: number | null, projectId: number | null): string | null => {
     if (tenantId == null) return null;
-    const forTenant = engRows.filter((e) => Number(e.tenant_id) === Number(tenantId));
-    const byProject = forTenant.find((e) => e.project_id != null && Number(e.project_id) === Number(projectId));
+    const forTenant = engRows.filter((e) => Number(e.tenantId) === Number(tenantId));
+    const byProject = forTenant.find((e) => e.projectId != null && Number(e.projectId) === Number(projectId));
     return (byProject ?? forTenant[0])?.id ?? null;
   };
   let ingested = 0;
@@ -65,10 +84,22 @@ async function ingestSignals(
     const sessionId = typeof s.sessionId === 'string' ? s.sessionId.slice(0, 64) : null;
     const occurredAt = typeof s.occurredAt === 'string' ? s.occurredAt : new Date().toISOString();
     const metadata = s.metadata != null ? JSON.stringify(s.metadata).slice(0, 4000) : null;
-    await sql`
-      INSERT INTO activity_signals (user_id, tenant_id, engagement_id, project_id, source, kind, ref, weight, duration_seconds, metadata, session_id, occurred_at)
-      VALUES (${userId}, ${tenantId}, ${engagementId}, ${projectId}, ${source}, ${kind}, ${ref}, ${weight}, ${duration}, ${metadata}, ${sessionId}, ${occurredAt})
-    `;
+    // `activity_signals.id` is a DB bigserial the schema models as a plain bigint PK
+    // (no Drizzle default), so it is omitted here and the sequence supplies it.
+    await db.insert(activitySignals).values({
+      userId,
+      tenantId,
+      engagementId,
+      projectId,
+      source,
+      kind,
+      ref,
+      weight,
+      durationSeconds: duration,
+      metadata,
+      sessionId,
+      occurredAt: new Date(occurredAt),
+    } as typeof activitySignals.$inferInsert);
     ingested++;
   }
   return ingested;
@@ -78,30 +109,33 @@ async function ingestSignals(
  *  signal resolver AND the manual-entry mutations so the rollup is computed in ONE
  *  place (DRY). amount = billable hours × the card's snapshot rate. */
 async function recomputeTimecard(
-  sql: NeonQueryFunction<false, false>,
+  db: Db,
   cardId: string,
 ): Promise<{ totalMinutes: number; billableMinutes: number; amountCents: number }> {
-  const [sums] = await sql`
-    SELECT COALESCE(SUM(minutes),0)::int AS total,
-           COALESCE(SUM(minutes) FILTER (WHERE billable),0)::int AS billable
-    FROM timecard_entries WHERE timecard_id = ${cardId}
-  `;
-  const [card] = await sql`SELECT rate_cents FROM timecards WHERE id = ${cardId}`;
+  const [sums] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${timecardEntries.minutes}),0)::int`,
+      billable: sql<number>`COALESCE(SUM(${timecardEntries.minutes}) FILTER (WHERE ${timecardEntries.billable}),0)::int`,
+    })
+    .from(timecardEntries)
+    .where(eq(timecardEntries.timecardId, cardId));
+  const [card] = await db
+    .select({ rateCents: timecards.rateCents })
+    .from(timecards)
+    .where(eq(timecards.id, cardId));
   const total = Number(sums?.total ?? 0);
   const billable = Number(sums?.billable ?? 0);
-  const rate = Number(card?.rate_cents ?? 0);
+  const rate = Number(card?.rateCents ?? 0);
   const amount = Math.round((billable / 60) * rate);
-  await sql`
-    UPDATE timecards SET total_minutes = ${total}, billable_minutes = ${billable},
-      amount_cents = ${amount}, updated_at = NOW()
-    WHERE id = ${cardId}
-  `;
+  await db
+    .update(timecards)
+    .set({ totalMinutes: total, billableMinutes: billable, amountCents: amount, updatedAt: sql`NOW()` })
+    .where(eq(timecards.id, cardId));
   return { totalMinutes: total, billableMinutes: billable, amountCents: amount };
 }
 
 export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
   // ── GET /log — the unified activity / audit timeline (MANAGER+, tenant JWT) ──
   // "Who did what, to what, when" across the whole workforce — team members,
@@ -130,7 +164,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{ signals?: unknown[] }>();
     const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
-    const ingested = await ingestSignals(sql(c.env), userId, list, 'portal', null);
+    const ingested = await ingestSignals(buildDatabase(c.env), userId, list, 'portal', null);
     return c.json({ ok: true, ingested });
   });
 
@@ -142,7 +176,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{ signals?: unknown[] }>();
     const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
-    const ingested = await ingestSignals(sql(c.env), userId, list, 'vscode', tenantId);
+    const ingested = await ingestSignals(buildDatabase(c.env), userId, list, 'vscode', tenantId);
     return c.json({ ok: true, ingested });
   });
 
@@ -153,7 +187,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ engagementId?: string; occurredAt?: string; durationMinutes?: number; note?: string }>();
     if (!b.engagementId || !b.durationMinutes || b.durationMinutes <= 0) return c.json({ error: 'engagementId and durationMinutes required' }, 400);
-    const ingested = await ingestSignals(sql(c.env), userId, [{
+    const ingested = await ingestSignals(buildDatabase(c.env), userId, [{
       source: 'meeting', kind: 'meeting', engagementId: b.engagementId,
       durationSeconds: Math.round(b.durationMinutes * 60),
       occurredAt: b.occurredAt, ref: 'meeting', metadata: b.note ? { note: b.note } : undefined,
@@ -165,24 +199,79 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   // active-minutes estimate for the signed-in worker (today, UTC).
   router.get('/today', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const rows = await sql(c.env)`
-      SELECT id, occurred_at, duration_seconds, weight, kind, source, engagement_id
-      FROM activity_signals
-      WHERE user_id = ${userId} AND occurred_at >= date_trunc('day', now())
-      ORDER BY occurred_at ASC LIMIT 2000
-    ` as unknown as { id: number; occurred_at: string; duration_seconds: number | null; weight: number; kind: string; source: string; engagement_id: string | null }[];
+    const rows = await buildDatabase(c.env)
+      .select({
+        id: activitySignals.id,
+        occurredAt: activitySignals.occurredAt,
+        durationSeconds: activitySignals.durationSeconds,
+        weight: activitySignals.weight,
+        kind: activitySignals.kind,
+        source: activitySignals.source,
+        engagementId: activitySignals.engagementId,
+      })
+      .from(activitySignals)
+      .where(and(
+        eq(activitySignals.userId, userId),
+        sql`${activitySignals.occurredAt} >= date_trunc('day', now())`,
+      ))
+      .orderBy(asc(activitySignals.occurredAt))
+      .limit(2000);
     const byKind: Record<string, number> = {};
     for (const r of rows) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
-    const resolved = resolveActiveMinutes(rows.map((r): ResolvableSignal => ({ id: r.id, occurredAt: r.occurred_at, durationSeconds: r.duration_seconds, weight: r.weight, kind: r.kind })));
+    const resolved = resolveActiveMinutes(rows.map((r): ResolvableSignal => ({ id: r.id, occurredAt: r.occurredAt, durationSeconds: r.durationSeconds, weight: r.weight, kind: r.kind })));
     return c.json({ signalCount: rows.length, minutes: resolved.minutes, byKind });
   });
 
   return router;
 }
 
+/** Client-visible timecard columns, aliased to the snake_case keys `mapCard` reads.
+ *  `submitted_at`/`approved_at` go through `sql` so the driver's raw timestamp
+ *  STRING is preserved (a plain column reference would decode to a JS Date and
+ *  change the JSON the portal receives). `period_start`/`period_end` are already
+ *  string-mode `date` columns. */
+const cardColumns = {
+  id: timecards.id,
+  engagement_id: timecards.engagementId,
+  tenant_id: timecards.tenantId,
+  period_start: timecards.periodStart,
+  period_end: timecards.periodEnd,
+  status: timecards.status,
+  total_minutes: timecards.totalMinutes,
+  billable_minutes: timecards.billableMinutes,
+  rate_cents: timecards.rateCents,
+  currency: timecards.currency,
+  amount_cents: timecards.amountCents,
+  submitted_at: sql<string | null>`${timecards.submittedAt}`,
+  approved_at: sql<string | null>`${timecards.approvedAt}`,
+} as const;
+
+/** Client-visible timecard-entry columns, aliased for `mapEntry`. */
+const entryColumns = {
+  id: timecardEntries.id,
+  work_date: timecardEntries.workDate,
+  minutes: timecardEntries.minutes,
+  source: timecardEntries.source,
+  billable: timecardEntries.billable,
+  description: timecardEntries.description,
+} as const;
+
+/** Client-visible invoice columns, aliased for `mapInvoice`. */
+const invoiceColumns = {
+  id: freelancerInvoices.id,
+  timecard_id: freelancerInvoices.timecardId,
+  engagement_id: freelancerInvoices.engagementId,
+  tenant_id: freelancerInvoices.tenantId,
+  amount_cents: freelancerInvoices.amountCents,
+  currency: freelancerInvoices.currency,
+  status: freelancerInvoices.status,
+  external_ref: freelancerInvoices.externalRef,
+  issued_at: sql<string | null>`${freelancerInvoices.issuedAt}`,
+  paid_at: sql<string | null>`${freelancerInvoices.paidAt}`,
+} as const;
+
 export function createTimecardRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
   const mapCard = (r: Record<string, unknown>) => ({
     id: r.id,
@@ -209,19 +298,42 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ engagementId?: string; periodStart?: string; periodEnd?: string }>();
     if (!b.engagementId || !b.periodStart || !b.periodEnd) return c.json({ error: 'engagementId, periodStart, periodEnd required' }, 400);
-    const [eng] = await sql(c.env)`
-      SELECT id, tenant_id, freelancer_user_id, rate_cents, currency FROM freelancer_engagements
-      WHERE id = ${b.engagementId} AND freelancer_user_id = ${userId}
-    `;
+    const engagementId = b.engagementId;
+    const periodStart = b.periodStart;
+    const periodEnd = b.periodEnd;
+    const db = buildDatabase(c.env);
+    const [eng] = await db
+      .select({
+        id: freelancerEngagements.id,
+        tenantId: freelancerEngagements.tenantId,
+        freelancerUserId: freelancerEngagements.freelancerUserId,
+        rateCents: freelancerEngagements.rateCents,
+        currency: freelancerEngagements.currency,
+      })
+      .from(freelancerEngagements)
+      .where(and(
+        eq(freelancerEngagements.id, engagementId),
+        eq(freelancerEngagements.freelancerUserId, userId),
+      ));
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
 
-    const signals = await sql(c.env)`
-      SELECT id, occurred_at, duration_seconds, weight, kind, to_char(occurred_at, 'YYYY-MM-DD') AS day
-      FROM activity_signals
-      WHERE engagement_id = ${b.engagementId}
-        AND occurred_at >= ${b.periodStart} AND occurred_at < (${b.periodEnd}::date + 1)
-      ORDER BY occurred_at ASC LIMIT 20000
-    ` as unknown as { id: number; occurred_at: string; duration_seconds: number | null; weight: number; kind: string; day: string }[];
+    const signals = await db
+      .select({
+        id: activitySignals.id,
+        occurredAt: activitySignals.occurredAt,
+        durationSeconds: activitySignals.durationSeconds,
+        weight: activitySignals.weight,
+        kind: activitySignals.kind,
+        day: sql<string>`to_char(${activitySignals.occurredAt}, 'YYYY-MM-DD')`,
+      })
+      .from(activitySignals)
+      .where(and(
+        eq(activitySignals.engagementId, engagementId),
+        sql`${activitySignals.occurredAt} >= ${periodStart}`,
+        sql`${activitySignals.occurredAt} < (${periodEnd}::date + 1)`,
+      ))
+      .orderBy(asc(activitySignals.occurredAt))
+      .limit(20000);
 
     // Group by day and resolve.
     const byDay = new Map<string, typeof signals>();
@@ -231,48 +343,77 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     }
     // Upsert the draft timecard first so entries can reference it.
     const cardId = crypto.randomUUID();
-    const [card] = await sql(c.env)`
-      INSERT INTO timecards (id, engagement_id, user_id, tenant_id, period_start, period_end, rate_cents, currency, status)
-      VALUES (${cardId}, ${b.engagementId}, ${userId}, ${eng.tenant_id}, ${b.periodStart}, ${b.periodEnd}, ${eng.rate_cents}, ${eng.currency ?? 'USD'}, 'draft')
-      ON CONFLICT (engagement_id, period_start, period_end) DO UPDATE SET updated_at = NOW()
-      RETURNING id, status
-    `;
+    const [card] = await db
+      .insert(timecards)
+      .values({
+        id: cardId,
+        engagementId,
+        userId,
+        tenantId: eng.tenantId,
+        periodStart,
+        periodEnd,
+        rateCents: eng.rateCents,
+        currency: eng.currency ?? 'USD',
+        status: 'draft',
+      })
+      .onConflictDoUpdate({
+        target: [timecards.engagementId, timecards.periodStart, timecards.periodEnd],
+        set: { updatedAt: sql`NOW()` },
+      })
+      .returning({ id: timecards.id, status: timecards.status });
     if (!card) return c.json({ error: 'Failed to create timecard' }, 500);
     if (card.status !== 'draft') return c.json({ error: 'Timecard for this period is already submitted' }, 409);
-    const realCardId = card.id as string;
+    const realCardId = card.id;
 
     // Replace auto entries for this card (idempotent re-resolve).
-    await sql(c.env)`DELETE FROM timecard_entries WHERE timecard_id = ${realCardId} AND source = 'auto'`;
+    await db.delete(timecardEntries).where(and(
+      eq(timecardEntries.timecardId, realCardId),
+      eq(timecardEntries.source, 'auto'),
+    ));
     for (const [day, daySignals] of byDay) {
-      const resolved = resolveActiveMinutes(daySignals.map((s): ResolvableSignal => ({ id: s.id, occurredAt: s.occurred_at, durationSeconds: s.duration_seconds, weight: s.weight, kind: s.kind })));
+      const resolved = resolveActiveMinutes(daySignals.map((s): ResolvableSignal => ({ id: s.id, occurredAt: s.occurredAt, durationSeconds: s.durationSeconds, weight: s.weight, kind: s.kind })));
       if (resolved.minutes <= 0) continue;
-      await sql(c.env)`
-        INSERT INTO timecard_entries (id, engagement_id, user_id, tenant_id, work_date, minutes, source, billable, resolved_from, timecard_id)
-        VALUES (${crypto.randomUUID()}, ${b.engagementId}, ${userId}, ${eng.tenant_id}, ${day}, ${resolved.minutes}, 'auto', true, ${JSON.stringify(resolved)}, ${realCardId})
-      `;
+      await db.insert(timecardEntries).values({
+        id: crypto.randomUUID(),
+        engagementId,
+        userId,
+        tenantId: eng.tenantId,
+        workDate: day,
+        minutes: resolved.minutes,
+        source: 'auto',
+        billable: true,
+        resolvedFrom: JSON.stringify(resolved),
+        timecardId: realCardId,
+      });
     }
     // Recompute totals over auto + any manual entries already in the period.
-    const totals = await recomputeTimecard(sql(c.env), realCardId);
+    const totals = await recomputeTimecard(db, realCardId);
     return c.json({ id: realCardId, ...totals });
   });
 
   // GET /mine — worker's timecards (web JWT).
   router.get('/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const rows = await sql(c.env)`
-      SELECT tc.*, t.name AS tenant_name FROM timecards tc JOIN tenants t ON t.id = tc.tenant_id
-      WHERE tc.user_id = ${userId} ORDER BY tc.period_start DESC LIMIT 200
-    ` as unknown as Record<string, unknown>[];
+    const rows = await buildDatabase(c.env)
+      .select({ ...cardColumns, tenant_name: tenants.name })
+      .from(timecards)
+      .innerJoin(tenants, eq(tenants.id, timecards.tenantId))
+      .where(eq(timecards.userId, userId))
+      .orderBy(desc(timecards.periodStart))
+      .limit(200);
     return c.json(rows.map(mapCard));
   });
 
   // GET / — employer's timecards for approval (tenant JWT).
   router.get('/', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await sql(c.env)`
-      SELECT tc.*, u.display_name AS freelancer_name FROM timecards tc JOIN users u ON u.id = tc.user_id
-      WHERE tc.tenant_id = ${tenantId} ORDER BY tc.period_start DESC LIMIT 500
-    ` as unknown as Record<string, unknown>[];
+    const rows = await buildDatabase(c.env)
+      .select({ ...cardColumns, freelancer_name: users.displayName })
+      .from(timecards)
+      .innerJoin(users, eq(users.id, timecards.userId))
+      .where(scopedToTenant(timecards, tenantId))
+      .orderBy(desc(timecards.periodStart))
+      .limit(500);
     return c.json(rows.map(mapCard));
   });
 
@@ -285,11 +426,12 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.get('/:id/entries', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const rows = await sql(c.env)`
-      SELECT te.* FROM timecard_entries te JOIN timecards tc ON tc.id = te.timecard_id
-      WHERE te.timecard_id = ${id} AND tc.user_id = ${userId}
-      ORDER BY te.work_date ASC
-    ` as unknown as Record<string, unknown>[];
+    const rows = await buildDatabase(c.env)
+      .select(entryColumns)
+      .from(timecardEntries)
+      .innerJoin(timecards, eq(timecards.id, timecardEntries.timecardId))
+      .where(and(eq(timecardEntries.timecardId, id), eq(timecards.userId, userId)))
+      .orderBy(asc(timecardEntries.workDate));
     return c.json(rows.map(mapEntry));
   });
 
@@ -298,14 +440,18 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.get('/:id/review', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const [cardRow] = await sql(c.env)`
-      SELECT tc.*, u.display_name AS freelancer_name FROM timecards tc JOIN users u ON u.id = tc.user_id
-      WHERE tc.id = ${id} AND tc.tenant_id = ${tenantId}
-    `;
+    const db = buildDatabase(c.env);
+    const [cardRow] = await db
+      .select({ ...cardColumns, freelancer_name: users.displayName })
+      .from(timecards)
+      .innerJoin(users, eq(users.id, timecards.userId))
+      .where(scopedToTenant(timecards, tenantId, eq(timecards.id, id)));
     if (!cardRow) return c.json({ error: 'Not found' }, 404);
-    const rows = await sql(c.env)`
-      SELECT * FROM timecard_entries WHERE timecard_id = ${id} ORDER BY work_date ASC
-    ` as unknown as Record<string, unknown>[];
+    const rows = await db
+      .select(entryColumns)
+      .from(timecardEntries)
+      .where(eq(timecardEntries.timecardId, id))
+      .orderBy(asc(timecardEntries.workDate));
     return c.json({ card: mapCard(cardRow), entries: rows.map(mapEntry) });
   });
 
@@ -314,15 +460,27 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ workDate?: string; minutes?: number; description?: string; billable?: boolean }>();
-    const [card] = await sql(c.env)`SELECT id, engagement_id, tenant_id FROM timecards WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'`;
+    const db = buildDatabase(c.env);
+    const [card] = await db
+      .select({ id: timecards.id, engagementId: timecards.engagementId, tenantId: timecards.tenantId })
+      .from(timecards)
+      .where(and(eq(timecards.id, id), eq(timecards.userId, userId), eq(timecards.status, 'draft')));
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
     const minutes = typeof b.minutes === 'number' ? Math.max(0, Math.round(b.minutes)) : 0;
     const workDate = typeof b.workDate === 'string' ? b.workDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
-    await sql(c.env)`
-      INSERT INTO timecard_entries (id, engagement_id, user_id, tenant_id, work_date, minutes, source, billable, description, timecard_id)
-      VALUES (${crypto.randomUUID()}, ${card.engagement_id}, ${userId}, ${card.tenant_id}, ${workDate}, ${minutes}, 'manual', ${b.billable !== false}, ${b.description ?? null}, ${id})
-    `;
-    const totals = await recomputeTimecard(sql(c.env), id);
+    await db.insert(timecardEntries).values({
+      id: crypto.randomUUID(),
+      engagementId: card.engagementId,
+      userId,
+      tenantId: card.tenantId,
+      workDate,
+      minutes,
+      source: 'manual',
+      billable: b.billable !== false,
+      description: b.description ?? null,
+      timecardId: id,
+    });
+    const totals = await recomputeTimecard(db, id);
     return c.json({ ok: true, ...totals }, 201);
   });
 
@@ -333,19 +491,25 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const id = c.req.param('id');
     const entryId = c.req.param('entryId');
     const b = await c.req.json<{ minutes?: number; billable?: boolean; description?: string }>();
-    const [card] = await sql(c.env)`SELECT id FROM timecards WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'`;
+    const db = buildDatabase(c.env);
+    const [card] = await db
+      .select({ id: timecards.id })
+      .from(timecards)
+      .where(and(eq(timecards.id, id), eq(timecards.userId, userId), eq(timecards.status, 'draft')));
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
     const minutes = typeof b.minutes === 'number' ? Math.max(0, Math.round(b.minutes)) : null;
-    const rows = await sql(c.env)`
-      UPDATE timecard_entries SET
-        minutes = COALESCE(${minutes}, minutes),
-        billable = COALESCE(${typeof b.billable === 'boolean' ? b.billable : null}, billable),
-        description = COALESCE(${b.description ?? null}, description),
-        updated_at = NOW()
-      WHERE id = ${entryId} AND timecard_id = ${id} RETURNING id
-    `;
+    const rows = await db
+      .update(timecardEntries)
+      .set({
+        minutes: sql`COALESCE(${minutes}, ${timecardEntries.minutes})`,
+        billable: sql`COALESCE(${typeof b.billable === 'boolean' ? b.billable : null}, ${timecardEntries.billable})`,
+        description: sql`COALESCE(${b.description ?? null}, ${timecardEntries.description})`,
+        updatedAt: sql`NOW()`,
+      })
+      .where(and(eq(timecardEntries.id, entryId), eq(timecardEntries.timecardId, id)))
+      .returning({ id: timecardEntries.id });
     if (rows.length === 0) return c.json({ error: 'Entry not found' }, 404);
-    const totals = await recomputeTimecard(sql(c.env), id);
+    const totals = await recomputeTimecard(db, id);
     return c.json({ ok: true, ...totals });
   });
 
@@ -354,10 +518,17 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const entryId = c.req.param('entryId');
-    const [card] = await sql(c.env)`SELECT id FROM timecards WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'`;
+    const db = buildDatabase(c.env);
+    const [card] = await db
+      .select({ id: timecards.id })
+      .from(timecards)
+      .where(and(eq(timecards.id, id), eq(timecards.userId, userId), eq(timecards.status, 'draft')));
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
-    await sql(c.env)`DELETE FROM timecard_entries WHERE id = ${entryId} AND timecard_id = ${id}`;
-    const totals = await recomputeTimecard(sql(c.env), id);
+    await db.delete(timecardEntries).where(and(
+      eq(timecardEntries.id, entryId),
+      eq(timecardEntries.timecardId, id),
+    ));
+    const totals = await recomputeTimecard(db, id);
     return c.json({ ok: true, ...totals });
   });
 
@@ -366,100 +537,161 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const rows = await sql(c.env)`
-      UPDATE timecards SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
-      WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id, tenant_id, engagement_id, billable_minutes
-    `;
+    const db = buildDatabase(c.env);
+    const rows = await db
+      .update(timecards)
+      .set({ status: 'submitted', submittedAt: sql`NOW()`, updatedAt: sql`NOW()` })
+      .where(and(eq(timecards.id, id), eq(timecards.userId, userId), eq(timecards.status, 'draft')))
+      .returning({
+        id: timecards.id,
+        tenantId: timecards.tenantId,
+        engagementId: timecards.engagementId,
+        billableMinutes: timecards.billableMinutes,
+      });
     const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
-    const [eng] = await sql(c.env)`SELECT created_by_user_id FROM freelancer_engagements WHERE id = ${card.engagement_id}`;
-    const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
-    if (eng?.created_by_user_id) {
-      await notify(sql(c.env), c.env, { userId: eng.created_by_user_id as string, tenantId: Number(card.tenant_id), kind: 'timecard_submitted', title: `${(me?.display_name as string) ?? 'A freelancer'} submitted a timecard`, ref: id });
+    const [eng] = await db
+      .select({ createdByUserId: freelancerEngagements.createdByUserId })
+      .from(freelancerEngagements)
+      .where(eq(freelancerEngagements.id, card.engagementId));
+    const [me] = await db.select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
+    if (eng?.createdByUserId) {
+      await notify(db, c.env, { userId: eng.createdByUserId, tenantId: Number(card.tenantId), kind: 'timecard_submitted', title: `${me?.displayName ?? 'A freelancer'} submitted a timecard`, ref: id });
     }
     return c.json({ ok: true, status: 'submitted' });
   });
 
   // POST /:id/approve — employer approves a submitted timecard (tenant JWT). This
   // ISSUES an invoice (pending) for the billable amount and notifies the worker.
-  router.post('/:id/approve', authMiddleware, async (c) => {
+  router.post('/:id/approve', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
-    const rows = await sql(c.env)`
-      UPDATE timecards SET status = 'approved', approved_at = NOW(), approved_by_user_id = ${actor}, updated_at = NOW()
-      WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted'
-      RETURNING id, engagement_id, user_id, amount_cents, currency
-    `;
+    const db = buildDatabase(c.env);
+    const rows = await db
+      .update(timecards)
+      .set({ status: 'approved', approvedAt: sql`NOW()`, approvedByUserId: actor, updatedAt: sql`NOW()` })
+      .where(scopedToTenant(timecards, tenantId, eq(timecards.id, id), eq(timecards.status, 'submitted')))
+      .returning({
+        id: timecards.id,
+        engagementId: timecards.engagementId,
+        userId: timecards.userId,
+        amountCents: timecards.amountCents,
+        currency: timecards.currency,
+      });
     const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
     // Issue an invoice (idempotent per timecard).
-    await sql(c.env)`
-      INSERT INTO freelancer_invoices (id, timecard_id, engagement_id, tenant_id, freelancer_user_id, amount_cents, currency, status)
-      VALUES (${crypto.randomUUID()}, ${id}, ${card.engagement_id}, ${tenantId}, ${card.user_id}, ${card.amount_cents}, ${card.currency ?? 'USD'}, 'pending')
-      ON CONFLICT (timecard_id) DO UPDATE SET amount_cents = EXCLUDED.amount_cents, updated_at = NOW()
-    `;
-    await notify(sql(c.env), c.env, { userId: card.user_id as string, tenantId, kind: 'timecard_approved', title: 'Your timecard was approved', body: `${card.currency ?? 'USD'} ${((Number(card.amount_cents) || 0) / 100).toFixed(2)}`, ref: id });
+    await db
+      .insert(freelancerInvoices)
+      .values({
+        id: crypto.randomUUID(),
+        timecardId: id,
+        engagementId: card.engagementId,
+        tenantId,
+        freelancerUserId: card.userId,
+        amountCents: card.amountCents,
+        currency: card.currency ?? 'USD',
+        status: 'pending',
+      })
+      .onConflictDoUpdate({
+        target: freelancerInvoices.timecardId,
+        set: { amountCents: sql`EXCLUDED.amount_cents`, updatedAt: sql`NOW()` },
+      });
+    await notify(db, c.env, { userId: card.userId, tenantId, kind: 'timecard_approved', title: 'Your timecard was approved', body: `${card.currency ?? 'USD'} ${((Number(card.amountCents) || 0) / 100).toFixed(2)}`, ref: id });
     return c.json({ ok: true, status: 'approved' });
   });
 
   // POST /:id/reject — employer rejects, returning it to draft with a reason.
-  router.post('/:id/reject', authMiddleware, async (c) => {
+  router.post('/:id/reject', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* optional */ }
-    const rows = await sql(c.env)`
-      UPDATE timecards SET status = 'draft', reject_reason = ${reason}, submitted_at = NULL, updated_at = NOW()
-      WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted' RETURNING id, user_id
-    `;
+    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* optional */ 
+      reportCaughtError(error, { source: "presentation/routes/activityRoutes.ts", operation: "createTimecardRoutes" });
+    }
+    const db = buildDatabase(c.env);
+    const rows = await db
+      .update(timecards)
+      .set({ status: 'draft', rejectReason: reason, submittedAt: null, updatedAt: sql`NOW()` })
+      .where(scopedToTenant(timecards, tenantId, eq(timecards.id, id), eq(timecards.status, 'submitted')))
+      .returning({ id: timecards.id, userId: timecards.userId });
     const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
-    await notify(sql(c.env), c.env, { userId: card.user_id as string, tenantId, kind: 'timecard_rejected', title: 'Your timecard was returned', body: reason, ref: id });
+    await notify(db, c.env, { userId: card.userId, tenantId, kind: 'timecard_rejected', title: 'Your timecard was returned', body: reason, ref: id });
     return c.json({ ok: true, status: 'draft' });
   });
 
   // GET /invoices — employer's invoices (tenant JWT).
   router.get('/invoices', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await sql(c.env)`
-      SELECT i.*, u.display_name AS freelancer_name FROM freelancer_invoices i JOIN users u ON u.id = i.freelancer_user_id
-      WHERE i.tenant_id = ${tenantId} ORDER BY i.issued_at DESC LIMIT 500
-    ` as unknown as Record<string, unknown>[];
+    const rows = await buildDatabase(c.env)
+      .select({ ...invoiceColumns, freelancer_name: users.displayName })
+      .from(freelancerInvoices)
+      .innerJoin(users, eq(users.id, freelancerInvoices.freelancerUserId))
+      .where(scopedToTenant(freelancerInvoices, tenantId))
+      .orderBy(desc(freelancerInvoices.issuedAt))
+      .limit(500);
     return c.json(rows.map(mapInvoice));
   });
 
   // GET /invoices/mine — worker's invoices (web JWT).
   router.get('/invoices/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const rows = await sql(c.env)`
-      SELECT i.*, t.name AS tenant_name FROM freelancer_invoices i JOIN tenants t ON t.id = i.tenant_id
-      WHERE i.freelancer_user_id = ${userId} ORDER BY i.issued_at DESC LIMIT 500
-    ` as unknown as Record<string, unknown>[];
+    const rows = await buildDatabase(c.env)
+      .select({ ...invoiceColumns, tenant_name: tenants.name })
+      .from(freelancerInvoices)
+      .innerJoin(tenants, eq(tenants.id, freelancerInvoices.tenantId))
+      .where(eq(freelancerInvoices.freelancerUserId, userId))
+      .orderBy(desc(freelancerInvoices.issuedAt))
+      .limit(500);
     return c.json(rows.map(mapInvoice));
   });
 
   // POST /invoices/:invId/pay — employer settles an invoice. Uses the payout
   // provider when configured; otherwise the caller falls back to /mark-paid.
-  router.post('/invoices/:invId/pay', authMiddleware, async (c) => {
+  router.post('/invoices/:invId/pay', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const invId = c.req.param('invId');
-    const [inv] = await sql(c.env)`SELECT * FROM freelancer_invoices WHERE id = ${invId} AND tenant_id = ${tenantId} AND status = 'pending'`;
+    const db = buildDatabase(c.env);
+    const [inv] = await db
+      .select({
+        id: freelancerInvoices.id,
+        amountCents: freelancerInvoices.amountCents,
+        currency: freelancerInvoices.currency,
+        freelancerUserId: freelancerInvoices.freelancerUserId,
+      })
+      .from(freelancerInvoices)
+      .where(scopedToTenant(
+        freelancerInvoices,
+        tenantId,
+        eq(freelancerInvoices.id, invId),
+        eq(freelancerInvoices.status, 'pending'),
+      ));
     if (!inv) return c.json({ error: 'Not found or already settled' }, 404);
     if (!isPayoutsConfigured(c.env)) return c.json({ error: 'No payout provider configured — use manual mark-paid', code: 'PAYOUTS_NOT_CONFIGURED' }, 409);
-    const res = await createPayout(c.env, { invoiceId: invId, amountCents: Number(inv.amount_cents), currency: inv.currency as string, freelancerUserId: inv.freelancer_user_id as string, tenantId });
+    const res = await createPayout(c.env, { invoiceId: invId, amountCents: Number(inv.amountCents), currency: inv.currency, freelancerUserId: inv.freelancerUserId, tenantId });
     if (!res.ok) return c.json({ error: res.error ?? 'Payout failed' }, 502);
-    await markInvoicePaid(sql(c.env), c.env, invId, res.externalRef ?? null);
+    await markInvoicePaid(db, c.env, invId, res.externalRef ?? null);
     return c.json({ ok: true, status: 'paid', externalRef: res.externalRef ?? null });
   });
 
   // POST /invoices/:invId/mark-paid — employer records a manual/off-platform payment.
-  router.post('/invoices/:invId/mark-paid', authMiddleware, async (c) => {
+  router.post('/invoices/:invId/mark-paid', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const invId = c.req.param('invId');
-    const [inv] = await sql(c.env)`SELECT id FROM freelancer_invoices WHERE id = ${invId} AND tenant_id = ${tenantId} AND status = 'pending'`;
+    const db = buildDatabase(c.env);
+    const [inv] = await db
+      .select({ id: freelancerInvoices.id })
+      .from(freelancerInvoices)
+      .where(scopedToTenant(
+        freelancerInvoices,
+        tenantId,
+        eq(freelancerInvoices.id, invId),
+        eq(freelancerInvoices.status, 'pending'),
+      ));
     if (!inv) return c.json({ error: 'Not found or already settled' }, 404);
-    await markInvoicePaid(sql(c.env), c.env, invId, null);
+    await markInvoicePaid(db, c.env, invId, null);
     return c.json({ ok: true, status: 'paid' });
   });
 
@@ -468,17 +700,24 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
 /** Settle an invoice: mark it + its timecard paid, and notify the worker. Shared by
  *  the provider-payout and manual mark-paid paths (DRY). */
-async function markInvoicePaid(sql: NeonQueryFunction<false, false>, env: Parameters<typeof notify>[1], invId: string, externalRef: string | null): Promise<void> {
-  const rows = await sql`
-    UPDATE freelancer_invoices SET status = 'paid', paid_at = NOW(), external_ref = ${externalRef}, updated_at = NOW()
-    WHERE id = ${invId} RETURNING timecard_id, tenant_id, freelancer_user_id, amount_cents, currency
-  `;
+async function markInvoicePaid(db: Db, env: Parameters<typeof notify>[1], invId: string, externalRef: string | null): Promise<void> {
+  const rows = await db
+    .update(freelancerInvoices)
+    .set({ status: 'paid', paidAt: sql`NOW()`, externalRef, updatedAt: sql`NOW()` })
+    .where(eq(freelancerInvoices.id, invId))
+    .returning({
+      timecardId: freelancerInvoices.timecardId,
+      tenantId: freelancerInvoices.tenantId,
+      freelancerUserId: freelancerInvoices.freelancerUserId,
+      amountCents: freelancerInvoices.amountCents,
+      currency: freelancerInvoices.currency,
+    });
   const inv = rows[0];
   if (!inv) return;
-  await sql`UPDATE timecards SET status = 'paid', updated_at = NOW() WHERE id = ${inv.timecard_id}`;
+  await db.update(timecards).set({ status: 'paid', updatedAt: sql`NOW()` }).where(eq(timecards.id, inv.timecardId));
   // Lifetime-earnings stat on the worker's for-hire profile just changed.
-  await invalidateCached(env as Env, freelancerStatsCacheKey(inv.freelancer_user_id as string));
-  await notify(sql, env, { userId: inv.freelancer_user_id as string, tenantId: Number(inv.tenant_id), kind: 'paid', title: 'You were paid', body: `${inv.currency ?? 'USD'} ${((Number(inv.amount_cents) || 0) / 100).toFixed(2)}`, ref: inv.timecard_id as string });
+  await invalidateCached(env as Env, freelancerStatsCacheKey(inv.freelancerUserId));
+  await notify(db, env, { userId: inv.freelancerUserId, tenantId: Number(inv.tenantId), kind: 'paid', title: 'You were paid', body: `${inv.currency ?? 'USD'} ${((Number(inv.amountCents) || 0) / 100).toFixed(2)}`, ref: inv.timecardId });
 }
 
 const mapInvoice = (r: Record<string, unknown>) => ({

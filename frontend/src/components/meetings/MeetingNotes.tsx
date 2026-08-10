@@ -53,7 +53,7 @@ export function MeetingNotes({
                 type="button"
                 onClick={generate}
                 disabled={busy}
-                style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 700, padding: '8px 14px', borderRadius: 8, cursor: busy ? 'default' : 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}
+                style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 700, padding: '8px 14px', borderRadius: 'var(--radius-md)', cursor: busy ? 'default' : 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}
               >
                 {busy ? t('generatingMinutes') : t('generateMinutes')}
               </button>

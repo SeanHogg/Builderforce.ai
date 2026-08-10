@@ -56,7 +56,7 @@ export function PrdCreateModal({
         }}
       >
         {error && (
-          <div style={{ padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 8, marginBottom: 12 }}>
+          <div style={{ padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)', marginBottom: 12 }}>
             {error}
           </div>
         )}
@@ -71,7 +71,7 @@ export function PrdCreateModal({
               placeholder={t('goalPlaceholder')}
               style={{
                 width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)',
-                borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
+                borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
               }}
             />
           </div>
@@ -81,7 +81,7 @@ export function PrdCreateModal({
               <button
                 type="button"
                 onClick={() => setPreview((p) => !p)}
-                style={{ fontSize: 12, padding: '4px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer' }}
+                style={{ fontSize: 12, padding: '4px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
                 {preview ? tc('edit') : t('preview')}
               </button>
@@ -93,12 +93,12 @@ export function PrdCreateModal({
                 placeholder={t('contentPlaceholder')}
                 style={{
                   width: '100%', minHeight: 200, padding: '10px 12px', fontSize: 13, fontFamily: 'var(--font-mono)',
-                  border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)',
+                  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)',
                   color: 'var(--text-primary)', resize: 'vertical',
                 }}
               />
               {preview && (
-                <div style={{ minHeight: 200, padding: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'auto', fontSize: 13 }}>
+                <div style={{ minHeight: 200, padding: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'auto', fontSize: 13 }}>
                   <div className="chat-message-markdown">
                     {prd ? <ChatMessageContent content={prd} /> : <span style={{ color: 'var(--text-muted)' }}>{t('previewPlaceholder')}</span>}
                   </div>
@@ -115,8 +115,8 @@ export function PrdCreateModal({
               disabled={isCreating || !goal.trim()}
               style={{
                 padding: '8px 18px', fontSize: 13, fontWeight: 600,
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff',
-                border: 'none', borderRadius: 10,
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)',
+                border: 'none', borderRadius: 'var(--radius-lg)',
                 cursor: isCreating || !goal.trim() ? 'not-allowed' : 'pointer', opacity: isCreating || !goal.trim() ? 0.7 : 1,
               }}
             >

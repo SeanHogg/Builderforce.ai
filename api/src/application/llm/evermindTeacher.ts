@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Evermind teacher-distillation — turn ANY frontier LLM into a teacher whose
  * exemplar answers train a project's self-learning Evermind.
@@ -24,6 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
 import { getTenantTokenAvailability } from './tenantTokenAvailability';
 import { resolveTenantLlmCredentials, listTenantProviderKeys } from './tenantProviderKeyService';
+import { isRoutableModel } from './vendors/registry';
 
 /** Max chars of task/run text handed to the teacher (bounds prompt/token cost). */
 export const TEACHER_INPUT_MAX_CHARS = 4000;
@@ -60,12 +62,35 @@ export interface TeacherExemplar {
 }
 
 /**
+ * Why a teacher call produced no exemplar. Every one of these used to collapse into a
+ * bare `null` that the coordinator silently swallowed — so a teach-a-task whose teacher
+ * never answered looked IDENTICAL in the console to one that worked, because the
+ * fallback re-recorded the raw input (== the task) as the "Learned" text. Naming the
+ * cause is what makes a broken teacher diagnosable instead of invisible.
+ */
+export type TeacherFailureReason =
+  /** The input was below the length worth spending a frontier call on. */
+  | 'input_too_short'
+  /** The gateway answered 4xx/5xx (bad model pin, no credit, vendor down). */
+  | 'gateway_error'
+  /** The teacher replied, but with less than {@link TEACHER_MIN_OUTPUT_CHARS}. */
+  | 'empty_output'
+  /** The call threw (network, abort, malformed payload). */
+  | 'exception';
+
+/** The outcome of one teacher call — an exemplar, or the REASON there isn't one. */
+export type TeacherResult =
+  | { ok: true; exemplar: TeacherExemplar }
+  | { ok: false; reason: TeacherFailureReason; detail?: string };
+
+/**
  * Ask a frontier `teacherModel` for an exemplar given `input` (a task prompt in
  * `answer` mode, or a run output in `refine` mode). Strict-pins the chosen model (no
  * silent substitution — a manager who picks Opus gets Opus or nothing) and routes
  * through the premium gateway pool so any vendor (Anthropic / Mistral / OpenRouter /
- * …) is reachable and metered. Returns null on any failure or a too-short exemplar so
- * the caller can fall back to raw-text adaptation.
+ * …) is reachable and metered. Never throws: every failure comes back as a NAMED
+ * {@link TeacherFailureReason} so the caller can both fall back to raw-text adaptation
+ * AND record why distillation didn't happen.
  */
 export async function generateTeacherExemplar(
   env: Env,
@@ -74,16 +99,16 @@ export async function generateTeacherExemplar(
   input: string,
   mode: TeacherMode = 'refine',
   signal?: AbortSignal,
-): Promise<TeacherExemplar | null> {
+): Promise<TeacherResult> {
   const model = teacherModel.trim();
   const text = input.trim();
-  if (!model || text.length < 20) return null;
+  if (!model || text.length < 20) return { ok: false, reason: 'input_too_short' };
 
   try {
     // Thread the tenant's connected BYO account so a strict-pinned frontier teacher
     // resolves on THEIR OWN account (subscription/api-key, $0 to us) when they have
     // one — matching the "BYO funds frontier" rule. Absent → the funded premium pool.
-    const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {}, configuredProviders: [], unresolvedReasons: {} }));
+    const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {}, configuredProviders: [], unresolvedReasons: {}, vendorPriority: [] }));
     const hasVendorKeys = Object.values(creds.vendorKeys).some(Boolean);
     const result = await llmProxyForPlan(env, 'pro', true, {
       ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
@@ -104,17 +129,105 @@ export async function generateTeacherExemplar(
       undefined,
       signal,
     );
-    if (result.response.status >= 400) return null;
+    if (result.response.status >= 400) {
+      return { ok: false, reason: 'gateway_error', detail: `HTTP ${result.response.status}` };
+    }
     const { content: output } = await readProxyChoice(result);
-    if (output.length < TEACHER_MIN_OUTPUT_CHARS) return null;
-    return { model: result.resolvedModel || model, output };
-  } catch {
-    return null;
+    if (output.length < TEACHER_MIN_OUTPUT_CHARS) {
+      return { ok: false, reason: 'empty_output', detail: `${output.length} chars` };
+    }
+    return { ok: true, exemplar: { model: result.resolvedModel || model, output } };
+  } catch (err) {
+    return { ok: false, reason: 'exception', detail: err instanceof Error ? err.message : String(err) };
   }
 }
 
-/** Why a teacher distillation was skipped (falls back to raw-text learning). */
-export type TeacherSkipReason = 'no_teacher' | 'teacher_failed';
+/**
+ * Why a teacher distillation didn't happen (the entry still learns, un-distilled).
+ * `not_pinned` = no manager ever chose a teacher; `budget_exhausted` = one IS pinned
+ * but the tenant is out of platform tokens — two very different fixes, so they must
+ * never collapse into one reason. The rest are {@link TeacherFailureReason} verbatim.
+ */
+export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable' | TeacherFailureReason;
+
+// ---------------------------------------------------------------------------
+// Fault breaker
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a teacher that failed at the GATEWAY stands down before the next
+ * alarm retries it.
+ *
+ * Distillation is a background enrichment, not a user-facing request: retrying a
+ * dead teacher on every alarm buys nothing and costs a paid frontier call each
+ * time. Without this, one project pinned to an unroutable id produced ~1,977
+ * identical HTTP 503 faults in four days, one per alarm, none self-correcting.
+ * A single cooldown window turns that into at most a couple of probes an hour,
+ * and the pin still recovers on its own once the vendor does.
+ *
+ * Only `gateway_error` and `exception` cool: `input_too_short` and
+ * `empty_output` are properties of THAT entry, not of the teacher, so cooling on
+ * them would disable a perfectly healthy model.
+ */
+const TEACHER_FAULT_COOLDOWN_SECONDS = 30 * 60;
+
+function teacherFaultKey(tenantId: number, model: string): string {
+  return `evermind-teacher-fault:${tenantId}:${model}`;
+}
+
+/** Should this failure bench the teacher, or is it specific to one entry? */
+function coolsTeacher(reason: TeacherFailureReason): boolean {
+  return reason === 'gateway_error' || reason === 'exception';
+}
+
+/**
+ * Bench a teacher that just failed at the gateway. Best-effort: without
+ * AUTH_CACHE_KV there is no breaker and behaviour is unchanged (dev/test).
+ */
+export async function noteTeacherFault(
+  env: Env,
+  tenantId: number,
+  model: string,
+  reason: TeacherFailureReason,
+): Promise<void> {
+  const kv = env.AUTH_CACHE_KV;
+  if (!kv || !coolsTeacher(reason)) return;
+  try {
+    await kv.put(teacherFaultKey(tenantId, model), reason, {
+      expirationTtl: TEACHER_FAULT_COOLDOWN_SECONDS,
+    });
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/llm/evermindTeacher.ts',
+      operation: 'noteTeacherFault',
+      level: 'warning',
+      context: { tenantId, model, reason },
+    });
+  }
+}
+
+/** Is this teacher currently benched by a recent gateway fault? */
+async function isTeacherCooling(env: Env, tenantId: number, model: string): Promise<boolean> {
+  const kv = env.AUTH_CACHE_KV;
+  if (!kv) return false;
+  try {
+    return (await kv.get(teacherFaultKey(tenantId, model))) !== null;
+  } catch (error) {
+    // Fail OPEN: a KV blip must not disable learning.
+    reportCaughtError(error, {
+      source: 'application/llm/evermindTeacher.ts',
+      operation: 'isTeacherCooling',
+      level: 'warning',
+      context: { tenantId, model },
+    });
+    return false;
+  }
+}
+
+/** The effective teacher for an alarm: the model to use, or WHY there isn't one. */
+export type EffectiveTeacher =
+  | { model: string }
+  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable'> };
 
 export interface EvermindTrainingText {
   /** The text the coordinator adapts the SSM on. */
@@ -130,6 +243,12 @@ export interface EvermindTrainingText {
   exemplar?: string;
   /** Present when NOT distilled: why the teacher was skipped. */
   skipReason?: TeacherSkipReason;
+  /** Present when NOT distilled: the machine detail behind `skipReason` (HTTP status,
+   *  exception message, …). Operator-facing diagnosis, never shown raw to end users. */
+  skipDetail?: string;
+  /** Present when NOT distilled but a teacher WAS pinned: which model failed. Lets the
+   *  console name the model that isn't answering rather than just "not distilled". */
+  attemptedTeacherModel?: string;
 }
 
 /**
@@ -154,19 +273,31 @@ export async function resolveEvermindTeacherModel(
   db: Db,
   tenantId: number,
   teacherModel: string | null | undefined,
-): Promise<string | null> {
+): Promise<EffectiveTeacher> {
   const model = (teacherModel ?? '').trim();
-  if (!model) return null;
+  if (!model) return { model: null, reason: 'not_pinned' };
+  // An id that routes nowhere can NEVER succeed: dispatch falls back to the
+  // default vendor, which has never heard of it, and returns 503 on every alarm
+  // forever. The pin endpoint now refuses these, but rows predating that
+  // validation still exist — and a 30-minute fault breaker only rations a call
+  // that was always doomed. Treat it as unpinned so the entry still learns
+  // un-distilled, and so the reason names the actual problem.
+  if (!isRoutableModel(model)) return { model: null, reason: 'unroutable' };
+  // Benched by a recent gateway fault — skip the call entirely rather than
+  // spend another paid frontier request on a teacher that just failed.
+  if (await isTeacherCooling(env, tenantId, model)) return { model: null, reason: 'cooling' };
   try {
     // A connected BYO frontier account funds the teacher itself → never budget-gate it.
     const byoConnected = (await listTenantProviderKeys(env, tenantId).catch(() => [])).length > 0;
-    if (byoConnected) return model;
+    if (byoConnected) return { model };
     const availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
-    if (!availability.hasTokens) return null;
-  } catch {
+    if (!availability.hasTokens) return { model: null, reason: 'budget_exhausted' };
+  } catch (error) {
     /* fail open — keep the teacher */
+  
+    reportCaughtError(error, { source: "application/llm/evermindTeacher.ts", operation: "resolveEvermindTeacherModel" });
   }
-  return model;
+  return { model };
 }
 
 /**
@@ -181,19 +312,36 @@ export async function resolveEvermindTeacherModel(
 export async function buildEvermindTrainingText(
   env: Env,
   tenantId: number,
-  teacherModel: string | null,
+  teacher: EffectiveTeacher,
   runText: string,
   opts?: { prompt?: string | null; signal?: AbortSignal },
 ): Promise<EvermindTrainingText> {
-  const model = (teacherModel ?? '').trim();
-  if (!model) return { text: runText, distilled: false, skipReason: 'no_teacher' };
+  if (teacher.model === null) {
+    return { text: runText, distilled: false, skipReason: teacher.reason };
+  }
+  const model = teacher.model;
 
   const prompt = (opts?.prompt ?? '').trim();
   const [input, mode] = prompt ? [prompt, 'answer' as const] : [runText, 'refine' as const];
-  const exemplar = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
-  if (!exemplar) return { text: runText, distilled: false, skipReason: 'teacher_failed' };
+  const result = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
+  if (!result.ok) {
+    // Bench the teacher when the GATEWAY is what failed, so the next alarm skips
+    // it instead of re-spending on a model that is down or mis-pinned.
+    await noteTeacherFault(env, tenantId, model, result.reason);
+    // A pinned teacher that produced nothing is an OPERATIONAL FAULT, not a normal
+    // path — carry the reason + the model that failed so the console can say so
+    // instead of silently presenting the un-distilled input as what was learned.
+    return {
+      text: runText,
+      distilled: false,
+      skipReason: result.reason,
+      attemptedTeacherModel: model,
+      ...(result.detail ? { skipDetail: result.detail } : {}),
+    };
+  }
 
   // Teach the (input → exemplar) mapping, mirroring DistillationEngine's shape.
   const context = input.trim().slice(0, 1500);
+  const { exemplar } = result;
   return { text: `${context}\n${exemplar.output}`, distilled: true, teacherModel: exemplar.model, exemplar: exemplar.output };
 }

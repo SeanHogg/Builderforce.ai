@@ -11,9 +11,12 @@
 import { buildTimeline, formatPayload, formatDuration } from '@seanhogg/builderforce-brain-ui';
 import {
   computeBrainDiagnostics,
+  detectUnbackedTicketClaim,
+  detectUnbackedWriteClaim,
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
+  traceWithPersistedSteps,
 } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainMessage, BrainTraceEvent, ChatDiagnosticsData } from '@seanhogg/builderforce-brain-embedded';
 
@@ -28,9 +31,10 @@ export interface TranscriptInput {
   /** The chat's title and server id, so a pasted transcript is traceable. */
   chatTitle?: string;
   chatId?: number | null;
-  /** Gathered chat identity + Evermind wiring state — rendered as a "Chat diagnostics"
-   *  block so a pasted report answers "what STATE was this chat in?" (project, tenant,
-   *  Evermind head, learn-gate outcome, agents, linked tickets), not just the turns. */
+  /** Gathered chat identity, ACCOUNT posture and Evermind wiring state — rendered as a
+   *  "Chat diagnostics" block so a pasted report answers "what STATE was this chat in?"
+   *  (plan + billing + month-to-date quota + model entitlement, project, tenant, Evermind
+   *  head, learn-gate outcome, agents, linked tickets), not just the turns. */
   diagnostics?: ChatDiagnosticsData;
 }
 
@@ -64,6 +68,12 @@ function fenced(label: string, payload: string, lines: string[]): void {
 /** Serialize the live conversation into a Markdown transcript. */
 export function buildTranscript(input: TranscriptInput): string {
   const nodes = buildTimeline({ messages: input.messages, trace: input.trace, streamingText: '', isRunning: false });
+  // The live `trace` only covers the CURRENT session — a reopened or resumed chat
+  // has none of the earlier run's steps in memory, only their durable `role:'tool'`
+  // rows. The timeline already reconstructs those; the diagnostics block used the
+  // bare trace and so reported `Tool calls: 0` under a transcript listing twenty of
+  // them. Both now read the same merged event list.
+  const events = traceWithPersistedSteps(input.messages, input.trace);
   const lines: string[] = ['# BuilderForce chat transcript'];
 
   // Chat + project provenance — a pasted transcript should say WHICH conversation
@@ -88,14 +98,26 @@ export function buildTranscript(input: TranscriptInput): string {
   // expired Claude subscription that silently fell back to the shared pool — the
   // "should have used Opus" context). SHARED formatter, so this copy and the web
   // triage report stay identical.
-  lines.push(...formatBrainProvenance(input.trace, { configuredModel: input.model, surface: 'VS Code (VSIX)' }));
+  lines.push(...formatBrainProvenance(events, { configuredModel: input.model, surface: 'VS Code (VSIX)' }));
   lines.push('');
 
-  // Diagnostics block — the A-vs-B verdict (context exhaustion vs model
-  // degradation) plus the token/tool-payload/downgrade numbers behind it. Same
-  // shared builder the web triage report uses, so both copy surfaces agree.
-  if (input.trace.length) {
-    lines.push(...formatBrainDiagnostics(computeBrainDiagnostics(input.trace, input.model)), '');
+  // Diagnostics block — the verdict (tool calls never emitted / context exhaustion vs
+  // model degradation) plus the token/tool-payload/downgrade numbers behind it. Same
+  // shared builder the web triage report uses, so both copy surfaces agree. The
+  // MESSAGES go in too: the "narrated a tool call, made none" verdict is only
+  // reachable by reading the turns against the trace.
+  if (events.length) {
+    lines.push(...formatBrainDiagnostics(computeBrainDiagnostics(events, input.model, input.messages)), '');
+  }
+
+  // Structural honesty flags — an assistant turn that CLAIMED a file write or a
+  // filed/linked ticket while no such tool call succeeded. Web parity: these ran only
+  // in the web triage report, so a VSIX capture of the same failure said nothing.
+  if (detectUnbackedWriteClaim(events, input.messages)) {
+    lines.push('⚠ UNBACKED WRITE CLAIM — an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.', '');
+  }
+  if (detectUnbackedTicketClaim(events, input.messages)) {
+    lines.push('⚠ UNBACKED TICKET CLAIM — an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.', '');
   }
 
   for (const node of nodes) {

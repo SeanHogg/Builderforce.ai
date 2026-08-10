@@ -1,5 +1,7 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
+
 /**
  * Small inline badge that summarizes a key's browser-access posture.
  * Shared between the owner and admin key list rows so both UIs report the
@@ -10,7 +12,7 @@ const badgeBase: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 700,
   padding: '2px 6px',
-  borderRadius: 4,
+  borderRadius: 'var(--radius-sm)',
   letterSpacing: '0.02em',
   whiteSpace: 'nowrap',
 };
@@ -30,9 +32,10 @@ export function AllowedOriginsBadge({ allowedOrigins }: { allowedOrigins: string
     return (
       <span
         title="Any origin can use this key — high-risk; rotate to a specific allowlist if you can"
-        style={{ ...badgeBase, background: 'rgba(244,114,94,0.15)', color: 'var(--coral-bright, #f4726e)' }}
+        style={{ ...badgeBase, background: 'rgba(244,114,94,0.15)', color: 'var(--coral-bright)' }}
       >
-        ANY ORIGIN ★
+        
+        ANY ORIGIN <Icon source="★" size="1em" />
       </span>
     );
   }

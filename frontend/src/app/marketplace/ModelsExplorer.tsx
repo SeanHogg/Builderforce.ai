@@ -1,24 +1,33 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { contrastText } from '@/lib/contrastText';
 import { type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { SkeletonGrid } from './SkeletonGrid';
+import { Select } from '@/components/Select';
 import {
   getModelCatalog,
   formatPricePerMillion,
   formatContext,
+  modelMatchesPriceLimits,
   tierColor,
   type ModelRecord,
 } from '@/lib/modelCatalog';
+import { appendModelComparison, MAX_MODEL_COMPARISON } from '@/lib/modelComparisonRequest';
 
-const MAX_COMPARE = 3;
+const MAX_COMPARE = MAX_MODEL_COMPARISON;
+const MODELS_PER_PAGE = 24;
 
 type TierFilter = 'all' | 'free' | 'paid' | 'builderforce';
+type PriceLimit = 'any' | '1' | '5' | '10' | '25' | '50';
+
+const PRICE_LIMITS: PriceLimit[] = ['any', '1', '5', '10', '25', '50'];
 
 /**
  * The live model catalog ("Models") is a category of the marketplace — this
@@ -54,10 +63,10 @@ function Badge({ record }: { record: ModelRecord }) {
   return (
     <span
       style={{
-        fontSize: 10,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         padding: '2px 8px',
-        borderRadius: 99,
+        borderRadius: 'var(--radius-full)',
         background: tierColor(record),
         color: contrastText(tierColor(record)),
         textTransform: 'uppercase',
@@ -78,12 +87,12 @@ function RoutableChip({ record }: { record: ModelRecord }) {
     <span
       title={t('routableChip.title')}
       style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-        background: 'rgba(34,197,94,0.12)', color: '#16a34a',
+        fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-full)',
+        background: 'rgba(34,197,94,0.12)', color: 'var(--success-text)',
         border: '1px solid rgba(34,197,94,0.35)', whiteSpace: 'nowrap',
       }}
     >
-      ✓ {t('routableChip.label')}{record.pool ? ` · ${record.pool}` : ''}
+      <Icon source="✓" size="1em" /> {t('routableChip.label')}{record.pool ? ` · ${record.pool}` : ''}
     </span>
   );
 }
@@ -93,13 +102,13 @@ function PriceTag({ record }: { record: ModelRecord }) {
   const free = record.pricing.prompt <= 0 && record.pricing.completion <= 0;
   if (free) {
     return (
-      <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>
+      <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,197,94,0.3)' }}>
         {t('price.free')}
       </span>
     );
   }
   return (
-    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
       <strong style={{ color: 'var(--text-primary)' }}>{formatPricePerMillion(record.pricing.prompt)}</strong> {t('price.in')} ·{' '}
       <strong style={{ color: 'var(--text-primary)' }}>{formatPricePerMillion(record.pricing.completion)}</strong> {t('price.out')} / 1M
     </span>
@@ -118,28 +127,28 @@ function ModelDetail({ record }: { record: ModelRecord }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Badge record={record} />
         <RoutableChip record={record} />
-        <code style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{record.id}</code>
+        <code style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{record.id}</code>
       </div>
 
       {record.description && (
-        <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-secondary)', margin: 0 }}>{record.description}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', lineHeight: 1.65, color: 'var(--text-secondary)', margin: 0 }}>{record.description}</p>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         {fieldSpecs.map((f) => (
           <div key={f.label} style={{ background: 'var(--bg-elevated)', padding: '12px 14px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{f.label}</div>
-            <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{f.render(record)}</div>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{f.label}</div>
+            <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', fontWeight: 600 }}>{f.render(record)}</div>
           </div>
         ))}
       </div>
 
       {record.supportedParameters && record.supportedParameters.length > 0 && (
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('detail.supportedParameters')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('detail.supportedParameters')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {record.supportedParameters.map((p) => (
-              <span key={p} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}>
+              <span key={p} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)' }}>
                 {p}
               </span>
             ))}
@@ -149,7 +158,7 @@ function ModelDetail({ record }: { record: ModelRecord }) {
 
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!record.isBuilderforce && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('detail.routedBlurb')}</p>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('detail.routedBlurb')}</p>
         )}
         <Link
           href={record.isBuilderforce ? (record.ctaHref ?? '/register') : '/pricing?upgrade=pro'}
@@ -218,13 +227,16 @@ function CompareTray({
   onRemove,
   onClear,
   onCompare,
+  onExecute,
 }: {
   selected: ModelRecord[];
   onRemove: (id: string) => void;
   onClear: () => void;
   onCompare: () => void;
+  onExecute: (prompt: string) => void;
 }) {
   const t = useTranslations('models');
+  const [prompt, setPrompt] = useState('');
   if (selected.length === 0) return null;
   return (
     <div
@@ -238,28 +250,28 @@ function CompareTray({
         width: 'min(320px, calc(100vw - 32px))',
         background: 'var(--panel-drawer-bg, var(--bg-elevated))',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 14,
+        borderRadius: 'var(--radius-lg)',
         boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
         overflow: 'hidden',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <strong style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)' }}>
+        <strong style={{ flex: 1, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
           {t('compare.title')} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({selected.length}/{MAX_COMPARE})</span>
         </strong>
-        <button type="button" onClick={onClear} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }}>
+        <button type="button" onClick={onClear} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)' }}>
           {t('compare.clear')}
         </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, maxHeight: 220, overflow: 'auto' }}>
         {selected.map((m) => (
-          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
             <button
               type="button"
               onClick={() => onRemove(m.id)}
               aria-label={t('compare.removeAria', { name: m.name })}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: 2 }}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-card-title)', lineHeight: 1, padding: 2 }}
             >
               ×
             </button>
@@ -267,15 +279,28 @@ function CompareTray({
         ))}
       </div>
       <div style={{ padding: 10, borderTop: '1px solid var(--border-subtle)' }}>
+        <label style={{ display: 'grid', gap: 6, marginBottom: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
+          {t('compare.promptLabel')}
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder={t('compare.promptPlaceholder')}
+            rows={3}
+            style={{ width: '100%', resize: 'vertical', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', padding: 9, font: 'inherit' }}
+          />
+        </label>
         <button
           type="button"
-          onClick={onCompare}
-          disabled={selected.length < 2}
+          onClick={() => onExecute(prompt)}
+          disabled={selected.length < 2 || !prompt.trim()}
           className="btn btn-primary"
-          style={{ width: '100%', padding: '10px 0', opacity: selected.length < 2 ? 0.5 : 1 }}
-          title={selected.length < 2 ? t('compare.needTwoTitle') : t('compare.compareTitle')}
+          style={{ width: '100%', padding: '10px 0', opacity: selected.length < 2 || !prompt.trim() ? 0.5 : 1 }}
+          title={selected.length < 2 ? t('compare.needTwoTitle') : !prompt.trim() ? t('compare.needPromptTitle') : t('compare.executeTitle')}
         >
-          {t('compare.button')}
+          {t('compare.executeButton')}
+        </button>
+        <button type="button" onClick={onCompare} disabled={selected.length < 2} className="btn btn-secondary" style={{ width: '100%', padding: '8px 0', marginTop: 8 }}>
+          {t('compare.specsButton')}
         </button>
       </div>
     </div>
@@ -315,11 +340,11 @@ function ModelCard({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{record.name}</span>
+            <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{record.name}</span>
             <Badge record={record} />
             <RoutableChip record={record} />
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{record.provider}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>{record.provider}</div>
         </div>
         <label
           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: checkboxDisabled ? 'not-allowed' : 'pointer', flexShrink: 0 }}
@@ -336,12 +361,12 @@ function ModelCard({
         </label>
       </div>
 
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {record.description || t('card.noDescription')}
       </p>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-        <span title={t('field.contextWindow')}>🧠 {formatContext(record)}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+        <span title={t('field.contextWindow')}><Icon source="🧠" size="1em" /> {formatContext(record)}</span>
         <PriceTag record={record} />
       </div>
 
@@ -360,12 +385,16 @@ function ModelCard({
 
 export function ModelsExplorer({ search, viewMode }: { search: string; viewMode: ViewMode }) {
   const t = useTranslations('models');
+  const router = useRouter();
   const [models, setModels] = useState<ModelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [tierFilter, setTierFilter] = useState<TierFilter>('all');
   const [routableOnly, setRoutableOnly] = useState(false);
+  const [maxInputPrice, setMaxInputPrice] = useState<PriceLimit>('any');
+  const [maxOutputPrice, setMaxOutputPrice] = useState<PriceLimit>('any');
+  const [page, setPage] = useState(1);
 
   const [detail, setDetail] = useState<ModelRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -399,10 +428,13 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const maxInput = maxInputPrice === 'any' ? undefined : Number(maxInputPrice);
+    const maxOutput = maxOutputPrice === 'any' ? undefined : Number(maxOutputPrice);
     return models.filter((m) => {
       if (tierFilter === 'builderforce' && !m.isBuilderforce) return false;
       if (tierFilter === 'free' && !(m.pricing.prompt <= 0 && m.pricing.completion <= 0)) return false;
       if (tierFilter === 'paid' && (m.pricing.prompt <= 0 && m.pricing.completion <= 0)) return false;
+      if (!modelMatchesPriceLimits(m, maxInput, maxOutput)) return false;
       // "Routable only": our own products always qualify; upstream models only if
       // the cascade actually routes them.
       if (routableOnly && !m.isBuilderforce && !m.routable) return false;
@@ -413,7 +445,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         m.id.toLowerCase().includes(q)
       );
     });
-  }, [models, search, tierFilter, routableOnly]);
+  }, [models, search, tierFilter, routableOnly, maxInputPrice, maxOutputPrice]);
 
   // Builderforce records always lead, regardless of search ordering.
   const ordered = useMemo(() => {
@@ -421,6 +453,17 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
     const rest = filtered.filter((m) => !m.isBuilderforce);
     return [...bf, ...rest];
   }, [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(ordered.length / MODELS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleModels = useMemo(
+    () => ordered.slice((currentPage - 1) * MODELS_PER_PAGE, currentPage * MODELS_PER_PAGE),
+    [currentPage, ordered],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, tierFilter, routableOnly, maxInputPrice, maxOutputPrice]);
 
   // Preserve selection order (matches checkbox order) for the tray + table.
   const selectedModels = useMemo(
@@ -449,7 +492,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
             onClick={() => setTierFilter(f.id)}
             aria-pressed={tierFilter === f.id}
             className={tierFilter === f.id ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13 }}
+            style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
           >
             {f.label}
           </button>
@@ -460,10 +503,40 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           aria-pressed={routableOnly}
           title={t('filter.routableOnlyTitle')}
           className={routableOnly ? 'btn btn-primary' : 'btn btn-secondary'}
-          style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13 }}
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
         >
-          ✓ {t('filter.routableOnly')}
+          <Icon source="✓" size="1em" /> {t('filter.routableOnly')}
         </button>
+        <Select
+          value={maxInputPrice}
+          onChange={(e) => setMaxInputPrice(e.target.value as PriceLimit)}
+          aria-label={t('filter.maxInput')}
+          title={t('filter.priceHelp')}
+          style={{ minWidth: 170, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
+        >
+          {PRICE_LIMITS.map((limit) => (
+            <option key={limit} value={limit}>
+              {limit === 'any'
+                ? `${t('filter.maxInput')}: ${t('filter.anyPrice')}`
+                : `${t('filter.maxInput')}: ${t('filter.upToPrice', { price: limit })}`}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={maxOutputPrice}
+          onChange={(e) => setMaxOutputPrice(e.target.value as PriceLimit)}
+          aria-label={t('filter.maxOutput')}
+          title={t('filter.priceHelp')}
+          style={{ minWidth: 178, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
+        >
+          {PRICE_LIMITS.map((limit) => (
+            <option key={limit} value={limit}>
+              {limit === 'any'
+                ? `${t('filter.maxOutput')}: ${t('filter.anyPrice')}`
+                : `${t('filter.maxOutput')}: ${t('filter.upToPrice', { price: limit })}`}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {loading ? (
@@ -471,76 +544,110 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
       ) : (
         <>
           {error && (
-            <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+            <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
               {error}
             </div>
           )}
 
           {ordered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>{t('empty')}</div>
-          ) : viewMode === 'table' ? (
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={theadRowStyle}>
-                    <th style={{ ...thStyle, width: 40 }} aria-label={t('table.compareAria')} />
-                    <th style={thStyle}>{t('table.model')}</th>
-                    <th style={thStyle}>{t('table.provider')}</th>
-                    <th style={thStyle}>{t('table.context')}</th>
-                    <th style={thStyle}>{t('table.input')}</th>
-                    <th style={thStyle}>{t('table.output')}</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>{t('table.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ordered.map((m) => {
+          ) : (
+            <>
+              {viewMode === 'table' ? (
+                <div style={tableWrapStyle}>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr style={theadRowStyle}>
+                        <th style={{ ...thStyle, width: 40 }} aria-label={t('table.compareAria')} />
+                        <th style={thStyle}>{t('table.model')}</th>
+                        <th style={thStyle}>{t('table.provider')}</th>
+                        <th style={thStyle}>{t('table.context')}</th>
+                        <th style={thStyle}>{t('table.input')}</th>
+                        <th style={thStyle}>{t('table.output')}</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>{t('table.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleModels.map((m) => {
+                        const checked = selectedIds.includes(m.id);
+                        return (
+                          <tr key={m.id} style={trStyle}>
+                            <td style={tdStyle}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={!checked && maxedOut}
+                                onChange={() => toggleCheck(m.id)}
+                                aria-label={t('compare.compareAria', { name: m.name })}
+                                style={{ width: 16, height: 16, accentColor: tierColor(m) }}
+                              />
+                            </td>
+                            <td style={tdStyle}>
+                              <strong style={{ color: 'var(--text-primary)' }}>{m.name}</strong> <Badge record={m} />
+                            </td>
+                            <td style={tdMutedStyle}>{m.provider}</td>
+                            <td style={tdMutedStyle}>{formatContext(m)}</td>
+                            <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.prompt)}</td>
+                            <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.completion)}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right' }}>
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDetail(m)}>
+                                {t('table.details')}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {visibleModels.map((m) => {
                     const checked = selectedIds.includes(m.id);
                     return (
-                      <tr key={m.id} style={trStyle}>
-                        <td style={tdStyle}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={!checked && maxedOut}
-                            onChange={() => toggleCheck(m.id)}
-                            aria-label={t('compare.compareAria', { name: m.name })}
-                            style={{ width: 16, height: 16, accentColor: tierColor(m) }}
-                          />
-                        </td>
-                        <td style={tdStyle}>
-                          <strong style={{ color: 'var(--text-primary)' }}>{m.name}</strong> <Badge record={m} />
-                        </td>
-                        <td style={tdMutedStyle}>{m.provider}</td>
-                        <td style={tdMutedStyle}>{formatContext(m)}</td>
-                        <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.prompt)}</td>
-                        <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.completion)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDetail(m)}>
-                            {t('table.details')}
-                          </button>
-                        </td>
-                      </tr>
+                      <ModelCard
+                        key={m.id}
+                        record={m}
+                        checked={checked}
+                        checkboxDisabled={!checked && maxedOut}
+                        onToggleCheck={() => toggleCheck(m.id)}
+                        onSelect={() => setDetail(m)}
+                      />
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {ordered.map((m) => {
-                const checked = selectedIds.includes(m.id);
-                return (
-                  <ModelCard
-                    key={m.id}
-                    record={m}
-                    checked={checked}
-                    checkboxDisabled={!checked && maxedOut}
-                    onToggleCheck={() => toggleCheck(m.id)}
-                    onSelect={() => setDetail(m)}
-                  />
-                );
-              })}
-            </div>
+                </div>
+              )}
+              {totalPages > 1 && (
+                <nav
+                  aria-label={t('pagination.label')}
+                  style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(currentPage - 1)}
+                    aria-label={t('pagination.previous')}
+                    style={{ padding: '8px 14px' }}
+                  >
+                    ←
+                  </button>
+                  <span aria-live="polite" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+                    {t('pagination.pageOf', { page: currentPage, pages: totalPages })}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(currentPage + 1)}
+                    aria-label={t('pagination.next')}
+                    style={{ padding: '8px 14px' }}
+                  >
+                    →
+                  </button>
+                </nav>
+              )}
+            </>
           )}
         </>
       )}
@@ -556,6 +663,10 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         onRemove={(id) => setSelectedIds((prev) => prev.filter((x) => x !== id))}
         onClear={() => setSelectedIds([])}
         onCompare={() => setCompareOpen(true)}
+        onExecute={(prompt) => {
+          const params = appendModelComparison(new URLSearchParams({ prompt: prompt.trim() }), selectedModels.map((model) => model.id));
+          router.push(`/create/new?${params.toString()}`);
+        }}
       />
 
       {/* Comparison table slide-out (wide) */}

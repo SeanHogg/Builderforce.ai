@@ -1,6 +1,8 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import React from 'react';
+import { useTranslations } from 'next-intl';
 import { usePermission, type Capability } from '@/lib/rbac';
 
 /**
@@ -36,16 +38,21 @@ export interface RoleGateProps {
 
 const lockPillStyle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
-  fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 999,
+  fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 'var(--radius-full)',
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)', boxShadow: '0 1px 6px rgba(0,0,0,0.14)',
 };
 
 export function RoleGate({ capability, children, variant = 'inline', silent = false, className, style }: RoleGateProps) {
-  const { allowed, requiredLabel } = usePermission(capability);
+  const { allowed, required } = usePermission(capability);
+  const t = useTranslations('common');
   if (allowed) return <>{children}</>;
 
-  const hint = `Requires ${requiredLabel} role`;
+  // Localized via an ICU select on the role key rather than interpolating the
+  // English ROLE_LABEL — "Requires {label} role" is not a sentence shape that
+  // survives translation (German needs the role in quotes and a different verb,
+  // Chinese drops the article entirely), so each locale owns the whole phrase.
+  const hint = t('requiresRoleHint', { role: required });
 
   if (variant === 'block') {
     return (
@@ -55,7 +62,7 @@ export function RoleGate({ capability, children, variant = 'inline', silent = fa
         </div>
         {!silent && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <span style={lockPillStyle}>🔒 {hint}</span>
+            <span style={lockPillStyle}><Icon source="🔒" size="1em" /> {hint}</span>
           </div>
         )}
       </div>
@@ -72,7 +79,7 @@ export function RoleGate({ capability, children, variant = 'inline', silent = fa
       style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'not-allowed', opacity: 0.55, ...style }}
     >
       <span style={{ pointerEvents: 'none', display: 'inline-flex', alignItems: 'center' }}>{children}</span>
-      {!silent && <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>🔒</span>}
+      {!silent && <span aria-hidden style={{ fontSize: 'var(--font-size-field-label)', lineHeight: 1 }}><Icon source="🔒" size="1em" /></span>}
     </span>
   );
 }

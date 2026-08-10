@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useCallback, type CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import type { PublishedAgent } from '@/lib/types';
 import type { AgentManifest, NamedArtifact } from '@/lib/builderforceApi';
 import { formatAgentPrice } from '@/lib/agentPresentation';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { RUNTIME_LABELS } from './CloudAgentFormFields';
 
 /**
@@ -25,13 +27,13 @@ const sectionStyle: CSSProperties = {
 const headRow: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 };
 const headLabel: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', color: 'var(--muted)' };
 const copyBtn: CSSProperties = {
-  fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, cursor: 'pointer',
+  fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
   background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)',
 };
 const rowStyle: CSSProperties = { display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' };
 const groupLabel: CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--muted)', minWidth: 58 };
 const chipStyle: CSSProperties = {
-  fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+  fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-full)',
   background: 'var(--surface-coral-soft)', color: 'var(--accent)', whiteSpace: 'nowrap',
 };
 const personaChip: CSSProperties = { ...chipStyle, background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
@@ -42,17 +44,17 @@ const label = (a: NamedArtifact) => a.name ?? a.slug;
 const EMPTY_MANIFEST: AgentManifest = { skills: [], personas: [], content: [] };
 
 /** Shared "Copy manifest" behaviour (text + transient "Copied!" state) so the card
- *  section and the compact table-row cell never diverge on what gets copied. */
+ *  section and the compact table-row cell never diverge on what gets copied.
+ *  The write, the 2000ms confirmation and its unmount-safe reset live in the shared
+ *  hook; a blocked clipboard stays silent as before (its `error` state is unused —
+ *  the chips still show the config). Thunk form so the manifest text is serialised
+ *  on the click, not on every render of the surrounding row. */
 function useManifestCopy(agent: PublishedAgent, m: AgentManifest) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(buildAgentManifestText(agent, m));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* clipboard blocked — the chips still show the config */ }
-  };
-  return { copied, copy };
+  const { copied, copy } = useCopyToClipboard();
+  const onCopy = useCallback(() => {
+    void copy(() => buildAgentManifestText(agent, m));
+  }, [copy, agent, m]);
+  return { copied, copy: onCopy };
 }
 
 /** Build the shareable plain-text manifest for an agent (config + assigned artifacts). */
@@ -91,6 +93,7 @@ function ChipRow({ label: groupName, items, persona }: { label: string; items: N
 }
 
 export function AgentManifestSection({ agent, manifest }: { agent: PublishedAgent; manifest?: AgentManifest }) {
+  const t = useTranslations('workforce');
   const m: AgentManifest = manifest ?? EMPTY_MANIFEST;
   const empty = m.skills.length === 0 && m.personas.length === 0 && m.content.length === 0;
   const { copied, copy } = useManifestCopy(agent, m);
@@ -98,16 +101,16 @@ export function AgentManifestSection({ agent, manifest }: { agent: PublishedAgen
   return (
     <div style={sectionStyle}>
       <div style={headRow}>
-        <span style={headLabel}>Assigned configuration</span>
-        <button type="button" style={copyBtn} onClick={copy}>{copied ? 'Copied!' : 'Copy manifest'}</button>
+        <span style={headLabel}>{t('manifest.assignedConfig')}</span>
+        <button type="button" style={copyBtn} onClick={copy}>{copied ? t('copiedExclaim') : t('manifest.copyManifest')}</button>
       </div>
       {empty ? (
-        <div style={emptyNote}>No skills or personas assigned</div>
+        <div style={emptyNote}>{t('manifest.emptyNote')}</div>
       ) : (
         <>
-          <ChipRow label="Personas" items={m.personas} persona />
-          <ChipRow label="Skills" items={m.skills} />
-          <ChipRow label="Content" items={m.content} />
+          <ChipRow label={t('manifest.personas')} items={m.personas} persona />
+          <ChipRow label={t('manifest.skills')} items={m.skills} />
+          <ChipRow label={t('manifest.content')} items={m.content} />
         </>
       )}
     </div>
@@ -125,6 +128,8 @@ const inlineCopyBtn: CSSProperties = { ...copyBtn, padding: '2px 7px' };
  * {@link AgentManifestSection}, so the two views stay consistent.
  */
 export function AgentManifestInline({ agent, manifest }: { agent: PublishedAgent; manifest?: AgentManifest }) {
+  const t = useTranslations('workforce');
+  const tc = useTranslations('common');
   const m: AgentManifest = manifest ?? EMPTY_MANIFEST;
   const { copied, copy } = useManifestCopy(agent, m);
   const all: Array<NamedArtifact & { persona?: boolean }> = [
@@ -139,7 +144,7 @@ export function AgentManifestInline({ agent, manifest }: { agent: PublishedAgent
   return (
     <div style={inlineWrap}>
       {all.length === 0 ? (
-        <span style={emptyNote}>None assigned</span>
+        <span style={emptyNote}>{t('manifest.noneAssigned')}</span>
       ) : (
         <>
           {shown.map((a) => (
@@ -148,7 +153,7 @@ export function AgentManifestInline({ agent, manifest }: { agent: PublishedAgent
           {overflow > 0 && <span style={moreChip} title={all.slice(MAX).map(label).join(', ')}>+{overflow}</span>}
         </>
       )}
-      <button type="button" style={inlineCopyBtn} onClick={copy}>{copied ? 'Copied!' : 'Copy'}</button>
+      <button type="button" style={inlineCopyBtn} onClick={copy}>{copied ? t('copiedExclaim') : tc('copy')}</button>
     </div>
   );
 }

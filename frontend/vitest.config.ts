@@ -23,11 +23,42 @@ export default defineConfig({
     // Use worker threads, not child-process forks: the default `forks` pool
     // fails to spawn workers in constrained/sandboxed CI environments
     // (`Timeout waiting for worker to respond`); threads run the suite cleanly.
+    /**
+     * The worker heap is NOT raised here — it is raised on the runner, by the
+     * `test` script (`node --max-old-space-size=…`). A worker thread inherits the
+     * parent's heap ceiling, and none of the levers this file has reach it:
+     * vitest 4 deleted `poolOptions.threads.resourceLimits` (silently — it just
+     * warns and raises nothing), and `execArgv` is rejected outright by Node,
+     * which refuses V8 flags on a worker and then fails to start ANY worker.
+     *
+     * It is still worth having: a suite of jsdom mounts this size has no reason
+     * to run near the default ceiling.
+     *
+     * It is NOT, however, what made `CreationCanvas.test.tsx` die with
+     * `ERR_WORKER_OUT_OF_MEMORY` — that was an unbounded render/effect loop in
+     * the next-intl mock, which returned a new `t` per render and so invalidated
+     * every `useMemo` hanging off it. Fixed in `src/test/setup.ts`; the file now
+     * completes in ~160s. Recorded here because this comment previously blamed
+     * the component's size and prescribed splitting it, which would not have
+     * helped.
+     */
     pool: 'threads',
+    /**
+     * Heavy jsdom mounts, measured against a shared thread pool rather than an
+     * idle one. A directory run of the canvas passes comfortably; the same files
+     * inside a 56-file `src/components` run get starved and were cut off
+     * mid-assertion. Neither ceiling can make a wrong assertion pass — `waitFor`
+     * POLLS, and a test that finishes early never spends its budget — so the
+     * only thing a longer ceiling buys is that a correct assertion is not
+     * reported as a failure because the scheduler was busy.
+     */
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@builderforce/creation-canvas-contract': path.resolve(__dirname, '../packages/creation-canvas-contract/src/index.ts'),
     },
     // The `link:`ed sibling packages (brain-embedded, brain-ui) ship their deps as
     // external peers and import them bare. Vite follows the symlink into the sibling's

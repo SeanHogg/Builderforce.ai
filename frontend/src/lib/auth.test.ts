@@ -151,6 +151,27 @@ describe('register', () => {
     fetchSpy.mockResolvedValueOnce(mockError(409, 'Email already exists'));
     await expect(register('dup@example.com', 'pass', undefined, true)).rejects.toThrow('Email already exists');
   });
+
+  it('preserves the sales-associate account type in registration', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      Promise.resolve(new Response(JSON.stringify({ verificationRequired: true, email: 'associate@example.com' }), {
+        status: 201, headers: { 'Content-Type': 'application/json' },
+      }))
+    );
+    await register('associate@example.com', 'secret123', 'Sales Associate', true, 'sales');
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).accountType).toBe('sales');
+  });
+
+  it('sends an opaque referral code without a client-selected commission type', async () => {
+    fetchSpy.mockResolvedValueOnce(Promise.resolve(new Response(JSON.stringify({ verificationRequired: true, email: 'buyer@example.com' }), { status: 201, headers: { 'Content-Type': 'application/json' } })));
+    await register('buyer@example.com', 'secret123', 'Buyer', true, 'standard', 'BSABC123', true);
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.referralCode).toBe('BSABC123');
+    expect(body.ageAttested).toBe(true);
+    expect(body).not.toHaveProperty('attributionType');
+  });
 });
 
 // ---------------------------------------------------------------------------

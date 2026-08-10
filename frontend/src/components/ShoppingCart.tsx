@@ -5,35 +5,45 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useCart, type CartItem } from '@/lib/CartContext';
 import { useAuth } from '@/lib/AuthContext';
+import { Icon } from '@/components/ui/Icon';
+import { useLocale, useTranslations } from 'next-intl';
+import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
+import { subscriptionCheckoutPayload } from '@/lib/subscriptionCart';
+import {
+  marketplacePurchaseApi,
+  setMarketplaceToken,
+  type MarketplacePurchase,
+} from '@/lib/builderforceApi';
 
-function formatPrice(item: CartItem): string {
-  if (item.price === 0) return 'Free';
-  const dollars = item.price.toFixed(2);
+function formatPrice(item: CartItem, locale: string, freeLabel: string, useLabel: string): string {
+  if (item.price === 0) return freeLabel;
+  const dollars = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(item.price);
   if (item.pricingModel === 'consumption') {
-    return `$${dollars}${item.priceUnit ? ` / ${item.priceUnit}` : ' / use'}`;
+    return `${dollars}${item.priceUnit ? ` / ${item.priceUnit}` : ` / ${useLabel}`}`;
   }
-  return `$${dollars}`;
+  return item.pricingModel === 'subscription' ? `${dollars}${item.priceUnit ?? ''}` : dollars;
 }
 
 function TypeBadge({ type }: { type: CartItem['type'] }) {
   const colors: Record<CartItem['type'], string> = {
-    skill: '#6366f1',
-    persona: '#8b5cf6',
-    content: '#0891b2',
-    agent: '#059669',
+    skill: 'var(--indigo-bright)',
+    persona: 'var(--purple-bright)',
+    content: 'var(--cyan-bright)',
+    agent: 'var(--emerald-bright)',
+    service: 'var(--coral-bright)',
   };
   return (
     <span
       style={{
         display: 'inline-block',
         padding: '1px 7px',
-        borderRadius: 4,
+        borderRadius: 'var(--radius-sm)',
         fontSize: 10,
         fontWeight: 700,
         letterSpacing: '0.05em',
         textTransform: 'uppercase',
         background: colors[type],
-        color: '#fff',
+        color: 'var(--text-on-accent)',
       }}
     >
       {type}
@@ -43,7 +53,15 @@ function TypeBadge({ type }: { type: CartItem['type'] }) {
 
 export default function ShoppingCart() {
   const { items, count, subtotal, removeItem, clearCart, isOpen, closeCart } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, tenant, user, webToken } = useAuth();
+  const t = useTranslations('shoppingCart');
+  const phoneT = useTranslations('pricing.phone');
+  const phonePageT = useTranslations('phonePage');
+  const locale = useLocale();
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null);
+  const [purchases, setPurchases] = useState<MarketplacePurchase[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Portal to <body> so the fixed drawer escapes ancestor stacking contexts.
@@ -55,6 +73,15 @@ export default function ShoppingCart() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (webToken) setMarketplaceToken(webToken);
+  }, [webToken]);
+
+  useEffect(() => {
+    if (!isOpen || !isAuthenticated || !webToken) return;
+    marketplacePurchaseApi.list().then(setPurchases).catch(() => setPurchases([]));
+  }, [isOpen, isAuthenticated, webToken]);
 
   // Close on Escape
   useEffect(() => {
@@ -71,6 +98,65 @@ export default function ShoppingCart() {
   }, [isOpen]);
 
   if (!isOpen || !mounted) return null;
+
+  const phoneItem = items.find((item) => item.checkoutKind === 'business_phone');
+  const subscriptionItem = items.find((item) => item.checkoutKind === 'plan_subscription');
+  const checkoutReturnPath = '/pricing?checkout=1';
+  const registrationPath = `/tenants?next=${encodeURIComponent(checkoutReturnPath)}`;
+  const setupTotal = items.reduce((sum, item) => sum + (item.setupFee ?? 0), 0);
+  const recurringTotal = items.filter((item) => item.pricingModel === 'subscription').reduce((sum, item) => sum + item.price, 0);
+  const checkout = async () => {
+    if (checkingOut) return;
+    setCheckingOut(true); setCheckoutError(null); setCheckoutSuccess(null);
+    try {
+      const marketplaceItems = items.filter((item): item is CartItem & { type: 'skill' | 'persona' | 'content' } =>
+        item.type === 'skill' || item.type === 'persona' || item.type === 'content');
+      if ((phoneItem || subscriptionItem) && items.length > 1) throw new Error(t('mixedCheckout'));
+
+      if (subscriptionItem) {
+        if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
+        if (!subscriptionItem.targetPlan || !subscriptionItem.billingCycle) throw new Error(t('unsupportedCheckout'));
+        const token = getStoredTenantToken();
+        const response = await fetch(`${AUTH_API_URL}/api/tenants/${tenant.id}/subscription/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(subscriptionCheckoutPayload(subscriptionItem, user.email)),
+        });
+        const body = await response.json() as { checkoutUrl?: string; error?: string };
+        if (!response.ok || !body.checkoutUrl) throw new Error(body.error ?? t('checkoutFailed'));
+        window.location.href = body.checkoutUrl;
+        return;
+      }
+
+      if (phoneItem) {
+        if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
+        const token = getStoredTenantToken();
+        const response = await fetch(`${AUTH_API_URL}/api/tenants/${tenant.id}/add-ons/business-phone/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ billingEmail: user.email }) });
+        const body = await response.json() as { checkoutUrl?: string; error?: string };
+        if (response.status === 403) throw new Error(phoneT('eligibility'));
+        if (response.status === 409) throw new Error(phonePageT('active'));
+        if (!response.ok || !body.checkoutUrl) throw new Error(t('checkoutFailed'));
+        window.location.href = body.checkoutUrl;
+        return;
+      }
+
+      if (marketplaceItems.length !== items.length || marketplaceItems.length === 0) {
+        throw new Error(t('unsupportedCheckout'));
+      }
+      // Ask the server about paid items first. Until their provider payment has
+      // been verified it returns 402, and no free item in the same cart is
+      // accidentally recorded as a partial checkout.
+      const checkoutItems = [...marketplaceItems].sort((a, b) => b.price - a.price);
+      for (const item of checkoutItems) {
+        await marketplacePurchaseApi.purchase({ artifactType: item.type, artifactSlug: item.slug });
+      }
+      const nextPurchases = await marketplacePurchaseApi.list();
+      setPurchases(nextPurchases);
+      clearCart();
+      setCheckoutSuccess(t('purchaseComplete', { count: marketplaceItems.length }));
+      setCheckingOut(false);
+    } catch (error) { setCheckoutError(error instanceof Error ? error.message : t('checkoutFailed')); setCheckingOut(false); }
+  };
 
   return createPortal(
     <>
@@ -91,7 +177,7 @@ export default function ShoppingCart() {
       <div
         ref={panelRef}
         role="dialog"
-        aria-label="Shopping cart"
+        aria-label={t('title')}
         aria-modal="true"
         style={{
           position: 'fixed',
@@ -99,7 +185,7 @@ export default function ShoppingCart() {
           right: 0,
           bottom: 0,
           width: 'min(420px, 100vw)',
-          background: 'var(--bg-elevated, #1a1a2e)',
+          background: 'var(--bg-elevated)',
           borderLeft: '1px solid var(--border, rgba(255,255,255,0.1))',
           zIndex: 9999,
           display: 'flex',
@@ -122,9 +208,9 @@ export default function ShoppingCart() {
               <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
-            <span style={{ fontWeight: 700, fontSize: 16 }}>Cart</span>
+            <span style={{ fontWeight: 700, fontSize: 16 }}>{t('title')}</span>
             {count > 0 && (
-              <span style={{ background: 'var(--accent, #6366f1)', color: '#fff', borderRadius: 10, padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
+              <span style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
                 {count}
               </span>
             )}
@@ -133,7 +219,7 @@ export default function ShoppingCart() {
             type="button"
             onClick={closeCart}
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
-            aria-label="Close cart"
+            aria-label={t('close')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -149,14 +235,14 @@ export default function ShoppingCart() {
                 <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
               </svg>
-              <p style={{ fontSize: 14 }}>Your cart is empty</p>
-              <button
-                type="button"
+              <p style={{ fontSize: 14 }}>{t('empty')}</p>
+              <Link
+                href="/marketplace"
                 onClick={closeCart}
-                style={{ marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 16px', cursor: 'pointer', fontSize: 13 }}
+                style={{ display: 'inline-block', marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text)', padding: '8px 16px', fontSize: 13, textDecoration: 'none' }}
               >
-                Browse Marketplace
-              </button>
+                {t('browse')}
+              </Link>
             </div>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -168,28 +254,29 @@ export default function ShoppingCart() {
                     alignItems: 'flex-start',
                     gap: 12,
                     padding: 12,
-                    borderRadius: 10,
+                    borderRadius: 'var(--radius-lg)',
                     background: 'var(--bg-base, rgba(255,255,255,0.03))',
                     border: '1px solid var(--border)',
                   }}
                 >
                   <div style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: 'center' }}>
-                    {item.emoji ?? (item.type === 'skill' ? '⚙️' : item.type === 'persona' ? '🤖' : item.type === 'agent' ? '👤' : '📄')}
+                    <Icon source={item.emoji ?? (item.type === 'skill' ? 'settings' : item.type === 'persona' ? 'brain' : item.type === 'agent' ? 'person' : 'document')} size={18} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                       <TypeBadge type={item.type} />
                     </div>
-                    <div style={{ fontSize: 13, color: item.price === 0 ? '#22c55e' : 'var(--text-muted)', fontWeight: 600 }}>
-                      {formatPrice(item)}
+                    <div style={{ fontSize: 13, color: item.price === 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                      {formatPrice(item, locale, t('free'), t('use'))}
+                      {item.setupFee != null && <div style={{ fontSize: 11, fontWeight: 400 }}>{t('plusActivation', { price: item.setupFee })}</div>}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => removeItem(item.id)}
                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, flexShrink: 0 }}
-                    aria-label={`Remove ${item.name}`}
+                    aria-label={t('remove', { name: item.name })}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -199,74 +286,93 @@ export default function ShoppingCart() {
               ))}
             </ul>
           )}
+
+          {checkoutSuccess && <p role="status" style={{ color: 'var(--success-text)', fontSize: 13 }}>{checkoutSuccess}</p>}
+          {isAuthenticated && purchases.length > 0 && (
+            <section style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }} aria-labelledby="cart-purchase-history">
+              <h2 id="cart-purchase-history" style={{ margin: '0 0 10px', fontSize: 14 }}>{t('purchaseHistory')}</h2>
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {purchases.slice(0, 20).map((purchase) => (
+                  <li key={purchase.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{purchase.artifactSlug}</span>
+                    <span style={{ flexShrink: 0 }}>{purchase.priceCents === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(purchase.priceCents / 100)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
 
         {/* Footer */}
         {items.length > 0 && (
           <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 15, fontWeight: 700 }}>
-              <span>Subtotal</span>
-              <span>{subtotal === 0 ? 'Free' : `$${subtotal.toFixed(2)}`}</span>
+              <span>{t('dueToday')}</span>
+              <span>{subtotal + setupTotal === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(subtotal + setupTotal)}</span>
             </div>
+            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}><span>{subscriptionItem?.billingCycle === 'yearly' ? t('renewsYearly') : t('renewsMonthly')}</span><span>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(recurringTotal)}</span></div>}
 
             {isAuthenticated ? (
               <>
                 <button
                   type="button"
+                  onClick={checkout}
+                  disabled={checkingOut}
                   style={{
                     width: '100%',
                     padding: '12px 0',
-                    borderRadius: 10,
+                    borderRadius: 'var(--radius-lg)',
                     border: 'none',
-                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    color: '#fff',
+                    background: 'linear-gradient(135deg, var(--indigo-bright), var(--purple-bright))',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: 15,
                     cursor: 'pointer',
                     marginBottom: 8,
                   }}
                 >
-                  Checkout
+                  {checkingOut ? t('redirecting') : t('checkout')}
                 </button>
+                {checkoutError && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 12 }}>{checkoutError}</p>}
                 <button
                   type="button"
                   onClick={clearCart}
                   style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}
                 >
-                  Clear cart
+                  {t('clear')}
                 </button>
               </>
             ) : (
               <div style={{ textAlign: 'center' }}>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                  Sign in to complete your purchase
+                  {t('signInPrompt')}
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Link
-                    href="/register"
+                    href={`/register?next=${encodeURIComponent(registrationPath)}`}
                     onClick={closeCart}
                     style={{
                       flex: 1,
                       textAlign: 'center',
                       padding: '10px 0',
-                      borderRadius: 8,
-                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      color: '#fff',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'linear-gradient(135deg, var(--indigo-bright), var(--purple-bright))',
+                      color: 'var(--text-on-accent)',
                       fontWeight: 600,
                       fontSize: 13,
                       textDecoration: 'none',
                     }}
                   >
-                    Create Account
+                    {t('createAccount')}
                   </Link>
                   <Link
-                    href="/login"
+                    href={`/login?next=${encodeURIComponent(checkoutReturnPath)}`}
                     onClick={closeCart}
                     style={{
                       flex: 1,
                       textAlign: 'center',
                       padding: '10px 0',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--border)',
                       color: 'var(--text)',
                       fontWeight: 600,
@@ -274,7 +380,7 @@ export default function ShoppingCart() {
                       textDecoration: 'none',
                     }}
                   >
-                    Sign In
+                    {t('signIn')}
                   </Link>
                 </div>
               </div>

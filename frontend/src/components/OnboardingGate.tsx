@@ -61,7 +61,7 @@ function GateSkeleton() {
         alignItems: 'center',
         justifyContent: 'center',
         color: 'var(--text-muted)',
-        fontSize: '0.875rem',
+        fontSize: 'var(--font-size-small)',
         fontFamily: 'var(--font-body)',
       }}
     >
@@ -112,7 +112,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
           maxWidth: 720,
           background: 'var(--surface-card)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 16,
+          borderRadius: 'var(--radius-xl)',
           boxShadow: '0 16px 48px var(--shadow-coral-soft)',
           display: 'flex',
           flexDirection: 'column',
@@ -129,13 +129,13 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
             style={{
               margin: 0,
               fontFamily: 'var(--font-display)',
-              fontSize: '1.25rem',
+              fontSize: 'var(--font-size-card-title)',
               fontWeight: 700,
             }}
           >
             {terms.title} · v{terms.version}
           </h1>
-          <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+          <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>
             We updated our terms. Accept the current version to continue using your account.
           </p>
         </div>
@@ -158,10 +158,10 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
               style={{
                 background: 'rgba(239,68,68,0.12)',
                 border: '1px solid rgba(239,68,68,0.4)',
-                color: '#f87171',
-                borderRadius: 10,
+                color: 'var(--error-text)',
+                borderRadius: 'var(--radius-lg)',
                 padding: '10px 14px',
-                fontSize: '0.875rem',
+                fontSize: 'var(--font-size-small)',
               }}
             >
               {error}
@@ -174,7 +174,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
               alignItems: 'flex-start',
               gap: 10,
               cursor: 'pointer',
-              fontSize: '0.875rem',
+              fontSize: 'var(--font-size-small)',
               color: 'var(--text-secondary)',
             }}
           >
@@ -197,12 +197,12 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
               style={{
                 padding: '11px 20px',
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 fontFamily: 'var(--font-display)',
                 fontWeight: 700,
-                fontSize: '0.9rem',
+                fontSize: 'var(--font-size-body)',
                 cursor: !agreed || submitting ? 'not-allowed' : 'pointer',
                 opacity: !agreed || submitting ? 0.5 : 1,
                 letterSpacing: '0.02em',

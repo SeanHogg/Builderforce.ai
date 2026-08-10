@@ -63,8 +63,8 @@ export function WorkforceCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {avatar}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-            {subtitle && <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
+            <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+            {subtitle && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -90,9 +90,9 @@ export function InitialAvatar({ label }: { label: string }) {
     <div
       aria-hidden
       style={{
-        width: 36, height: 36, borderRadius: 10, background: 'var(--bg-base)',
+        width: 36, height: 36, borderRadius: 'var(--radius-lg)', background: 'var(--bg-base)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, fontWeight: 700, color: 'var(--coral-bright)', flexShrink: 0,
+        fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--coral-bright)', flexShrink: 0,
       }}
     >
       {label.slice(0, 1).toUpperCase()}

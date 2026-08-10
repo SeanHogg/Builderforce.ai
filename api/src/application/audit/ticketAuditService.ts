@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Ticket role/diagnostic audit engine — pillar 1.
  *
@@ -22,8 +23,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { recordManagerAction } from '../manager/ManagerService';
-import { computeCoverage, type AuditSignals, type RequirementInput } from './auditRules';
+import { computeCoverage, verdictSignature, type AuditSignals, type RequirementInput } from './auditRules';
 import type { CoverageResult, UnmetRequirement } from './auditRules';
+import { requirementApplies } from '../kanban/types';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { isReviewRole } from '../kanban/roleCatalog';
+import { publishSignoffToPr } from '../validation/publishReviewToPr';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
 
@@ -32,34 +37,86 @@ export interface TicketAuditResult extends CoverageResult {
   boardId: string | null;
 }
 
+/** The verdict a role can record. `waived`/`delegated` require a reason and are
+ *  role-capability gated at the route (they weaken the standard, so must be audited). */
+export type SignoffVerdict = 'approved' | 'changes_requested' | 'waived' | 'delegated';
+
+/** The verifiable work backing a sign-off — what makes it more than a rubber stamp. */
+export interface SignoffContribution {
+  executionId?: number;
+  prdRevision?: number;
+  prUrl?: string;
+  diffFiles?: string[];
+  reviewThreadRef?: string;
+  toolRunId?: string;
+  /**
+   * True when the PLATFORM recorded this entry from a finished run rather than the member
+   * recording a verdict of its own (see `attestRoleRun.ts`). Flagged rather than hidden:
+   * an auto-attested producer credit is a legitimate accountability record, but a reader
+   * auditing who actually judged the work must be able to tell the two apart, and
+   * `getAccountability` must never count one as a considered review.
+   */
+  autoAttested?: boolean;
+}
+
 export interface SignoffInput {
   taskId: number;
   roleKey: string;
   laneKey?: string | null;
   memberKind?: string | null;
   memberRef?: string | null;
-  verdict?: 'approved' | 'changes_requested';
+  memberName?: string | null;
+  verdict?: SignoffVerdict;
   summary?: string | null;
+  contribution?: SignoffContribution | null;
+  waiveReason?: string | null;
 }
 
 export class TicketAuditService {
   constructor(private readonly db: Db) {}
 
-  /** Record a role sign-off, then recompute the ticket's audit. */
-  async recordSignoff(env: Env, tenantId: number, input: SignoffInput): Promise<TicketAuditResult> {
+  /** Record a role sign-off (append-only accountability record), then recompute the
+   *  ticket's audit. Returns the audit AND the new sign-off id so callers can link it
+   *  to a manifest participant. */
+  async recordSignoff(env: Env, tenantId: number, input: SignoffInput): Promise<TicketAuditResult & { signoffId: string }> {
+    const signoffId = crypto.randomUUID();
     await this.db.insert(ticketRoleSignoffs).values({
-      id: crypto.randomUUID(),
+      id: signoffId,
       tenantId,
       taskId: input.taskId,
       laneKey: input.laneKey ?? null,
       roleKey: input.roleKey,
       memberKind: input.memberKind ?? null,
       memberRef: input.memberRef ?? null,
+      memberName: input.memberName ?? null,
       verdict: input.verdict ?? 'approved',
       summary: input.summary ?? null,
+      contribution: input.contribution ?? null,
+      waiveReason: input.waiveReason ?? null,
       createdAt: new Date(),
     });
-    return this.computeAudit(env, tenantId, input.taskId);
+    const audit = await this.computeAudit(env, tenantId, input.taskId);
+
+    // Mirror the sign-off onto the ticket's pull request. A reviewer's verdict
+    // that lives only in the sign-off ledger is invisible to whoever is deciding
+    // whether to merge — which is the one moment it exists to inform. Only
+    // REVIEW-shaped verdicts are published: an 'approved' from a role that merely
+    // participated (e.g. the BA confirming scope) is accountability, not a code
+    // review, and posting every role's sign-off would bury the ones that matter.
+    //
+    // Best-effort and after the ledger write, so GitHub can never cost us the record.
+    if (isReviewRole(input.roleKey)) {
+      await publishSignoffToPr(env, this.db, tenantId, input.taskId, {
+        roleKey: input.roleKey,
+        verdict: input.verdict ?? 'approved',
+        summary: input.summary ?? null,
+        reviewerName: input.memberName ?? null,
+      }).catch((error) => {
+        reportCaughtError(error, { source: "application/audit/ticketAuditService.ts", operation: "recordSignoff" });
+      });
+    }
+
+    return { ...audit, signoffId };
   }
 
   /**
@@ -68,17 +125,13 @@ export class TicketAuditService {
    */
   async computeAudit(env: Env, tenantId: number, taskId: number): Promise<TicketAuditResult> {
     const [task] = await this.db
-      .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status })
+      .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, taskType: tasks.taskType, actionType: tasks.actionType })
       .from(tasks)
       .where(eq(tasks.id, taskId))
       .limit(1);
     if (!task) throw new Error('task not found');
 
-    const [board] = await this.db
-      .select({ id: boards.id })
-      .from(boards)
-      .where(eq(boards.projectId, task.projectId))
-      .limit(1);
+    const board = await findCanonicalBoard(this.db, task.projectId, tenantId);
 
     let reqs: RequirementInput[] = [];
     if (board) {
@@ -99,6 +152,10 @@ export class TicketAuditService {
           .where(inArray(swimlaneRequirements.swimlaneId, applicable.map((l) => l.id)));
         reqs = reqRows
           .filter((r) => laneById.has(r.swimlaneId))
+          // Ticket-type / condition scoping: a requirement only counts for the ticket
+          // types it applies to (a Security ticket requires the security role; a docs
+          // ticket doesn't require QA). Shared with the manifest + gate for consistency.
+          .filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: task.taskType, actionType: task.actionType }))
           .map((r): RequirementInput => {
             const lane = laneById.get(r.swimlaneId)!;
             return {
@@ -109,6 +166,7 @@ export class TicketAuditService {
               responsibility: (r.responsibility as RequirementInput['responsibility']) ?? undefined,
               isRequired: r.isRequired,
               description: r.description ?? undefined,
+              quorum: r.quorum,
             };
           });
       }
@@ -116,6 +174,14 @@ export class TicketAuditService {
 
     const signals = await this.gatherSignals(taskId);
     const coverage = computeCoverage(reqs, signals);
+
+    // Prior verdict, read BEFORE the upsert overwrites it — the flag journal below
+    // is change-driven, not pass-driven.
+    const [previous] = await this.db
+      .select({ status: ticketAudits.status, missing: ticketAudits.missing })
+      .from(ticketAudits)
+      .where(and(eq(ticketAudits.tenantId, tenantId), eq(ticketAudits.taskId, taskId)))
+      .limit(1);
 
     const now = new Date();
     await this.db
@@ -148,7 +214,14 @@ export class TicketAuditService {
       .set({ auditStatus: coverage.status, auditFlagCount: coverage.missing.length })
       .where(eq(tasks.id, taskId));
 
-    if (coverage.status === 'flagged') {
+    // Journal the flag only when the verdict actually changed (newly flagged, or the
+    // set of unmet checks moved). An unchanged verdict is already visible on the
+    // ticket + the flagged list — re-recording it every pass buries the feed.
+    const previousSignature = previous
+      ? verdictSignature(previous.status, safeParseMissing(previous.missing))
+      : null;
+    const changed = verdictSignature(coverage.status, coverage.missing) !== previousSignature;
+    if (coverage.status === 'flagged' && changed) {
       await recordManagerAction(this.db, {
         tenantId,
         projectId: task.projectId,
@@ -215,9 +288,10 @@ export class TicketAuditService {
         .where(eq(ticketRoleSignoffs.taskId, taskId))
         .orderBy(asc(ticketRoleSignoffs.createdAt)),
       this.db
-        .select({ toolId: toolRuns.toolId })
+        .select({ toolId: toolRuns.toolId, result: toolRuns.result, createdAt: toolRuns.createdAt })
         .from(toolRuns)
-        .where(eq(toolRuns.taskId, taskId)),
+        .where(eq(toolRuns.taskId, taskId))
+        .orderBy(asc(toolRuns.createdAt)),
     ]);
 
     // Latest verdict per role wins (append-only ledger; a later approval clears an
@@ -232,17 +306,40 @@ export class TicketAuditService {
     const changesRequestedRoles = new Set<string>();
     for (const [role, verdict] of latest) {
       if (verdict === 'changes_requested') changesRequestedRoles.add(role);
+      // 'delegated' = handed to another actor, not yet satisfied → leave unmet.
+      else if (verdict === 'delegated') { /* still outstanding */ }
+      // 'approved' and 'waived' (an audited, reasoned exception) both satisfy coverage.
       else approvedRoles.add(role);
+    }
+
+    // Diagnostic pass/fail: a tool's ToolResult carries an optional 0..5 `score`. The
+    // LATEST run per tool decides — score present & below threshold ⇒ failed (does not
+    // satisfy); score absent ⇒ satisfied-by-existence (legacy, backward-compatible).
+    const ranDiagnostics = new Set<string>();
+    const failedDiagnostics = new Set<string>();
+    const latestScore = new Map<string, number | null>();
+    for (const d of diagnostics) {
+      ranDiagnostics.add(d.toolId);
+      const score = d.result && typeof d.result === 'object' && 'score' in d.result ? (d.result as { score?: number | null }).score ?? null : null;
+      latestScore.set(d.toolId, score); // ordered asc by createdAt ⇒ last write is latest
+    }
+    for (const [toolId, score] of latestScore) {
+      if (score != null && score < DIAGNOSTIC_PASS_THRESHOLD) failedDiagnostics.add(toolId);
     }
 
     return {
       approvedRoles,
       changesRequestedRoles,
-      ranDiagnostics: new Set(diagnostics.map((d) => d.toolId)),
+      ranDiagnostics,
+      failedDiagnostics,
       performedRoles: performed,
     };
   }
 }
+
+/** Pass mark for a scored diagnostic requirement (ToolResult.score is 0..5). A run at
+ *  or above this satisfies; below it, the requirement stays unmet. */
+const DIAGNOSTIC_PASS_THRESHOLD = 3;
 
 function safeParseMissing(raw: string | null): UnmetRequirement[] {
   if (!raw) return [];

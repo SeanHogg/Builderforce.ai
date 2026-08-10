@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useMemo, useState } from 'react';
@@ -136,7 +137,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
                 <tr key={s.id} style={trStyle}>
                   <td style={tdStyle}>
                     <strong>{s.name}</strong>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>by {s.author}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>by {s.author}</div>
                   </td>
                   <td style={tdMutedStyle}>{s.description}</td>
                   <td style={tdMutedStyle}>{s.category ?? '—'}</td>
@@ -164,7 +165,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
                 </div>
               )}
               <div className="cc-skill-stats">
-                {typeof s.likes === 'number' && <span>♥ {s.likes}</span>}
+                {typeof s.likes === 'number' && <span><Icon source="♥" size="1em" /> {s.likes}</span>}
                 {typeof s.downloads === 'number' && <span>↓ {s.downloads}</span>}
               </div>
             </article>
@@ -185,7 +186,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skills-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(2rem, 5vw, 3rem);
+          font-size: var(--font-size-page-title);
           margin: 0;
         }
         .cc-skills-lead {
@@ -201,13 +202,13 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         }
         .cc-btn {
           padding: 10px 22px;
-          border-radius: 11px;
+          border-radius: var(--radius-lg);
           text-decoration: none;
           color: var(--text-primary);
           background: var(--surface-interactive, rgba(136,146,176,0.08));
           border: 1px solid var(--border-subtle);
           font-weight: 600;
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
         }
         .cc-btn.primary {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));
@@ -221,7 +222,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           margin-bottom: 16px;
           padding: 16px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 50%, transparent);
         }
         .cc-skills-filter {
@@ -232,7 +233,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           min-width: 180px;
         }
         .cc-skills-filter label {
-          font-size: 0.78rem;
+          font-size: var(--font-size-eyebrow);
           color: var(--text-muted);
           text-transform: uppercase;
           letter-spacing: 0.05em;
@@ -241,15 +242,15 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skills-filter select {
           padding: 8px 10px;
           border: 1px solid var(--border-subtle);
-          border-radius: 9px;
+          border-radius: var(--radius-md);
           background: var(--bg-deep);
           color: var(--text-primary);
           font-family: inherit;
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
         }
         .cc-skills-count {
           color: var(--text-secondary);
-          font-size: 0.85rem;
+          font-size: var(--font-size-small);
           margin: 0 0 16px;
         }
         .cc-skills-grid {
@@ -260,7 +261,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skill-card {
           padding: 18px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
           display: flex;
           flex-direction: column;
@@ -275,25 +276,25 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         .cc-skill-name {
           font-family: var(--font-display);
           font-weight: 600;
-          font-size: 1.05rem;
+          font-size: var(--font-size-card-title);
           margin: 0;
         }
         .cc-skill-cat {
-          font-size: 0.7rem;
+          font-size: var(--font-size-eyebrow);
           padding: 3px 8px;
           background: rgba(77,158,255,0.12);
           color: var(--coral-bright);
-          border-radius: 5px;
+          border-radius: var(--radius-sm);
           white-space: nowrap;
         }
         .cc-skill-author {
           color: var(--text-muted);
-          font-size: 0.78rem;
+          font-size: var(--font-size-small);
           margin: 0;
         }
         .cc-skill-desc {
           color: var(--text-secondary);
-          font-size: 0.88rem;
+          font-size: var(--font-size-small);
           line-height: 1.5;
           margin: 4px 0 0;
         }
@@ -303,7 +304,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           gap: 4px;
         }
         .cc-skill-tag {
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
           color: var(--text-muted);
         }
         .cc-skill-stats {
@@ -312,7 +313,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           display: flex;
           gap: 12px;
           color: var(--text-muted);
-          font-size: 0.8rem;
+          font-size: var(--font-size-small);
         }
       `}</style>
     </div>

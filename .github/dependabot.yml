@@ -1,0 +1,102 @@
+# Dependabot — automated dependency and action updates.
+#
+# This repo is NOT a pnpm workspace: each package under api/, frontend/,
+# agent-runtime/, packages/*, etc. carries its own manifest + lockfile, so every
+# directory has to be listed explicitly (Dependabot resolves one lockfile per
+# entry). The `directories:` plural form keeps that to one ecosystem block
+# instead of one block per package.
+#
+# Noise control is deliberate and matters more than freshness here: without
+# grouping, ~15 npm directories x weekly minor/patch churn would open dozens of
+# PRs a week and train everyone to ignore them. So:
+#   - patch + minor are batched into ONE grouped PR per directory
+#   - major bumps stay ungrouped (they need a human to read the changelog)
+#   - open-pull-requests-limit caps the blast radius per ecosystem
+#
+# Security advisories are exempt from the schedule and from the PR limit —
+# GitHub raises those immediately regardless of what is configured here.
+
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — the workflows themselves.
+  # The repo currently pins actions/checkout@v4 + setup-node@v4 while the sibling
+  # builderforce-memory repo is on @v7/@v6; this keeps both from drifting again.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: 'ci(deps)'
+
+  # ---------------------------------------------------------------------------
+  # npm — the shipped packages. Deliberately NOT every package.json in the tree:
+  # frontend/.next is build output, and webdit/* + brain-embedded are not on a
+  # release path, so bumping them buys risk without buying anything.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directories:
+      - /api
+      - /frontend
+      - /agent-runtime
+      - /packages/agent-tools
+      - /packages/brain-ui
+      - /packages/tui
+      - /sdk
+      - /studio
+      - /studio-embedded
+      - /browser-sdk
+      - /voice
+      - /qa-e2e
+      - /clients/vscode
+      - /docs-site
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # One PR per directory for the low-risk churn.
+      safe-updates:
+        patterns: ['*']
+        update-types: [minor, patch]
+      # Type definitions move constantly and independently of runtime behaviour;
+      # keeping them in their own group stops a @types bump from being buried in
+      # a diff that also moves a framework.
+      types:
+        patterns: ['@types/*']
+    ignore:
+      # TypeScript is pinned across every package at ^6.0.3 with tsgo; a
+      # Dependabot bump in ONE directory desynchronises the compiler across the
+      # monorepo and breaks tsup DTS builds ("ignoreDeprecations": "6.0").
+      # Upgrade it deliberately, everywhere at once, by hand.
+      - dependency-name: typescript
+      # Node type defs must track the engines field, not the newest major.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: 'chore(deps)'
+      prefix-development: 'chore(dev-deps)'
+
+  # ---------------------------------------------------------------------------
+  # Docker — the agent + QA runner images. These run untrusted-ish agent code
+  # with a real shell, so a stale base image is a genuine exposure, not just lag.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directories:
+      - /api/container
+      - /api/qa-container
+      - /agent-runtime
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'build(deps)'

@@ -2,8 +2,8 @@ import type { CostClass } from '@/lib/builderforceApi';
 
 /** CAPEX/OPEX accent tokens — one source of truth for every spine/reconcile surface. */
 export const COST_CLASS_COLORS: Record<CostClass, string> = {
-  capex: '#3f8fe0', // investment / new value
-  opex: '#9a6bd0',  // run / maintain
+  capex: 'var(--coral-bright)', // investment / new value
+  opex: 'var(--purple-bright)',  // run / maintain
 };
 
 /** Compact USD formatting for cost badges ($0 → $1.2k → $3.40M). */

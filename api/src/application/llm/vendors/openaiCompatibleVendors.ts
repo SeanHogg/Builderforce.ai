@@ -32,6 +32,9 @@ interface VendorSpec {
   baseUrl: string;
   apiKeyEnv: Parameters<typeof createOpenAICompatibleVendor>[0]['apiKeyEnv'];
   brand: string;
+  /** Sibling regional host tried when `baseUrl` REJECTS a credential — set only
+   *  for providers running two platforms with non-interchangeable keys. */
+  altBaseUrl?: string;
   /** Default catalog model ids (real, current). */
   models: string[];
   /** Override the OpenAI `max_tokens` field name (rare). */
@@ -39,6 +42,11 @@ interface VendorSpec {
   /** Extra static headers (rare). */
   headers?: Record<string, string>;
   noStream?: boolean;
+  /** Serve streamed callers by replaying the completed call as one SSE chunk. */
+  pseudoStream?: boolean;
+  /** This upstream refuses the Worker's egress — run it from the tenant's connected
+   *  runtime when one is online. See `VendorModule.requiresLocalEgress`. */
+  requiresLocalEgress?: boolean;
 }
 
 const SPECS: ReadonlyArray<VendorSpec> = [
@@ -80,7 +88,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'xai', brand: 'xAI', apiKeyEnv: 'XAI_API_KEY',
     baseUrl: 'https://api.x.ai/v1/chat/completions',
-    models: ['grok-3', 'grok-3-mini', 'grok-2-1212'],
+    models: ['grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',
@@ -88,9 +96,46 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     models: ['sonar', 'sonar-pro', 'sonar-reasoning'],
   },
   {
+    // Moonshot runs TWO independent Open Platforms whose keys are not
+    // interchangeable: platform.moonshot.ai (international) and
+    // platform.moonshot.cn (China). A key carries no marker for which issued it,
+    // so pinning one host silently 401s the other platform's tenants. Default to
+    // the international host — it matches the docs (`providers/moonshot.md`) and
+    // the local runtime's `MOONSHOT_BASE_URL` — and let the factory fall back to
+    // the China host when a credential is rejected there.
     id: 'moonshot', brand: 'Moonshot', apiKeyEnv: 'MOONSHOT_API_KEY',
-    baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
-    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-0711-preview'],
+    baseUrl: 'https://api.moonshot.ai/v1/chat/completions',
+    altBaseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+    // Current K2 ids, kept in step with `docs-site/.../providers/moonshot.md`. The
+    // credential health probe uses the FIRST entry, so the flagship leads: the
+    // retired `moonshot-v1-*` models it used to probe fail on a perfectly good key.
+    models: ['kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview', 'kimi-k2-thinking', 'kimi-k2-thinking-turbo'],
+  },
+  {
+    id: 'kimi-code', brand: 'Kimi Code', apiKeyEnv: 'KIMI_CODE_API_KEY',
+    baseUrl: 'https://api.kimi.com/coding/v1/chat/completions',
+    // Kimi asks third-party coding clients to preserve their real identity. Do
+    // not spoof kimi-code-cli/Claude/Codex; identify this gateway truthfully.
+    headers: { 'User-Agent': 'Builderforce.ai' },
+    // Kimi's edge returns an HTML 403 to the Cloudflare Workers egress BEFORE the
+    // API reads the key — the same request from an ordinary machine gets a clean
+    // JSON answer. So this vendor runs from the tenant's own connected runtime when
+    // one is online: the personal interactive client the subscription is licensed
+    // for. See `hostEgress.ts`; falls back to direct egress when nothing is online.
+    requiresLocalEgress: true,
+    // The relay is request/response, so an SSE body arrives whole regardless. Serve
+    // streamed callers through the shared pseudo-stream adapter rather than marking the
+    // vendor `noStream` — that would make streaming dispatch SKIP Kimi entirely, and a
+    // caller who streams would silently never reach the account they connected.
+    pseudoStream: true,
+    // Keep the all-members model first: credential health probes use the first
+    // catalog entry, while K3/high-speed access depends on the subscription tier.
+    models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
+  },
+  {
+    id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    models: ['qwen3-coder-plus', 'qwen3-max', 'qwen-plus', 'qwen-turbo'],
   },
   {
     id: 'hyperbolic', brand: 'Hyperbolic', apiKeyEnv: 'HYPERBOLIC_API_KEY',
@@ -192,6 +237,15 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     baseUrl: 'https://api.minimax.io/v1/chat/completions',
     models: ['MiniMax-M1', 'MiniMax-Text-01'],
   },
+  {
+    // Meta MUSE — OpenAI-compatible endpoint at api.meta.ai/v1.
+    // Tenant BYO key stored as LlmProvider 'meta'; maps to this vendor so that
+    // the gateway dispatches MUSE models on the tenant's own Meta AI account.
+    // Reachable via explicit `direct/meta/<model-id>` pin or the BYO auto-seed.
+    id: 'meta', brand: 'Meta AI', apiKeyEnv: 'META_API_KEY',
+    baseUrl: 'https://api.meta.ai/v1/chat/completions',
+    models: ['muse-spark-1.1'],
+  },
 ];
 
 /** All factory-built OpenAI-compatible vendor modules, in declaration order. */
@@ -199,6 +253,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
   createOpenAICompatibleVendor({
     id: spec.id,
     baseUrl: spec.baseUrl,
+    ...(spec.altBaseUrl ? { altBaseUrl: spec.altBaseUrl } : {}),
     apiKeyEnv: spec.apiKeyEnv,
     catalog: spec.models.map((id) => ({
       id,
@@ -209,6 +264,8 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     ...(spec.maxTokensField ? { maxTokensField: spec.maxTokensField } : {}),
     ...(spec.headers ? { headers: spec.headers } : {}),
     ...(spec.noStream ? { noStream: spec.noStream } : {}),
+    ...(spec.pseudoStream ? { pseudoStream: spec.pseudoStream } : {}),
+    ...(spec.requiresLocalEgress ? { requiresLocalEgress: spec.requiresLocalEgress } : {}),
   }),
 );
 

@@ -47,5 +47,7 @@ describe('meanEvalLoss', () => {
     const newLoss = meanEvalLoss(adapted, tok, examples)!;
     // delta = baseLoss - newLoss should be ≥ ~0: training on the data must not regress it.
     expect(newLoss).toBeLessThanOrEqual(baseLoss + 1e-6);
-  });
+    // 12 epochs of real SSM training runs ~10s on a cold CI box — well past the 5s default,
+    // and a timeout here would read as "training regressed" when it only means "slow runner".
+  }, 60_000);
 });

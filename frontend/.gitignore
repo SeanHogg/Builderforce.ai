@@ -24,3 +24,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 *.tsbuildinfo
+
+# ONNX runtime published by scripts/copy-ort-runtime.mjs (prebuild) for the
+# VS Code canvas. Generated from the pinned dependency — never committed.
+/public/ort/

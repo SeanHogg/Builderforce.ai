@@ -143,3 +143,99 @@ export interface FlaggedTicket {
   coverage: number;
   missing: UnmetRequirement[];
 }
+
+// ── Coordinated Role Participation: manifest + accountability record ──────────
+export type ParticipantState =
+  | 'pending' | 'assigned' | 'in_progress' | 'completed' | 'changes_requested' | 'waived' | 'skipped' | 'unstaffed';
+
+export interface ManifestParticipant {
+  id: string;
+  stageKey: string | null;
+  roleKey: string;
+  roleName: string;
+  responsibility: Responsibility;
+  required: boolean;
+  source: string;
+  assigneeKind: string | null;
+  assigneeRef: string | null;
+  assigneeName: string | null;
+  state: ParticipantState;
+  signoffId: string | null;
+  childTaskId: number | null;
+  evidence: SignoffContribution | null;
+  note: string | null;
+}
+
+export interface SignoffContribution {
+  executionId?: number;
+  prdRevision?: number;
+  prUrl?: string;
+  diffFiles?: string[];
+  reviewThreadRef?: string;
+  toolRunId?: string;
+}
+
+export interface AccountabilitySignoff {
+  laneKey: string | null;
+  roleKey: string;
+  roleName: string;
+  memberKind: string | null;
+  memberRef: string | null;
+  memberName: string | null;
+  verdict: string;
+  summary: string | null;
+  contribution: SignoffContribution | null;
+  waiveReason: string | null;
+  createdAt: string;
+}
+
+export type AccountabilityGapKind = 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested';
+/** `blocking` = something is wrong; `advisory` = outstanding work or a reasoned waiver. */
+export type AccountabilityGapSeverity = 'blocking' | 'advisory';
+export interface AccountabilityGap {
+  kind: AccountabilityGapKind;
+  severity: AccountabilityGapSeverity;
+  roleKey: string;
+  roleName: string;
+  /** Slot identity — the same role can appear twice on a ticket (owner + reviewer). */
+  stageKey: string | null;
+  responsibility: Responsibility | null;
+  state: ParticipantState | null;
+  reason: string | null;
+  detail: string;
+}
+
+/**
+ * The key that identifies a participation SLOT — lane + role. Mirrors the server's
+ * `accountabilityGaps.slotKey`: the manifest calls the lane `stageKey` and the ledger
+ * calls it `laneKey`, and matching a sign-off to its row depends on both spelling it
+ * the same way.
+ */
+export const slotKey = (lane: string | null, roleKey: string): string => `${lane ?? ''}:${roleKey}`;
+
+export interface AccountabilityReport {
+  taskId: number;
+  requiredCount: number;
+  completedCount: number;
+  percentComplete: number;
+  participants: ManifestParticipant[];
+  signoffs: AccountabilitySignoff[];
+  gaps: AccountabilityGap[];
+}
+
+export interface ParticipantsSummaryRow {
+  taskId: number;
+  completed: number;
+  required: number;
+  percent: number;
+}
+
+/** An incident's implicated delivery ticket + its Accountability Report (RCA linkage). */
+export interface ImplicatedTicket {
+  taskId: number;
+  title: string;
+  status: string;
+  relation: string;
+  note: string | null;
+  accountability: AccountabilityReport;
+}

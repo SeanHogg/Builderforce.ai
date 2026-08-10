@@ -19,7 +19,8 @@
  * Detection is deliberately conservative and grounded in THIS gateway's model-id
  * conventions (see `CODING_MODEL_POOL` in LlmProxyService):
  *
- *   • Anthropic extended thinking — bare `claude-*` ids ONLY. Those dispatch to the
+ *   • Anthropic ADAPTIVE thinking — supported bare `claude-*` ids ONLY. Every such
+ *     model dispatches to the
  *     direct Anthropic Messages vendor (`vendors/anthropic.ts`), the one path whose
  *     translator we wire the `thinking` param through. OpenRouter-routed
  *     `anthropic/claude-*` slugs speak the OpenAI shape and don't accept Anthropic's
@@ -51,6 +52,9 @@ export type ModelReasoningSupport =
 // (OpenRouter) and colon registry forms are intentionally excluded — see file docs.
 const ANTHROPIC_THINKING_RE = /^claude-/i;
 
+/** Thinking depth levels Anthropic's `output_config.effort` accepts. */
+export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 // OpenAI reasoning families, with an optional `openai/` (OpenRouter) prefix:
 //   o1 | o3 | o4 | o4-mini | o3-mini | gpt-5 | gpt-5-mini | gpt-5-codex …
 // `gpt-4.1` / `gpt-4o` (non-reasoning) do NOT match.
@@ -68,15 +72,21 @@ export function detectReasoningSupport(modelId: string | undefined | null): Mode
   return { kind: 'none' };
 }
 
-/** Anthropic extended-thinking token budget per think level. Scales with intensity;
- *  `medium` is the default when only `reasoningLevel: 'on'` asked (no explicit level). */
-const THINK_BUDGET_TOKENS: Record<AgentThinkLevel, number> = {
-  off: 0,
-  minimal: 2048,
-  low: 2048,
-  medium: 8192,
-  high: 16384,
-  xhigh: 16384,
+/**
+ * Anthropic thinking DEPTH per think level, expressed as `output_config.effort`.
+ *
+ * Replaces the former `THINK_BUDGET_TOKENS` map: manual extended thinking
+ * (`thinking:{type:'enabled',budget_tokens}`) is REMOVED on every model this
+ * gateway calls directly (Sonnet 5, Opus 4.8) and returns HTTP 400. Depth is now
+ * a qualitative effort level paired with adaptive thinking, not a token count.
+ */
+const THINK_EFFORT: Record<AgentThinkLevel, AnthropicEffort> = {
+  off: 'low',
+  minimal: 'low',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
 };
 
 /** OpenAI `reasoning_effort` per think level. */
@@ -95,15 +105,20 @@ function reasoningSwitchedOn(execParams: AgentExecParams): boolean {
 }
 
 /**
- * Anthropic extended thinking is comparatively expensive, so it is gated tighter:
- * only when the think level is `high`/`xhigh` OR reasoning is explicitly switched on.
+ * Anthropic thinking is comparatively expensive, so it is gated tighter: only when
+ * the think level is `high`/`xhigh` OR reasoning is explicitly switched on.
+ *
+ * Emits ADAPTIVE thinking plus an effort level — Claude decides per request how much
+ * to think, bounded by `thinkingEffort`. The vendor translator turns `thinkingEffort`
+ * into `output_config.effort`; it is carried as a sibling field rather than inlined
+ * so the wire-shape decision stays in one place (`vendors/anthropic.ts`).
  */
 function anthropicThinkingParams(execParams: AgentExecParams): Record<string, unknown> | undefined {
   const level = execParams.thinkLevel;
   const wants = level === 'high' || level === 'xhigh' || reasoningSwitchedOn(execParams);
   if (!wants) return undefined;
-  const budget = level && level !== 'off' ? THINK_BUDGET_TOKENS[level] : THINK_BUDGET_TOKENS.medium;
-  return { thinking: { type: 'enabled', budget_tokens: budget } };
+  const effort = level && level !== 'off' ? THINK_EFFORT[level] : THINK_EFFORT.medium;
+  return { thinking: { type: 'adaptive' }, thinkingEffort: effort };
 }
 
 /**
@@ -134,11 +149,15 @@ export interface ReasoningParamOpts {
 /**
  * Map a model id + desired execution levers to the CORRECT vendor reasoning param,
  * or `undefined` when the model family is unknown OR the levers don't ask for
- * reasoning. The returned object is spread verbatim into the gateway request body;
- * it survives to the vendor as `extraBody` (non-standard fields pass through
- * {@link stripStandardFields}), where the anthropic / OpenAI-compatible translators
- * consume it. Returning `undefined` (the common case with no persona) leaves the
- * request unchanged.
+ * reasoning. The returned object is merged into that model's `extraBody`, where the
+ * anthropic / OpenAI-compatible translators consume it. Returning `undefined` (the
+ * common case with no persona) leaves the request unchanged.
+ *
+ * Call this PER MODEL ACTUALLY TRIED, never once for a whole candidate chain: the
+ * gateway's vendor dispatcher walks a chain internally on failover, so
+ * `vendors/registry.ts` re-derives here for each candidate (carrying the vendor-neutral
+ * intent via `VendorCallParams.reasoningIntent`). That is what lets an `auto`/mixed
+ * chain send `thinking` on its Anthropic hop and NOTHING on a Cloudflare/qwen hop.
  */
 export function reasoningParamsForModel(
   modelId: string | undefined | null,
@@ -159,4 +178,35 @@ export function reasoningParamsForModel(
     default:
       return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Client-supplied (vendor-neutral) reasoning intent
+// ---------------------------------------------------------------------------
+
+/**
+ * The vendor-neutral levels a CLIENT may request via the gateway body's optional
+ * `reasoning: { level }` (the VS Code chat "Thinking" toggle). Deliberately a SUBSET
+ * of `AgentThinkLevel` member names so the parsed value feeds
+ * {@link reasoningParamsForModel} with NO second translation table — this module stays
+ * the one and only mapping. The toggle-off case OMITS the field entirely.
+ */
+const CLIENT_REASONING_LEVELS = new Set<AgentThinkLevel>(['low', 'medium', 'high']);
+
+/**
+ * Validate an untrusted client `reasoning` value into the SAME `AgentExecParams`
+ * lever shape the persona compiler emits, or `undefined` when absent/malformed/off.
+ *
+ * Everything unrecognised (a bad shape, an unknown or vendor-specific level, `off`)
+ * returns `undefined` → the request behaves exactly as it does today. Client input is
+ * never forwarded verbatim: only the matched union member is carried forward, so a
+ * caller cannot smuggle vendor params through this field.
+ */
+export function parseClientReasoningIntent(raw: unknown): AgentExecParams | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const level = (raw as { level?: unknown }).level;
+  if (typeof level !== 'string') return undefined;
+  const normalized = level.trim().toLowerCase() as AgentThinkLevel;
+  if (!CLIENT_REASONING_LEVELS.has(normalized)) return undefined;
+  return { thinkLevel: normalized };
 }

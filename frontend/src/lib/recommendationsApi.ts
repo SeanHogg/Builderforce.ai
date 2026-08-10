@@ -74,17 +74,6 @@ export const recommendationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recKey }),
     }),
-  /**
-   * Submit thumbs up/down feedback (+ optional free-text reason) — FR-6.2.
-   * The API contract is `{ recKey, vote: 'up' | 'down', reason? }`; the caller
-   * passes a `vote` directly so the client and route agree.
-   */
-  feedback: (recKey: string, vote: 'up' | 'down', reason?: string): Promise<{ recKey: string; vote: string; reason: string | null }> =>
-    apiRequest<{ recKey: string; vote: string; reason: string | null }>(`/api/insights/recommendations/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recKey, vote, reason }),
-    }),
-  space: (days = 30): Promise<SpaceMetrics> =>
-    apiRequest<SpaceMetrics>(`/api/insights/space?days=${days}`),
+  space: (days = 30, projectId?: number | null): Promise<SpaceMetrics> =>
+    apiRequest<SpaceMetrics>(`/api/insights/space?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 };

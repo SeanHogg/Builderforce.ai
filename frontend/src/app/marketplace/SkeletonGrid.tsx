@@ -9,17 +9,17 @@ export function SkeletonGrid({ count = 8 }: { count?: number }) {
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="animate-pulse" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface-2)', flexShrink: 0 }} />
+            <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-lg)', background: 'var(--surface-2)', flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ height: 12, width: '60%', borderRadius: 6, background: 'var(--surface-2)', marginBottom: 6 }} />
-              <div style={{ height: 10, width: '40%', borderRadius: 6, background: 'var(--surface-2)' }} />
+              <div style={{ height: 12, width: '60%', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', marginBottom: 6 }} />
+              <div style={{ height: 10, width: '40%', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)' }} />
             </div>
           </div>
-          <div className="animate-pulse" style={{ height: 10, width: '100%', borderRadius: 6, background: 'var(--surface-2)' }} />
-          <div className="animate-pulse" style={{ height: 10, width: '85%', borderRadius: 6, background: 'var(--surface-2)' }} />
+          <div className="animate-pulse" style={{ height: 10, width: '100%', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)' }} />
+          <div className="animate-pulse" style={{ height: 10, width: '85%', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)' }} />
           <div className="animate-pulse" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-            <div style={{ height: 18, width: 48, borderRadius: 999, background: 'var(--surface-2)' }} />
-            <div style={{ height: 18, width: 60, borderRadius: 999, background: 'var(--surface-2)' }} />
+            <div style={{ height: 18, width: 48, borderRadius: 'var(--radius-full)', background: 'var(--surface-2)' }} />
+            <div style={{ height: 18, width: 60, borderRadius: 'var(--radius-full)', background: 'var(--surface-2)' }} />
           </div>
         </div>
       ))}

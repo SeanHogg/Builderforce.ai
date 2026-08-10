@@ -114,7 +114,7 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
       style={{
         display: 'flex', flexDirection: 'column', gap: 14,
         background: 'var(--bg-elevated, var(--card-bg))', border: '1px solid var(--border-subtle, var(--border))',
-        borderRadius: 12, padding: 16, marginBottom: 20,
+        borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 20,
       }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>

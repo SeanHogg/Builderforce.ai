@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Data-ingestion accounting — the non-token half of the consumption framework,
  * mirroring application/llm/tokenUsage.ts + usageLedger.ts.
@@ -10,12 +11,11 @@
  */
 
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { ingestionUsageLog, tenants } from '../../infrastructure/database/schema';
+import { ingestionUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import type { Env } from '../../env';
 import { resolveIngestionMonthlyBytes } from '../../domain/tenant/PlanLimits';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { utcMonthStart } from '../llm/tokenUsage';
+import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 
 export interface RecordIngestionRow {
   tenantId: number;
@@ -40,7 +40,9 @@ export async function recordIngestion(db: Db, row: RecordIngestionRow): Promise<
       itemsIngested: Math.max(0, Math.floor(row.itemsIngested ?? 0)),
       metadata:      row.metadata ? JSON.stringify(row.metadata) : null,
     });
-  } catch { /* never let ingestion logging fail the request */ }
+  } catch (error) { /* never let ingestion logging fail the request */ 
+    reportCaughtError(error, { source: "application/ingestion/ingestionLedger.ts", operation: "recordIngestion" });
+  }
 }
 
 /** Bytes ingested by a tenant since `since` — the single window-sum the meter and
@@ -70,9 +72,31 @@ export async function dailyTenantIngestionBytes(
   return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
 }
 
-export type IngestionCapResult =
-  | { allowed: true }
-  | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };
+/** Month-to-date ingestion grouped by the integration that supplied it. Null
+ * provider rows remain part of the aggregate meter but are intentionally omitted
+ * here because there is no integration card to attribute them to. */
+export async function tenantIngestionBytesByProvider(
+  db: Db,
+  tenantId: number,
+  since: Date,
+): Promise<Array<{ key: string; used: number }>> {
+  const rows = await db
+    .select({ provider: ingestionUsageLog.provider, used: sql<number>`COALESCE(SUM(${ingestionUsageLog.bytesIngested}), 0)` })
+    .from(ingestionUsageLog)
+    .where(and(
+      eq(ingestionUsageLog.tenantId, tenantId),
+      gte(ingestionUsageLog.createdAt, since),
+      sql`${ingestionUsageLog.provider} IS NOT NULL`,
+    ))
+    .groupBy(ingestionUsageLog.provider)
+    .orderBy(ingestionUsageLog.provider);
+  return rows.map((r) => ({
+    key: String(r.provider),
+    used: Math.max(0, Math.floor(Number(r.used ?? 0))),
+  }));
+}
+
+export type IngestionCapResult = MonthlyTenantCapResult;
 
 /**
  * Gate NEW ingestion against the tenant's monthly byte allowance. Self-contained:
@@ -81,34 +105,18 @@ export type IngestionCapResult =
  * tenants) always pass. Fails OPEN on a query error — a metering hiccup must not
  * block a legitimate import.
  */
-export async function enforceIngestionCap(db: Db, tenantId: number): Promise<IngestionCapResult> {
-  try {
-    const [tenantRow] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    const effectivePlan = resolveEffectivePlan({
-      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
-      billingStatus: (tenantRow?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: tenantRow?.trialEndsAt ?? null,
-    });
-    const limit = resolveIngestionMonthlyBytes({
-      effectivePlan,
-      tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
-    });
-    if (limit < 0) return { allowed: true }; // unlimited
-
-    const used = await sumTenantIngestionBytes(db, tenantId, utcMonthStart());
-    if (used >= limit) return { allowed: false, effectivePlan, used, limit };
-    return { allowed: true };
-  } catch {
-    return { allowed: true };
-  }
+export async function enforceIngestionCap(
+  db: Db,
+  tenantId: number,
+  ingestionDb: Db = db,
+  env?: Env,
+): Promise<IngestionCapResult> {
+  return enforceMonthlyTenantCap({
+    db,
+    tenantId,
+    env,
+    usageDb: ingestionDb,
+    resolveLimit: resolveIngestionMonthlyBytes,
+    sumUsage: sumTenantIngestionBytes,
+  });
 }

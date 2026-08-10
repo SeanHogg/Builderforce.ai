@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import QuickStart from './QuickStart';
 
 interface InstallBuilderForceAgentsProps {
@@ -25,11 +26,11 @@ export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAg
           style={{
             background: 'rgba(0,229,204,0.06)',
             border: '1px solid rgba(0,229,204,0.2)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             padding: '10px 14px',
             marginBottom: 20,
             fontSize: 12,
-            color: 'var(--cyan-bright, #00e5cc)',
+            color: 'var(--cyan-bright, var(--cyan-bright))',
           }}
         >
           {t('tokenPreconfigured')}
@@ -41,9 +42,9 @@ export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAg
       <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
         {t.rich('laterHint', {
           link: (chunks) => (
-            <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+            <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
               {chunks}
-            </a>
+            </Link>
           ),
         })}
       </p>

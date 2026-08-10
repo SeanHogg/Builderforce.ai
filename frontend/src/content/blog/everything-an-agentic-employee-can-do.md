@@ -46,7 +46,7 @@ An EMP is human-in-the-loop by design. Write operations can pass through approva
 
 ## It's governed and observable
 
-Every action an EMP takes is on the record: an execution timeline, per-tool emissions, DORA and member metrics, and a unified activity rollup. Policy packs can gate what agents may do; a governance auditor can review their pull requests. You always know what your agentic employees did, what it cost, and whether it was allowed.
+Instrumented EMP execution paths can emit timeline, tool, delivery, and activity records. Policy packs can gate configured operations and a governance auditor can review supported pull-request workflows. Check the coverage indicator before treating the record as complete.
 
 ## It can become *your* model
 

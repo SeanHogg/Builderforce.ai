@@ -14,5 +14,6 @@
     "ignoreDeprecations": "6.0",
     "types": ["react", "react-dom", "node"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["src/canvas", "src/shims"]
 }

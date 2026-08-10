@@ -48,8 +48,8 @@ export function BandedMetricBar({ label, valueText, tiers, activeIndex, ariaLabe
         <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {active && (
             <span style={{
-              fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: active.color,
-              padding: '1px 8px', borderRadius: 999,
+              fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-on-accent)', background: active.color,
+              padding: '1px 8px', borderRadius: 'var(--radius-full)',
             }}>
               {active.label}
             </span>
@@ -65,7 +65,7 @@ export function BandedMetricBar({ label, valueText, tiers, activeIndex, ariaLabe
               key={tr.key}
               title={tr.label}
               style={{
-                flex: 1, height: 22, borderRadius: 5, background: tr.color,
+                flex: 1, height: 22, borderRadius: 'var(--radius-sm)', background: tr.color,
                 opacity: activeIndex == null ? 0.4 : on ? 1 : 0.26,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 outline: on ? '2px solid var(--text-primary)' : 'none', outlineOffset: 1,
@@ -73,7 +73,7 @@ export function BandedMetricBar({ label, valueText, tiers, activeIndex, ariaLabe
               }}
             >
               <span style={{
-                fontSize: '0.68rem', fontWeight: on ? 700 : 600, color: '#fff',
+                fontSize: '0.68rem', fontWeight: on ? 700 : 600, color: 'var(--text-on-accent)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px',
               }}>
                 {tr.label}

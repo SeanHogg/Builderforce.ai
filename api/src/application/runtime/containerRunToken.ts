@@ -39,3 +39,12 @@ export async function verifyContainerRunToken(secret: string, executionId: numbe
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ presented.charCodeAt(i);
   return diff === 0;
 }
+
+/** Git smart-HTTP URL whose only credential is the execution HMAC. The upstream
+ * provider credential remains in the Worker-side proxy. */
+export function containerGitCloneUrl(internalBaseUrl: string, executionId: number, runToken: string): string {
+  const url = new URL(`/api/runtime/internal/container-git/${executionId}.git`, internalBaseUrl.endsWith('/') ? internalBaseUrl : `${internalBaseUrl}/`);
+  url.username = 'x-access-token';
+  url.password = runToken;
+  return url.toString();
+}

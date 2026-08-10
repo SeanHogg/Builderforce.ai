@@ -17,7 +17,11 @@ const PROVIDERS = [
  */
 export default function OAuthButtons() {
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/dashboard';
+  const destination = searchParams.get('next') || '/dashboard';
+  const referralCode = searchParams.get('ref')?.trim();
+  const next = referralCode
+    ? `/sales/referral-claim?ref=${encodeURIComponent(referralCode)}&next=${encodeURIComponent(destination)}`
+    : destination;
 
   return (
     <>
@@ -43,7 +47,7 @@ export default function OAuthButtons() {
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               padding: '10px 14px',
               cursor: 'pointer',
               fontFamily: 'var(--font-body)',
@@ -53,7 +57,7 @@ export default function OAuthButtons() {
             onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--coral-bright)'; }}
             onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-subtle)'; }}
           >
-            <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem', background: 'var(--bg-surface)', borderRadius: 4, flexShrink: 0 }}>{icon}</span>
+            <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', flexShrink: 0 }}>{icon}</span>
             {label}
           </button>
         ))}
