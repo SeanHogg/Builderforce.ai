@@ -16,6 +16,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { neon } from '@neondatabase/serverless';
+import { readBurnrateCutoverPolicy, validateBurnrateCutoverPolicy } from './check-burnrate-cutover-policy.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const mapPath = resolve(here, '..', '..', 'specs', 'builderforce', 'data-model', 'source-to-target.tsv');
@@ -79,16 +80,19 @@ function databaseLabel(raw) {
 }
 
 const mapped = readMap();
+const policy = readBurnrateCutoverPolicy();
+const policyErrors = validateBurnrateCutoverPolicy(policy);
 const burnrate = mapped.filter((row) => row.product === 'BR');
 const invalidNames = burnrate.filter((row) => !IDENTIFIER.test(row.sourceTable));
 const keep = burnrate.filter((row) => row.move === 'keep' && IDENTIFIER.test(row.target));
 
-if (burnrate.length !== 344 || invalidNames.length || keep.length === 0) {
-  console.error(`❌ BurnRateOS map validation failed: rows=${burnrate.length}, invalid source names=${invalidNames.length}, keep targets=${keep.length}`);
+if (burnrate.length !== 344 || invalidNames.length || keep.length === 0 || policyErrors.length) {
+  console.error(`❌ BurnRateOS map/policy validation failed: rows=${burnrate.length}, invalid source names=${invalidNames.length}, keep targets=${keep.length}, policy errors=${policyErrors.length}`);
+  if (policyErrors.length) console.error(policyErrors.join('\n'));
   process.exit(1);
 }
 if (validateOnly) {
-  console.log(`✅ BurnRateOS cutover audit map valid — ${burnrate.length} source tables, ${keep.length} one-to-one keep targets.`);
+  console.log(`✅ BurnRateOS cutover audit map/policy valid — ${burnrate.length} source tables, ${keep.length} one-to-one keep targets, policy v${policy.version}.`);
   process.exit(0);
 }
 
@@ -132,6 +136,7 @@ const report = {
   generatedAt: new Date().toISOString(),
   source: databaseLabel(sourceUrl),
   target: databaseLabel(targetUrl),
+  cutoverPolicy: { version: policy.version, effectiveDate: policy.effectiveDate, newTablesAllowed: policy.newTablesAllowed, capabilities: policy.capabilities, providers: policy.providers },
   summary: {
     mappedSourceTables: tables.length,
     sourceTablesPresent: tables.filter((row) => row.sourceExists).length,
