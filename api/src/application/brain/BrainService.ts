@@ -905,6 +905,39 @@ export class BrainService {
     return rows.map((row) => ({ ...row, seq: row.id }));
   }
 
+  /**
+   * Post a progress/result update from a cloud execution into the Brain chat that
+   * launched it. The execution payload supplies the chat id; callers may not choose
+   * an unrelated chat. Tenant scope and archive state are still checked here at the
+   * write boundary, and attribution remains machine-readable in message metadata.
+   */
+  async postExecutionUpdate(
+    chatId: number,
+    tenantId: number,
+    input: { agentRef: string; agentName?: string; content: string },
+  ) {
+    const [chat] = await this.db
+      .select({ id: brainChats.id })
+      .from(brainChats)
+      .where(and(
+        eq(brainChats.id, chatId),
+        eq(brainChats.tenantId, tenantId),
+        eq(brainChats.isArchived, false),
+      ))
+      .limit(1);
+    if (!chat) return { error: 'Originating Brain chat not found' as const };
+
+    const content = input.content.trim();
+    if (!content) return { error: 'content is required' as const };
+    const agentName = input.agentName?.trim() || 'BuilderForce Agent';
+    const metadata = JSON.stringify({
+      authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName },
+      via: 'cloud-execution',
+    });
+    const [message] = await this.appendRaw(chatId, [{ role: 'assistant', content, metadata }]);
+    return { chatId, message };
+  }
+
   // -----------------------------------------------------------------------
   // Trace (persisted tool/LLM-turn timeline — survives a reload; migration 0330)
   // -----------------------------------------------------------------------

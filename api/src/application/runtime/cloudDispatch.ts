@@ -139,6 +139,17 @@ export function parseCloudAgentRef(payload: string | undefined): string | undefi
   }
 }
 
+/** Brain chat that originated a dispatched run. Absent for headless/board runs. */
+export function parseOriginatingChatId(payload: string | null | undefined): number | undefined {
+  if (!payload) return undefined;
+  try {
+    const value = (JSON.parse(payload) as { chatId?: unknown }).chatId;
+    return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The ROLE a run ran AS, off its payload — the reviewer round-trip stamps `reviewRole`,
  *  a role-attributed producer stamps `actAsRole`. Drives manifest attribution at finalize
  *  and the approvals→sign-off bridge (a human approving a role's gate records that role's
