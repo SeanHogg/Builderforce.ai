@@ -163,7 +163,7 @@ export function DemoShowcase() {
 
 const styles = `
   .demo-showcase { border-top: 1px solid var(--border-subtle); }
-  .demo-showcase-inner { max-width: 1180px; margin: 0 auto; padding: clamp(72px,8vw,108px) clamp(18px,4vw,40px); }
+  .demo-showcase-inner { max-width: var(--marketing-max); margin: 0 auto; padding: var(--marketing-section-padding) var(--marketing-gutter); }
   .demo-showcase-eyebrow { margin: 0 0 12px; color: var(--accent); font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
   .demo-showcase-heading { max-width: 760px; margin: 0; color: var(--text-primary); font-size: var(--font-size-page-title); line-height: 1.03; letter-spacing: -.04em; }
   .demo-showcase-lead {

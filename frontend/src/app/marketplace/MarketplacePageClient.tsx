@@ -564,9 +564,11 @@ export default function MarketplacePageClient() {
     : tm('searchPlaceholder');
 
   return (
-    // Full-width surface: the marketplace is a browse-heavy grid, so it overrides the
-    // shared 1100px `.page-inner` cap and runs to 100% of the shell width.
-    <div className="page-inner" style={{ maxWidth: '100%' }}>
+    // The storefront is a public page, so it sits in THE marketing column — the
+    // same measure as the header, so the grid starts under the logo and ends
+    // under "Open the canvas". It used to run to 100% of the shell width, which
+    // made it the one public page whose content ignored the chrome around it.
+    <div className="mkt-in mkt-page">
       <div className="mp-head">
         <div className="mp-head__copy">
           <h1 className="mp-title">{tm('title')}</h1>

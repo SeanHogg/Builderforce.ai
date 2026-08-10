@@ -324,13 +324,18 @@ export function MeetCarousel() {
       </div>
 
       <style>{`
-        .meet-carousel { max-width: 1320px; margin: 0 auto; padding: 0 24px 86px; scroll-margin-top: 90px; }
+        .meet-carousel { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter) var(--marketing-section-padding); scroll-margin-top: 90px; }
         .meet-carousel-kicker { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:0 64px 14px; color:var(--text-muted); font:600 .68rem/1 var(--font-display); letter-spacing:.16em; text-transform:uppercase; }
         .meet-carousel-kicker > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .meet-carousel-status { display:flex; align-items:center; gap:12px; flex:none; }
         .meet-carousel-status button { display:grid; width:26px; height:26px; place-items:center; padding:0; border:1px solid var(--border-subtle); border-radius:50%; background:var(--surface-card); color:var(--text-secondary); font-size:var(--font-size-field-label); cursor:pointer; transition:color .2s,border-color .2s; }
         .meet-carousel-status button:hover { color:var(--text-primary); border-color:var(--border-accent); }
-        .meet-carousel-frame { position:relative; padding:0 64px; }
+        /* The card fills the marketing column and the arrows ride ON it, inset
+           from its edges. They used to sit in 64px of side padding OUTSIDE the
+           card, which pulled the card 128px narrower than every other band —
+           so the one component people look at longest was the one that did not
+           line up with the header. */
+        .meet-carousel-frame { position:relative; --meet-panel-gutter:clamp(44px,5vw,76px); }
 
         /*
          * The stack: every slide occupies the same grid cell, so the frame is the
@@ -350,12 +355,12 @@ export function MeetCarousel() {
 
         .meet-carousel-arrow { position:absolute; z-index:3; top:50%; width:46px; height:46px; display:grid; place-items:center; transform:translateY(-50%); border:1px solid var(--border-subtle); border-radius:50%; background:var(--surface-card); color:var(--text-secondary); font-size:var(--font-size-card-title); cursor:pointer; backdrop-filter:blur(12px); transition:color .2s,border-color .2s,box-shadow .2s; }
         .meet-carousel-arrow:hover { color:var(--text-primary); border-color:var(--border-accent); box-shadow:0 10px 26px var(--shadow-coral-soft); }
-        .meet-carousel-arrow.is-prev { left:6px; }
-        .meet-carousel-arrow.is-next { right:6px; }
+        .meet-carousel-arrow.is-prev { left:14px; }
+        .meet-carousel-arrow.is-next { right:14px; }
 
         /* ── Shared panel frame for all three slides ── */
-        .meet-panel { position:relative; overflow:hidden; display:flex; flex-direction:column; gap:26px; padding:40px clamp(20px,3vw,44px) 36px; border:1px solid var(--border-accent); border-radius:var(--radius-xl); background:var(--surface-card); box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
-        .meet-panel::before { content:''; position:absolute; top:0; left:clamp(20px,3vw,44px); width:96px; height:3px; background:var(--coral-bright); }
+        .meet-panel { position:relative; overflow:hidden; display:flex; flex-direction:column; gap:26px; padding:40px var(--meet-panel-gutter) 36px; border:1px solid var(--border-accent); border-radius:var(--radius-xl); background:var(--surface-card); box-shadow:inset 0 1px 0 var(--surface-inset-highlight); }
+        .meet-panel::before { content:''; position:absolute; top:0; left:var(--meet-panel-gutter); width:96px; height:3px; background:var(--coral-bright); }
         .meet-panel-head { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); gap:clamp(24px,4vw,56px); align-items:end; padding-bottom:26px; border-bottom:1px solid var(--border-subtle); }
         .meet-panel h3 { margin:0 0 7px; color:var(--text-primary); font:650 .92rem/1.3 var(--font-display); }
         .meet-panel p { color:var(--text-secondary); }
@@ -469,9 +474,9 @@ export function MeetCarousel() {
 
         /* ── Tablet: one column inside every panel ── */
         @media (max-width:1000px) {
-          .meet-carousel { padding:0 20px 86px; }
+          .meet-carousel { padding-inline:20px; }
           .meet-carousel-kicker,.meet-carousel-nav { margin-left:0; margin-right:0; }
-          .meet-carousel-frame { padding:0; }
+          .meet-carousel-frame { --meet-panel-gutter:clamp(20px,3vw,44px); }
           .meet-carousel-arrow { top:auto; bottom:16px; }
           .meet-carousel-arrow.is-prev { left:18px; }
           .meet-carousel-arrow.is-next { right:18px; }
@@ -484,7 +489,7 @@ export function MeetCarousel() {
 
         /* ── Phone ── */
         @media (max-width:700px) {
-          .meet-carousel { padding:0 14px 74px; scroll-margin-top:72px; }
+          .meet-carousel { padding-inline:14px; scroll-margin-top:72px; }
           .meet-carousel-kicker { margin-bottom:10px; font-size:var(--font-size-field-label); letter-spacing:.12em; }
           .meet-carousel-viewport { border-radius:var(--radius-xl); }
           .meet-panel { gap:20px; padding:28px 18px 74px; border-radius:var(--radius-xl); }

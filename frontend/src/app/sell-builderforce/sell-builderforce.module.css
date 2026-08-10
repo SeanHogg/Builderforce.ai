@@ -1,4 +1,5 @@
-.page{max-width:1180px;margin:0 auto;padding:clamp(28px,5vw,72px) clamp(18px,4vw,40px) 88px;color:var(--text-primary)}
+/* THE marketing column (globals.css) — same measure as the header. */
+.page{max-width:var(--marketing-max);margin:0 auto;padding:clamp(28px,5vw,72px) var(--marketing-gutter) 88px;color:var(--text-primary)}
 .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:clamp(32px,6vw,76px);align-items:center;padding:clamp(20px,4vw,52px) 0 72px}
 .eyebrow{margin:0 0 12px;color:var(--accent);font-size:var(--font-size-eyebrow);font-weight:800;letter-spacing:.13em;text-transform:uppercase}
 .hero h1{margin:0;font-size:var(--font-size-hero);line-height:.98;letter-spacing:-.055em;max-width:760px}

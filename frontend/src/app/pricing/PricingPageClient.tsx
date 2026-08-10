@@ -395,14 +395,16 @@ export default function PricingPageClient() {
             <div className={styles.planGrid}>
               {configuredPlans.map((configured) => {
                 const plan = configured.id;
-                const price = configured.monthly === 0 ? formatPrice(0) : `${formatPrice(configured.monthly)}${configured.priceSuffix}`;
                 return (
                 <article key={plan} className={styles.planCard} data-featured={plan === 'pro'}>
                   <div className={styles.planCardTop}>
                     <h3>{configured.name}</h3>
                     {effectivePlan === plan && !isAnon && <PlanBadge plan={plan} />}
                   </div>
-                  <div className={styles.price}>{price}</div>
+                  <div className={styles.price}>
+                    <span className={styles.priceAmount}>{formatPrice(configured.monthly)}</span>
+                    {configured.monthly !== 0 && <span className={styles.priceSuffix}>{configured.priceSuffix}</span>}
+                  </div>
                   <p className={styles.priceNote}>{configured.description}</p>
                   <ul className={styles.featureList}>
                     {configured.features.map((feature) => <li key={feature}>{feature}</li>)}

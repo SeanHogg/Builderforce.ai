@@ -58,7 +58,8 @@ export default async function Soc2Page() {
 
       <style>{`
         .s2 { color: var(--text-primary); }
-        .s2-wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+        /* THE marketing column (globals.css) — same measure as the header. */
+        .s2-wrap { max-width: var(--marketing-max); margin: 0 auto; padding-inline: var(--marketing-gutter); }
         .s2-hero { text-align: center; padding: clamp(48px, 8vw, 88px) 20px clamp(28px, 5vw, 48px); }
         .s2-eyebrow {
           display: inline-flex; align-items: center; gap: 8px; font-size: var(--font-size-eyebrow); font-weight: 700;

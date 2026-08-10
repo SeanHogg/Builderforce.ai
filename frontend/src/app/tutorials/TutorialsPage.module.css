@@ -1,14 +1,15 @@
 .page { position: relative; z-index: 1; min-height: 100vh; padding-bottom: 88px; }
-.hero { max-width: 900px; margin: 0 auto; padding: 72px 24px 38px; text-align: center; }
+/* THE marketing column (globals.css); the reading measure stays on the text. */
+.hero { max-width: var(--marketing-max); margin: 0 auto; padding: 72px var(--marketing-gutter) 38px; text-align: center; }
 .eyebrow { margin: 0 0 14px; color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .hero h1 { max-width: 780px; margin: 0 auto 18px; color: var(--text-primary); font-family: var(--font-display); font-size: var(--font-size-hero); line-height: 1.03; letter-spacing: -.045em; }
 .heroLead { max-width: 700px; margin: 0 auto; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.72; }
-.process { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 940px; margin: 20px auto 54px; padding: 0 24px; }
+.process { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: var(--marketing-max); margin: 20px auto 54px; padding: 0 var(--marketing-gutter); }
 .process article { position: relative; padding: 18px 18px 18px 52px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--surface-card) 88%, transparent); }
 .process span { position: absolute; top: 17px; left: 17px; display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--coral-bright) 16%, transparent); color: var(--coral-bright); font-size: var(--font-size-eyebrow); font-weight: 800; }
 .process strong { color: var(--text-primary); font-size: var(--font-size-small); }
 .process p { margin: 5px 0 0; color: var(--text-muted); font-size: var(--font-size-small); line-height: 1.5; }
-.catalog { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+.catalog { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter); }
 .sectionHead { margin-bottom: 22px; }
 .sectionHead h2 { margin: 0 0 7px; color: var(--text-primary); font-family: var(--font-display); font-size: var(--font-size-section); }
 .sectionHead p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
@@ -25,7 +26,7 @@
 .start { display: flex; align-items: center; justify-content: space-between; margin-top: auto; color: var(--topic-accent); font-size: var(--font-size-small); font-weight: 700; }
 .start span:last-child { transition: transform .2s ease; }
 .card:hover .start span:last-child { transform: translateX(4px); }
-.custom { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 30px; max-width: 1112px; margin: 42px auto 0; padding: 32px; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: linear-gradient(125deg, color-mix(in srgb, var(--coral-bright) 10%, var(--surface-card)), var(--surface-card)); }
+.custom { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 30px; max-width: var(--marketing-column); margin: 42px auto 0; padding: 32px; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: linear-gradient(125deg, color-mix(in srgb, var(--coral-bright) 10%, var(--surface-card)), var(--surface-card)); }
 .custom h2 { margin: 0 0 8px; color: var(--text-primary); font-family: var(--font-display); font-size: var(--font-size-section); }
 .custom p { max-width: 700px; margin: 0; color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.6; }
 .custom a { display: inline-flex; align-items: center; min-height: 46px; padding: 0 20px; border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); color: var(--text-on-accent); font-size: var(--font-size-small); font-weight: 750; text-decoration: none; white-space: nowrap; }

@@ -25,7 +25,8 @@ export default async function MediaPage() {
   const t = await getTranslations();
 
   return (
-    <main style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(20px, 4vw, 48px) clamp(16px, 4vw, 32px) 80px' }}>
+    // `mkt-in` = THE marketing column (globals.css); only vertical rhythm here.
+    <main className="mkt-in" style={{ padding: 'clamp(20px, 4vw, 48px) var(--marketing-gutter) 80px' }}>
       {/* Hero */}
       <p style={{ color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', fontSize: 'var(--font-size-small)', margin: '0 0 10px' }}>
         {t('media.eyebrow')}

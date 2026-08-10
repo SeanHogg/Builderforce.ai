@@ -29,8 +29,10 @@
   scroll-snap-type: x mandatory;
   scroll-padding-left: 0;
   scrollbar-width: none;
-  /* Room for the last card to sit clear of the viewport edge. */
-  padding-right: max(24px, calc(50vw - 580px));
+  /* Room for the last card to sit clear of the viewport edge — measured off the
+     marketing column, so the rail's right-hand rest position lines up with the
+     header's CTA instead of with a retyped half-width. */
+  padding-right: max(var(--marketing-gutter), calc(50vw - var(--marketing-column) / 2));
   overscroll-behavior-x: contain;
 }
 
@@ -76,7 +78,7 @@
 /* Progress rail — how far through the set you are, without inventing pagination
    dots for a list whose length the reader does not care about. */
 .progress {
-  width: min(1160px, 100%);
+  width: 100%;
   height: 2px;
   margin-top: 4px;
   background: var(--border-subtle);

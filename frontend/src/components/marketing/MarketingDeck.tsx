@@ -62,8 +62,8 @@ export default function MarketingDeck() {
   return (
     <section className="mdk" aria-roledescription="carousel" aria-label={t('seo.title')}>
       <style>{`
-        .mdk { position: relative; width: 100%; max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column;
-          padding: clamp(48px, 7vw, 92px) clamp(18px, 4vw, 40px) clamp(36px, 5vw, 64px); }
+        .mdk { position: relative; width: 100%; max-width: var(--marketing-max); margin: 0 auto; display: flex; flex-direction: column;
+          padding: clamp(48px, 7vw, 92px) var(--marketing-gutter) clamp(36px, 5vw, 64px); }
         .mdk-stage { display: flex; align-items: center; min-height: min(610px, calc(100svh - 180px)); }
         .mdk-card {
           position: relative; width: 100%; overflow: hidden; text-align: left;

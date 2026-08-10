@@ -102,7 +102,9 @@ export default function PromptsPage() {
   };
 
   return (
-    <div className="page-inner">
+    // `/prompts` is a public page, so it takes THE marketing column (globals.css)
+    // rather than the app shell's narrower `.page-inner` cap.
+    <div className="mkt-in mkt-page">
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
         <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>{t('title')}</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)', maxWidth: 600, margin: '0 auto' }}>

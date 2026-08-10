@@ -46,10 +46,12 @@ export default function BlogPageClient() {
         }
 
         /* ── HERO ── */
+        /* THE marketing column (globals.css) — same measure as the header. */
         .blog-hero {
-          max-width: 1100px;
+          max-width: var(--marketing-max);
+          box-sizing: border-box;
           margin: 0 auto;
-          padding: 44px 24px 40px;
+          padding: 44px var(--marketing-gutter) 40px;
           text-align: center;
           animation: blog-fadeInUp 0.7s ease-out both;
         }
@@ -96,9 +98,10 @@ export default function BlogPageClient() {
         /* ── POST GRID ── */
         .blog-main {
           flex: 1;
-          max-width: 1100px;
+          max-width: var(--marketing-max);
+          box-sizing: border-box;
           margin: 0 auto;
-          padding: 8px 24px 72px;
+          padding: 8px var(--marketing-gutter) 72px;
           width: 100%;
         }
         /* Card + grid styles live in components/blog/ArticleCard.tsx */
@@ -152,7 +155,7 @@ export default function BlogPageClient() {
         {/* ── Hero ── */}
         <div className="blog-hero">
           <div className="blog-hero-badge"><Icon source="📝" size="1em" /> {t('badge')}</div>
-          <h1 className="blog-hero-title">Builderforce Blog</h1>
+          <h1 className="blog-hero-title">{t('title')}</h1>
           <p className="blog-hero-desc">{t('desc')}</p>
         </div>
 

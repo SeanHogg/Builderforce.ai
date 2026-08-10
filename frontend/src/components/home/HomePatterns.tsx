@@ -9,7 +9,10 @@ export function HomeSection({ children, id, tone = 'plain', narrow = false }: {
   narrow?: boolean;
 }) {
   const toneClass = tone === 'soft' ? styles.sectionSoft : tone === 'grid' ? styles.sectionGrid : '';
-  return <section className={`${styles.section} ${toneClass}`} id={id}><div className={`${styles.inner} ${narrow ? styles.innerNarrow : ''}`}>{children}</div></section>;
+  // `mkt-in` is THE marketing column (globals.css). The section paints edge to
+  // edge and owns only vertical rhythm; the column decides where content starts
+  // and stops, so a homepage band lines up with the header above it.
+  return <section className={`${styles.section} ${toneClass}`} id={id}><div className={`mkt-in ${styles.inner} ${narrow ? styles.innerNarrow : ''}`}>{children}</div></section>;
 }
 
 /**

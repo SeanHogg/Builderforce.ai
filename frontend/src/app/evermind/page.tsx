@@ -48,7 +48,7 @@ export default async function EvermindPage() {
         .ev-hero {
           position: relative; overflow: hidden; isolation: isolate;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
-          text-align: center; min-height: 76vh; padding: 64px 24px 130px;
+          text-align: center; min-height: 76vh; padding: 64px var(--marketing-gutter) 130px;
         }
         .ev-hero-content { position: relative; z-index: 1; width: 100%; max-width: 820px; display: flex; flex-direction: column; align-items: center; }
         .ev-eyebrow {
@@ -93,7 +93,7 @@ export default async function EvermindPage() {
           .ev-eyebrow { margin-bottom: 18px; }
         }
 
-        .ev-section { max-width: 1100px; margin: 0 auto; padding: 0 24px 64px; width: 100%; }
+        .ev-section { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter) 64px; width: 100%; }
         .ev-h2 { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section); color: var(--text-primary); margin: 0 0 10px; }
         .ev-h2 .ev-accent { color: var(--coral-bright); margin-right: 8px; }
         .ev-lead { font-size: var(--font-size-card-title); color: var(--text-secondary); line-height: 1.75; max-width: 820px; margin: 0 0 28px; }
@@ -136,8 +136,8 @@ export default async function EvermindPage() {
         .ev-faq details[open] summary { border-bottom: 1px solid var(--border-subtle); }
         .ev-faq p { color: var(--text-secondary); line-height: 1.7; font-size: var(--font-size-body); padding: 14px 0 16px; margin: 0; }
 
-        .ev-cta { max-width: 820px; margin: 0 auto; padding: 0 24px 80px; }
-        .ev-cta-box { text-align: center; padding: 52px 40px; border-radius: var(--radius-xl); border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px); }
+        .ev-cta { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter) 80px; }
+        .ev-cta-box { max-width: 820px; margin-inline: auto; text-align: center; padding: 52px 40px; border-radius: var(--radius-xl); border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px); }
         .ev-cta-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section); color: var(--text-primary); margin: 0 0 12px; }
         .ev-cta-desc { font-size: var(--font-size-body); color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
 

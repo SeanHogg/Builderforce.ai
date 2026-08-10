@@ -1,5 +1,7 @@
-.page { --about-max: 1180px; color: var(--text-primary); overflow: hidden; }
-.hero { max-width: var(--about-max); margin: 0 auto; padding: 96px 28px 88px; display: grid; grid-template-columns: 1.06fr .94fr; gap: 72px; align-items: center; }
+/* THE marketing column (globals.css). `--about-max` was this page's private copy
+   of the site measure, set 140px narrower than the header it sits under. */
+.page { --about-max: var(--marketing-max); color: var(--text-primary); overflow: hidden; }
+.hero { max-width: var(--about-max); margin: 0 auto; padding: 96px var(--marketing-gutter) 88px; display: grid; grid-template-columns: 1.06fr .94fr; gap: 72px; align-items: center; }
 .eyebrow { margin: 0 0 16px; color: var(--coral-bright); font-size: var(--font-size-small); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .hero h1 { max-width: 760px; margin: 0; font-family: var(--font-display); font-size: var(--font-size-hero); line-height: .93; letter-spacing: -.055em; }
 .lede { max-width: 680px; margin: 28px 0 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.65; }
@@ -22,10 +24,10 @@
 .satellite { position: absolute; display: flex; align-items: center; gap: 9px; max-width: 180px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--surface-card) 92%, transparent); box-shadow: 0 12px 30px rgba(0,0,0,.14); font-size: var(--font-size-small); font-weight: 700; }
 .satelliteProduct { left: 9%; top: 15%; }.satelliteFinance { right: 7%; top: 22%; }.satelliteGrowth { left: 8%; bottom: 14%; }.satelliteSecurity { right: 6%; bottom: 16%; }
 .thesis, .story { border-block: 1px solid var(--border-subtle); background: var(--surface-card); }
-.thesis { display: grid; grid-template-columns: .55fr 1.45fr; gap: 72px; padding: 82px max(28px, calc((100vw - var(--about-max)) / 2)); }
+.thesis { display: grid; grid-template-columns: .55fr 1.45fr; gap: 72px; padding: 82px max(var(--marketing-gutter), calc((100vw - var(--marketing-column)) / 2)); }
 .thesis h2, .sectionHeader h2, .story h2, .trust h2, .cta h2 { margin: 0; font-family: var(--font-display); font-size: var(--font-size-page-title); line-height: 1.04; letter-spacing: -.035em; }
 .thesis div p { max-width: 760px; margin: 24px 0 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.8; }
-.promises, .system, .principles { max-width: var(--about-max); margin: 0 auto; padding: 96px 28px; }
+.promises, .system, .principles { max-width: var(--about-max); margin: 0 auto; padding: 96px var(--marketing-gutter); }
 .sectionHeader { max-width: 760px; margin-bottom: 48px; }
 .sectionHeader > p:last-child { margin: 20px 0 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.7; }
 .promiseGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
@@ -34,7 +36,7 @@
 .promiseGrid h3, .principleGrid h3 { margin: 36px 0 12px; font-family: var(--font-display); font-size: var(--font-size-section); }
 .promiseGrid p, .principleGrid p { margin: 0; color: var(--text-secondary); line-height: 1.65; }
 .system { max-width: none; background: linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 48%, transparent), transparent); }
-.system > * { max-width: var(--about-max); margin-inline: auto; }
+.system > * { max-width: var(--marketing-column); margin-inline: auto; }
 .domainGroup { margin-top: 42px; }
 .groupHeading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .groupHeading h3 { margin: 0; font-family: var(--font-display); font-size: var(--font-size-section); }
@@ -49,17 +51,17 @@
 .domainCard strong { font-family: var(--font-display); font-size: var(--font-size-card-title); }
 .domainCard em { margin-top: 3px; color: var(--text-muted); font-size: var(--font-size-small); font-style: normal; line-height: 1.35; }
 .domainCard b { color: var(--text-muted); }
-.story { display: grid; grid-template-columns: .8fr 1.2fr; gap: 80px; padding: 96px max(28px, calc((100vw - var(--about-max)) / 2)); }
+.story { display: grid; grid-template-columns: .8fr 1.2fr; gap: 80px; padding: 96px max(var(--marketing-gutter), calc((100vw - var(--marketing-column)) / 2)); }
 .storyCopy { border-left: 1px solid var(--border-subtle); padding-left: 54px; }
 .storyCopy p { margin: 0 0 24px; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.78; }
 .principleGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--border-subtle); }
 .principleGrid article { padding: 34px; background: var(--surface-card); }
 .principleGrid h3 { margin-top: 0; }
-.trust { max-width: var(--about-max); margin: 0 auto 96px; padding: 52px; display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: radial-gradient(circle at 85% 0, color-mix(in srgb, var(--coral-bright) 14%, transparent), transparent 35%), var(--surface-card); }
+.trust { width: min(var(--marketing-column), calc(100% - 2 * var(--marketing-gutter))); margin: 0 auto 96px; padding: 52px; display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: radial-gradient(circle at 85% 0, color-mix(in srgb, var(--coral-bright) 14%, transparent), transparent 35%), var(--surface-card); }
 .trust > div { max-width: 720px; }
 .trust div > p:last-child { margin: 18px 0 0; color: var(--text-secondary); line-height: 1.7; }
 .trust > a { flex: 0 0 auto; color: var(--coral-bright); font-weight: 800; text-decoration: none; }
-.cta { padding: 108px 28px; text-align: center; background: var(--surface-inverse); color: var(--text-inverse); }
+.cta { padding: 108px var(--marketing-gutter); text-align: center; background: var(--surface-inverse); color: var(--text-inverse); }
 .cta > p:not(.eyebrow) { max-width: 620px; margin: 22px auto 0; color: color-mix(in srgb, currentColor 68%, transparent); font-size: var(--font-size-lede); line-height: 1.7; }
 .cta .actions { justify-content: center; }
 .cta .secondaryButton { color: inherit; background: transparent; border-color: color-mix(in srgb, currentColor 22%, transparent); }

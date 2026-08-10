@@ -48,8 +48,9 @@ export default function BookDemoPageClient() {
 }
 
 const styles = `
-  .bdp { padding: clamp(24px, 5vw, 56px) 16px; }
-  .bdp-inner { max-width: 960px; margin: 0 auto; }
+  .bdp { padding-block: clamp(24px, 5vw, 56px); }
+  /* THE marketing column (globals.css) — same measure as the header. */
+  .bdp-inner { max-width: var(--marketing-max); margin: 0 auto; padding-inline: var(--marketing-gutter); }
   .bdp-head { text-align: center; margin-bottom: 32px; }
   .bdp-badge {
     display: inline-block; font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;

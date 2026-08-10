@@ -15,7 +15,8 @@
 .hero {
   position: relative;
   isolation: isolate;
-  padding: clamp(28px, 5vw, 56px) clamp(16px, 4vw, 24px) clamp(24px, 4vw, 40px);
+  /* Vertical rhythm only — `.inner` carries `.mkt-in`, and two gutters stack. */
+  padding-block: clamp(28px, 5vw, 56px) clamp(24px, 4vw, 40px);
   text-align: center;
 }
 
@@ -93,10 +94,11 @@
 }
 
 /* ── Stage: the board with the composer riding on it ── */
+/* Fills the marketing column its `.inner` already establishes — a second, wider
+   cap here is how the hero board ended up 32px off the header. */
 .stage {
   position: relative;
   width: 100%;
-  max-width: 1240px;
   margin-top: clamp(10px, 2vw, 20px);
 }
 

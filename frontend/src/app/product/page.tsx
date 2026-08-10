@@ -52,7 +52,9 @@ export default async function ProductPage() {
 
       <style>{`
         .pp { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
-        .pp-hero { text-align: center; padding: 44px 24px 40px; max-width: 820px; margin: 0 auto; }
+        /* THE marketing column (globals.css); the reading measure is on the text. */
+        .pp-hero { text-align: center; padding: 44px var(--marketing-gutter) 40px; max-width: var(--marketing-max); margin: 0 auto; }
+        .pp-hero > * { max-width: 62ch; margin-inline: auto; }
         .pp-eyebrow {
           font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 600;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px;
@@ -76,7 +78,7 @@ export default async function ProductPage() {
         .pp-stat-l { font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.3; white-space: pre-line; }
         .pp-proof-note { max-width: 760px; margin: 14px auto 0; padding: 0 24px; text-align: center; color: var(--text-muted); font-size: var(--font-size-small); line-height: 1.55; }
 
-        .pp-sections { max-width: 1100px; margin: 0 auto; padding: 40px 24px 24px; width: 100%; }
+        .pp-sections { max-width: var(--marketing-max); margin: 0 auto; padding: 40px var(--marketing-gutter) 24px; width: 100%; }
         .pp-section { margin-bottom: 56px; }
         .pp-section-head { margin-bottom: 20px; }
         .pp-section-title {
@@ -114,9 +116,9 @@ export default async function ProductPage() {
         .pp-disclosure p { margin: 6px 0 0; line-height: 1.45; }
         .pp-card-cta { font-size: var(--font-size-small); font-weight: 600; color: var(--coral-bright); }
 
-        .pp-cta { max-width: 820px; margin: 0 auto; padding: 0 24px 80px; }
+        .pp-cta { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter) 80px; }
         .pp-cta-box {
-          text-align: center; padding: 52px 40px; border-radius: var(--radius-xl);
+          max-width: 820px; margin-inline: auto; text-align: center; padding: 52px 40px; border-radius: var(--radius-xl);
           border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px);
         }
         .pp-cta-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section); color: var(--text-primary); margin: 0 0 12px; }

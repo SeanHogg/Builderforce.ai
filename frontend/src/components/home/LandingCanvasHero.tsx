@@ -170,7 +170,9 @@ export function LandingCanvasHero() {
     <section className={`${styles.hero}${showBrain ? ` ${styles.heroBrain}` : ''}`}>
       {showBrain && <BrainBackdrop className={styles.brain} />}
 
-      <div className={styles.inner}>
+      {/* `mkt-in` = THE marketing column (globals.css): the hero board starts
+          under the logo and ends under "Open the canvas", like every other band. */}
+      <div className={`mkt-in ${styles.inner}`}>
         <span className={styles.badge}>
           <span className={styles.badgeDot} aria-hidden="true" />
           {t('heroBadge')}

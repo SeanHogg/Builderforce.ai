@@ -6836,7 +6836,8 @@
     "paginationLabel": "Blog-Seitennummerierung",
     "prevPage": "Vorherige Seite",
     "nextPage": "Nächste Seite",
-    "pageN": "Seite {n}"
+    "pageN": "Seite {n}",
+    "title": "Builderforce-Blog"
   },
   "brain": {
     "timeline": {
@@ -15813,13 +15814,13 @@
     "hero": {
       "eyebrow": "Über Builderforce",
       "title": "Produkt bauen. Unternehmen führen. Ein System.",
-      "lead": "Builderforce bringt die Startup-Survival-Intelligenz von BurnRateOS auf die kreative Arbeitsfläche für Menschen und KI-Agenten und verbindet Idee, Geschäft und die Arbeit, die daraus Realität macht.",
+      "lead": "Builderforce ist das kreative Betriebssystem für Menschen und KI-Agenten und verbindet Idee, Geschäft und die Arbeit, die daraus Realität macht.",
       "primaryCta": "Kostenlos starten",
       "secondaryCta": "Demo buchen",
       "domains": "Betriebsbereiche",
       "foundations": "gemeinsame Grundlagen",
       "workspace": "vernetzter Arbeitsbereich",
-      "core": "Von der Idee zum Ergebnis",
+      "core": "IDEA to REAL",
       "visualAria": "Builderforce-Betriebssystem verbindet Produkt, Finanzen, Umsatz und Governance"
     },
     "thesis": {
@@ -15848,15 +15849,15 @@
     "system": {
       "eyebrow": "Was wir aufgebaut haben",
       "title": "Das gesamte Betriebsbild, mit der Ausführung verbunden",
-      "lead": "Neun Betriebsbereiche übernehmen den Startup-Survival-Umfang von BurnRateOS. Drei Grundlagen geben jedem Bereich dieselbe Intelligenz, denselben Geschäftskontext, Integrationen und die geregelte Builderforce-Ausführung.",
+      "lead": "Neun Betriebsbereiche verbinden das Unternehmen hinter einer gemeinsamen Mission. Drei Grundlagen geben jedem Bereich dieselbe Intelligenz, denselben Geschäftskontext, Integrationen und die geregelte Builderforce-Ausführung.",
       "domains": "Betriebsbereiche",
       "foundations": "Gemeinsame Grundlagen"
     },
     "story": {
       "eyebrow": "Unsere Geschichte",
-      "title": "Zwei notwendige Ideen wurden zu einer Plattform.",
-      "bodyOne": "BurnRateOS begann mit einer klaren Beobachtung: Talentierte Teams können ständig liefern und trotzdem keine Zeit oder kein Geld mehr haben. Es verband finanzielle Reichweite, Kundennachweise, Betriebsrhythmus und kommerzielle Entscheidungen, damit Fortschritt an Überleben statt nur an Aktivität gemessen wird.",
-      "bodyTwo": "Builderforce begann mit der anderen Hälfte des Problems: Ideen, Artefakte, Menschen und KI-Agenten waren über unverbundene Tools verstreut. Zusammen entsteht ein einziger Kreislauf – vom Geschäftssignal über die kreative Entscheidung bis zur geregelten Ausführung und zum messbaren Ergebnis."
+      "title": "From IDEA to REAL.",
+      "bodyOne": "Builderforce entstand aus einer einfachen Überzeugung: Kreation sollte nicht beim Prototyp enden. Eine Idee wird erst real, wenn Produkt, Geschäftskontext, Menschen und Ausführung gemeinsam vorankommen.",
+      "bodyTwo": "Builderforce verbindet diese gesamte Reise in einem gemeinsamen Arbeitsbereich – vom ersten Funken und Kundensignal bis zu kreativen Entscheidungen, geregelter Ausführung und messbaren Ergebnissen."
     },
     "principles": {
       "eyebrow": "Wie wir bauen",
@@ -16250,5 +16251,32 @@
       "audits": "Weitere Audits",
       "faq": "Fragen"
     }
+  },
+  "integrationsIndex": {
+    "seo": {
+      "title": "Integrationen — Verbinden Sie Ihre Agenten mit Ihrem Stack | Builderforce.ai",
+      "description": "Builderforce.ai lässt sich mit GitHub, GitLab, Slack, Discord, WhatsApp, Ollama, Anthropic, MCP, Notion und Gmail verbinden. Binden Sie Ihre selbst gehosteten KI-Agenten an die Werkzeuge an, die Sie bereits nutzen."
+    },
+    "eyebrow": "Integrationen",
+    "title": "Verbinden Sie Ihre Agenten mit Ihrem Stack",
+    "lede": "Builderforce.ai bindet Ihre selbst gehosteten, modellunabhängigen KI-Agenten an Versionsverwaltung, Chat-Kanäle, Modellanbieter und die Werkzeuge an, die Sie bereits nutzen — jede Aktion mit Freigaben und Audit-Protokoll."
+  },
+  "integrationDetail": {
+    "eyebrow": "{category}-Integration",
+    "title": "Builderforce.ai + {name}",
+    "ctaPrimary": "Kostenlos starten",
+    "ctaDocs": "Mehr erfahren",
+    "useCasesHeading": "Was Sie mit {name} tun können",
+    "moreHeading": "Weitere Integrationen entdecken",
+    "moreLede": "Builderforce.ai verbindet Ihre Agenten mit Versionsverwaltung, Chat-Kanälen, Modellanbietern und den Werkzeugen, die Sie bereits nutzen.",
+    "moreLink": "Alle Integrationen ansehen"
+  },
+  "marketplaceSkill": {
+    "eyebrow": "Marktplatz · Skill",
+    "byAuthor": "von {author}",
+    "downloads": "{count} Downloads",
+    "getCta": "Diesen Skill holen",
+    "browseCta": "Marktplatz durchsuchen",
+    "aboutHeading": "Über diesen Skill"
   }
 }

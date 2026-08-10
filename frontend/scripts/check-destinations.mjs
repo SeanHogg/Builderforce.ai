@@ -34,6 +34,14 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
 const REGISTRY = path.join(SRC, 'lib', 'navGroups.ts');
+/**
+ * The registry is TWO files: the app rail and the public surface. They were one
+ * until it crossed the 800-line ratchet, and the split follows the seam that was
+ * already there — where a signed-in person goes, versus which pages a signed-out
+ * one can reach. Still one declaration per destination, which is the rule; this
+ * script simply has to read both halves to check it.
+ */
+const PUBLIC_REGISTRY = path.join(SRC, 'lib', 'publicDestinations.ts');
 
 /**
  * Files allowed to declare something that LOOKS like a destination list. Every
@@ -43,7 +51,8 @@ const REGISTRY = path.join(SRC, 'lib', 'navGroups.ts');
  * registry row cannot reach their case.
  */
 const ALLOWED = new Map([
-  ['src/lib/navGroups.ts', 'THE registry. This is the one place.'],
+  ['src/lib/navGroups.ts', 'THE registry, app half — where a signed-in person can go.'],
+  ['src/lib/publicDestinations.ts', 'THE registry, public half — which pages a signed-out visitor can reach.'],
   // `src/lib/content.ts` used to sit here, exempted as "marketing CONTENT, not
   // app destinations". The exemption was FALSE, and the ratchet stayed green
   // while `FOOTER_COLUMNS` and `RESOURCE_NAV_LINKS` — the site footer and the
@@ -74,7 +83,12 @@ function walk(dir, out = []) {
   return out;
 }
 
-const registrySource = fs.readFileSync(REGISTRY, 'utf8');
+const railSource = fs.readFileSync(REGISTRY, 'utf8');
+const publicSource = fs.readFileSync(PUBLIC_REGISTRY, 'utf8');
+/** Both halves, for the checks that span them (a rail row pointing at an
+ *  explainer; a public page bound to a rail row that does not exist). */
+const registrySource = `${railSource}
+${publicSource}`;
 
 // ── 1 · One declaration ────────────────────────────────────────────────────
 // An object literal carrying BOTH a route-ish field and a label-ish field is a

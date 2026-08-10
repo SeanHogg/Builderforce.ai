@@ -37,7 +37,9 @@ export default async function ComparePage() {
 
       <style>{`
         .cmp { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
-        .cmp-hero { text-align: center; padding: 44px 24px 36px; max-width: 1100px; margin: 0 auto; width: 100%; }
+        /* Every band below rides THE marketing column (globals.css) so the page
+           starts under the logo and stops under "Open the canvas". */
+        .cmp-hero { text-align: center; padding: 44px var(--marketing-gutter) 36px; max-width: var(--marketing-max); margin: 0 auto; width: 100%; }
         .cmp-eyebrow {
           font-family: var(--font-display); font-size: var(--font-size-eyebrow); font-weight: 600;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px;
@@ -49,7 +51,7 @@ export default async function ComparePage() {
         .cmp-sub { font-size: var(--font-size-lede); color: var(--text-secondary); line-height: 1.7; margin: 0; }
 
         .cmp-pillars {
-          max-width: 1100px; margin: 0 auto; padding: 16px 24px 8px; width: 100%;
+          max-width: var(--marketing-max); margin: 0 auto; padding: 16px var(--marketing-gutter) 8px; width: 100%;
           display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
         }
         .cmp-pillar {
@@ -59,7 +61,7 @@ export default async function ComparePage() {
         .cmp-pillar-title { font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title); color: var(--text-primary); margin: 0 0 6px; }
         .cmp-pillar-desc { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.6; margin: 0; }
 
-        .cmp-section { max-width: 1100px; margin: 0 auto; padding: 28px 24px 8px; width: 100%; }
+        .cmp-section { max-width: var(--marketing-max); margin: 0 auto; padding: 28px var(--marketing-gutter) 8px; width: 100%; }
         .cmp-intro { font-size: var(--font-size-body); color: var(--text-secondary); line-height: 1.7; max-width: none; margin: 0 0 24px; }
 
         .cmp-criteria { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
@@ -67,7 +69,8 @@ export default async function ComparePage() {
         .cmp-cat-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-body); color: var(--text-primary); margin: 0 0 6px; }
         .cmp-cat-blurb { font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.6; margin: 0; }
 
-        .cmp-cta { max-width: 820px; margin: 0 auto; padding: 40px 24px 80px; }
+        .cmp-cta { max-width: var(--marketing-max); margin: 0 auto; padding: 40px var(--marketing-gutter) 80px; }
+        .cmp-cta-box { max-width: 820px; margin-inline: auto; }
         .cmp-cta-box {
           text-align: center; padding: 52px 40px; border-radius: var(--radius-xl);
           border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px);

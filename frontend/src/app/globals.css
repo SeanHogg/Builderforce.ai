@@ -146,7 +146,29 @@
   --font-size-small: 0.82rem;
   --font-size-eyebrow: 0.68rem;
   --font-size-field-label: 0.62rem;
-  --content-readable: 1100px;
+  /* THE MARKETING COLUMN — one measure for the whole public site.
+     `--marketing-max` is the OUTER box, gutter included, so anything that sets
+     `max-width: var(--marketing-max)` + `padding-inline: var(--marketing-gutter)`
+     starts exactly under the logo and ends exactly under "Open the canvas". The
+     header IS the measure: `.mh-inner` reads the same two tokens, so the site
+     cannot drift away from its own chrome.
+     Every public page used to pick its own number — 1320 on the header and the
+     Meet carousel, 1240 on the landing hero and the domain pages, 1180 on
+     pricing / about / the deck, 1160 on the homepage sections, 1100 on
+     /features and /compare and /evermind, 1080 on /soc2, 980 on /integrations,
+     960 on /book-demo — so the content column jumped left and right as you
+     moved through the site, and jumped WITHIN the homepage between one band and
+     the next. There is one number now and it lives here. */
+  --marketing-max: 1320px;
+  --marketing-gutter: 24px;
+  /* The same column as a CONTENT width, for a band that already carries its
+     gutter on an ancestor (the `.section > .inner` shape). Derived, never
+     retyped — the two can't disagree. */
+  --marketing-column: calc(var(--marketing-max) - 2 * var(--marketing-gutter));
+  /* Vertical rhythm between marketing bands — the horizontal measure's twin, and
+     for the same reason: every section had picked its own clamp (9vw here, 8vw
+     there, 7vw on the deck), so the page breathed unevenly as you scrolled. */
+  --marketing-section-padding: clamp(76px, 9vw, 120px);
   --content-narrow: 720px;
   /* The three panel widths (PRD 21 §2.4 / §3.4) — sheet, wide, full, and no
      fourth. A bespoke `min(560px, 96vw)` at a call site is how twenty distinct
@@ -3692,6 +3714,37 @@ select.input option {
   }
 }
 
+/* ── THE MARKETING COLUMN ──────────────────────────────────────────────────
+   One container for every public band. A marketing section is full-bleed (its
+   background runs edge to edge) with its CONTENT held in this column, so the
+   band paints wide and reads narrow. Compose it: `<section class="…"><div
+   class="mkt-in">`, and let the section own only vertical rhythm and paint.
+
+   Narrow the gutter and the header narrows with it, because both read the same
+   token — that is the entire point of the primitive. */
+.mkt-in {
+  width: 100%;
+  /* A band that is deliberately narrower than the column (a prose section, a
+     centred close) sets `--mkt-width` rather than its own `max-width`: a custom
+     property cannot lose a specificity or source-order fight with the
+     primitive, so the narrow case stays narrow without anyone reasoning about
+     which stylesheet loaded first. */
+  max-width: var(--mkt-width, var(--marketing-max));
+  margin-inline: auto;
+  padding-inline: var(--marketing-gutter);
+}
+
+/* A public page that is a plain column rather than a stack of painted bands
+   (the storefront, /prompts, /tools): the column plus its vertical rhythm. */
+.mkt-page { padding-block: var(--space-6); }
+
+@media (max-width: 560px) {
+  :root {
+    --marketing-gutter: 18px;
+    --marketing-section-padding: 64px;
+  }
+}
+
 /* Top header */
 .mh {
   position: sticky;
@@ -3705,10 +3758,10 @@ select.input option {
   border-bottom: 1px solid var(--border);
 }
 .mh-inner {
-  max-width: 1320px;
+  max-width: var(--marketing-max);
   margin: 0 auto;
   height: 66px;
-  padding: 0 24px;
+  padding: 0 var(--marketing-gutter);
   display: flex;
   align-items: center;
   gap: 18px;
@@ -4033,7 +4086,7 @@ select.input option {
 
 /* Consolidated BurnRateOS marketing surfaces. */
 .br-domain-page { position: relative; z-index: 1; min-height: 100vh; color: var(--text-primary); }
-.br-domain-hero { max-width: 1240px; margin: 0 auto; padding: 64px 28px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 56px; align-items: center; }
+.br-domain-hero { width: 100%; max-width: var(--marketing-max); margin: 0 auto; padding: 64px var(--marketing-gutter); display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 56px; align-items: center; }
 .br-domain-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
 .br-domain-badges span { padding: 5px 10px; border: 1px solid var(--border-accent); border-radius: var(--radius-full); color: var(--coral-bright); font-size: var(--font-size-eyebrow); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .br-domain-kicker { margin: 0 0 10px; color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -4050,16 +4103,19 @@ select.input option {
 .br-domain-visual > span:not(.br-domain-visual__icon) { margin-top: 8px; color: var(--text-secondary); }
 .br-domain-signal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 38px; }
 .br-domain-signal-grid i { height: calc(34px + var(--signal-index) * 15px); align-self: end; border-radius: var(--radius-sm); background: linear-gradient(180deg, var(--coral-bright), color-mix(in srgb, var(--coral-bright) 18%, transparent)); }
-.br-domain-features { padding: 72px max(28px, calc((100vw - 1184px) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
+/* A full-bleed band whose content sits in the column without an inner wrapper:
+   the side padding IS the gutter plus whatever the viewport has over the
+   column. Same measure as `.mkt-in`, expressed as padding. */
+.br-domain-features { padding: 72px max(var(--marketing-gutter), calc((100vw - var(--marketing-column)) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
 .br-domain-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .br-domain-card { padding: 26px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); }
 .br-domain-card__number { color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 800; }
 .br-domain-card h3 { margin: 22px 0 8px; font-size: var(--font-size-card-title); }
 .br-domain-card p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
-.br-domain-closing { max-width: 820px; margin: 0 auto; padding: 72px 28px 92px; text-align: center; }
-.br-domain-closing p { margin: 0 auto 28px; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.6; }
+.br-domain-closing { width: 100%; max-width: var(--marketing-max); margin: 0 auto; padding: 72px var(--marketing-gutter) 92px; text-align: center; }
+.br-domain-closing p { max-width: 62ch; margin: 0 auto 28px; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.6; }
 @media (max-width: 850px) { .br-domain-hero { grid-template-columns: 1fr; padding-top: 38px; } .br-domain-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .br-domain-hero { padding-inline: 18px; } .br-domain-features { padding-inline: 18px; } .br-domain-grid { grid-template-columns: 1fr; } .br-domain-visual { min-height: 280px; } }
+@media (max-width: 560px) { .br-domain-grid { grid-template-columns: 1fr; } .br-domain-visual { min-height: 280px; } }
 
 /* Right cluster */
 .mh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
@@ -4515,9 +4571,14 @@ select.input option {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .mk { position: relative; z-index: 1; color: var(--text-primary); }
-.mk-in { max-width: var(--content-readable, 1100px); margin: 0 auto; }
+/* `.mk-in` is the marketing column under its own name — the band system's pages
+   were written against it before the primitive existed. It composes rather than
+   redeclares, so widening the site is one token. */
+.mk-in { width: 100%; max-width: var(--marketing-max); margin-inline: auto; padding-inline: var(--marketing-gutter); box-sizing: border-box; }
 
-.mk-band { padding: clamp(36px, 6vw, 68px) clamp(18px, 4vw, 32px); background: var(--bg-surface); }
+/* The band paints edge to edge; `.mk-in` holds the content. Horizontal padding
+   belongs to the column, not the band, or the two gutters stack. */
+.mk-band { padding: clamp(36px, 6vw, 68px) 0; background: var(--bg-surface); }
 .mk-band--tint { background: var(--bg-deep); }
 .mk-band--wash { background: var(--wash-hero); border-bottom: 1px solid var(--border-subtle); }
 .mk-band--grad { background: var(--grad-brand); text-align: center; }

@@ -6836,7 +6836,8 @@
     "paginationLabel": "博客分页",
     "prevPage": "上一页",
     "nextPage": "下一页",
-    "pageN": "第 {n} 页"
+    "pageN": "第 {n} 页",
+    "title": "Builderforce 博客"
   },
   "brain": {
     "timeline": {
@@ -15813,13 +15814,13 @@
     "hero": {
       "eyebrow": "关于 Builderforce",
       "title": "构建产品。经营公司。一个系统。",
-      "lead": "Builderforce 将 BurnRateOS 的创业生存智能融入人类与 AI 智能体共用的创意画布，把想法、业务和让想法成真的工作连接起来。",
+      "lead": "Builderforce 是人类与 AI 智能体共用的创意操作系统，把想法、业务和让想法成真的工作连接起来。",
       "primaryCta": "免费开始",
       "secondaryCta": "预约演示",
       "domains": "运营领域",
       "foundations": "共享基础",
       "workspace": "互联工作空间",
-      "core": "从想法到成果",
+      "core": "IDEA to REAL",
       "visualAria": "Builderforce 操作系统连接产品、财务、收入和治理"
     },
     "thesis": {
@@ -15848,15 +15849,15 @@
     "system": {
       "eyebrow": "我们构建了什么",
       "title": "完整运营视图，与执行紧密相连",
-      "lead": "九个运营领域承载 BurnRateOS 的创业生存能力，三个基础能力为每个领域提供一致的智能、业务上下文、集成和受治理的 Builderforce 执行。",
+      "lead": "九个运营领域让整个公司围绕共同使命协同。三个基础能力为每个领域提供一致的智能、业务上下文、集成和受治理的 Builderforce 执行。",
       "domains": "运营领域",
       "foundations": "共享基础"
     },
     "story": {
       "eyebrow": "我们的故事",
-      "title": "两个必需的理念，汇成一个平台。",
-      "bodyOne": "BurnRateOS 始于一个直白的观察：优秀团队即使持续交付，也仍可能耗尽时间或资金。它连接现金跑道、客户证据、运营节奏和商业决策，让进展以生存能力衡量，而不只是活动数量。",
-      "bodyTwo": "Builderforce 始于问题的另一半：想法、产物、人员和 AI 智能体散落在彼此割裂的工具中。二者合一，形成从业务信号到创意决策、受治理执行和可衡量成果的完整闭环。"
+      "title": "From IDEA to REAL.",
+      "bodyOne": "Builderforce 始于一个简单的信念：创造不应止于原型。只有当产品、业务上下文、人员与执行协同推进时，想法才会成为现实。",
+      "bodyTwo": "Builderforce 在一个共享工作空间中连接整个旅程——从最初的灵感和客户信号，到创意决策、受治理的执行和可衡量的结果。"
     },
     "principles": {
       "eyebrow": "我们的构建原则",
@@ -16250,5 +16251,32 @@
       "audits": "其他审计",
       "faq": "常见问题"
     }
+  },
+  "integrationsIndex": {
+    "seo": {
+      "title": "集成 — 将你的智能体团队连接到现有技术栈 | Builderforce.ai",
+      "description": "Builderforce.ai 可与 GitHub、GitLab、Slack、Discord、WhatsApp、Ollama、Anthropic、MCP、Notion 和 Gmail 集成。把自托管的 AI 智能体团队接入你已经在用的工具。"
+    },
+    "eyebrow": "集成",
+    "title": "将你的智能体团队连接到现有技术栈",
+    "lede": "Builderforce.ai 把自托管、不绑定模型的 AI 智能体接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具——每一次操作都有审批和审计记录。"
+  },
+  "integrationDetail": {
+    "eyebrow": "{category} 集成",
+    "title": "Builderforce.ai + {name}",
+    "ctaPrimary": "免费开始使用",
+    "ctaDocs": "了解更多",
+    "useCasesHeading": "使用 {name} 可以做什么",
+    "moreHeading": "探索更多集成",
+    "moreLede": "Builderforce.ai 把你的智能体团队接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具。",
+    "moreLink": "浏览全部集成"
+  },
+  "marketplaceSkill": {
+    "eyebrow": "市场 · 技能",
+    "byAuthor": "作者：{author}",
+    "downloads": "{count} 次下载",
+    "getCta": "获取此技能",
+    "browseCta": "浏览市场",
+    "aboutHeading": "关于此技能"
   }
 }

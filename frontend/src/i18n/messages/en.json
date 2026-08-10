@@ -6837,7 +6837,8 @@
     "paginationLabel": "Blog pagination",
     "prevPage": "Previous page",
     "nextPage": "Next page",
-    "pageN": "Page {n}"
+    "pageN": "Page {n}",
+    "title": "Builderforce Blog"
   },
   "brain": {
     "timeline": {
@@ -15814,13 +15815,13 @@
     "hero": {
       "eyebrow": "About Builderforce",
       "title": "Build the product. Run the company. One system.",
-      "lead": "Builderforce brings BurnRateOS's startup survival intelligence into the creative canvas for humans and AI agents—connecting the idea, the business, and the work that makes it real.",
+      "lead": "Builderforce is the creative operating system for humans and AI agents—connecting the idea, the business, and the work that makes it real.",
       "primaryCta": "Start free",
       "secondaryCta": "Book a demo",
       "domains": "operating domains",
       "foundations": "shared foundations",
       "workspace": "connected workspace",
-      "core": "Idea to outcome",
+      "core": "IDEA to REAL",
       "visualAria": "Builderforce operating system connecting product, finance, revenue, and governance"
     },
     "thesis": {
@@ -15849,15 +15850,15 @@
     "system": {
       "eyebrow": "What we have built",
       "title": "The whole operating picture, connected to execution",
-      "lead": "Nine operating domains carry the startup-survival scope of BurnRateOS. Three foundations give every domain the same intelligence, business context, integrations, and governed Builderforce execution.",
+      "lead": "Nine operating domains connect the company around one shared mission. Three foundations give every domain the same intelligence, business context, integrations, and governed Builderforce execution.",
       "domains": "Operating domains",
       "foundations": "Shared foundations"
     },
     "story": {
       "eyebrow": "Our story",
-      "title": "Two necessary ideas became one platform.",
-      "bodyOne": "BurnRateOS began with a blunt observation: talented teams can ship constantly and still run out of time or money. It connected runway, customer evidence, operating cadence, and commercial decisions so progress could be measured by survival—not activity alone.",
-      "bodyTwo": "Builderforce began with the other half of the problem: ideas, artifacts, people, and AI agents were scattered across disconnected tools. Bringing the two together creates one loop—from business signal to creative decision, governed execution, and measurable outcome."
+      "title": "From IDEA to REAL.",
+      "bodyOne": "Builderforce began with a simple belief: creating should not stop at the prototype. An idea becomes real only when the product, business context, people, and execution move together.",
+      "bodyTwo": "Builderforce connects that entire journey in one shared workspace—from the first spark and customer signal to creative decisions, governed execution, and measurable outcomes."
     },
     "principles": {
       "eyebrow": "How we build",
@@ -16251,5 +16252,32 @@
       "audits": "Other audits",
       "faq": "Questions"
     }
+  },
+  "integrationsIndex": {
+    "seo": {
+      "title": "Integrations — Connect Your Agent Workforce to Your Stack | Builderforce.ai",
+      "description": "Builderforce.ai integrates with GitHub, GitLab, Slack, Discord, WhatsApp, Ollama, Anthropic, MCP, Notion and Gmail. Connect your self-hosted AI agent workforce to the tools you already use."
+    },
+    "eyebrow": "Integrations",
+    "title": "Connect your agent workforce to your stack",
+    "lede": "Builderforce.ai plugs your self-hosted, model-agnostic AI agents into source control, chat channels, model providers and the tools you already use — every action governed by approvals and an audit trail."
+  },
+  "integrationDetail": {
+    "eyebrow": "{category} integration",
+    "title": "Builderforce.ai + {name}",
+    "ctaPrimary": "Get started free",
+    "ctaDocs": "Learn more",
+    "useCasesHeading": "What you can do with {name}",
+    "moreHeading": "Explore more integrations",
+    "moreLede": "Builderforce.ai connects your agent workforce to source control, chat channels, model providers and the tools you already use.",
+    "moreLink": "Browse all integrations"
+  },
+  "marketplaceSkill": {
+    "eyebrow": "Marketplace · Skill",
+    "byAuthor": "by {author}",
+    "downloads": "{count} downloads",
+    "getCta": "Get this skill",
+    "browseCta": "Browse the marketplace",
+    "aboutHeading": "About this skill"
   }
 }

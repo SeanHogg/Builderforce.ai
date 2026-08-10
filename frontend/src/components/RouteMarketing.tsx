@@ -161,7 +161,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
           border, radius, type and motion all come from the primitives now, so
           this page cannot drift from the rest of the product again. */}
       <style>{`
-        .route-mkt { max-width: 1000px; margin: 0 auto; padding: var(--space-6); }
+        .route-mkt { max-width: var(--marketing-max); margin: 0 auto; padding: var(--space-6) var(--marketing-gutter); }
         .rm-hero { text-align: center; }
         .rm-icon { font-size: var(--font-size-hero); line-height: 1; margin-bottom: var(--space-4); }
         .rm-title { color: var(--text-primary); margin: 0 0 var(--space-3); }

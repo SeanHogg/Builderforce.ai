@@ -10,7 +10,8 @@ import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
 
-const wrap: React.CSSProperties = { maxWidth: 980, margin: '0 auto', padding: '32px 20px' };
+/* Width comes from `.mkt-in` — THE marketing column (globals.css). */
+const wrap: React.CSSProperties = { padding: '32px 0' };
 const cardLink: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8, padding: 18, textDecoration: 'none',
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
@@ -42,7 +43,7 @@ export default function ToolsHubClient() {
   const gridTools = tools.filter((tool) => tool.id !== 'agentic-maturity');
 
   return (
-    <div style={wrap}>
+    <div className="mkt-in" style={wrap}>
       <header style={{ marginBottom: 24 }}>
         <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: 0 }}>
           {t('hubEyebrow')}
