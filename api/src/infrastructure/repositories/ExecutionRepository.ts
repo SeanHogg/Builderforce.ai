@@ -68,12 +68,14 @@ export class ExecutionRepository implements IExecutionRepository {
       .values({
         taskId:      plain.taskId,
         agentId:     plain.agentId ?? undefined,
+        agentRegistrationId: plain.agentRegistrationId ?? undefined,
         agentHostId:      plain.agentHostId ?? undefined,
         tenantId:    plain.tenantId,
         submittedBy: plain.submittedBy,
         sessionId:   plain.sessionId ?? undefined,
         status:      plain.status,
         payload:     plain.payload ?? undefined,
+        source:      plain.source,
       })
       .returning();
     if (!inserted) throw new Error('Execution insert returned no rows');
@@ -88,6 +90,16 @@ export class ExecutionRepository implements IExecutionRepository {
         status:       plain.status,
         result:       plain.result ?? undefined,
         errorMessage: plain.errorMessage ?? undefined,
+        // The productivity verdict (0385) must actually LAND. Without this column in the
+        // set, `markProduced(true)` round-trips through the domain, writes everything
+        // except the one field it exists for, and `toDomain(updated)` reads the unchanged
+        // value straight back — a silent no-op that leaves the lane-move signal dead and
+        // lets a legitimate no-code ticket be judged an empty completion.
+        //
+        // `?? undefined` is load-bearing: drizzle omits an undefined key, so a `null`
+        // (not judged) can never overwrite a verdict `finalizeCloudRun` already wrote,
+        // while `false` — a real "this run shipped nothing" — is persisted.
+        produced:     plain.produced ?? undefined,
         startedAt:    plain.startedAt ?? undefined,
         completedAt:  plain.completedAt ?? undefined,
         updatedAt:    new Date(),
@@ -104,15 +116,21 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     id:           asExecutionId(row.id),
     taskId:       asTaskId(row.taskId),
     agentId:      row.agentId != null ? asAgentId(row.agentId) : null,
+    agentRegistrationId: row.agentRegistrationId ?? null,
     agentHostId:       row.agentHostId != null ? asAgentHostId(row.agentHostId) : null,
     tenantId:     asTenantId(row.tenantId),
     submittedBy:  row.submittedBy,
     sessionId:    row.sessionId ?? null,
     status:       row.status as ExecutionStatus,
     payload:      row.payload ?? null,
+    source:       (row.source === 'vscode' || row.source === 'brain') ? row.source : 'agent',
     cloudAgentRef: row.cloudAgentRef ?? null,
     result:       row.result ?? null,
     errorMessage: row.errorMessage ?? null,
+    // The autonomy breaker's productivity signal (0385). It MUST survive into
+    // `toPlain()` — both breaker call sites read the plain props, and dropping it here
+    // would silently restore the failure-only streak with everything else in place.
+    produced:     row.produced ?? null,
     startedAt:    row.startedAt ?? null,
     completedAt:  row.completedAt ?? null,
     createdAt:    row.createdAt,

@@ -135,7 +135,7 @@ export function AgentAssignmentPanel({
         <button type="button" onClick={() => setShowAdd((v) => !v)} style={primaryBtn}>{showAdd ? 'Done' : '+ Assign agent'}</button>
       </div>
 
-      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
@@ -192,24 +192,24 @@ export function AgentAssignmentPanel({
 
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
 };
 const primaryBtn: React.CSSProperties = {
-  padding: '5px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '5px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const addBtn: React.CSSProperties = { ...primaryBtn, padding: '4px 10px', fontSize: 11, flexShrink: 0 };
 const dangerBtn: React.CSSProperties = {
-  padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
-  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
+  padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: 'var(--error-text)',
+  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', flexShrink: 0,
 };
 const selectStyle: React.CSSProperties = {
-  fontSize: 11, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+  fontSize: 11, padding: '3px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
 };
 function kindBadge(kind: string): React.CSSProperties {
   const wf = kind === 'workforce';
   return {
-    fontSize: 10, fontWeight: 600, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 6, flexShrink: 0,
+    fontSize: 10, fontWeight: 600, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
     background: wf ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
     color: wf ? 'var(--coral-bright)' : 'var(--text-muted)',
   };

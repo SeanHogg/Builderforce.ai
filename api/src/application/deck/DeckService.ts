@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * DeckService — the single orchestrator behind both deck entry points (the Brain
  * "generate deck" tool and the PMO download button). Resolves a template, gathers
@@ -83,7 +84,9 @@ export async function generateDeck(db: Db, env: Env, input: GenerateDeckInput): 
         customMetadata: { tenantId: String(input.tenantId), deckId },
       });
       await db.update(generatedDecks).set({ r2Key }).where(eq(generatedDecks.id, deckId));
-    } catch { /* download still works from the returned bytes */ }
+    } catch (error) { /* download still works from the returned bytes */ 
+      reportCaughtError(error, { source: "application/deck/DeckService.ts", operation: "generateDeck" });
+    }
   }
 
   const filename = `${slugify(template.name)}-${quarter}.pptx`;

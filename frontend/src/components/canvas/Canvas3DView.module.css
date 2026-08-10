@@ -1,0 +1,265 @@
+/*
+ * The 3D canvas view.
+ *
+ * Colours come from the `--canvas-*` tokens a canvas shell already publishes,
+ * falling back to the application tokens so the view is legible in both themes
+ * wherever it is mounted. Depth is expressed with elevation and haze rather than
+ * fixed greys, so the same stylesheet reads correctly on a light board and on an
+ * ink-dark one.
+ */
+
+.scene {
+  position: absolute;
+  /* The same edges the rail and the mini map step aside for (see
+     `--canvas-reserved-*` in CanvasCommands.module.css). Without it the scene —
+     and its own controls — render underneath a docked panel. Defaults to the
+     full surface when nothing is docked. */
+  top: 0px;
+  bottom: var(--canvas-reserved-bottom, 0px);
+  left: var(--canvas-reserved-left, 0px);
+  right: var(--canvas-reserved-right, 0px);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 8%, color-mix(in srgb, var(--canvas-accent) 12%, transparent) 0%, transparent 62%),
+    var(--canvas-board, var(--bg-deep));
+  color: var(--canvas-ink, var(--text-primary));
+}
+
+/* ---------- the projected scene ---------- */
+
+.viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* The whole surface is a gesture target, so the browser must not claim it. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.viewport[data-gesture='orbit'] { cursor: grabbing; }
+.viewport[data-gesture='pan'] { cursor: move; }
+.viewport[data-gesture='move'] { cursor: grabbing; }
+.viewport:focus-visible { outline: 2px solid var(--canvas-accent); outline-offset: -2px; }
+
+/* The camera the scene is projected through. Panning transforms THIS element —
+   outside the perspective it owns — so travel is a plain screen-space slide and
+   never bends how a drag maps back onto the board. */
+.camera {
+  position: absolute;
+  inset: 0;
+  transition: transform .09s linear;
+}
+
+.stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-style: preserve-3d;
+  transform-origin: 50% 50%;
+  transition: transform .09s linear;
+}
+
+.empty {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  margin: 0;
+  padding: 0 24px;
+  color: var(--canvas-muted, var(--text-secondary));
+  font-size: 12px;
+  text-align: center;
+}
+
+.plane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 1px solid color-mix(in srgb, var(--canvas-accent) 26%, transparent);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(color-mix(in srgb, var(--canvas-accent) 7%, transparent), transparent 70%),
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--canvas-accent) 9%, transparent) 0 1px, transparent 1px 120px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--canvas-accent) 9%, transparent) 0 1px, transparent 1px 120px);
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.planeTag {
+  position: absolute;
+  top: 18px;
+  left: 26px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  color: var(--canvas-muted, var(--text-secondary));
+  font: 700 30px var(--font-sans, inherit);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+.planeTag i { font-style: normal; font-weight: 500; font-size: 22px; opacity: .78; }
+
+.link {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--canvas-muted, var(--text-secondary)) 62%, transparent);
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
+.link[data-spans='true'] { background: color-mix(in srgb, var(--canvas-accent) 72%, transparent); height: 4px; margin-top: -2px; }
+
+/* An object lifted off its plane keeps a line back to it: without one, a card
+   floating in open space reads as being somewhere it is not. */
+.tether {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--canvas-accent) 58%, transparent) 0 10px,
+    transparent 10px 20px
+  );
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
+.card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 22px 24px;
+  border: 1px solid var(--canvas-line, var(--border-subtle));
+  border-top: 5px solid var(--canvas-3d-accent, var(--canvas-accent));
+  border-radius: var(--radius-xl);
+  background: var(--canvas-panel, var(--bg-elevated));
+  box-shadow: 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  /* The card is a drag handle, so the browser must not scroll or zoom on it. */
+  touch-action: none;
+  /* A rendered mesh stands up off the card rather than lying on it (see
+     `.cardPreview[data-solid='true']`), which needs the card to keep its
+     children in the same 3D space instead of flattening them into its face. */
+  transform-style: preserve-3d;
+  transition: box-shadow .16s ease, border-color .16s ease;
+}
+
+/* Grabbable, and it says so. A locked or read-only object keeps the pointer
+   cursor: the drag falls through and turns the space instead. */
+.card[data-movable='true'] { cursor: grab; }
+.viewport[data-gesture='move'] .card[data-movable='true'] { cursor: grabbing; }
+
+.card:hover,
+.card:focus-visible { border-color: var(--canvas-3d-accent, var(--canvas-accent)); outline: none; }
+
+.card[data-selected='true'] {
+  border-color: var(--canvas-3d-accent, var(--canvas-accent));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 46%, transparent), 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
+}
+
+.cardHead { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.cardHead i {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 16%, var(--canvas-panel, var(--bg-elevated)));
+  color: var(--canvas-3d-accent, var(--canvas-accent));
+  font-size: 24px;
+  font-style: normal;
+}
+
+.cardHead b {
+  overflow: hidden;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* What a generated object made. Sized in card units, not viewport units, because
+   the whole scene is already scaled by the stage transform. */
+.cardPreview {
+  width: 100%;
+  height: 190px;
+  flex: none;
+  object-fit: contain;
+  border: 1px solid var(--canvas-line, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 10%, var(--canvas-panel, var(--bg-elevated)));
+}
+
+/* A mesh redrawn from its own triangles is a view FROM the camera, so it has to
+   face the camera: the inline transform undoes the stage rotation, standing the
+   object up on the card instead of painting a picture of it onto the floor. The
+   card keeps its own plane, which is what makes the object read as sitting on it. */
+.cardPreview[data-solid='true'] {
+  border-color: transparent;
+  background: none;
+  transform-origin: 50% 100%;
+}
+
+.cardSub {
+  overflow: hidden;
+  color: var(--canvas-muted, var(--text-secondary));
+  font-size: 20px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.cardGroup {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 14%, transparent);
+  color: var(--canvas-3d-accent, var(--canvas-accent));
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* The one line of chrome the scene keeps. The command rail floats over this same
+   bottom-left corner, so the text starts clear of it rather than underneath. */
+.hint {
+  position: relative;
+  z-index: 2;
+  padding: 7px 12px 7px 62px;
+  border-top: 1px solid var(--canvas-line, var(--border-subtle));
+  background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated)) 92%, transparent);
+  color: var(--canvas-muted, var(--text-secondary));
+  font-size: 9px;
+}
+
+@media (max-width: 760px) {
+  .hint { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage,
+  .card { transition: none; }
+}

@@ -12,7 +12,7 @@ interface AgentHostSessionsContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -115,7 +115,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -140,7 +140,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                 background: showHandoff ? 'var(--bg-base)' : 'var(--surface-interactive)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
                 flexShrink: 0,
               }}
@@ -151,7 +151,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
         </div>
 
         {handoffResult && (
-          <div style={{ padding: '8px 12px', fontSize: 12, color: 'rgba(34,197,94,0.9)', background: 'rgba(34,197,94,0.08)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.2)' }}>
+          <div style={{ padding: '8px 12px', fontSize: 12, color: 'rgba(34,197,94,0.9)', background: 'rgba(34,197,94,0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(34,197,94,0.2)' }}>
             {handoffResult}
           </div>
         )}
@@ -172,7 +172,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                   background: 'var(--bg-elevated)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
                 <option value="">Select target agentHost…</option>
@@ -193,11 +193,11 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                   background: 'var(--bg-elevated)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                 }}
               />
               {handoffError && (
-                <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)' }}>{handoffError}</div>
+                <div style={{ fontSize: 12, color: 'var(--coral-bright)' }}>{handoffError}</div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button
@@ -215,10 +215,10 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                     padding: '7px 14px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: handoffTargetId && !handing ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-                    color: handoffTargetId && !handing ? '#fff' : 'var(--text-muted)',
+                    background: handoffTargetId && !handing ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+                    color: handoffTargetId && !handing ? 'var(--text-on-accent)' : 'var(--text-muted)',
                     border: 'none',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     cursor: !handoffTargetId || handing ? 'not-allowed' : 'pointer',
                   }}
                 >
@@ -250,7 +250,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                   style={{
                     maxWidth: '90%',
                     padding: '8px 12px',
-                    borderRadius: 10,
+                    borderRadius: 'var(--radius-lg)',
                     fontSize: 12,
                     lineHeight: 1.55,
                     background:
@@ -326,7 +326,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                 fontSize: 12,
                 fontWeight: 600,
                 padding: '3px 8px',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-elevated)',
                 color: 'var(--text-secondary)',
                 flexShrink: 0,

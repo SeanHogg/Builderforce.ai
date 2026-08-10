@@ -74,10 +74,10 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
   },
   {
     id: PRIVACY_AUDIT_ID,
-    name: 'Privacy & Data-Law Compliance',
+    name: 'Compliance Audit Agent',
     category: 'governance',
     icon: EXTERNAL_DIAGNOSTIC_ICONS[PRIVACY_AUDIT_ID]!,
-    blurb: 'Scans your repos for GDPR, CCPA/CPRA, and CAN-SPAM readiness — privacy policy, cookie consent, unsubscribe, data export & erasure, and retention — and tells you exactly what to close next.',
+    blurb: 'Reviews connected GitHub source for privacy, AI, marketing, minor-safety, transfer, and accessibility readiness across US federal/state, EU/EEA, UK, Canada, Brazil, and Australia requirements.',
     agentWorkflow: 'privacy_audit',
     ticketPerFinding: true,
     scan: privacyScan,

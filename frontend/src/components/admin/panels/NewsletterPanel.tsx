@@ -259,7 +259,7 @@ export default function NewsletterPanel() {
               {newsletterTemplates.map((t) => (
                 <tr key={t.id}>
                   <td>{t.name}</td>
-                  <td style={{ fontFamily: 'var(--mono)' }}>{t.slug}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{t.slug}</td>
                   <td>{t.subject}</td>
                   <td>{t.isActive ? '✓' : '—'}</td>
                   <td className="text-muted">{t.updatedAt ? fmtDateTime(t.updatedAt) : '—'}</td>

@@ -18,7 +18,7 @@ import type { BoardProvider, DiscoveryResult } from '../boardsync/providers';
 
 export type ImportMode = 'migrate' | 'sync' | 'both';
 export type ImportRunStatus =
-  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'failed' | 'cancelled';
+  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'failed' | 'cancelled' | 'rolled_back';
 export type StagedProjectAction = 'create' | 'map' | 'skip';
 export type StagedUserAction = 'invite' | 'map' | 'skip';
 
@@ -127,13 +127,13 @@ export interface MigrationStore {
   /** True if a project key is already taken (any tenant — keys are globally unique). */
   projectKeyExists(key: string): Promise<boolean>;
   /** Insert a new BF project, returning its id. */
-  insertProject(input: { tenantId: number; segmentId: string | null; key: string; name: string; description: string | null }): Promise<number>;
+  insertProject(input: { tenantId: number; segmentId: string | null; key: string; name: string; description: string | null; importRunId: string }): Promise<number>;
   /** Confirm a project belongs to the tenant (for action='map'). */
   projectBelongsToTenant(projectId: number, tenantId: number): Promise<boolean>;
   /** Insert a task, returning its id. externalId + source seed a unique key. */
-  insertTask(input: { tenantId: number; projectId: number; segmentId: string | null; title: string; description: string | null; taskType: string; status: string; storyPoints: number | null; source: string; externalId: string; assignedUserId: string | null }): Promise<number>;
+  insertTask(input: { tenantId: number; projectId: number; segmentId: string | null; title: string; description: string | null; taskType: string; status: string; storyPoints: number | null; source: string; externalId: string; assignedUserId: string | null; importRunId: string }): Promise<number>;
   /** Create an ongoing board connection, returning its id. */
-  insertConnection(input: { tenantId: number; segmentId: string | null; projectId: number; credentialId: string | null; provider: string; externalBoardId: string | null }): Promise<string>;
+  insertConnection(input: { tenantId: number; segmentId: string | null; projectId: number; credentialId: string | null; provider: string; externalBoardId: string | null; importRunId: string }): Promise<string>;
   /** Seed the persistent type mapping for a connection. */
   insertTypeMappings(connectionId: string, tenantId: number, segmentId: string | null, rows: TypeMappingRow[]): Promise<void>;
   /** Create the idempotency link so a later sync recognises the imported task. */
@@ -142,6 +142,9 @@ export interface MigrationStore {
   hasMemberOrInvite(tenantId: number, email: string): Promise<boolean>;
   /** Create a pending workspace invitation. */
   insertInvitation(input: { tenantId: number; email: string; invitedByUserId: string | null }): Promise<void>;
+  /** Atomically remove only canonical artifacts stamped with this migration run. */
+  /** Atomically removes run-owned artifacts and marks the run rolled_back. */
+  rollbackImport(runId: string, tenantId: number): Promise<{ tasksRemoved: number; connectionsRemoved: number; projectsRemoved: number }>;
 }
 
 /** Builds a provider scoped to one external board (null = account-wide for discover). */
@@ -305,14 +308,14 @@ export class MigrationService {
           bfProjectId = sp.targetProjectId;
         } else {
           const key = await this.allocateKey(sp.targetProjectName || sp.name);
-          bfProjectId = await this.store.insertProject({ tenantId, segmentId: run.segmentId, key, name: sp.targetProjectName || sp.name, description: sp.description });
+          bfProjectId = await this.store.insertProject({ tenantId, segmentId: run.segmentId, key, name: sp.targetProjectName || sp.name, description: sp.description, importRunId: run.id });
           projectsCreated += 1;
         }
         projectIdByStaged.set(sp.id, bfProjectId);
 
         // Ongoing sync: one connection per external board, scoped to its external id.
         if (wantsSync) {
-          const connId = await this.store.insertConnection({ tenantId, segmentId: run.segmentId, projectId: bfProjectId, credentialId: run.credentialId, provider: run.provider, externalBoardId: sp.externalId });
+          const connId = await this.store.insertConnection({ tenantId, segmentId: run.segmentId, projectId: bfProjectId, credentialId: run.credentialId, provider: run.provider, externalBoardId: sp.externalId, importRunId: run.id });
           connectionByStaged.set(sp.id, connId);
           connectionsCreated += 1;
           if (typeMappings.length) await this.store.insertTypeMappings(connId, tenantId, run.segmentId, typeMappings);
@@ -352,6 +355,7 @@ export class MigrationService {
             source: run.provider,
             externalId: item.externalId,
             assignedUserId,
+            importRunId: run.id,
           });
           tasksCreated += 1;
           const connId = connectionByStaged.get(item.stagedProjectId);
@@ -368,6 +372,13 @@ export class MigrationService {
       await this.store.updateRun(runId, { status: 'failed', errorMessage: err instanceof Error ? err.message : String(err) });
       throw err;
     }
+  }
+
+  async rollback(runId: string, tenantId: number): Promise<RunRow> {
+    const run = await this.requireRun(runId, tenantId);
+    if (run.status !== 'completed') throw new Error(`Only a completed migration can be rolled back (current: ${run.status})`);
+    await this.store.rollbackImport(runId, tenantId);
+    return (await this.store.getRun(runId, tenantId))!;
   }
 
   async getDetail(runId: string, tenantId: number): Promise<RunDetail | null> {

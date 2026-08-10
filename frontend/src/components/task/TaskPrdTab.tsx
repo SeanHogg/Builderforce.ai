@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
@@ -21,16 +22,16 @@ import { PrdCreateModal } from '../prd/PrdCreateModal';
  */
 
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', cursor: 'pointer',
 };
 const iconBtn: React.CSSProperties = {
   width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)',
   color: 'var(--text-secondary)', cursor: 'pointer',
 };
 const textBtn: React.CSSProperties = {
-  padding: '6px 12px', fontSize: 12, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '6px 12px', fontSize: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer',
 };
 
@@ -134,7 +135,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
     <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
       {view === 'raw' ? (
         <pre style={{
-          margin: 0, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+          margin: 0, padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
           background: 'var(--bg-elevated)', color: 'var(--text-primary)', overflowX: 'auto',
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: '0.78rem', lineHeight: 1.6, whiteSpace: 'pre-wrap',
         }}>
@@ -161,13 +162,13 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
             {specs.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.isPrimary ? '★ ' : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
+                {s.isPrimary ? <Icon source="★" size="1em" /> : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
               </option>
             ))}
           </Select>
         ) : (
           <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
-            {selected?.isPrimary ? '★ ' : ''}{selected?.goal || 'PRD'}
+            {selected?.isPrimary ? <Icon source="★" size="1em" /> : ''}{selected?.goal || 'PRD'}
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}> · {selected?.status}</span>
           </div>
         )}

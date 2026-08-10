@@ -496,6 +496,38 @@ export async function createProject(
   return project;
 }
 
+/** Create a durable unified Canvas session from the editor. */
+export async function createCreationSession(
+  secrets: vscode.SecretStorage,
+  prompt: string,
+): Promise<{ id: string; title: string; revision: number }> {
+  const result = await authed<{ session: { id: string; title: string; revision: number } }>(secrets, "/api/creation-sessions", {
+    method: "POST",
+    body: JSON.stringify({ title: prompt.trim().slice(0, 80) || "Untitled session", initialPrompt: prompt.trim() }),
+  });
+  if (!result?.session) throw new Error("not signed in");
+  return result.session;
+}
+
+
+export interface BfCreationSessionSummary {
+  id: string;
+  title: string;
+  revision: number;
+  lastActivityAt: string;
+  status?: "active" | "archived";
+  pinned?: boolean;
+  unread?: boolean;
+  collaboratorCount?: number;
+  preview?: { objects?: Array<{ status?: string }> } | null;
+}
+
+export async function listCreationSessions(secrets: vscode.SecretStorage): Promise<BfCreationSessionSummary[]> {
+  const result = await authed<{ sessions: BfCreationSessionSummary[] }>(secrets, "/api/creation-sessions?limit=50");
+  return result?.sessions ?? [];
+}
+
+
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
 const TASKS_TTL = 30_000;
 const taskCache = ttlCache<number, BfTask[]>(TASKS_TTL);
@@ -718,7 +750,10 @@ export async function appendBrainMessages(
  * Adopt a project onto a Brain chat (PATCH /api/brain/chats/:id) — used by the native
  * participant's self-heal: when the server reports the chat is `not-attached` but the
  * IDE has an active project, bind it so the NEXT turn trains that project's Evermind
- * (parity with the webview App's adopt-on-open). Best-effort; swallows errors.
+ * (parity with the webview App's adopt-on-open — see `adoptedProjectRef` in
+ * `webview/src/App.tsx`). Both are gated on the IDE having a project SELECTED: with no
+ * selection there is nothing to adopt and the chat stays global by design.
+ * Best-effort; swallows errors.
  */
 export async function updateBrainChatProject(
   secrets: vscode.SecretStorage,

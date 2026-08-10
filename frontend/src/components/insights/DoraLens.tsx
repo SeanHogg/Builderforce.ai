@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { insightsApi, type DoraInsights } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetricBar';
@@ -22,7 +23,7 @@ import { hrs, pct } from './format';
 type TierKey = 'elite' | 'high' | 'medium' | 'low';
 const TIER_ORDER: TierKey[] = ['elite', 'high', 'medium', 'low'];
 const TIER_COLOR: Record<TierKey, string> = {
-  elite: '#15803d', high: '#22c55e', medium: '#f59e0b', low: '#ef4444',
+  elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: 'var(--error)',
 };
 
 // ── DORA tier classification (index 0=Elite … 3=Low) ─────────────────────────
@@ -48,9 +49,10 @@ function tierMttr(h: number): number {
 }
 
 export function DoraLens() {
+  const { currentProjectId } = useProjectScope();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days), [days]);
+  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -78,7 +80,7 @@ export function DoraLens() {
   const trendLabels = series.map((p) => p.bucketStart.slice(5)); // MM-DD
   const trendSeries: TrendSeries[] = [
     { key: 'deploy', label: t('dora.deployFreq'), color: TIER_COLOR.elite, values: series.map((p) => score(p.totalDeployments > 0 ? tierDeployFreq(p.deploymentFrequencyPerDay) : null)) },
-    { key: 'lead', label: t('dora.leadTime'), color: '#2563eb', values: series.map((p) => score(p.leadTimeHours != null ? tierLeadTime(p.leadTimeHours) : null)) },
+    { key: 'lead', label: t('dora.leadTime'), color: 'var(--info)', values: series.map((p) => score(p.leadTimeHours != null ? tierLeadTime(p.leadTimeHours) : null)) },
     { key: 'cfr', label: t('dora.cfr'), color: TIER_COLOR.medium, values: series.map((p) => score(p.changeFailureRatePct != null ? tierCfr(p.changeFailureRatePct) : null)) },
     { key: 'mttr', label: t('dora.mttr'), color: TIER_COLOR.low, values: series.map((p) => score(p.mttrHours != null ? tierMttr(p.mttrHours) : null)) },
   ];
@@ -105,9 +107,9 @@ export function DoraLens() {
             <span
               aria-label={t('dora.tierAria')}
               style={{
-                fontSize: '0.76rem', fontWeight: 700, color: '#fff',
+                fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-on-accent)',
                 background: overall ? TIER_COLOR[overall] : 'var(--text-muted)',
-                padding: '2px 10px', borderRadius: 999,
+                padding: '2px 10px', borderRadius: 'var(--radius-full)',
               }}
             >
               {overall ? t(`dora.tier.${overall}`) : '—'}
@@ -138,8 +140,8 @@ export function DoraLens() {
             // share column carry the number; suppress the redundant value column.
             formatValue={() => ''}
             segments={[
-              { key: 'failed', label: t('dora.failed'), value: cfr, color: '#ef4444' },
-              { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: '#22c55e' },
+              { key: 'failed', label: t('dora.failed'), value: cfr, color: 'var(--error-text)' },
+              { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: 'var(--success-text)' },
             ]}
           />
         )}

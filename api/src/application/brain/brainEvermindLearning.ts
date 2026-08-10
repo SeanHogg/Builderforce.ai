@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * brainEvermindLearning — make a project-scoped Brain conversation TRAIN the
  * project's Evermind, not just agent runs.
@@ -182,7 +183,9 @@ export async function dispatchBrainLearn(
   // the others or the reply.
   await Promise.all(
     gate.contributedProjectIds.map((pid) =>
-      dispatchProjectEvermindLearnText(env, tenantId, pid, gate.assistant!, undefined, prompt).catch(() => { /* per-target best-effort */ }),
+      dispatchProjectEvermindLearnText(env, tenantId, pid, gate.assistant!, undefined, prompt).catch((error) => { /* per-target best-effort */ 
+        reportCaughtError(error, { source: "application/brain/brainEvermindLearning.ts", operation: "dispatchBrainLearn" });
+      }),
     ),
   );
 }
@@ -209,6 +212,8 @@ export async function learnFromPersistedTurns(
   const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, inserted).catch(
     () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, contributedProjectIds: [], assistant: null }),
   );
-  schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch(() => { /* never fail the write */ }));
+  schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch((error) => { /* never fail the write */ 
+    reportCaughtError(error, { source: "application/brain/brainEvermindLearning.ts", operation: "learnFromPersistedTurns" });
+  }));
   return gate.outcome;
 }

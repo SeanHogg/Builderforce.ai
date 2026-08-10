@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Optional KV-backed cache for API-key → tenant resolution.
  *
@@ -86,8 +87,10 @@ export async function resolveKeyCached(
       });
       return cached as ResolvedKey;
     }
-  } catch {
+  } catch (error) {
     // KV read errors should never fail the request — fall through to DB.
+  
+    reportCaughtError(error, { source: "infrastructure/auth/keyResolutionCache.ts", operation: "resolveKeyCached" });
   }
 
   const fresh = await loader();
@@ -109,8 +112,10 @@ export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk' | 'jwt
   const cacheKey = `auth:${keyType}:${hash}`;
   try {
     await kv.put(cacheKey, JSON.stringify({ revoked: true }), { expirationTtl: TOMBSTONE_TTL_SECONDS });
-  } catch {
+  } catch (error) {
     // Cache invalidation failures degrade to "wait for the existing TTL to expire" — acceptable.
+  
+    reportCaughtError(error, { source: "infrastructure/auth/keyResolutionCache.ts", operation: "invalidateKeyCache" });
   }
 }
 

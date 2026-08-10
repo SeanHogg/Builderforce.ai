@@ -2,6 +2,29 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.119] — One composer, one menu — the editor and the web app now match
+
+- **Memory, Consolidate and Fork have moved into the `/` menu.** They used to be three permanent pills in the composer's button row, inert for most of a chat's life, sitting between the mode controls and Send — on a narrow side panel they crowded out the send button itself. In the menu each one has room to say what it actually does, and the two that need a real conversation behind them now explain *why* they are unavailable instead of just greying out.
+- **Memory no longer disappears when a chat has no project behind it.** It used to vanish from the row entirely, which reads as a bug; now it stays put and tells you to link the chat to a project first.
+- **The editor composer and the web composer are now the same control**, top to bottom: same `/` menu contents, same order, same plan chip beside the send button. A change to either one can no longer leave the other behind.
+
+## [2026.7.117] — Change model shows the same list wherever you open it
+
+- **The Sessions-view / command-palette "Change model" picker now offers exactly what the composer's `/` menu does** — same rows, same order (cheapest first: Free → Plan → Paid → your own connected accounts → your saved LLM configs), and the same one-line answer to who gets billed for each. The two pickers used to be built separately, so they grouped models differently, named the same connected provider differently, and worded "who pays" differently while reading the same account. Both are now rendered from one list.
+- **The picker is now translated** (Chinese, Spanish, French, German), including the "add a card" / "upgrade" rows when premium is locked. It used to be English-only.
+
+## [2026.7.115] — Pick your model from the composer, without leaving the chat
+
+- **The model now lives in the `/` menu, next to Effort and Thinking.** The composer used to carry a separate chip that only told you the model's name; changing it threw you into a VS Code quick-pick, and the panel could never show you what was actually on offer. Now the `/` control names the model in use right on the button, and opening it gives you the full list — searchable, filtered by who pays (Free, Plan, Paid, BYO, your saved LLM configs) — with the funding line on every row, so you can see that a pick is billed to your own connected account rather than your plan allowance before you make it. The old chip is gone; **Change model** remains in the Sessions view overflow and the command palette.
+- **"Auto" now tells you what auto actually chose.** Previously an auto-routed chat just said "Auto" — it never named the model the gateway resolved for it, including a project's own Evermind model, which was reported as a metered premium model it is not.
+- **The `/` menu is now the same control on the web and in the editor**, so a change to either one can no longer leave the other behind.
+
+## [2026.7.109] — The Evermind panel is now tabbed, and you can send its diagnostics to someone
+
+- **The Evermind panel's four jobs are now four tabs — Teach, Test, Check and Maintain.** They used to be stacked one under the other, which turned the sidebar into a scroll marathon: "Replace the model" sat a page and a half below the state it was meant to repair. Each tab is now one job, and the things that are always true — the version, what it has learned, whether it is serving replies, and any quarantine warning — stay pinned above the tabs, so you can never replace a model without seeing why it stopped working. Arrow keys move between tabs.
+- **New: Copy diagnostics.** When the model produces nonsense there was no way to hand the evidence to anyone — a screenshot loses the exact output, which is the whole point. One button (in the panel header, and again under Maintain) copies the full picture as text you can paste to support or an AI assistant: the model's state, every Evermind under the project, the last test-bench run *with its raw output verbatim* and the reason it was refused, the last knowledge check, and the tail of the learn log. It works even when the panel failed to load — that failure is often exactly what needs sending.
+- **A failed readiness check and outstanding knowledge findings now follow you between tabs**, marked on the tab itself, and your results stay put when you switch away and back — so a knowledge check you paid frontier tokens for is never thrown away by a tab click.
+
 ## [2026.7.67] — Keep typing while the assistant works — your follow-ups now wait their turn
 
 - **You no longer have to sit on your hands while a run is going.** Previously, once the assistant started working the composer went read-only — anything you typed was ignored until it finished, so a follow-up thought had to wait (and was easy to lose). Now you can keep composing and send while a run is in flight: your message joins a queue and goes out automatically the moment the current run finishes. Queue several and they send one at a time, each as its own turn, so you can line up "then do X, then check Y" without babysitting the run. Queued messages show as removable chips above the box, so you can see exactly what's pending and cancel anything you change your mind about before it sends.

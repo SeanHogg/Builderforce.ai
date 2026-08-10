@@ -59,7 +59,7 @@ describe('navigate_to', () => {
     const { ctx, navigate } = makeCtx();
     const nav = buildPlatformActions(ctx).find((a) => a.name === 'navigate_to')!;
     await nav.run({ page: 'ide_project', id: 42, query: 'chat=9' });
-    expect(navigate).toHaveBeenCalledWith('/ide/42?chat=9');
+    expect(navigate).toHaveBeenCalledWith('/create/build/42?chat=9');
   });
 
   it('resolves the project task board to the scoped Tasks tab (not the IDE redirect)', async () => {
@@ -91,15 +91,15 @@ describe('open_project', () => {
     const { ctx, navigate } = makeCtx();
     const open = buildPlatformActions(ctx).find((a) => a.name === 'open_project')!;
     const res = await open.run({ id: 5 });
-    expect(navigate).toHaveBeenCalledWith('/ide/5');
-    expect(res).toEqual({ opened: '/ide/5' });
+    expect(navigate).toHaveBeenCalledWith('/create/build/5');
+    expect(res).toEqual({ opened: '/create/build/5' });
   });
 
   it('carries a chat id into the IDE when given', async () => {
     const { ctx, navigate } = makeCtx();
     const open = buildPlatformActions(ctx).find((a) => a.name === 'open_project')!;
     await open.run({ id: 5, chatId: 9 });
-    expect(navigate).toHaveBeenCalledWith('/ide/5?chat=9');
+    expect(navigate).toHaveBeenCalledWith('/create/build/5?chat=9');
   });
 
   it('errors without a project id', async () => {

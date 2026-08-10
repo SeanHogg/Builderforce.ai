@@ -1,0 +1,1131 @@
+product	source_table	domain	move	target
+BF	discount_codes	Finance	merged	(folded into a sibling)
+BF	discount_redemptions	Finance	keep	discount_redemptions
+BF	report_subscriptions	Platform & observability	primitive	connection
+BF	cost_calculations	Finance	keep	cost_calculations
+BF	webhook_subscriptions	Integrations	primitive	connection
+BF	budgets	Finance	keep	budgets
+BF	rd_financials_quarterly	Finance	flatten	metric_fact + a scheduled rollup
+BF	rd_revenue_quarterly	Finance	merged	(folded into a sibling)
+BF	freelancer_invoices	Commerce	primitive	ledger_entry
+BF	chat_messages	Platform & observability	primitive	message
+BF	chat_memories	Agents & runtime	keep	chat_memories
+BF	brain_chats	Canvas & ideas	primitive	thread
+BF	chat_read_state	Platform & observability	merged	(folded into a sibling)
+BF	chat_ticket_links	Platform & observability	primitive	share_link
+BF	brain_chat_messages	Canvas & ideas	primitive	message
+BF	team_memory	Identity & tenancy	keep	team_memory
+BF	marketplace_knowledge	Commerce	keep	marketplace_knowledge
+BF	knowledge_listing_purchases	Support & knowledge	primitive	ledger_entry
+BF	knowledge_documents	Support & knowledge	session	creation_session + live session
+BF	knowledge_document_versions	Support & knowledge	primitive	revision
+BF	knowledge_document_tags	Support & knowledge	primitive	annotation
+BF	knowledge_acknowledgements	Support & knowledge	keep	knowledge_acknowledgements
+BF	knowledge_document_collaborators	Support & knowledge	primitive	membership
+BF	facts	Agents & runtime	keep	facts
+BF	freelancer_conversations	Commerce	primitive	thread
+BF	freelancer_messages	Commerce	primitive	message
+BF	email_preferences	Growth & marketing	primitive	setting
+BF	newsletter_subscribers	Growth & marketing	primitive	membership
+BF	newsletter_templates	Growth & marketing	primitive	catalog_item
+BF	newsletter_events	Growth & marketing	primitive	event_log
+BF	time_entries	Delivery & work	keep	time_entries
+BF	activity_log	Platform & observability	primitive	event_log
+BF	email_verification_codes	Growth & marketing	merged	(folded into a sibling)
+BF	contributors	Delivery & work	keep	contributors
+BF	contributor_identities	Delivery & work	keep	contributor_identities
+BF	activity_events	Platform & observability	primitive	event_log
+BF	contributor_daily_metrics	Delivery & work	primitive	metric_fact
+BF	contributor_merges	Delivery & work	keep	contributor_merges
+BF	dev_teams	Delivery & work	keep	dev_teams
+BF	teams	Identity & tenancy	merged	(folded into a sibling)
+BF	team_velocity	Identity & tenancy	merged	(folded into a sibling)
+BF	ceremony_participants	Delivery & work	primitive	membership
+BF	ceremony_schedules	Delivery & work	primitive	setting
+BF	meetings	Platform & observability	session	creation_session + live session
+BF	meeting_attendees	Platform & observability	primitive	membership
+BF	calendar_connections	Integrations	primitive	connection
+BF	poker_stories	Delivery & work	keep	poker_stories
+BF	poker_votes	Delivery & work	primitive	annotation
+BF	retrospectives	Delivery & work	merged	(folded into a sibling)
+BF	retro_items	Delivery & work	keep	retro_items
+BF	customer_feedback	Support & knowledge	keep	customer_feedback
+BF	uptime_samples	Platform & observability	primitive	metric_fact
+BF	freelancer_engagements	Commerce	keep	freelancer_engagements
+BF	activity_signals	Growth & marketing	keep	activity_signals
+BF	timecard_entries	Finance	keep	timecard_entries
+BF	timecards	Finance	keep	timecards
+BF	freelancer_notifications	Commerce	primitive	webhook
+BF	pulse_surveys	People & HR	primitive	question_set
+BF	pulse_responses	People & HR	primitive	response
+BF	coaching_notes	People & HR	primitive	annotation
+BF	feedback_collectors	Support & knowledge	keep	feedback_collectors
+BF	feedback_submissions	Support & knowledge	primitive	response
+BF	rehearsals	Delivery & work	keep	rehearsals
+BF	rehearsal_steps	Delivery & work	primitive	run
+BF	creation_sessions	Canvas & ideas	keep	creation_sessions
+BF	creation_session_objects	Canvas & ideas	keep	creation_session_objects
+BF	creation_session_timeline	Canvas & ideas	primitive	event_log
+BF	creation_session_connections	Canvas & ideas	primitive	connection
+BF	creation_session_members	Canvas & ideas	primitive	membership
+BF	creation_session_invites	Canvas & ideas	primitive	invitation
+BF	creation_session_snapshots	Canvas & ideas	primitive	snapshot
+BF	creation_session_events	Canvas & ideas	primitive	event_log
+BF	creation_outcome_events	Canvas & ideas	primitive	event_log
+BF	creation_session_comments	Canvas & ideas	primitive	annotation
+BF	creation_session_project_links	Canvas & ideas	primitive	share_link
+BF	creation_session_templates	Canvas & ideas	primitive	catalog_item
+BF	creation_session_claims	Canvas & ideas	keep	creation_session_claims
+BF	marketplace_purchases	Commerce	primitive	ledger_entry
+BF	access_reviews	Governance & security	primitive	annotation
+BF	deliverable_updates	Delivery & work	merged	(folded into a sibling)
+BF	demo_events	Platform & observability	primitive	event_log
+BF	sales_leads	Revenue & CRM	merged	marketing_leads
+BF	business_contacts	Revenue & CRM	keep	business_contacts
+BF	support_tickets	Support & knowledge	keep	support_tickets
+BF	deck_templates	Investor & portfolio	primitive	catalog_item
+BF	generated_decks	Commerce	keep	generated_decks
+BF	freelancer_profiles	Commerce	primitive	party_role
+BF	deliverable_proposals	Delivery & work	keep	deliverable_proposals
+BF	freelancer_reviews	Commerce	primitive	annotation
+BF	rfp_requests	Platform & observability	merged	(folded into a sibling)
+BF	rfp_responses	Platform & observability	primitive	response
+BF	catalog_adoption_events	Platform & observability	primitive	event_log
+BF	sales_contacts	Revenue & CRM	keep	sales_contacts
+BF	sales_campaigns	Revenue & CRM	merged	marketing_campaigns
+BF	sales_weekly_goals	Revenue & CRM	primitive	work_item
+BF	sales_coaching_notes	Revenue & CRM	primitive	annotation
+BF	sales_canvas_sessions	Revenue & CRM	merged	(folded into a sibling)
+BF	sales_commission_rules	Revenue & CRM	primitive	ledger_entry
+BF	sales_associate_settings	Revenue & CRM	primitive	setting
+BF	sales_referrals	Revenue & CRM	keep	sales_referrals
+BF	release_notes	Delivery & work	primitive	annotation
+BF	api_error_log	Platform & observability	primitive	event_log
+BF	deployment_events	Delivery & work	primitive	event_log
+BF	report_schedules	Platform & observability	primitive	setting
+BF	security_incidents	Governance & security	keep	security_incidents
+BF	mvp_scenarios	Investor & portfolio	keep	mvp_scenarios
+BF	validation_results	Investor & portfolio	primitive	response
+BF	product_releases	Investor & portfolio	keep	product_releases
+BF	changelog_entries	Platform & observability	keep	changelog_entries
+BF	vulnerability_scans	Governance & security	keep	vulnerability_scans
+BF	vulnerability_findings	Governance & security	keep	vulnerability_findings
+BF	qa_journey_events	Delivery & work	primitive	event_log
+BF	qa_flows	Delivery & work	keep	qa_flows
+BF	qa_tests	Delivery & work	keep	qa_tests
+BF	qa_targets	Delivery & work	keep	qa_targets
+BF	qa_credentials	Delivery & work	primitive	credential
+BF	qa_explorations	Delivery & work	keep	qa_explorations
+BF	qa_findings	Delivery & work	keep	qa_findings
+BF	qa_routing_settings	Delivery & work	primitive	setting
+BF	qa_schedules	Delivery & work	primitive	setting
+BF	repo_branches	Delivery & work	keep	repo_branches
+BF	pull_requests	Platform & observability	merged	(folded into a sibling)
+BF	pr_reconciliation_runs	Delivery & work	primitive	run
+BF	pr_reconciliation_items	Delivery & work	keep	pr_reconciliation_items
+BF	pr_reconciliation_errors	Delivery & work	keep	pr_reconciliation_errors
+BF	repo_analysis_evidence	Delivery & work	keep	repo_analysis_evidence
+BF	prod_incidents	Delivery & work	keep	prod_incidents
+BF	on_call_rotations	Delivery & work	keep	on_call_rotations
+BF	escalation_policies	Delivery & work	primitive	setting
+BF	escalation_levels	Delivery & work	keep	escalation_levels
+BF	monitors	Agents & runtime	keep	monitors
+BF	monitor_events	Agents & runtime	primitive	event_log
+BF	incident_events	Delivery & work	primitive	event_log
+BF	error_collectors	Platform & observability	keep	error_collectors
+BF	error_collector_integrations	Platform & observability	primitive	connection
+BF	error_mapping_rules	Platform & observability	primitive	setting
+BF	error_groups	Platform & observability	keep	error_groups
+BF	error_events	Platform & observability	primitive	event_log
+BF	alerts	Platform & observability	primitive	webhook
+BF	alert_events	Platform & observability	primitive	event_log
+BF	drive_connections	Integrations	primitive	connection
+BF	privacy_requests	Governance & security	merged	(folded into a sibling)
+BF	source_control_integrations	Platform & observability	primitive	connection
+BF	security_ticket_access	Governance & security	primitive	membership
+BF	security_audits	Governance & security	keep	security_audits
+BF	approvals	Delivery & work	keep	approvals
+BF	approval_rules	Delivery & work	primitive	setting
+BF	admin_audit_log	Growth & marketing	primitive	event_log
+BF	soc_controls	Governance & security	keep	soc_controls
+BF	soc_evidence	Governance & security	keep	soc_evidence
+BF	pii_data_assets	Governance & security	keep	pii_data_assets
+BF	security_dpas	Governance & security	keep	security_dpas
+BF	compliance_events	Governance & security	primitive	event_log
+BF	data_subject_requests	Governance & security	merged	(folded into a sibling)
+BF	data_suppression_list	Growth & marketing	keep	data_suppression_list
+BF	feature_flags	Platform & observability	primitive	annotation
+BF	business_value_configs	Platform & observability	primitive	setting
+BF	feature_roi	Platform & observability	merged	(folded into a sibling)
+BF	feature_scores	Platform & observability	primitive	metric_fact
+BF	ticket_audits	Support & knowledge	keep	ticket_audits
+BF	ai_tool_adoption	Agents & runtime	merged	(folded into a sibling)
+BF	industry_benchmarks	Platform & observability	primitive	metric_fact
+BF	saved_queries	Revenue & CRM	merged	(folded into a sibling)
+BF	lens_snapshots	Platform & observability	primitive	snapshot
+BF	forecast_anomaly_acks	Finance	keep	forecast_anomaly_acks
+BF	policy_packs	Governance & security	primitive	catalog_item
+BF	policy_gates	Governance & security	keep	policy_gates
+BF	site_traffic_daily	Growth & marketing	flatten	metric_fact + a scheduled rollup
+BF	site_collections	Growth & marketing	keep	site_collections
+BF	site_records	Growth & marketing	keep	site_records
+BF	marketing_sender_identities	Growth & marketing	keep	marketing_sender_identities
+BF	marketing_audiences	Growth & marketing	keep	marketing_audiences
+BF	marketing_audience_members	Growth & marketing	primitive	membership
+BF	marketing_suppressions	Growth & marketing	merged	(folded into a sibling)
+BF	marketing_templates	Growth & marketing	primitive	catalog_item
+BF	marketing_assets	Growth & marketing	keep	marketing_assets
+BF	marketing_campaigns	Growth & marketing	keep	marketing_campaigns
+BF	marketing_campaign_sends	Growth & marketing	primitive	webhook
+BF	users	Identity & tenancy	keep	users
+BF	legal_documents	Governance & security	session	creation_session + live session
+BF	legal_document_versions	Governance & security	primitive	revision
+BF	user_legal_acceptances	Identity & tenancy	merged	(folded into a sibling)
+BF	user_mfa_recovery_codes	Identity & tenancy	merged	(folded into a sibling)
+BF	auth_user_sessions	Identity & tenancy	keep	auth_user_sessions
+BF	auth_tokens	Identity & tenancy	primitive	share_link
+BF	developer_api_keys	Platform & observability	primitive	credential
+BF	tenant_api_keys	Identity & tenancy	primitive	credential
+BF	tenant_mcp_extensions	Identity & tenancy	merged	(folded into a sibling)
+BF	tenants	Identity & tenancy	keep	tenants
+BF	segments	Identity & tenancy	keep	segments
+BF	tenant_members	Identity & tenancy	primitive	membership
+BF	tenant_invitations	Identity & tenancy	primitive	invitation
+BF	tenant_manager_defaults	Identity & tenancy	primitive	setting
+BF	member_profiles	Identity & tenancy	primitive	party_role
+BF	member_metrics_period	Identity & tenancy	keep	member_metrics_period
+BF	tenant_skill_assignments	Identity & tenancy	primitive	membership
+BF	chat_sessions	Identity & tenancy	session	creation_session + live session
+BF	chat_members	Platform & observability	primitive	membership
+BF	oauth_accounts	Identity & tenancy	primitive	connection
+BF	magic_link_tokens	Platform & observability	primitive	share_link
+BF	dev_team_members	Delivery & work	primitive	membership
+BF	team_members	Identity & tenancy	primitive	membership
+BF	admin_impersonation_sessions	Growth & marketing	keep	admin_impersonation_sessions
+BF	admin_impersonation_role_switches	Growth & marketing	keep	admin_impersonation_role_switches
+BF	role_permission_overrides	Identity & tenancy	primitive	relation
+BF	tenant_custom_roles	Identity & tenancy	merged	(folded into a sibling)
+BF	platform_modules	Platform & observability	merged	(folded into a sibling)
+BF	tenant_member_modules	Identity & tenancy	keep	tenant_member_modules
+BF	user_permission_overrides	Identity & tenancy	primitive	relation
+BF	ceremony_sessions	Delivery & work	session	creation_session + live session
+BF	meeting_transcript_segments	Canvas & ideas	keep	meeting_transcript_segments
+BF	user_availability	Identity & tenancy	merged	(folded into a sibling)
+BF	poker_sessions	Delivery & work	session	creation_session + live session
+BF	import_staged_users	Integrations	primitive	sync_state
+BF	device_authorizations	Governance & security	keep	device_authorizations
+BF	vscode_connections	Platform & observability	primitive	connection
+BF	tenant_models	Identity & tenancy	merged	(folded into a sibling)
+BF	marketing_sessions	Growth & marketing	primitive	metric_fact
+BF	on_call_members	Platform & observability	primitive	membership
+BF	error_group_users	Platform & observability	merged	(folded into a sibling)
+BF	tenant_benchmark_profiles	Identity & tenancy	primitive	party_role
+BF	member_personas	Identity & tenancy	merged	(folded into a sibling)
+BF	tenant_llm_provider_keys	Identity & tenancy	primitive	credential
+BF	tenant_openrouter_connections	Identity & tenancy	primitive	connection
+BF	llm_usage_log	Agents & runtime	primitive	event_log
+BF	llm_failover_log	Agents & runtime	primitive	event_log
+BF	llm_health_probes	Agents & runtime	keep	llm_health_probes
+BF	llm_traces	Agents & runtime	keep	llm_traces
+BF	pending_prompts	Agents & runtime	keep	pending_prompts
+BF	platform_personas	Platform & observability	keep	platform_personas
+BF	brain_chat_trace	Canvas & ideas	keep	brain_chat_trace
+BF	prompt_library_entries	Canvas & ideas	keep	prompt_library_entries
+BF	prompt_library_versions	Canvas & ideas	primitive	revision
+BF	prompt_library_stars	Canvas & ideas	merged	(folded into a sibling)
+BF	security_vendors	Governance & security	keep	security_vendors
+BF	security_trainings	Governance & security	keep	security_trainings
+BF	personality_events	Platform & observability	primitive	event_log
+BF	trait_reinforcements	People & HR	keep	trait_reinforcements
+BF	marketplace_personas	Commerce	merged	(folded into a sibling)
+BF	knowledge_training_assignments	Support & knowledge	primitive	membership
+BF	proposal_evaluations	Revenue & CRM	keep	proposal_evaluations
+BF	ide_datasets	Agents & runtime	keep	ide_datasets
+BF	ide_training_jobs	Agents & runtime	primitive	run
+BF	ide_training_logs	Agents & runtime	primitive	event_log
+BF	mailbox_connections	Integrations	primitive	connection
+BF	ingestion_usage_log	Platform & observability	primitive	event_log
+BF	email_delivery_failures	Growth & marketing	keep	email_delivery_failures
+BF	integration_credentials	Integrations	primitive	credential
+BF	integration_sync_logs	Integrations	primitive	event_log
+BF	import_staged_items	Integrations	primitive	sync_state
+BF	import_type_mappings	Integrations	primitive	relation
+BF	webhook_deliveries	Integrations	primitive	webhook
+BF	studio_voice_clones	Canvas & ideas	primitive	artifact
+BF	studio_voice_clone_licenses	Canvas & ideas	primitive	artifact
+BF	studio_voiceovers	Canvas & ideas	primitive	artifact
+BF	innovation_ideas	Investor & portfolio	keep	innovation_ideas
+BF	outbound_fetch_log	Platform & observability	primitive	event_log
+BF	connectors	Integrations	keep	connectors
+BF	connector_connections	Integrations	primitive	connection
+BF	connector_call_logs	Integrations	primitive	event_log
+BF	portfolios	Delivery & work	primitive	work_item
+BF	initiatives	Delivery & work	primitive	work_item
+BF	objectives	Canvas & ideas	primitive	work_item
+BF	objective_links	Canvas & ideas	primitive	share_link
+BF	key_results	Delivery & work	primitive	work_item
+BF	pmo_dependencies	Delivery & work	primitive	relation
+BF	capacity_planning	Delivery & work	keep	capacity_planning
+BF	allocation_goals	Platform & observability	primitive	work_item
+BF	headcount_events	People & HR	primitive	event_log
+BF	open_positions	Hiring	keep	open_positions
+BF	ai_program_initiatives	Agents & runtime	keep	ai_program_initiatives
+BF	rd_fte_allocation_quarterly	Finance	merged	(folded into a sibling)
+BF	marketplace_skills	Commerce	keep	marketplace_skills
+BF	marketplace_skill_likes	Commerce	primitive	annotation
+BF	artifact_likes	Canvas & ideas	primitive	annotation
+BF	managed_agent_host_requests	Platform & observability	merged	(folded into a sibling)
+BF	manager_directives	Agents & runtime	keep	manager_directives
+BF	manager_actions	Agents & runtime	keep	manager_actions
+BF	manager_stall_watch	Agents & runtime	keep	manager_stall_watch
+BF	manager_systemic_findings	Agents & runtime	keep	manager_systemic_findings
+BF	agents	Agents & runtime	keep	agents
+BF	agent_registrations	Agents & runtime	primitive	connection
+BF	ide_agents	Agents & runtime	keep	ide_agents
+BF	skills	Agents & runtime	keep	skills
+BF	agent_hosts	Agents & runtime	keep	agent_hosts
+BF	executions	Agents & runtime	primitive	run
+BF	execution_lifecycle_outbox	Agents & runtime	keep	execution_lifecycle_outbox
+BF	execution_messages	Agents & runtime	primitive	message
+BF	agent_host_skill_assignments	Agents & runtime	primitive	membership
+BF	artifact_assignments	Canvas & ideas	primitive	membership
+BF	agent_assignments	Agents & runtime	primitive	membership
+BF	agent_purchases	Agents & runtime	primitive	ledger_entry
+BF	agent_feedback	Agents & runtime	keep	agent_feedback
+BF	agent_host_directories	Agents & runtime	keep	agent_host_directories
+BF	agent_host_directory_files	Agents & runtime	keep	agent_host_directory_files
+BF	workflows	Agents & runtime	keep	workflows
+BF	workflow_definitions	Agents & runtime	primitive	catalog_item
+BF	workflow_triggers	Agents & runtime	keep	workflow_triggers
+BF	usage_snapshots	Finance	primitive	snapshot
+BF	tool_audit_events	Agents & runtime	primitive	event_log
+BF	telemetry_spans	Agents & runtime	keep	telemetry_spans
+BF	cron_jobs	Platform & observability	primitive	run
+BF	agent_memory	Agents & runtime	keep	agent_memory
+BF	qa_runs	Delivery & work	primitive	run
+BF	qa_run_steps	Delivery & work	primitive	run
+BF	ticket_runs	Support & knowledge	primitive	run
+BF	job_roles	Hiring	keep	job_roles
+BF	import_runs	Integrations	primitive	run
+BF	run_model_outcomes	Agents & runtime	keep	run_model_outcomes
+BF	repo_analysis_runs	Delivery & work	primitive	run
+BF	repo_analysis_artifacts	Delivery & work	keep	repo_analysis_artifacts
+BF	agent_dispatches	Agents & runtime	primitive	webhook
+BF	tool_runs	Agents & runtime	primitive	run
+BF	marketing_tool_runs	Growth & marketing	primitive	run
+BF	job_postings	Hiring	keep	job_postings
+BF	job_proposals	Hiring	keep	job_proposals
+BF	execution_rollbacks	Agents & runtime	keep	execution_rollbacks
+BF	agent_inference_logs	Agents & runtime	primitive	event_log
+BF	agent_knowledge_chunks	Agents & runtime	keep	agent_knowledge_chunks
+BF	resource_leases	Agents & runtime	keep	resource_leases
+BF	coordination_notes	Platform & observability	primitive	annotation
+BF	project_insight_events	Delivery & work	primitive	event_log
+BF	projects	Delivery & work	keep	projects
+BF	project_sites	Delivery & work	keep	project_sites
+BF	tasks	Delivery & work	primitive	work_item
+BF	task_reviews	Delivery & work	primitive	annotation
+BF	work_deltas	Delivery & work	keep	work_deltas
+BF	project_manager_configs	Delivery & work	primitive	setting
+BF	task_status_transitions	Delivery & work	primitive	event_log
+BF	project_agents	Delivery & work	merged	(folded into a sibling)
+BF	agent_host_projects	Agents & runtime	flatten	a column, array or JSONB key
+BF	agent_host_sync_history	Agents & runtime	primitive	event_log
+BF	specs	Delivery & work	keep	specs
+BF	task_specs	Delivery & work	merged	(folded into a sibling)
+BF	workflow_tasks	Agents & runtime	keep	workflow_tasks
+BF	ide_projects	Agents & runtime	keep	ide_projects
+BF	project_memories	Delivery & work	merged	(folded into a sibling)
+BF	team_projects	Identity & tenancy	flatten	a column, array or JSONB key
+BF	project_facts	Delivery & work	merged	(folded into a sibling)
+BF	roadmap_items	Delivery & work	primitive	work_item
+BF	sprints	Delivery & work	keep	sprints
+BF	task_dependencies	Delivery & work	primitive	relation
+BF	boards	Delivery & work	keep	boards
+BF	swimlanes	Delivery & work	keep	swimlanes
+BF	swimlane_agent_assignments	Delivery & work	primitive	membership
+BF	swimlane_transitions	Delivery & work	primitive	event_log
+BF	kanban_templates	Delivery & work	primitive	catalog_item
+BF	kanban_template_lanes	Delivery & work	merged	(folded into a sibling)
+BF	kanban_template_lane_requirements	Delivery & work	keep	kanban_template_lane_requirements
+BF	swimlane_requirements	Delivery & work	merged	(folded into a sibling)
+BF	project_role_assignments	Delivery & work	primitive	membership
+BF	ticket_role_signoffs	Support & knowledge	keep	ticket_role_signoffs
+BF	ticket_participants	Support & knowledge	primitive	membership
+BF	board_connections	Delivery & work	primitive	connection
+BF	external_ticket_links	Integrations	primitive	share_link
+BF	board_sync_outbox	Delivery & work	primitive	sync_state
+BF	board_type_mappings	Delivery & work	primitive	relation
+BF	import_staged_projects	Integrations	primitive	sync_state
+BF	spec_versions	Delivery & work	primitive	revision
+BF	spec_audit_records	Delivery & work	keep	spec_audit_records
+BF	project_repositories	Delivery & work	keep	project_repositories
+BF	project_evermind	Delivery & work	merged	(folded into a sibling)
+BF	prod_incident_implicated_tasks	Delivery & work	keep	prod_incident_implicated_tasks
+BF	monitoring_boards	Platform & observability	keep	monitoring_boards
+BF	saved_dashboards	Revenue & CRM	merged	(folded into a sibling)
+BF	dashboard_widgets	Platform & observability	keep	dashboard_widgets
+BF	dashboard_pins	Platform & observability	keep	dashboard_pins
+BF	delay_reasons	Delivery & work	merged	(folded into a sibling)
+BF	task_file_changes	Delivery & work	keep	task_file_changes
+BF	project_secrets	Delivery & work	primitive	credential
+BF	project_backends	Delivery & work	merged	(folded into a sibling)
+BF	project_game_targets	Delivery & work	keep	project_game_targets
+BF	project_backend_requests	Delivery & work	merged	(folded into a sibling)
+BF	challenges	Governance & security	keep	challenges
+HV	impersonation_sessions	Identity & tenancy	merged	(folded into a sibling)
+HV	impersonation_role_switches	Identity & tenancy	merged	(folded into a sibling)
+HV	modules	Investor & portfolio	keep	modules
+HV	user_module_assignments	Identity & tenancy	primitive	membership
+HV	user_plan_overrides	Identity & tenancy	primitive	relation
+HV	boosts	Growth & marketing	keep	boosts
+HV	job_boosts	Hiring	merged	(folded into a sibling)
+HV	company_boosts	Identity & tenancy	merged	(folded into a sibling)
+HV	ad_campaigns	Growth & marketing	keep	ad_campaigns
+HV	ad_sets	Growth & marketing	keep	ad_sets
+HV	ads	Growth & marketing	keep	ads
+HV	enrichment_credits	Revenue & CRM	primitive	ledger_entry
+HV	enrichment_transactions	Revenue & CRM	primitive	ledger_entry
+HV	campaign_dollars_balance	Growth & marketing	primitive	ledger_entry
+HV	campaign_dollars_transactions	Growth & marketing	primitive	ledger_entry
+HV	career_resilience_reports	People & HR	merged	(folded into a sibling)
+HV	affiliate_profiles	Growth & marketing	primitive	party_role
+HV	affiliate_referrals	Growth & marketing	keep	affiliate_referrals
+HV	affiliate_conversions	Growth & marketing	primitive	revision
+HV	affiliate_payouts	Growth & marketing	primitive	ledger_entry
+HV	affiliate_tiers	Growth & marketing	primitive	catalog_item
+HV	affiliate_link_clicks	Growth & marketing	merged	(folded into a sibling)
+HV	ai_chat_sessions	Agents & runtime	session	creation_session + live session
+HV	ai_chat_messages	Agents & runtime	primitive	message
+HV	ai_usage_records	Agents & runtime	keep	ai_usage_records
+HV	user_token_balance	Identity & tenancy	primitive	ledger_entry
+HV	company_token_balance	Identity & tenancy	primitive	ledger_entry
+HV	token_pack_purchases	Platform & observability	primitive	ledger_entry
+HV	artifact_views	Canvas & ideas	session	creation_session + live session
+HV	profile_views	Platform & observability	session	creation_session + live session
+HV	activity_logs	Platform & observability	primitive	event_log
+HV	request_logs	Platform & observability	primitive	event_log
+HV	dashboard_metrics	Platform & observability	primitive	metric_fact
+HV	user_engagement_metrics	Identity & tenancy	primitive	metric_fact
+HV	notifications	Platform & observability	primitive	webhook
+HV	marketing_leads	Growth & marketing	keep	marketing_leads
+HV	api_keys	Platform & observability	primitive	credential
+HV	articles	Growth & marketing	session	creation_session + live session
+HV	article_versions	Growth & marketing	primitive	revision
+HV	article_engagement	Growth & marketing	primitive	metric_fact
+HV	article_claps	Growth & marketing	primitive	metric_fact
+HV	article_shares	Growth & marketing	primitive	share_link
+HV	partner_program_opt_ins	Commerce	keep	partner_program_opt_ins
+HV	partner_payout_periods	Commerce	primitive	ledger_entry
+HV	partner_payouts	Commerce	primitive	ledger_entry
+HV	partner_program_balances	Commerce	primitive	ledger_entry
+HV	skill_assessments	Agents & runtime	primitive	question_set
+HV	assessment_attempts	Hiring	primitive	run
+HV	assessment_runs	Hiring	primitive	run
+HV	assessment_dimension_norms	Hiring	flatten	an enum + CHECK
+HV	application_form_answers	Hiring	primitive	message
+HV	answer_cache	Agents & runtime	keep	answer_cache
+HV	subscription_plans	Finance	merged	billing_plans
+HV	subscriptions	Finance	primitive	connection
+HV	payment_methods	Finance	keep	payment_methods
+HV	invoices	Finance	primitive	ledger_entry
+HV	invoice_line_items	Finance	keep	invoice_line_items
+HV	refund_requests	Platform & observability	merged	(folded into a sibling)
+HV	billing_events	Finance	primitive	event_log
+HV	usage_records	Finance	primitive	ledger_entry
+HV	company_subscriptions	Identity & tenancy	primitive	connection
+HV	booking_offerings	Commerce	primitive	catalog_item
+HV	booking_availability_rules	Commerce	primitive	setting
+HV	booking_availability_overrides	Commerce	primitive	relation
+HV	booking_reservations	Commerce	keep	booking_reservations
+HV	booking_comments	Commerce	primitive	annotation
+HV	booking_payout_records	Commerce	primitive	ledger_entry
+HV	scheduled_events	Platform & observability	primitive	event_log
+HV	availability_slots	Identity & tenancy	keep	availability_slots
+HV	calibration_sessions	Identity & tenancy	session	creation_session + live session
+HV	calibration_submissions	Platform & observability	primitive	response
+HV	candidate_resumes	Hiring	keep	candidate_resumes
+HV	redaction_profiles	Platform & observability	primitive	party_role
+HV	candidate_resume_shares	Hiring	primitive	share_link
+HV	pitch_decks	Investor & portfolio	session	creation_session + live session
+HV	pitch_deck_candidates	Investor & portfolio	primitive	artifact
+HV	pitch_deck_shares	Investor & portfolio	primitive	share_link
+HV	coffee_requests	Platform & observability	merged	(folded into a sibling)
+HV	community_resources	Commerce	keep	community_resources
+HV	company_profiles	Identity & tenancy	primitive	party_role
+HV	company_embed_keys	Identity & tenancy	primitive	share_link
+HV	user_company_role_associations	Identity & tenancy	primitive	relation
+HV	company_followers	Identity & tenancy	primitive	membership
+HV	company_locations	Identity & tenancy	merged	(folded into a sibling)
+HV	company_team_members	Identity & tenancy	primitive	membership
+HV	company_views	Identity & tenancy	merged	(folded into a sibling)
+HV	employer_branding_pages	Growth & marketing	keep	employer_branding_pages
+HV	company_integrations	Identity & tenancy	primitive	connection
+HV	workspace_compliance_policy	Identity & tenancy	merged	(folded into a sibling)
+HV	workspace_email_safety_policy	Identity & tenancy	merged	(folded into a sibling)
+HV	email_push_subscriptions	Growth & marketing	primitive	connection
+HV	content_audiences	Growth & marketing	keep	content_audiences
+HV	content_locations	Growth & marketing	keep	content_locations
+HV	courses	People & HR	keep	courses
+HV	course_modules	People & HR	keep	course_modules
+HV	course_lessons	People & HR	keep	course_lessons
+HV	course_enrollments	People & HR	keep	course_enrollments
+HV	course_certificates	People & HR	keep	course_certificates
+HV	lms_connectors	People & HR	keep	lms_connectors
+HV	lms_course_publishes	People & HR	keep	lms_course_publishes
+HV	course_checkouts	People & HR	keep	course_checkouts
+HV	creator_youtube_ingests	Growth & marketing	keep	creator_youtube_ingests
+HV	creator_profiles	Platform & observability	primitive	party_role
+HV	portfolio_items	Delivery & work	keep	portfolio_items
+HV	promo_projects	Growth & marketing	keep	promo_projects
+HV	promo_project_revisions	Growth & marketing	primitive	revision
+HV	promo_project_extra_revision_purchases	Growth & marketing	primitive	ledger_entry
+HV	event_attendees	Growth & marketing	primitive	membership
+HV	event_co_hosts	Growth & marketing	session	creation_session + live session
+HV	event_waitlist	Growth & marketing	keep	event_waitlist
+HV	event_reminders_sent	Growth & marketing	keep	event_reminders_sent
+HV	event_matchmaking	Growth & marketing	keep	event_matchmaking
+HV	event_categories	Growth & marketing	keep	event_categories
+HV	extension_sessions	Identity & tenancy	keep	extension_sessions
+HV	extension_events	Identity & tenancy	primitive	event_log
+HV	inbox_profiles	Platform & observability	primitive	party_role
+HV	external_email_accounts	Integrations	primitive	connection
+HV	external_email_messages	Integrations	primitive	message
+HV	email_user_rules	Growth & marketing	primitive	setting
+HV	email_sync_runs	Growth & marketing	primitive	sync_state
+HV	feed_posts	Growth & marketing	keep	feed_posts
+HV	feed_post_likes	Growth & marketing	primitive	annotation
+HV	feed_comment_reactions	Growth & marketing	primitive	annotation
+HV	feed_post_comments	Growth & marketing	primitive	annotation
+HV	feed_post_reports	Growth & marketing	merged	(folded into a sibling)
+HV	feed_features	Growth & marketing	keep	feed_features
+HV	follow_up_sequences	Growth & marketing	merged	(folded into a sibling)
+HV	follow_up_steps	Growth & marketing	primitive	run
+HV	follow_up_enrollments	Growth & marketing	keep	follow_up_enrollments
+HV	follow_up_logs	Growth & marketing	primitive	event_log
+HV	game_play_invites	Canvas & ideas	primitive	invitation
+HV	game_agent_conversations	Canvas & ideas	primitive	thread
+HV	user_points_balance	Identity & tenancy	primitive	ledger_entry
+HV	points_ledger	People & HR	primitive	ledger_entry
+HV	points_activity_counters	People & HR	primitive	ledger_entry
+HV	points_streaks	People & HR	primitive	ledger_entry
+HV	points_task_streaks	People & HR	primitive	ledger_entry
+HV	points_fraud_flags	People & HR	primitive	ledger_entry
+HV	badges	People & HR	keep	badges
+HV	user_badges	Identity & tenancy	keep	user_badges
+HV	point_redemptions	Finance	keep	point_redemptions
+HV	user_tax_status	Identity & tenancy	merged	(folded into a sibling)
+HV	inbox_seat_addons	Commerce	keep	inbox_seat_addons
+HV	outplacement_packages	Hiring	keep	outplacement_packages
+HV	outplacement_enrollments	Growth & marketing	merged	follow_up_enrollments
+HV	article_payout_runs	Growth & marketing	primitive	ledger_entry
+HV	article_payout_entries	Growth & marketing	primitive	ledger_entry
+HV	boost_checkouts	Growth & marketing	keep	boost_checkouts
+HV	enrichment_provider_calls	Revenue & CRM	keep	enrichment_provider_calls
+HV	gig_projects	Commerce	keep	gig_projects
+HV	gig_bids	Commerce	keep	gig_bids
+HV	gig_milestones	Commerce	primitive	work_item
+HV	gig_disputes	Commerce	keep	gig_disputes
+HV	gig_dispute_events	Commerce	primitive	event_log
+HV	photoreal_avatar_renders	Platform & observability	primitive	rendition
+HV	job_view_events	Hiring	primitive	event_log
+HV	company_view_events	Identity & tenancy	primitive	event_log
+HV	take_home_invites	Platform & observability	primitive	invitation
+HV	geocoder_cache	Agents & runtime	keep	geocoder_cache
+HV	help_mappings	Support & knowledge	primitive	relation
+HV	inbox_actions	Revenue & CRM	keep	inbox_actions
+HV	inbox_action_runs	Delivery & work	primitive	run
+HV	integrations	Integrations	primitive	connection
+HV	integration_runs	Integrations	primitive	run
+HV	interview_sessions	Hiring	session	creation_session + live session
+HV	interview_answers	Hiring	primitive	message
+HV	exclusive_boards	Commerce	keep	exclusive_boards
+HV	board_bids	Delivery & work	merged	(folded into a sibling)
+HV	job_pipeline_entries	Hiring	keep	job_pipeline_entries
+HV	pipeline_touchpoints	Revenue & CRM	keep	pipeline_touchpoints
+HV	pipeline_share_links	Revenue & CRM	primitive	share_link
+HV	job_items	Hiring	keep	job_items
+HV	job_preferences	Hiring	primitive	setting
+HV	job_applications	Hiring	keep	job_applications
+HV	saved_jobs	Revenue & CRM	primitive	run
+HV	job_alerts	Hiring	primitive	webhook
+HV	job_websites	Hiring	keep	job_websites
+HV	job_board_sources	Hiring	primitive	connection
+HV	job_board_sync_log	Hiring	primitive	event_log
+HV	course_prerequisites	People & HR	merged	(folded into a sibling)
+HV	learning_paths	People & HR	merged	(folded into a sibling)
+HV	learning_path_courses	People & HR	primitive	relation
+HV	learning_path_enrollments	People & HR	merged	course_enrollments
+HV	scorm_cmi_states	People & HR	keep	scorm_cmi_states
+HV	xapi_statements	Platform & observability	primitive	ledger_entry
+HV	external_lrs_targets	Integrations	merged	(folded into a sibling)
+HV	learning_cohorts	People & HR	keep	learning_cohorts
+HV	cohort_members	Hiring	primitive	membership
+HV	learning_assignments	People & HR	primitive	membership
+HV	learning_goals	People & HR	primitive	work_item
+HV	lrs_credentials	People & HR	primitive	credential
+HV	lrs_statements	People & HR	primitive	ledger_entry
+HV	lrs_documents	People & HR	keep	lrs_documents
+HV	legal_document_acceptances	Governance & security	keep	legal_document_acceptances
+HV	lists	Revenue & CRM	keep	lists
+HV	list_items	Delivery & work	keep	list_items
+HV	live_screening_sessions	Identity & tenancy	session	creation_session + live session
+HV	live_screening_invites	Platform & observability	primitive	invitation
+HV	countries	Identity & tenancy	keep	countries
+HV	state_provinces	Identity & tenancy	merged	(folded into a sibling)
+HV	cities	Revenue & CRM	keep	cities
+HV	postal_zip_codes	Platform & observability	merged	(folded into a sibling)
+HV	resume_match_scores	Hiring	primitive	metric_fact
+HV	conversations	Platform & observability	primitive	thread
+HV	conversation_participants	Platform & observability	primitive	membership
+HV	messages	Platform & observability	primitive	message
+HV	message_read_receipts	Platform & observability	merged	(folded into a sibling)
+HV	email_templates	Growth & marketing	primitive	catalog_item
+HV	email_campaigns	Growth & marketing	keep	email_campaigns
+HV	email_campaign_recipients	Growth & marketing	primitive	membership
+HV	email_suppressions	Growth & marketing	merged	(folded into a sibling)
+HV	email_marketing_preferences	Growth & marketing	primitive	setting
+HV	communication_tracking	Revenue & CRM	keep	communication_tracking
+HV	application_notes	Hiring	primitive	annotation
+HV	interviews	Hiring	keep	interviews
+HV	nle_media_sources	Canvas & ideas	primitive	artifact
+HV	nle_media_tags	Canvas & ideas	primitive	artifact
+HV	offer_letters	Hiring	keep	offer_letters
+HV	onboarding_checklists	Identity & tenancy	keep	onboarding_checklists
+HV	onboarding_tasks	Identity & tenancy	keep	onboarding_tasks
+HV	page_embed_videos	Growth & marketing	keep	page_embed_videos
+HV	paid_media_connections	Growth & marketing	primitive	connection
+HV	paid_media_accounts	Growth & marketing	primitive	connection
+HV	paid_media_campaigns	Growth & marketing	primitive	connection
+HV	paid_media_ad_sets	Growth & marketing	primitive	connection
+HV	paid_media_ads	Growth & marketing	primitive	connection
+HV	paid_media_creatives	Growth & marketing	primitive	connection
+HV	paid_media_platform_refs	Growth & marketing	primitive	relation
+HV	paid_media_sync_runs	Growth & marketing	primitive	connection
+HV	paid_media_insights	Growth & marketing	primitive	metric_fact
+HV	paid_media_pixels	Growth & marketing	primitive	connection
+HV	paid_media_conversions	Growth & marketing	primitive	revision
+HV	paid_media_audiences	Growth & marketing	primitive	connection
+HV	partners	Platform & observability	primitive	party_role
+HV	partner_api_keys	Commerce	primitive	credential
+HV	partner_connections	Commerce	primitive	connection
+HV	payout_profiles	Commerce	primitive	ledger_entry
+HV	payout_ledger_entries	Commerce	primitive	ledger_entry
+HV	payouts	Commerce	primitive	ledger_entry
+HV	people_tenants	People & HR	keep	people_tenants
+HV	people_segments	People & HR	merged	(folded into a sibling)
+HV	people_employees	People & HR	keep	people_employees
+HV	people_one_on_ones	People & HR	session	creation_session + live session
+HV	people_goals	People & HR	primitive	work_item
+HV	people_strategic_objectives	People & HR	primitive	work_item
+HV	people_objective_outcomes	People & HR	keep	people_objective_outcomes
+HV	people_objective_milestones	People & HR	primitive	work_item
+HV	people_company_milestones	People & HR	primitive	work_item
+HV	people_performance_reviews	People & HR	primitive	annotation
+HV	people_pulse_checks	People & HR	primitive	question_set
+HV	people_pulse_responses	People & HR	primitive	response
+HV	people_scheduled_check_ins	People & HR	primitive	question_set
+HV	people_check_in_responses	People & HR	primitive	response
+HV	people_weekly_syncs	People & HR	merged	(folded into a sibling)
+HV	people_scorecards	People & HR	primitive	question_set
+HV	people_scorecard_snapshots	People & HR	primitive	snapshot
+HV	people_meeting_transcripts	People & HR	primitive	rendition
+HV	people_workflow_triggers	People & HR	keep	people_workflow_triggers
+HV	people_workflow_executions	People & HR	primitive	run
+HV	people_tco_settings	People & HR	primitive	setting
+HV	people_role_definitions	People & HR	primitive	catalog_item
+HV	people_headcount_plans	People & HR	keep	people_headcount_plans
+HV	people_pto_requests	People & HR	merged	(folded into a sibling)
+HV	performance_cycles	People & HR	merged	(folded into a sibling)
+HV	performance_reviews	People & HR	primitive	annotation
+HV	performance_goals	People & HR	primitive	work_item
+HV	business_phone_numbers	Revenue & CRM	keep	business_phone_numbers
+HV	call_logs	Revenue & CRM	primitive	event_log
+HV	sms_messages	Revenue & CRM	primitive	message
+HV	phone_balances	Revenue & CRM	primitive	ledger_entry
+HV	phone_balance_transactions	Revenue & CRM	primitive	ledger_entry
+HV	platform_pricing	Platform & observability	keep	platform_pricing
+HV	shared_task_participants	Platform & observability	primitive	membership
+HV	recruiter_talent_pools	Hiring	merged	(folded into a sibling)
+HV	talent_pool_candidates	Hiring	primitive	party_role
+HV	candidate_interactions	Hiring	keep	candidate_interactions
+HV	candidate_submissions	Hiring	primitive	response
+HV	placements	Hiring	keep	placements
+HV	placement_splits	Hiring	keep	placement_splits
+HV	placement_notification_subscriptions	Hiring	primitive	connection
+HV	placement_notification_log	Hiring	primitive	event_log
+HV	job_boards	Hiring	merged	(folded into a sibling)
+HV	job_board_postings	Hiring	primitive	connection
+HV	queue_job_to_resume	Platform & observability	keep	queue_job_to_resume
+HV	queue_job_to_process	Platform & observability	keep	queue_job_to_process
+HV	saved_searches	Revenue & CRM	keep	saved_searches
+HV	recruiter_agent_runs	Hiring	primitive	run
+HV	recruiter_agent_followups	Hiring	keep	recruiter_agent_followups
+HV	ats_connections	Hiring	primitive	connection
+HV	extracted_profiles	Platform & observability	primitive	party_role
+HV	recruiter_lists	Hiring	merged	(folded into a sibling)
+HV	recruiter_list_members	Hiring	primitive	membership
+HV	recruiter_outreach_sequences	Hiring	keep	recruiter_outreach_sequences
+HV	recruiter_outreach_enrollments	Hiring	merged	follow_up_enrollments
+HV	recruiter_match_scores	Hiring	primitive	metric_fact
+HV	recruiter_clients	Hiring	primitive	party_role
+HV	recruiter_client_contacts	Hiring	merged	(folded into a sibling)
+HV	pipeline_stages	Revenue & CRM	keep	pipeline_stages
+HV	recruiter_deals	Hiring	merged	deals
+HV	reference_contacts	Hiring	merged	(folded into a sibling)
+HV	reference_shares	Hiring	primitive	share_link
+HV	content_reports	Growth & marketing	merged	(folded into a sibling)
+HV	resume_reviews	Hiring	primitive	annotation
+HV	resume_review_annotations	Hiring	primitive	artifact
+HV	meta_resumes	Platform & observability	merged	(folded into a sibling)
+HV	resume_information	Hiring	primitive	artifact
+HV	resume_versions	Hiring	primitive	revision
+HV	resume_templates	Hiring	primitive	catalog_item
+HV	watched_resumes	Platform & observability	merged	(folded into a sibling)
+HV	resume_views	Hiring	merged	(folded into a sibling)
+HV	studio_projects	Canvas & ideas	primitive	artifact
+HV	studio_project_subjects	Canvas & ideas	primitive	artifact
+HV	retained_search_firms	Hiring	keep	retained_search_firms
+HV	reviews	Platform & observability	primitive	annotation
+HV	review_comments	Platform & observability	primitive	annotation
+HV	role_feature_access	Identity & tenancy	primitive	membership
+HV	scorecard_templates	Hiring	primitive	catalog_item
+HV	competencies	People & HR	keep	competencies
+HV	competency_levels	People & HR	merged	(folded into a sibling)
+HV	scorecard_attributes	Hiring	keep	scorecard_attributes
+HV	interview_kits	Hiring	keep	interview_kits
+HV	interview_kit_stages	Hiring	keep	interview_kit_stages
+HV	scorecard_submissions	Hiring	primitive	response
+HV	scorecard_submission_ratings	Hiring	primitive	annotation
+HV	hiring_decisions	Hiring	keep	hiring_decisions
+HV	screening_templates	Hiring	primitive	catalog_item
+HV	screening_template_items	Hiring	keep	screening_template_items
+HV	screening_requests	Hiring	merged	(folded into a sibling)
+HV	screening_request_items	Hiring	merged	(folded into a sibling)
+HV	service_offerings	Commerce	primitive	catalog_item
+HV	service_inquiries	Commerce	merged	(folded into a sibling)
+HV	push_subscriptions	Platform & observability	primitive	connection
+HV	social_connections	Growth & marketing	primitive	connection
+HV	managed_accounts	Platform & observability	primitive	connection
+HV	job_sourcing_listings	Hiring	primitive	catalog_item
+HV	studio_brand_kits	Canvas & ideas	primitive	artifact
+HV	video_analytics	Growth & marketing	primitive	metric_fact
+HV	video_campaigns	Growth & marketing	primitive	artifact
+HV	video_campaign_projects	Growth & marketing	primitive	artifact
+HV	studio_captions	Canvas & ideas	primitive	artifact
+HV	linkedin_accounts	Integrations	primitive	connection
+HV	youtube_accounts	Integrations	primitive	connection
+HV	studio_recordings	Canvas & ideas	primitive	artifact
+HV	studio_delivery_coaching	Canvas & ideas	primitive	artifact
+HV	studio_ats_packages	Canvas & ideas	primitive	artifact
+HV	studio_interview_questions	Canvas & ideas	primitive	artifact
+HV	studio_interview_sessions	Canvas & ideas	primitive	artifact
+HV	studio_skills_demos	Canvas & ideas	primitive	artifact
+HV	studio_async_interviews	Canvas & ideas	keep	studio_async_interviews
+HV	studio_async_responses	Canvas & ideas	primitive	artifact
+HV	interview_question_sets	Hiring	keep	interview_question_sets
+HV	studio_video_heatmap	Canvas & ideas	primitive	metric_fact
+HV	stock_media_assets	Canvas & ideas	keep	stock_media_assets
+HV	user_stock_media_usage	Identity & tenancy	keep	user_stock_media_usage
+HV	studio_project_versions	Canvas & ideas	primitive	revision
+HV	studio_chapters	Canvas & ideas	primitive	artifact
+HV	studio_video_forms	Canvas & ideas	primitive	artifact
+HV	studio_video_form_submissions	Canvas & ideas	primitive	artifact
+HV	studio_review_comments	Canvas & ideas	primitive	annotation
+HV	studio_review_links	Canvas & ideas	primitive	share_link
+HV	studio_thumbnails	Canvas & ideas	primitive	artifact
+HV	studio_project_publications	Canvas & ideas	primitive	artifact
+HV	studio_templates	Canvas & ideas	primitive	catalog_item
+HV	template_licenses	Commerce	keep	template_licenses
+HV	take_home_assignments	Platform & observability	primitive	membership
+HV	take_home_submissions	Platform & observability	primitive	response
+HV	interview_stage_questions	Hiring	primitive	question_set
+HV	workspace_tags	Identity & tenancy	primitive	annotation
+HV	tag_assignments	Platform & observability	primitive	membership
+HV	workspace_job_types	Identity & tenancy	primitive	catalog_item
+HV	workspace_person_merge_policy	Identity & tenancy	merged	(folded into a sibling)
+HV	person_merge_queue	Platform & observability	primitive	run
+HV	workspace_sources	Identity & tenancy	merged	(folded into a sibling)
+HV	tenant_integrations	Identity & tenancy	primitive	connection
+HV	usage_ledger	Finance	primitive	ledger_entry
+HV	usage_statements	Finance	primitive	ledger_entry
+HV	usage_invoices	Finance	primitive	ledger_entry
+HV	usage_sessions	Finance	primitive	ledger_entry
+HV	usage_events	Finance	primitive	event_log
+HV	roles	Identity & tenancy	merged	(folded into a sibling)
+HV	user_roles	Identity & tenancy	merged	(folded into a sibling)
+HV	password_history	Identity & tenancy	primitive	event_log
+HV	two_factor_codes	Platform & observability	merged	(folded into a sibling)
+HV	email_verification_tokens	Growth & marketing	primitive	share_link
+HV	password_reset_tokens	Identity & tenancy	primitive	share_link
+HV	refresh_tokens	Platform & observability	primitive	share_link
+HV	user_profiles	Identity & tenancy	primitive	party_role
+HV	account_preferences	Identity & tenancy	primitive	setting
+HV	privacy_preferences	Governance & security	primitive	setting
+HV	cookie_preferences	Platform & observability	primitive	setting
+HV	account_invitations	Identity & tenancy	primitive	invitation
+HV	system_settings	Platform & observability	primitive	setting
+HV	user_connections	Identity & tenancy	primitive	connection
+HV	login_events	Platform & observability	primitive	event_log
+HV	sessions	Identity & tenancy	keep	sessions
+HV	account_locks	Identity & tenancy	merged	(folded into a sibling)
+HV	email_change_requests	Growth & marketing	merged	(folded into a sibling)
+HV	bot_block_events	Platform & observability	primitive	event_log
+HV	region_waitlist	Identity & tenancy	keep	region_waitlist
+HV	two_factor_backup_codes	Platform & observability	merged	(folded into a sibling)
+HV	profile_sync_runs	Delivery & work	primitive	sync_state
+HV	videos	Growth & marketing	keep	videos
+HV	webauthn_credentials	Governance & security	primitive	credential
+HV	webauthn_challenges	Governance & security	keep	webauthn_challenges
+HV	whitelabel_tenants	Commerce	keep	whitelabel_tenants
+HV	worker_runs	Agents & runtime	primitive	run
+HV	task_time_entries	Delivery & work	keep	task_time_entries
+HV	timesheets	Finance	keep	timesheets
+HV	timesheet_touchpoints	Finance	merged	(folded into a sibling)
+HV	placement_documents	Hiring	keep	placement_documents
+HV	workspace_grants	Identity & tenancy	keep	workspace_grants
+HV	workspaces	Identity & tenancy	merged	(folded into a sibling)
+BR	stage_lookup	Identity & tenancy	keep	stage_lookup
+BR	tenant_integration_settings	Identity & tenancy	primitive	setting
+BR	tenant_integration_credentials	Identity & tenancy	primitive	credential
+BR	enrichment_cache	Agents & runtime	keep	enrichment_cache
+BR	tenant_enrichment_credits	Identity & tenancy	primitive	ledger_entry
+BR	extractor_runs	Platform & observability	primitive	run
+BR	accounts	Identity & tenancy	primitive	connection
+BR	companies	Identity & tenancy	keep	companies
+BR	company_domains	Identity & tenancy	merged	(folded into a sibling)
+BR	company_stage_configurations	Identity & tenancy	merged	(folded into a sibling)
+BR	account_company_relationships	Identity & tenancy	primitive	relation
+BR	contacts	Revenue & CRM	primitive	party_role
+BR	contact_identifiers	Revenue & CRM	merged	(folded into a sibling)
+BR	contact_sources	Revenue & CRM	merged	(folded into a sibling)
+BR	contact_field_provenance	Revenue & CRM	keep	contact_field_provenance
+BR	contact_edit_log	Revenue & CRM	primitive	event_log
+BR	tenant_contact_links	Identity & tenancy	primitive	share_link
+BR	contact_experiences	Revenue & CRM	keep	contact_experiences
+BR	contact_educations	Revenue & CRM	keep	contact_educations
+BR	contact_compensations	Revenue & CRM	keep	contact_compensations
+BR	saved_contact_searches	Revenue & CRM	keep	saved_contact_searches
+BR	company_crm	Identity & tenancy	flatten	columns on the parent
+BR	company_billing	Identity & tenancy	merged	(folded into a sibling)
+BR	company_support	Identity & tenancy	merged	(folded into a sibling)
+BR	company_product	Identity & tenancy	merged	(folded into a sibling)
+BR	company_marketing	Identity & tenancy	merged	(folded into a sibling)
+BR	company_field_provenance	Identity & tenancy	merged	(folded into a sibling)
+BR	company_edit_log	Identity & tenancy	primitive	event_log
+BR	company_members	Identity & tenancy	primitive	membership
+BR	guest_sessions	Identity & tenancy	merged	(folded into a sibling)
+BR	email_otp_challenges	Growth & marketing	keep	email_otp_challenges
+BR	mfa_backup_codes	Identity & tenancy	merged	(folded into a sibling)
+BR	login_attempts	Platform & observability	primitive	run
+BR	planning_poker_sessions	Finance	session	creation_session + live session
+BR	planning_poker_session_participants	Finance	primitive	membership
+BR	stories	Delivery & work	primitive	work_item
+BR	retrospective_participants	Delivery & work	primitive	membership
+BR	retrospective_items	Delivery & work	merged	(folded into a sibling)
+BR	votes	Platform & observability	primitive	annotation
+BR	session_discussions	Identity & tenancy	keep	session_discussions
+BR	card_decks	Commerce	keep	card_decks
+BR	subscription_overrides	Finance	primitive	relation
+BR	jira_integrations	Integrations	primitive	connection
+BR	user_invitations	Identity & tenancy	primitive	invitation
+BR	action_items	Delivery & work	keep	action_items
+BR	products	Investor & portfolio	keep	products
+BR	epics	Delivery & work	primitive	work_item
+BR	user_stories	Identity & tenancy	merged	(folded into a sibling)
+BR	subtasks	Delivery & work	merged	(folded into a sibling)
+BR	financial_integrations	Finance	primitive	connection
+BR	financial_transactions	Finance	primitive	ledger_entry
+BR	financial_accounts	Finance	primitive	connection
+BR	financial_categories	Finance	merged	(folded into a sibling)
+BR	burn_rate_metrics	Finance	primitive	metric_fact
+BR	revenue_metrics	Finance	primitive	metric_fact
+BR	employee_tco_settings	People & HR	primitive	setting
+BR	business_pricing_models	Finance	keep	business_pricing_models
+BR	business_documents	Platform & observability	session	creation_session + live session
+BR	business_insights	Platform & observability	primitive	metric_fact
+BR	pitch_deck_sections	Investor & portfolio	primitive	artifact
+BR	pitch_deck_share_links	Investor & portfolio	primitive	share_link
+BR	pitch_deck_views	Investor & portfolio	session	creation_session + live session
+BR	pitch_deck_slide_views	Investor & portfolio	session	creation_session + live session
+BR	pitch_deck_versions	Investor & portfolio	primitive	revision
+BR	brand_kits	Growth & marketing	keep	brand_kits
+BR	pitch_deck_comments	Investor & portfolio	primitive	annotation
+BR	sync_jobs	Delivery & work	primitive	run
+BR	customer_journeys	Growth & marketing	keep	customer_journeys
+BR	journey_touchpoints	Growth & marketing	keep	journey_touchpoints
+BR	conversion_events	Platform & observability	primitive	event_log
+BR	customer_engagement_feedback_widgets	Support & knowledge	keep	customer_engagement_feedback_widgets
+BR	customer_engagement_feedback_events	Platform & observability	primitive	event_log
+BR	customer_engagement_feature_roi_stats	Finance	primitive	metric_fact
+BR	roi_timeline_entries	Finance	keep	roi_timeline_entries
+BR	customer_profiles	Platform & observability	primitive	party_role
+BR	ab_tests	Growth & marketing	keep	ab_tests
+BR	ab_test_variants	Growth & marketing	keep	ab_test_variants
+BR	ab_test_segments	Growth & marketing	keep	ab_test_segments
+BR	account_members	Identity & tenancy	primitive	membership
+BR	account_audit_logs	Identity & tenancy	primitive	event_log
+BR	billing_accounts	Finance	primitive	connection
+BR	billing_plans	Finance	keep	billing_plans
+BR	pricing_versions	Finance	primitive	revision
+BR	account_pricing_versions	Identity & tenancy	primitive	revision
+BR	payment_transactions	Finance	primitive	ledger_entry
+BR	usage_metrics	Finance	primitive	metric_fact
+BR	billing_webhooks	Finance	primitive	webhook
+BR	development_integrations	Integrations	primitive	connection
+BR	development_issues	Integrations	merged	(folded into a sibling)
+BR	development_commits	Integrations	merged	(folded into a sibling)
+BR	development_pull_requests	Integrations	merged	(folded into a sibling)
+BR	development_time_entries	Integrations	merged	(folded into a sibling)
+BR	development_releases	Integrations	merged	(folded into a sibling)
+BR	development_deployments	Integrations	merged	(folded into a sibling)
+BR	development_cost_metrics	Integrations	primitive	metric_fact
+BR	analytics	Platform & observability	primitive	metric_fact
+BR	employees	People & HR	primitive	party_role
+BR	hr_employment_records	People & HR	keep	hr_employment_records
+BR	hr_emergency_contacts	People & HR	keep	hr_emergency_contacts
+BR	goals	Platform & observability	primitive	work_item
+BR	one_on_one_sessions	People & HR	merged	(folded into a sibling)
+BR	workflow_actions	Agents & runtime	keep	workflow_actions
+BR	workflow_executions	Agents & runtime	primitive	run
+BR	calendar_integrations	Integrations	primitive	connection
+BR	calendar_events	Integrations	primitive	event_log
+BR	booking_hosts	Commerce	keep	booking_hosts
+BR	booking_services	Commerce	keep	booking_services
+BR	booking_external_calendar_links	Commerce	primitive	share_link
+BR	booking_webhook_subscriptions	Commerce	primitive	connection
+BR	slack_integrations	Integrations	primitive	connection
+BR	slack_notifications	Integrations	primitive	connection
+BR	scheduled_check_ins	Platform & observability	primitive	question_set
+BR	check_in_responses	People & HR	primitive	response
+BR	meeting_transcripts	Platform & observability	primitive	rendition
+BR	kanban_boards	Delivery & work	merged	boards
+BR	kanban_columns	Delivery & work	keep	kanban_columns
+BR	work_items	Delivery & work	keep	work_items
+BR	deliveries	Platform & observability	primitive	webhook
+BR	task_effort_estimates	Delivery & work	keep	task_effort_estimates
+BR	sprint_financial_impact	Delivery & work	keep	sprint_financial_impact
+BR	runway_forecast_links	Finance	primitive	share_link
+BR	sprint_forecasts	Delivery & work	merged	(folded into a sibling)
+BR	velocity_history	Delivery & work	primitive	event_log
+BR	team_capacity	Identity & tenancy	merged	(folded into a sibling)
+BR	risk_assessments	Governance & security	primitive	question_set
+BR	bottleneck_analysis	Delivery & work	keep	bottleneck_analysis
+BR	capacity_heatmaps	Delivery & work	keep	capacity_heatmaps
+BR	sync_mappings	Delivery & work	primitive	relation
+BR	integration_webhooks	Integrations	primitive	webhook
+BR	integration_webhook_deliveries	Integrations	primitive	webhook
+BR	sync_conflict_resolutions	Delivery & work	keep	sync_conflict_resolutions
+BR	sales_pipelines	Revenue & CRM	merged	(folded into a sibling)
+BR	deals	Revenue & CRM	keep	deals
+BR	deal_activities	Revenue & CRM	primitive	event_log
+BR	quota_attainment	Finance	flatten	metric_fact + a scheduled rollup
+BR	conversion_rates	Platform & observability	merged	(folded into a sibling)
+BR	marketing_spend	Growth & marketing	primitive	ledger_entry
+BR	customer_acquisition_cost	Platform & observability	merged	(folded into a sibling)
+BR	customer_lifetime_value	Platform & observability	merged	(folded into a sibling)
+BR	payback_period	Finance	keep	payback_period
+BR	channel_performance	Growth & marketing	flatten	metric_fact + a scheduled rollup
+BR	attribution_models	Platform & observability	merged	(folded into a sibling)
+BR	headcount_plans	People & HR	merged	(folded into a sibling)
+BR	role_definitions	Identity & tenancy	primitive	catalog_item
+BR	compensation_structures	Finance	keep	compensation_structures
+BR	hiring_forecasts	Hiring	merged	(folded into a sibling)
+BR	onboarding_costs	Identity & tenancy	merged	(folded into a sibling)
+BR	ramp_times	Hiring	keep	ramp_times
+BR	team_capacity_plans	Identity & tenancy	merged	(folded into a sibling)
+BR	headcount_impacts	People & HR	keep	headcount_impacts
+BR	forecast_scenarios	Finance	merged	break_even_scenarios
+BR	scenario_assumptions	Finance	keep	scenario_assumptions
+BR	sensitivity_analyses	Platform & observability	merged	(folded into a sibling)
+BR	monte_carlo_simulations	Finance	keep	monte_carlo_simulations
+BR	arr_projections	Finance	flatten	metric_fact + a scheduled rollup
+BR	cohort_retention	Hiring	keep	cohort_retention
+BR	forecast_versions	Finance	primitive	revision
+BR	custom_kpis	Finance	keep	custom_kpis
+BR	kpi_formulas	Finance	keep	kpi_formulas
+BR	metric_thresholds	Platform & observability	keep	metric_thresholds
+BR	automated_alerts	Platform & observability	primitive	webhook
+BR	alert_rules	Platform & observability	primitive	setting
+BR	dashboard_layouts	Platform & observability	keep	dashboard_layouts
+BR	what_if_scenarios	Finance	merged	break_even_scenarios
+BR	feedback_integrations	Support & knowledge	primitive	connection
+BR	customer_cohorts	Platform & observability	merged	(folded into a sibling)
+BR	churn_predictions	Finance	keep	churn_predictions
+BR	feedback_sentiments	Support & knowledge	keep	feedback_sentiments
+BR	product_analytics_integrations	Investor & portfolio	primitive	connection
+BR	investor_reports	Investor & portfolio	merged	(folded into a sibling)
+BR	report_approvals	Platform & observability	keep	report_approvals
+BR	report_versions	Platform & observability	primitive	revision
+BR	investor_portal_access	Investor & portfolio	primitive	membership
+BR	variance_analyses	Platform & observability	merged	(folded into a sibling)
+BR	workflow_automations	Agents & runtime	merged	(folded into a sibling)
+BR	features	Investor & portfolio	primitive	work_item
+BR	experiments	Growth & marketing	keep	experiments
+BR	feature_adoption	Platform & observability	merged	(folded into a sibling)
+BR	release_plans	Delivery & work	keep	release_plans
+BR	approval_workflows	Delivery & work	merged	(folded into a sibling)
+BR	approval_requests	Delivery & work	merged	(folded into a sibling)
+BR	approval_actions	Delivery & work	keep	approval_actions
+BR	entity_versions	Platform & observability	primitive	revision
+BR	comments	Platform & observability	primitive	annotation
+BR	activity_feed	Growth & marketing	keep	activity_feed
+BR	model_locks	Agents & runtime	keep	model_locks
+BR	sign_offs	Delivery & work	keep	sign_offs
+BR	investor_profiles	Investor & portfolio	primitive	party_role
+BR	portfolio_companies	Delivery & work	keep	portfolio_companies
+BR	valuation_history	Finance	primitive	event_log
+BR	health_scores	People & HR	primitive	metric_fact
+BR	health_dimensions	People & HR	keep	health_dimensions
+BR	health_metrics	People & HR	primitive	metric_fact
+BR	health_alerts	People & HR	primitive	webhook
+BR	funding_rounds	Finance	keep	funding_rounds
+BR	investor_access	Investor & portfolio	primitive	membership
+BR	investor_invitations	Investor & portfolio	primitive	invitation
+BR	company_milestones	Identity & tenancy	primitive	work_item
+BR	investor_communications	Investor & portfolio	merged	(folded into a sibling)
+BR	investor_alerts	Investor & portfolio	primitive	webhook
+BR	investor_dashboard_configs	Investor & portfolio	primitive	setting
+BR	investor_update_requests	Investor & portfolio	merged	(folded into a sibling)
+BR	deal_flow_opportunities	Revenue & CRM	keep	deal_flow_opportunities
+BR	due_diligence_documents	Investor & portfolio	keep	due_diligence_documents
+BR	due_diligence_checklists	Investor & portfolio	keep	due_diligence_checklists
+BR	data_rooms	Investor & portfolio	keep	data_rooms
+BR	agile_events	Platform & observability	primitive	event_log
+BR	item_activities	Platform & observability	primitive	event_log
+BR	usage_consumer_users	Finance	primitive	ledger_entry
+BR	usage_feature_attribution	Finance	primitive	ledger_entry
+BR	usage_daily_rollups	Finance	primitive	metric_fact
+BR	landing_pages	Growth & marketing	keep	landing_pages
+BR	landing_page_blocks	Growth & marketing	keep	landing_page_blocks
+BR	website_pages	Growth & marketing	keep	website_pages
+BR	nurture_flows	Growth & marketing	keep	nurture_flows
+BR	nurture_flow_steps	Growth & marketing	primitive	run
+BR	nurture_flow_enrollments	Growth & marketing	merged	follow_up_enrollments
+BR	business_metrics	Platform & observability	primitive	metric_fact
+BR	funding_history	Finance	primitive	event_log
+BR	investment_opportunities	Investor & portfolio	keep	investment_opportunities
+BR	investor_inquiries	Investor & portfolio	merged	(folded into a sibling)
+BR	feature_requests	Platform & observability	merged	(folded into a sibling)
+BR	strategic_objectives	Platform & observability	primitive	work_item
+BR	objective_outcomes	Canvas & ideas	merged	(folded into a sibling)
+BR	objective_milestones	Canvas & ideas	primitive	work_item
+BR	startup_syncs	Platform & observability	merged	(folded into a sibling)
+BR	sync_agenda_items	Delivery & work	keep	sync_agenda_items
+BR	sync_metrics	Delivery & work	primitive	metric_fact
+BR	pulse_checks	People & HR	primitive	question_set
+BR	pulse_questions	People & HR	primitive	question_set
+BR	scorecards	Hiring	primitive	question_set
+BR	scorecard_metrics	Hiring	primitive	metric_fact
+BR	scorecard_snapshots	Hiring	primitive	snapshot
+BR	product_ideas	Investor & portfolio	keep	product_ideas
+BR	market_analyses	Investor & portfolio	merged	(folded into a sibling)
+BR	competitive_analyses	Investor & portfolio	merged	(folded into a sibling)
+BR	investor_market_analyses	Investor & portfolio	merged	(folded into a sibling)
+BR	investor_peer_comparables	Investor & portfolio	keep	investor_peer_comparables
+BR	customer_insights	Platform & observability	primitive	metric_fact
+BR	validation_data_imports	Investor & portfolio	keep	validation_data_imports
+BR	validation_ai_insights	Investor & portfolio	primitive	metric_fact
+BR	validation_dashboards	Investor & portfolio	keep	validation_dashboards
+BR	validation_scenarios	Investor & portfolio	merged	break_even_scenarios
+BR	affiliate_partners	Growth & marketing	primitive	party_role
+BR	affiliate_payout_methods	Growth & marketing	primitive	ledger_entry
+BR	support_ticket_messages	Support & knowledge	primitive	message
+BR	support_articles	Support & knowledge	keep	support_articles
+BR	system_features	Platform & observability	keep	system_features
+BR	pricing_plans	Finance	merged	billing_plans
+BR	plan_features	Finance	keep	plan_features
+BR	account_features	Identity & tenancy	primitive	setting
+BR	account_email_settings	Identity & tenancy	primitive	setting
+BR	embed_consent_log	Growth & marketing	primitive	event_log
+BR	embed_keys	Growth & marketing	primitive	share_link
+BR	embed_widget_layout	Growth & marketing	keep	embed_widget_layout
+BR	embed_terms_gate_config	Growth & marketing	primitive	setting
+BR	onboarding_flows	Identity & tenancy	keep	onboarding_flows
+BR	onboarding_flow_versions	Identity & tenancy	primitive	revision
+BR	onboarding_progress	Identity & tenancy	keep	onboarding_progress
+BR	onboarding_events	Identity & tenancy	primitive	event_log
+BR	terms_versions	Governance & security	primitive	revision
+BR	user_terms_agreements	Identity & tenancy	keep	user_terms_agreements
+BR	break_even_scenarios	Finance	keep	break_even_scenarios
+BR	ri_icps	Revenue & CRM	keep	ri_icps
+BR	ri_prospects	Revenue & CRM	keep	ri_prospects
+BR	ri_sequences	Revenue & CRM	keep	ri_sequences
+BR	ri_campaigns	Revenue & CRM	merged	marketing_campaigns
+BR	ri_ids	Revenue & CRM	keep	ri_ids
+BR	pricing_simulations	Finance	keep	pricing_simulations
+BR	marketing_emails	Growth & marketing	keep	marketing_emails
+BR	ai_coaching_conversations	Agents & runtime	primitive	thread
+BR	ai_coaching_messages	Agents & runtime	primitive	message
+BR	ai_tool_calls	Agents & runtime	keep	ai_tool_calls
+BR	scratch_pads	Investor & portfolio	session	creation_session + live session
+BR	scratch_pad_scheduled_meetings	Investor & portfolio	session	creation_session + live session
+BR	scratch_pad_scheduled_invitees	Investor & portfolio	merged	(folded into a sibling)
+BR	scratch_pad_attachments	Investor & portfolio	keep	scratch_pad_attachments
+BR	scratch_pad_meetings	Investor & portfolio	session	creation_session + live session
+BR	scratch_pad_notes_templates	Investor & portfolio	primitive	catalog_item
+BR	scratch_pad_meeting_attendees	Investor & portfolio	primitive	membership
+BR	scratch_pad_transcript_lines	Investor & portfolio	primitive	rendition
+BR	scratch_pad_pages	Investor & portfolio	session	creation_session + live session
+BR	scratch_pad_shares	Investor & portfolio	primitive	share_link
+BR	scratch_pad_share_views	Investor & portfolio	merged	(folded into a sibling)
+BR	scratch_pad_collaborators	Investor & portfolio	primitive	membership
+BR	announcement_banners	Growth & marketing	keep	announcement_banners
+BR	user_segments	Identity & tenancy	merged	(folded into a sibling)
+BR	referral_codes	Growth & marketing	merged	(folded into a sibling)
+BR	referral_entries	Growth & marketing	keep	referral_entries
+BR	expenses	Finance	keep	expenses
+BR	investor_updates	Investor & portfolio	merged	(folded into a sibling)
+BR	nps_surveys	Support & knowledge	primitive	question_set
+BR	waitlist_entries	Growth & marketing	keep	waitlist_entries
+BR	learn_videos	Growth & marketing	keep	learn_videos
+BR	podcast_outreach	Growth & marketing	keep	podcast_outreach
+BR	webinar_events	Platform & observability	primitive	event_log
+BR	consultant_profiles	Commerce	primitive	party_role
+BR	consultant_knowledge_docs	Commerce	keep	consultant_knowledge_docs
+BR	consultant_consultations	Commerce	keep	consultant_consultations
+BR	consultant_earnings	Commerce	primitive	ledger_entry
+BR	marketplace_listings	Commerce	primitive	catalog_item
+BR	carts	Commerce	keep	carts
+BR	ai_credit_balances	Agents & runtime	primitive	ledger_entry
+BR	ai_credit_transactions	Agents & runtime	primitive	ledger_entry
+BR	ai_gateway_budget_snapshots	Agents & runtime	primitive	snapshot
+BR	ai_credit_purchases	Agents & runtime	primitive	ledger_entry
+BR	marketplace_transactions	Commerce	primitive	ledger_entry
+BR	marketplace_seller_balances	Commerce	primitive	ledger_entry
+BR	marketplace_payouts	Commerce	primitive	ledger_entry
+BR	import_jobs	Integrations	primitive	run
+BR	import_rows	Integrations	primitive	sync_state
+BR	import_source_connections	Integrations	primitive	connection
+BR	feature_votes	Platform & observability	primitive	annotation
+BR	email_sends	Growth & marketing	primitive	webhook
+BR	email_tracking_events	Growth & marketing	primitive	event_log
+BR	agency_brandings	Commerce	keep	agency_brandings
+BR	agency_clients	Commerce	keep	agency_clients
+BR	blog_posts	Growth & marketing	keep	blog_posts
+BR	saved_calculations	Finance	keep	saved_calculations
+BR	coach_mark_dismissals	Platform & observability	merged	(folded into a sibling)
+BR	catalog_items	Delivery & work	keep	catalog_items
+BR	orders	Commerce	keep	orders
+BR	order_line_items	Commerce	keep	order_line_items
+BR	pricing_change_logs	Finance	primitive	event_log
+BR	ai_email_classifications	Agents & runtime	keep	ai_email_classifications
+BR	ai_contract_analyses	Agents & runtime	merged	(folded into a sibling)
+BR	ai_competitors	Agents & runtime	keep	ai_competitors
+BR	ai_competitor_intel	Agents & runtime	merged	(folded into a sibling)
+BR	ai_expense_classifications	Agents & runtime	merged	(folded into a sibling)
+BR	ai_voice_agent_configs	Agents & runtime	primitive	setting
+BR	ai_voice_agent_calls	Agents & runtime	keep	ai_voice_agent_calls
+BR	marketing_heatmap_pages	Growth & marketing	keep	marketing_heatmap_pages
+BR	marketing_heatmap_analyses	Growth & marketing	merged	(folded into a sibling)
+BR	marketing_heatmap_screenshots	Growth & marketing	keep	marketing_heatmap_screenshots
+BR	marketing_heatmap_capture_tokens	Growth & marketing	primitive	share_link
+BR	marketing_heatmap_events	Growth & marketing	primitive	event_log
+BR	marketing_brand_kits	Growth & marketing	merged	brand_kits
+BR	marketing_content_items	Growth & marketing	keep	marketing_content_items
+BR	marketing_seo_pages	Growth & marketing	keep	marketing_seo_pages
+BR	marketing_push_subscribers	Growth & marketing	primitive	membership
+BR	marketing_push_campaigns	Growth & marketing	merged	marketing_campaigns
+BR	marketing_push_deliveries	Growth & marketing	primitive	webhook
+BR	uptime_monitors	Platform & observability	keep	uptime_monitors
+BR	uptime_checks	Platform & observability	keep	uptime_checks

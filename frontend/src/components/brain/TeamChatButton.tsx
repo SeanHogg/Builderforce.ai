@@ -17,6 +17,7 @@
  * to open the drawer, so it renders nothing. Consumers never gate on that themselves.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useOptionalBrainContext } from '@/lib/brain';
@@ -92,13 +93,13 @@ export function TeamChatButton({
         background: 'var(--bg-elevated)',
         color: 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: loading ? 'wait' : 'pointer',
         opacity: loading ? 0.6 : 1,
         ...style,
       }}
     >
-      <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>💬</span>
+      <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}><Icon source="💬" size="1em" /></span>
       {variant === 'labeled' && <span>{text}</span>}
     </button>
   );

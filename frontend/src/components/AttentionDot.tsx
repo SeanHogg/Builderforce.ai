@@ -14,7 +14,7 @@ import type { AttentionState } from '@/lib/builderforceApi';
  */
 const COLOR: Record<AttentionState, string> = {
   running: 'var(--coral-bright)',
-  awaiting_input: 'var(--warning, #d97706)',
+  awaiting_input: 'var(--warning)',
 };
 
 export function AttentionDot({

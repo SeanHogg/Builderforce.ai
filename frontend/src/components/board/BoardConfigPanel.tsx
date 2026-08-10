@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
@@ -11,6 +12,7 @@ import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager
 import { useBoardConfig } from './useBoardConfig';
 import {
   boardsApi,
+  kanbanApi,
   workflowDefinitions,
   type Board,
   type Swimlane,
@@ -18,6 +20,7 @@ import {
   type SwimlaneRequirement,
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
+import type { TemplateSummary } from '@/lib/kanban';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import {
   listTeams,
@@ -36,16 +39,16 @@ import {
  */
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '7px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '7px 12px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '5px 9px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const sectionPad: React.CSSProperties = { padding: 20 };
 
@@ -128,7 +131,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
       {loading || provisioning || !board ? (
         <div style={sectionPad}>
           {shownError ? (
-            <span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span>
+            <span style={{ fontSize: 13, color: 'var(--danger)' }}>{shownError}</span>
           ) : (
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               {provisioning || !board ? t('settingUp') : t('loading')}
@@ -136,13 +139,13 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
           )}
         </div>
       ) : shownError ? (
-        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span></div>
+        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger)' }}>{shownError}</span></div>
       ) : tab === 'lanes' ? (
         <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={reload} />
       ) : tab === 'teams' ? (
         <TeamsTab projectId={projectId} />
       ) : tab === 'settings' ? (
-        <SettingsTab board={board} onSaved={reload} />
+        <SettingsTab board={board} projectId={projectId} onSaved={reload} />
       ) : (
         <div style={sectionPad}>
           <BoardConnectionsManager projectId={projectId} heading={t('externalHeading')} />
@@ -206,7 +209,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
       </div>
       {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noLanes')}</div>}
       {lanes.map((lane, index) => (
-        <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+        <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title={t('moveLeft')} onClick={() => moveLane(index, -1)}>▲</button>
@@ -234,7 +237,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
               <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> {t('terminal')}
             </label>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
           </div>
           <LaneActionRow lane={lane} lanes={lanes} workflows={workflows} patchLane={patchLane} />
           <AgentList board={board} lane={lane} agents={agentsByLane[lane.id] ?? []} reload={reload} />
@@ -370,14 +373,14 @@ function LaneRequirementsRow({ board, lane, patchLane }: {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
               {reqs.map((r) => (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px' }}>
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '6px 10px' }}>
                   <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{kindLabel(r.kind)}</span>
                   <span style={{ color: 'var(--text-primary)' }}>{r.ref}</span>
                   {r.responsibility && <span style={{ color: 'var(--text-muted)' }}>· {t(r.responsibility === 'owner' ? 'respOwner' : r.responsibility === 'reviewer' ? 'respReviewer' : 'respContributor')}</span>}
                   <label style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center', color: 'var(--text-secondary)' }}>
                     <input type="checkbox" checked={r.isRequired} onChange={() => toggleRequired(r)} /> {t('required')}
                   </label>
-                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', padding: '2px 8px' }} onClick={() => remove(r.id)}>{t('delete')}</button>
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger)', padding: '2px 8px' }} onClick={() => remove(r.id)}>{t('delete')}</button>
                 </div>
               ))}
             </div>
@@ -447,7 +450,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
       {agents.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
           <span style={{ fontWeight: 600 }}>{a.name ?? a.role}</span>
-          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, textTransform: 'capitalize' }} title={t('roleTitle')}>
+          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 'var(--radius-sm)', textTransform: 'capitalize' }} title={t('roleTitle')}>
             {a.role}
           </span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -455,7 +458,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
             {a.model ? ` · ${a.model}` : ` · ${t('defaultLlm')}`}
           </span>
           <span style={{ flex: 1 }} />
-          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>{t('remove')}</button>
+          <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(a.id)}>{t('remove')}</button>
         </div>
       ))}
       {adding ? (
@@ -530,7 +533,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
   };
 
   const workforceLink = (chunks: React.ReactNode) => (
-    <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</a>
+    <Link href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</Link>
   );
 
   return (
@@ -540,7 +543,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
       </div>
 
       {error && (
-        <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', marginBottom: 10 }}>{error}</div>
+        <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 10 }}>{error}</div>
       )}
 
       {loading ? (
@@ -560,7 +563,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
                     )}
                   </div>
                   <span style={{ flex: 1 }} />
-                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(tm.id, projectId))}>
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(tm.id, projectId))}>
                     {t('remove')}
                   </button>
                 </div>
@@ -600,8 +603,9 @@ function TeamsTab({ projectId }: { projectId: number }) {
   );
 }
 
-function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) {
+function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: number; onSaved: () => void }) {
   const t = useTranslations('boardConfig');
+  const confirm = useConfirm();
   const [maxConcurrent, setMaxConcurrent] = useState(board.maxConcurrentTickets);
   const [name, setName] = useState(board.name);
   const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
@@ -610,6 +614,47 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
   // Default true: a board with the flag unset still gates high/urgent work.
   const [requireApproval, setRequireApproval] = useState(board.requireExecutionApproval ?? true);
   const [saving, setSaving] = useState(false);
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([kanbanApi.listTemplates(), kanbanApi.roster(projectId)])
+      .then(([available, roster]) => {
+        if (!live) return;
+        setTemplates(available);
+        setActiveTemplateId(roster.templateId);
+        setSelectedTemplateId(roster.templateId);
+      })
+      .catch((e) => { if (live) setTemplateError(e instanceof Error ? e.message : t('templateLoadError')); });
+    return () => { live = false; };
+  }, [projectId, t]);
+
+  const applyTemplate = async () => {
+    if (!selectedTemplateId || selectedTemplateId === activeTemplateId) return;
+    const selected = templates.find((template) => template.id === selectedTemplateId);
+    const accepted = await confirm({
+      title: t('templateConfirmTitle'),
+      message: t('templateConfirmMessage', { name: selected?.name ?? selectedTemplateId }),
+      confirmLabel: t('templateApply'),
+      destructive: true,
+    });
+    if (!accepted) return;
+    setTemplateBusy(true);
+    setTemplateError(null);
+    try {
+      await kanbanApi.applyTemplate(projectId, selectedTemplateId);
+      setActiveTemplateId(selectedTemplateId);
+      onSaved();
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : t('templateApplyError'));
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -628,6 +673,32 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
 
   return (
     <div style={{ ...sectionPad, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 420 }}>
+      <div style={{ paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('templateHeading')}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>{t('templateHint')}</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <Select
+            value={selectedTemplateId}
+            onChange={(e) => setSelectedTemplateId(e.target.value)}
+            disabled={templateBusy || templates.length === 0}
+            aria-label={t('templateLabel')}
+            style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+          >
+            {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+          </Select>
+          <RoleGate capability="manager.manage" variant="block">
+            <button
+              type="button"
+              style={{ ...btnPrimary, opacity: !selectedTemplateId || selectedTemplateId === activeTemplateId || templateBusy ? 0.6 : 1 }}
+              disabled={!selectedTemplateId || selectedTemplateId === activeTemplateId || templateBusy}
+              onClick={() => void applyTemplate()}
+            >
+              {templateBusy ? t('templateApplying') : t('templateApply')}
+            </button>
+          </RoleGate>
+        </div>
+        {templateError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger)' }}>{templateError}</div>}
+      </div>
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
         {t('boardNameLabel')}
         <input style={{ ...inputStyle, width: '100%', marginTop: 4 }} value={name} onChange={(e) => setName(e.target.value)} />

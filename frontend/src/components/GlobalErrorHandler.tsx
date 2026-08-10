@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   API_ERROR_EVENT,
   type ApiErrorEvent,
 } from '@/lib/errors/apiErrorEvent';
+import { requestReportError } from '@/lib/reportError';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 /* ------------------------------------------------------------------ */
 /*  Inline SVG icons (no lucide-react dependency)                     */
@@ -32,6 +35,12 @@ const IconAlert = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
     <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const IconFlag = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />
   </svg>
 );
 
@@ -118,19 +127,18 @@ export function GlobalErrorHandler() {
       .filter(Boolean)
       .join('\n');
 
-    try {
-      await navigator.clipboard.writeText(ticket);
+    // The plain shared write, not the hook: `copied` is per-toast state living inside the
+    // toasts array, which the hook's single state could not represent. A refused
+    // clipboard resolves false and leaves the toast unflagged, as the old catch did.
+    if (!await copyTextToClipboard(ticket)) return;
+    setToasts((prev) =>
+      prev.map((t) => (t.id === entry.id ? { ...t, copied: true } : t)),
+    );
+    setTimeout(() => {
       setToasts((prev) =>
-        prev.map((t) => (t.id === entry.id ? { ...t, copied: true } : t)),
+        prev.map((t) => (t.id === entry.id ? { ...t, copied: false } : t)),
       );
-      setTimeout(() => {
-        setToasts((prev) =>
-          prev.map((t) => (t.id === entry.id ? { ...t, copied: false } : t)),
-        );
-      }, 2000);
-    } catch {
-      /* clipboard not available */
-    }
+    }, 2000);
   }, []);
 
   if (toasts.length === 0) return null;
@@ -145,8 +153,7 @@ export function GlobalErrorHandler() {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        maxWidth: 420,
-        width: '100%',
+        width: 'min(520px, calc(100vw - 32px))',
         pointerEvents: 'none',
       }}
     >
@@ -178,6 +185,7 @@ function Toast({
   onToggleExpand: (id: string) => void;
   onCopy: (entry: ToastEntry) => void;
 }) {
+  const t = useTranslations('globalError');
   const { id, event: ev, expanded, copied } = entry;
 
   return (
@@ -185,27 +193,30 @@ function Toast({
       role="alert"
       style={{
         pointerEvents: 'auto',
-        background: 'var(--bg-elevated, #111827)',
+        background: 'var(--bg-elevated, var(--bg-elevated))',
         border: '1px solid var(--error-border, rgba(239,68,68,0.5))',
         borderRadius: 'var(--radius-md, 8px)',
         padding: '12px 14px',
-        color: 'var(--text-primary, #f0f4ff)',
+        color: 'var(--text-primary, var(--text-primary))',
         fontFamily: 'var(--font-body, system-ui, sans-serif)',
-        fontSize: 14,
+        fontSize: 'var(--font-size-small)',
         boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
         animation: 'toast-slide-in 200ms ease-out',
       }}
     >
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--error, #f87171)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ color: 'var(--error, var(--error))', flexShrink: 0 }}>
           <IconAlert />
         </span>
         <span
           style={{
             fontWeight: 600,
-            color: 'var(--error-text, #fca5a5)',
-            flexShrink: 0,
+            color: 'var(--error-text)',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {ev.status}
@@ -213,8 +224,8 @@ function Toast({
         </span>
         <span
           style={{
-            color: 'var(--text-muted, #5a6480)',
-            fontSize: 12,
+            color: 'var(--text-muted, var(--text-muted))',
+            fontSize: 'var(--font-size-small)',
             marginLeft: 'auto',
             flexShrink: 0,
           }}
@@ -225,26 +236,39 @@ function Toast({
         {/* Action buttons */}
         <button
           onClick={() => onToggleExpand(id)}
-          title={expanded ? 'Collapse' : 'Expand details'}
+          title={expanded ? t('collapse') : t('expandDetails')}
           style={iconBtnStyle}
         >
           {expanded ? <IconChevronUp /> : <IconChevronDown />}
         </button>
+        {/* Add user context to this error in BuilderForce.ai's product Quality feed. */}
+        <button
+          onClick={() => requestReportError({
+            title: `${ev.status}${ev.code ? ` ${ev.code}` : ''}`.trim(),
+            message: ev.message,
+            url: ev.url,
+          })}
+          title={t('report')}
+          aria-label={t('report')}
+          style={iconBtnStyle}
+        >
+          <IconFlag />
+        </button>
         <button
           onClick={() => onCopy(entry)}
-          title="Copy support ticket"
+          title={t('copyTicket')}
           style={{
             ...iconBtnStyle,
             color: copied
-              ? 'var(--success, #22c55e)'
-              : 'var(--text-muted, #5a6480)',
+              ? 'var(--success, var(--success))'
+              : 'var(--text-muted, var(--text-muted))',
           }}
         >
           {copied ? <IconCheck /> : <IconCopy />}
         </button>
         <button
           onClick={() => onDismiss(id)}
-          title="Dismiss"
+          title={t('dismiss')}
           style={iconBtnStyle}
         >
           <IconX />
@@ -267,8 +291,8 @@ function Toast({
       <div
         style={{
           marginTop: 2,
-          fontSize: 12,
-          color: 'var(--text-muted, #5a6480)',
+          fontSize: 'var(--font-size-small)',
+          color: 'var(--text-muted, var(--text-muted))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -283,17 +307,17 @@ function Toast({
           style={{
             marginTop: 8,
             padding: 10,
-            background: 'var(--bg-deep, #050810)',
+            background: 'var(--bg-deep, var(--bg-deep))',
             border: '1px solid var(--border, rgba(136,146,176,0.15))',
             borderRadius: 'var(--radius-md, 8px)',
-            fontSize: 12,
+            fontSize: 'var(--font-size-small)',
             fontFamily: 'var(--font-mono, monospace)',
             overflowX: 'auto',
             maxHeight: 192,
             overflowY: 'auto',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            color: 'var(--text-secondary, #8892b0)',
+            color: 'var(--text-secondary, var(--text-secondary))',
           }}
         >
           {JSON.stringify(
@@ -325,7 +349,7 @@ const iconBtnStyle: React.CSSProperties = {
   border: 'none',
   cursor: 'pointer',
   padding: 4,
-  color: 'var(--text-muted, #5a6480)',
+  color: 'var(--text-muted, var(--text-muted))',
   display: 'flex',
   alignItems: 'center',
   flexShrink: 0,

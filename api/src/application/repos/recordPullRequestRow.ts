@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * recordPullRequestRow — the single place that inserts a `pull_requests` row.
  *
@@ -11,6 +12,37 @@
 import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { deploymentEvents, pullRequests } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+
+/**
+ * The column projection every PR-lookup helper below returns. It was duplicated
+ * verbatim across findOpenPullRequestByTask / findMergedPullRequestBySha /
+ * findOpenPullRequestByProject, so a column added for one caller silently missed
+ * the other two — which is exactly how `number` came to be absent from all three
+ * despite the ordering clauses already referencing it.
+ *
+ * `number` is included because publishing a Check Run needs the PR head SHA, and
+ * the only way to that SHA is getPullRequestDetail(…, { number }).
+ */
+const PR_REF_COLUMNS = {
+  id: pullRequests.id,
+  tenantId: pullRequests.tenantId,
+  taskId: pullRequests.taskId,
+  projectId: pullRequests.projectId,
+  repoId: pullRequests.repoId,
+  buildStatus: pullRequests.buildStatus,
+  number: pullRequests.number,
+} as const;
+
+/** Shape returned by the PR-lookup helpers. */
+export type PullRequestRef = {
+  id: string;
+  tenantId: number;
+  taskId: number | null;
+  projectId: number;
+  repoId: string | null;
+  buildStatus: string | null;
+  number: number | null;
+};
 
 export interface RecordPullRequestInput {
   tenantId: number;
@@ -86,8 +118,10 @@ async function recordMergeDeployment(db: Db, pr: { id: string; tenantId: number;
       externalRef: pr.id,
       deployedAt: new Date(),
     });
-  } catch {
+  } catch (error) {
     // best-effort — a missing deployment row only undercounts DORA frequency.
+  
+    reportCaughtError(error, { source: "application/repos/recordPullRequestRow.ts", operation: "recordMergeDeployment" });
   }
 }
 
@@ -104,6 +138,23 @@ export async function markPullRequestMergedById(
     .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
     .returning();
   if (row) await recordMergeDeployment(db, { id: row.id, tenantId: row.tenantId, projectId: row.projectId, taskId: row.taskId ?? null });
+  return row ?? null;
+}
+
+/**
+ * Flag a PR row CLOSED (not merged) by its id — the DB-side counterpart of
+ * {@link closePullRequest}, used when a run is reverted.
+ *
+ * Deliberately does NOT write a {@link deploymentEvents} row: a closed PR shipped
+ * nothing, so counting it as a deployment would inflate DORA frequency with work
+ * that was thrown away.
+ */
+export async function markPullRequestClosedById(db: Db, id: string, tenantId: number) {
+  const [row] = await db
+    .update(pullRequests)
+    .set({ status: 'closed', updatedAt: new Date() })
+    .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
+    .returning();
   return row ?? null;
 }
 
@@ -129,14 +180,7 @@ export async function markPullRequestMergedByTask(
  *  pre-merge phase so the build status + reason land on the right PR row. */
 export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId: number) {
   const [row] = await db
-    .select({
-      id: pullRequests.id,
-      tenantId: pullRequests.tenantId,
-      taskId: pullRequests.taskId,
-      projectId: pullRequests.projectId,
-      repoId: pullRequests.repoId,
-      buildStatus: pullRequests.buildStatus,
-    })
+    .select(PR_REF_COLUMNS)
     .from(pullRequests)
     .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
     // Prefer a row with a real provider number, then newest (same precedence as the GET route).
@@ -148,14 +192,7 @@ export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId
 /** Find the merged PR a post-merge CI build belongs to, by its recorded merge SHA. */
 export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
   const [row] = await db
-    .select({
-      id: pullRequests.id,
-      tenantId: pullRequests.tenantId,
-      taskId: pullRequests.taskId,
-      projectId: pullRequests.projectId,
-      repoId: pullRequests.repoId,
-      buildStatus: pullRequests.buildStatus,
-    })
+    .select(PR_REF_COLUMNS)
     .from(pullRequests)
     .where(eq(pullRequests.mergeSha, mergeSha))
     .limit(1);
@@ -167,6 +204,21 @@ export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
  *  deployment row: a failing post-merge build is a change failure; a later success
  *  closes MTTR by stamping restored_at on the still-open failure. (Pre-merge rows have
  *  no deployment_events row yet, so the DORA reconcile is a harmless no-op for them.) */
+/**
+ * The newest open PR for a PROJECT (no task). Designer/Mobile PRs are opened by
+ * the IDE bridge, not by an agent working a ticket, so they have a `projectId`
+ * and a null `taskId` — `findOpenPullRequestByTask` can never match them.
+ */
+export async function findOpenPullRequestByProject(db: Db, tenantId: number, projectId: number) {
+  const [row] = await db
+    .select(PR_REF_COLUMNS)
+    .from(pullRequests)
+    .where(and(eq(pullRequests.projectId, projectId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
+    .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus: string, buildError: string | null = null) {
   await db
     .update(pullRequests)
@@ -187,7 +239,9 @@ export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus:
         .set({ restoredAt: new Date() })
         .where(and(eq(deploymentEvents.externalRef, id), eq(deploymentEvents.isFailure, true), isNull(deploymentEvents.restoredAt)));
     }
-  } catch {
+  } catch (error) {
     // best-effort — DORA change-failure/MTTR self-heals on the next build event.
+  
+    reportCaughtError(error, { source: "application/repos/recordPullRequestRow.ts", operation: "setPullRequestBuildStatus" });
   }
 }

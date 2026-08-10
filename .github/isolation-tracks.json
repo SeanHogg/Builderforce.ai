@@ -1,5 +1,5 @@
 {
-  "$comment": "Machine-readable source of truth for the README '🧵 Isolation Tracks' table (T9 · Platform · DB · CI steward). The track-scope guard (api/scripts/check-track-scope.mjs, run by .github/workflows/track-scope.yml) reads THIS file to enforce that a `track/<id>` branch edits only files under its track's `owns` globs (minus `excludes`) plus the shared hubs, and draws migration numbers only from its band. Keep this file and the README table in sync — this file is canonical.",
+  "$comment": "Machine-readable source of truth for the generated isolation-track reference (T9 · Platform · DB · CI steward). The track-scope guard reads THIS file to enforce that a `track/<id>` branch edits only files under its owns globs (minus excludes) plus shared coordination files, and draws migration numbers only from its band. This file is canonical; regenerate .github/isolation-tracks.generated.md after editing it.",
   "globSyntax": "Paths are repo-root-relative. `**` matches any number of path segments, `*` matches within one segment. `[` and `]` are LITERAL (Next.js route dirs like marketplace/[slug]), not character classes.",
   "sharedHubs": [
     "api/src/infrastructure/database/schema.ts",
@@ -23,7 +23,6 @@
         "frontend/src/app/agents/**",
         "frontend/src/app/blog/**",
         "frontend/src/app/pricing/**",
-        "frontend/src/app/projects/[id]/**",
         "frontend/src/app/sitemap.ts",
         "frontend/src/lib/seo.*",
         "frontend/src/lib/content.*",
@@ -40,8 +39,7 @@
         "frontend/src/components/QuickStart*",
         "frontend/src/components/blog/**",
         "frontend/public/robots.txt",
-        "frontend/public/install.*",
-        "api/src/presentation/routes/pendingPromptRoutes.ts"
+        "frontend/public/install.*"
       ],
       "excludes": []
     },
@@ -54,6 +52,10 @@
         "frontend/src/components/**",
         "frontend/src/lib/brain/**",
         "brain-embedded/**",
+        "clients/vscode/**",
+        "packages/brain-ui/**",
+        "packages/creation-canvas-contract/**",
+        "api/src/presentation/routes/pendingPromptRoutes.ts",
         "api/src/presentation/routes/dashboardRoutes.ts"
       ],
       "excludes": [
@@ -65,7 +67,6 @@
         "frontend/src/app/agents/**",
         "frontend/src/app/blog/**",
         "frontend/src/app/pricing/**",
-        "frontend/src/app/projects/[id]/**",
         "frontend/src/app/sitemap.ts",
         "frontend/src/app/workflows/**",
         "frontend/src/app/embed/**",
@@ -78,6 +79,7 @@
         "frontend/src/components/blog/**",
         "frontend/src/components/workflow-builder/**",
         "frontend/src/components/LlmStudioPanel*",
+        "frontend/src/components/ide/Voice*",
         "frontend/src/components/QaContent.tsx"
       ]
     },
@@ -99,12 +101,14 @@
       "owns": [
         "api/src/application/runtime/**",
         "api/src/application/repos/**",
+        "api/src/application/manager/**",
         "api/src/infrastructure/relay/**",
         "api/src/presentation/routes/runtimeRoutes.ts",
         "api/src/presentation/routes/repoRoutes.ts",
         "api/src/presentation/routes/repoAnalysisRoutes.ts",
         "api/src/presentation/routes/taskRoutes.ts",
-        "api/src/presentation/routes/agentRuntimeRoutes.ts"
+        "api/src/presentation/routes/agentRuntimeRoutes.ts",
+        "api/src/presentation/routes/managerRoutes.ts"
       ],
       "excludes": []
     },
@@ -114,7 +118,9 @@
       "migrationBand": null,
       "owns": [
         "agent-runtime/**",
-        "packages/**"
+        "packages/agent-stall/**",
+        "packages/agent-tools/**",
+        "packages/tui/**"
       ],
       "excludes": []
     },
@@ -130,7 +136,8 @@
         "api/src/presentation/routes/studioWeightRoutes.ts",
         "frontend/src/components/LlmStudioPanel*",
         "frontend/src/components/ide/Voice*",
-        "frontend/src/lib/voiceStudio.ts"
+        "frontend/src/lib/voice*",
+        "frontend/src/hooks/useVideoVersions.ts"
       ],
       "excludes": []
     },
@@ -143,6 +150,7 @@
         "frontend/src/app/embed/**",
         "frontend/src/lib/embed/**",
         "api/src/application/seams/**",
+        "api/src/application/governance/**",
         "api/src/infrastructure/auth/segment*",
         "api/src/presentation/routes/tenant*",
         "api/src/presentation/routes/embedRoutes.ts",
@@ -181,8 +189,10 @@
       "owns": [
         "api/migrations/**",
         "api/scripts/**",
+        "api/src/infrastructure/database/schema/**",
         ".github/workflows/**",
         ".github/isolation-tracks.json",
+        "ROADMAP.md",
         "frontend/eslint.config.js",
         "tsconfig*.json",
         "frontend/tsconfig.json",

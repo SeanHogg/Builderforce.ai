@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeFetchUrl, fetchWebDocument } from './webFetch';
+import { normalizeFetchUrl, fetchWebDocument, framePolicy } from './webFetch';
 
 describe('normalizeFetchUrl', () => {
   it('rewrites a GitHub blob URL to the raw file', () => {
@@ -39,5 +39,35 @@ describe('fetchWebDocument SSRF guard', () => {
 
   it('rejects an unsupported protocol', async () => {
     await expect(fetchWebDocument('ftp://example.com/x')).rejects.toThrow(/http/);
+  });
+});
+
+describe('framePolicy', () => {
+  it('allows a page that says nothing about framing', () => {
+    expect(framePolicy(null, null)).toEqual({ frameable: true, frameBlockedBy: null });
+    expect(framePolicy(null, "default-src 'self'; img-src https:")).toEqual({ frameable: true, frameBlockedBy: null });
+  });
+
+  it('refuses any X-Frame-Options value — ALLOW-FROM is dead in every browser', () => {
+    for (const value of ['DENY', 'SAMEORIGIN', 'sameorigin', 'ALLOW-FROM https://builderforce.ai']) {
+      expect(framePolicy(value, null), value).toEqual({ frameable: false, frameBlockedBy: 'x-frame-options' });
+    }
+  });
+
+  it('reads frame-ancestors: wildcard and an explicit BuilderForce origin open the frame', () => {
+    expect(framePolicy(null, 'frame-ancestors *')).toEqual({ frameable: true, frameBlockedBy: null });
+    expect(framePolicy(null, "default-src 'self'; frame-ancestors https://builderforce.ai"))
+      .toEqual({ frameable: true, frameBlockedBy: null });
+    expect(framePolicy(null, 'frame-ancestors https:')).toEqual({ frameable: true, frameBlockedBy: null });
+  });
+
+  it("reads frame-ancestors: 'none', 'self' and a foreign origin close it", () => {
+    for (const csp of ["frame-ancestors 'none'", "frame-ancestors 'self'", 'frame-ancestors https://example.com']) {
+      expect(framePolicy(null, csp), csp).toEqual({ frameable: false, frameBlockedBy: 'frame-ancestors' });
+    }
+  });
+
+  it('ignores a directive whose name merely starts the same way', () => {
+    expect(framePolicy(null, "frame-src 'none'")).toEqual({ frameable: true, frameBlockedBy: null });
   });
 });

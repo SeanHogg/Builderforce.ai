@@ -1,0 +1,22 @@
+name: builderforce
+type: remote
+dynamic:
+  tools: true
+meta:
+  category: productivity
+  tags:
+    - agents
+    - project-management
+    - kanban
+    - okr
+    - devops
+    - remote
+about:
+  title: Builderforce
+  description: Run tickets, boards, OKRs and cloud coding agents in your Builderforce workspace
+  icon: https://www.google.com/s2/favicons?domain=builderforce.ai&sz=64
+source:
+  project: https://github.com/SeanHogg/Builderforce.ai
+remote:
+  transport_type: streamable-http
+  url: https://api.builderforce.ai/mcp

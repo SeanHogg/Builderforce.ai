@@ -74,7 +74,7 @@ function pill(text: string, color: string) {
   return (
     <span
       style={{
-        display: 'inline-block', padding: '1px 8px', borderRadius: 999,
+        display: 'inline-block', padding: '1px 8px', borderRadius: 'var(--radius-full)',
         fontSize: 11, fontWeight: 600, color, border: `1px solid ${color}55`,
         background: `${color}14`, whiteSpace: 'nowrap',
       }}
@@ -91,7 +91,7 @@ function Json({ value }: { value: unknown }) {
     <pre
       style={{
         margin: 0, padding: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
-        borderRadius: 8, fontSize: 12, lineHeight: 1.5, overflow: 'auto',
+        borderRadius: 'var(--radius-md)', fontSize: 12, lineHeight: 1.5, overflow: 'auto',
         maxHeight: 360, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text-secondary)',
       }}
     >
@@ -166,14 +166,14 @@ export function LlmTracesPanel() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('traces.searchPlaceholder')}
           style={{
-            flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+            flex: 1, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
             background: 'var(--bg-deep)', color: 'var(--text-primary)', fontSize: 13,
           }}
         />
         <button
           type="submit"
           style={{
-            padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border-accent)',
+            padding: '8px 18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-accent)',
             background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
           }}
         >
@@ -189,7 +189,7 @@ export function LlmTracesPanel() {
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
         {/* List */}
         {viewMode === 'table' ? (
-        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, overflowX: 'auto', overflowY: 'hidden' }}>
+        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflowX: 'auto', overflowY: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: 'var(--bg-base)', color: muted, textAlign: 'left' }}>
@@ -249,7 +249,7 @@ export function LlmTracesPanel() {
                   cursor: 'pointer',
                   background: 'var(--bg-elevated, var(--bg-base))',
                   border: `1px solid ${selected?.traceId === tr.traceId ? 'var(--border-accent)' : 'var(--border-subtle, var(--border-subtle))'}`,
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-lg)',
                   padding: 16,
                   display: 'flex',
                   flexDirection: 'column',
@@ -274,7 +274,7 @@ export function LlmTracesPanel() {
 
         {/* Detail */}
         {selected && (
-          <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16, maxHeight: 700, overflow: 'auto' }}>
+          <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16, maxHeight: 700, overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <code style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{selected.traceId}</code>
               <button

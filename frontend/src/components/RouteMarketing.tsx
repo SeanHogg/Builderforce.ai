@@ -2,11 +2,14 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { getRouteMarketing } from '@/lib/routeMarketing';
+import { useTranslations } from 'next-intl';
+import { getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
+import { ButtonLink, Icon, Surface, surfaceClassName } from '@/components/ui';
 import JsonLd from './JsonLd';
 import RelatedArticles from './blog/RelatedArticles';
+import { signInHref } from '@/lib/auth';
 
 /**
  * Marketing page rendered (inside MarketingShell) when a logged-out visitor or
@@ -19,24 +22,38 @@ import RelatedArticles from './blog/RelatedArticles';
  * this component only renders it and decides its own section visibility.
  */
 export default function RouteMarketing({ pathname }: { pathname: string }) {
+  const t = useTranslations('routeMarketing');
   const m = getRouteMarketing(pathname);
-  const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
+  const loginHref = signInHref(pathname);
   const metaDesc = m.seoDescription ?? m.description;
 
   // Client-set <title>/description so each feature route has a unique, crawlable
   // head (these routes render client-side, so there is no server metadata
   // export). Modern crawlers execute JS and read both this and the JSON-LD below.
+  //
+  // The `noindex` half matters as much as the title. Every authenticated route
+  // renders this teaser to a logged-out visitor, which quietly turned operator
+  // tooling — Platform Admin, the workspace switcher — into indexable pages. The
+  // root layout declares `robots: 'index, follow'`, so a route that must stay
+  // out of the index has to say so here, and has to put the tag BACK on unmount
+  // or one visit to /admin would suppress the whole site for that session.
   useEffect(() => {
     const prevTitle = document.title;
     document.title = `${m.title} — Builderforce.ai`;
     const tag = document.querySelector('meta[name="description"]');
     const prevDesc = tag?.getAttribute('content') ?? null;
     if (tag) tag.setAttribute('content', metaDesc);
+
+    const robots = document.querySelector('meta[name="robots"]');
+    const prevRobots = robots?.getAttribute('content') ?? null;
+    if (robots && isNoindexTeaserRoute(pathname)) robots.setAttribute('content', 'noindex, follow');
+
     return () => {
       document.title = prevTitle;
       if (tag && prevDesc !== null) tag.setAttribute('content', prevDesc);
+      if (robots && prevRobots !== null) robots.setAttribute('content', prevRobots);
     };
-  }, [m.title, metaDesc]);
+  }, [m.title, metaDesc, pathname]);
 
   return (
     <div className="route-mkt">
@@ -49,29 +66,30 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         })}
       />
 
-      <section className="rm-hero">
-        <div className="rm-icon" aria-hidden="true">{m.icon}</div>
-        <h1 className="rm-title">{m.title}</h1>
+      <section className={surfaceClassName({ tone: 'raised', padding: 'lg' }, 'rm-hero')}>
+        <div className="rm-icon" aria-hidden="true"><Icon source={m.icon} size={28} /></div>
+        <h1 className="ui-text-page-title rm-title">{m.title}</h1>
         <p className="rm-desc">{m.description}</p>
-        <p className="rm-sub">
-          Sign in to use {m.title}, or create a free account — no credit card required.
-        </p>
+        <p className="ui-text-small rm-sub">{t('subtitle', { surface: m.title })}</p>
         <div className="rm-actions">
-          <Link href="/register" className="rm-btn-primary">🚀 Get Started Free</Link>
-          <Link href={loginHref} className="rm-btn-secondary">Sign In</Link>
-          <Link href="/product" className="rm-btn-ghost">Explore the product →</Link>
+          <ButtonLink href="/create/new" variant="primary" size="lg">
+            <span aria-hidden="true">✦</span>
+            {t('startFree')}
+          </ButtonLink>
+          <ButtonLink href={loginHref} variant="secondary" size="lg">{t('signIn')}</ButtonLink>
+          <ButtonLink href="/creation-canvas" variant="ghost" size="lg">{t('exploreCanvas')} →</ButtonLink>
         </div>
       </section>
 
       {m.highlights && m.highlights.length > 0 && (
         <section className="rm-highlights">
-          <div className="rm-inside-head">How {m.title} works</div>
+          <div className="ui-eyebrow rm-inside-head">{t('howItWorks', { surface: m.title })}</div>
           <div className="rm-hl-grid">
             {m.highlights.map((h) => (
-              <div key={h.title} className="rm-hl-card">
-                <div className="rm-hl-title">{h.title}</div>
-                <div className="rm-hl-desc">{h.desc}</div>
-              </div>
+              <Surface key={h.title} tone="raised" padding="md">
+                <div className="ui-text-card-title rm-hl-title">{h.title}</div>
+                <div className="ui-text-small rm-hl-desc">{h.desc}</div>
+              </Surface>
             ))}
           </div>
         </section>
@@ -79,25 +97,29 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
 
       {m.figures && m.figures.length > 0 && (
         <section className="rm-figures">
-          <div className="rm-inside-head">See how it works</div>
+          <div className="ui-eyebrow rm-inside-head">{t('seeHowItWorks')}</div>
           {m.figures.map((f) => (
             <figure key={f.src} className="rm-figure">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="rm-figure-img" src={f.src} alt={f.alt} loading="lazy" width={1600} height={900} />
-              <figcaption className="rm-figure-cap">{f.caption}</figcaption>
+              <figcaption className="ui-text-small rm-figure-cap">{f.caption}</figcaption>
             </figure>
           ))}
         </section>
       )}
 
       <section className="rm-inside">
-        <div className="rm-inside-head">What you get with Builderforce.ai</div>
+        <div className="ui-eyebrow rm-inside-head">{t('whatYouGet')}</div>
         <div className="rm-grid">
           {PRODUCT_SECTIONS.map((s) => (
-            <Link key={s.id} href={`/product#${s.id}`} className="rm-card">
-              <div className="rm-card-icon" aria-hidden="true">{s.icon}</div>
-              <div className="rm-card-title">{s.title}</div>
-              <div className="rm-card-blurb">{s.blurb}</div>
+            <Link
+              key={s.id}
+              href={`/product#${s.id}`}
+              className={surfaceClassName({ tone: 'raised', interactive: true }, 'rm-card')}
+            >
+              <div className="rm-card-icon" aria-hidden="true"><Icon source={s.icon} size={24} /></div>
+              <div className="ui-text-card-title">{s.title}</div>
+              <div className="ui-text-small rm-card-blurb">{s.blurb}</div>
             </Link>
           ))}
         </div>
@@ -105,12 +127,15 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
 
       {m.faq && m.faq.length > 0 && (
         <section className="rm-faq">
-          <div className="rm-inside-head">Frequently asked questions</div>
+          <div className="ui-eyebrow rm-inside-head">{t('faqHeading')}</div>
           <div className="rm-faq-list">
             {m.faq.map((q) => (
-              <details key={q.question} className="rm-faq-item">
-                <summary className="rm-faq-q">{q.question}</summary>
-                <p className="rm-faq-a">{q.answer}</p>
+              <details
+                key={q.question}
+                className={surfaceClassName({ tone: 'raised', padding: 'none' }, 'rm-faq-item')}
+              >
+                <summary className="ui-text-card-title rm-faq-q">{q.question}</summary>
+                <p className="ui-text-body rm-faq-a">{q.answer}</p>
               </details>
             ))}
           </div>
@@ -118,104 +143,69 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
       )}
 
       {m.relatedSurface && (
-        <RelatedArticles surface={m.relatedSurface} heading="Related reading" />
+        <RelatedArticles surface={m.relatedSurface} heading={t('relatedReading')} />
       )}
 
+      {/* LAYOUT ONLY.
+          This block used to be 95 lines and carried a fourth parallel vocabulary
+          — `.rm-btn-primary` / `.rm-btn-secondary` / `.rm-btn-ghost` / `.rm-card`
+          / `.rm-hl-card` / `.rm-faq-item` / `.rm-inside-head` re-declared the
+          button, the card and the eyebrow that `<Button>`, `<Surface>` and
+          `.ui-eyebrow` already own, on the single component that renders for 86
+          public routes. Its eyebrow was 0.82rem sans against a documented
+          0.68rem mono, its title clamped to a ramp that matched no role, and its
+          buttons were `padding: 13px 26px` — off the space ramp entirely.
+
+          What is left here is what genuinely belongs to THIS composition: the
+          measure, the grid tracks, the gaps, and the disclosure marker. Colour,
+          border, radius, type and motion all come from the primitives now, so
+          this page cannot drift from the rest of the product again. */}
       <style>{`
-        .route-mkt { max-width: 1000px; margin: 0 auto; padding: 24px; }
-        .rm-hero {
-          text-align: center;
-          padding: 48px 24px 40px;
-          border: 1px solid var(--border-subtle);
-          border-radius: 20px;
-          background: var(--surface-card);
-        }
-        .rm-icon { font-size: 56px; line-height: 1; margin-bottom: 16px; }
-        .rm-title {
-          font-family: var(--font-display);
-          font-weight: 700;
-          font-size: clamp(1.8rem, 4vw, 2.6rem);
-          color: var(--text-primary);
-          margin: 0 0 12px;
-        }
+        .route-mkt { max-width: var(--marketing-max); margin: 0 auto; padding: var(--space-6) var(--marketing-gutter); }
+        .rm-hero { text-align: center; }
+        .rm-icon { font-size: var(--font-size-hero); line-height: 1; margin-bottom: var(--space-4); }
+        .rm-title { color: var(--text-primary); margin: 0 0 var(--space-3); }
         .rm-desc {
-          font-size: clamp(1rem, 2vw, 1.12rem);
+          font-size: var(--font-size-body);
           color: var(--text-secondary);
-          max-width: 600px;
-          margin: 0 auto 8px;
+          max-width: var(--content-narrow);
+          margin: 0 auto var(--space-2);
           line-height: 1.6;
         }
-        .rm-sub { font-size: 0.9rem; color: var(--text-muted); margin: 0 auto 28px; }
-        .rm-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
-        .rm-btn-primary {
-          display: inline-flex; align-items: center; gap: 8px;
-          padding: 13px 26px; border-radius: 12px;
-          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
-          color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 0.92rem;
-          text-decoration: none; box-shadow: 0 6px 20px var(--shadow-coral-mid);
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .rm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px var(--shadow-coral-strong); }
-        .rm-btn-secondary {
-          display: inline-flex; align-items: center; padding: 13px 26px; border-radius: 12px;
-          border: 1px solid var(--border-subtle); background: var(--surface-card);
-          color: var(--text-primary); font-family: var(--font-display); font-weight: 600; font-size: 0.92rem;
-          text-decoration: none;
-        }
-        .rm-btn-secondary:hover { border-color: var(--border-accent); }
-        .rm-btn-ghost { color: var(--coral-bright); font-weight: 600; font-size: 0.88rem; text-decoration: none; padding: 13px 8px; }
-        .rm-btn-ghost:hover { text-decoration: underline; }
+        .rm-sub { color: var(--text-muted); margin: 0 auto var(--space-6); }
+        .rm-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; align-items: center; }
 
-        .rm-highlights { margin-top: 40px; }
-        .rm-hl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-        .rm-hl-card {
-          padding: 22px 20px; border-radius: 16px;
-          border: 1px solid var(--border-subtle); background: var(--surface-card);
-        }
-        .rm-hl-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--text-primary); margin-bottom: 6px; }
-        .rm-hl-desc { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
+        .rm-highlights, .rm-figures, .rm-inside, .rm-faq { margin-top: var(--space-10); }
+        .rm-hl-grid, .rm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
+        .rm-hl-title { margin-bottom: var(--space-1); }
+        .rm-hl-desc, .rm-card-blurb { color: var(--text-secondary); }
 
-        .rm-figures { margin-top: 40px; display: flex; flex-direction: column; gap: 26px; }
+        .rm-figures { display: flex; flex-direction: column; gap: var(--space-6); }
         .rm-figure { margin: 0; }
         .rm-figure-img {
-          width: 100%; height: auto; display: block; border-radius: 16px;
-          border: 1px solid var(--border-subtle); background: #0e1525;
+          width: 100%; height: auto; display: block;
+          border-radius: var(--radius-xl);
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-deep);
         }
-        .rm-figure-cap { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; text-align: center; margin-top: 10px; }
+        .rm-figure-cap { color: var(--text-muted); text-align: center; margin-top: var(--space-2); }
 
-        .rm-inside { margin-top: 40px; }
-        .rm-inside-head {
-          text-align: center; font-family: var(--font-display); font-weight: 600;
-          font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase;
-          color: var(--text-muted); margin-bottom: 18px;
-        }
-        .rm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-        .rm-card {
-          display: flex; flex-direction: column; gap: 6px;
-          padding: 20px; border-radius: 16px;
-          border: 1px solid var(--border-subtle); background: var(--surface-card);
-          text-decoration: none; transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-        .rm-card:hover { transform: translateY(-3px); border-color: var(--border-accent); }
-        .rm-card-icon { font-size: 1.5rem; }
-        .rm-card-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--text-primary); }
-        .rm-card-blurb { font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; }
+        .rm-inside-head { text-align: center; margin-bottom: var(--space-5); }
+        .rm-card { display: flex; flex-direction: column; gap: var(--space-2); text-decoration: none; }
+        .rm-card-icon { font-size: var(--font-size-section); }
 
-        .rm-faq { margin-top: 40px; max-width: 760px; margin-left: auto; margin-right: auto; }
-        .rm-faq-list { display: flex; flex-direction: column; gap: 10px; }
-        .rm-faq-item {
-          border: 1px solid var(--border-subtle); border-radius: 14px;
-          background: var(--surface-card); padding: 4px 18px;
-        }
+        .rm-faq { max-width: var(--content-narrow); margin-left: auto; margin-right: auto; }
+        .rm-faq-list { display: flex; flex-direction: column; gap: var(--space-3); }
+        .rm-faq-item { padding-left: var(--space-5); padding-right: var(--space-5); }
         .rm-faq-q {
-          cursor: pointer; list-style: none; padding: 14px 0;
-          font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
-          color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; gap: 12px;
+          cursor: pointer; list-style: none; padding: var(--space-4) 0;
+          color: var(--text-primary); display: flex;
+          justify-content: space-between; align-items: center; gap: var(--space-3);
         }
         .rm-faq-q::-webkit-details-marker { display: none; }
-        .rm-faq-q::after { content: '+'; color: var(--coral-bright); font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
+        .rm-faq-q::after { content: '+'; color: var(--coral-bright); font-size: var(--font-size-section); line-height: 1; flex-shrink: 0; }
         .rm-faq-item[open] .rm-faq-q::after { content: '–'; }
-        .rm-faq-a { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
+        .rm-faq-a { margin: 0 0 var(--space-4); color: var(--text-secondary); }
       `}</style>
     </div>
   );

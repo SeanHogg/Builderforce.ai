@@ -1,0 +1,30 @@
+{
+  "release": "REPLACE_WITH_RELEASE",
+  "generatedAt": "REPLACE_WITH_ISO_TIMESTAMP",
+  "metrics": {
+    "dogfoodDays": 0,
+    "tenantSessions": 0,
+    "multiplayerSessions": 0,
+    "commandDataLossRate": 1,
+    "wrapperSuccessRate": 0,
+    "returnToSessionRate": 0,
+    "sessionApi5xxRate": 1,
+    "concurrentEditors": 0,
+    "visibleObjects": 0,
+    "referencedObjects": 0
+  },
+  "artifacts": {
+    "deployedE2E": [],
+    "securityReview": [],
+    "accessibilityAudit": [],
+    "webVsixConformance": [],
+    "operationsDrills": []
+  },
+  "ownerSignoffs": {
+    "product": {},
+    "platform": {},
+    "security": {},
+    "accessibility": {},
+    "operations": {}
+  }
+}

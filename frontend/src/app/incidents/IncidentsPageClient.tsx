@@ -2,23 +2,29 @@
 
 /**
  * IncidentsPageClient — the Incident Management surface. Four sub-views selected
- * via the shared <PillTabs> (?tab=): live Incident war rooms, On-call rotations,
+ * via the shared <DestinationIndex> (?tab=): live Incident war rooms, On-call rotations,
  * Escalation policies, and a Business-contact directory. Detail / create flows use
  * the canonical <SlideOutPanel> (never a modal) and destructive removals go through
  * useConfirm(). Writes are gated to manager+ (mirrors the API requireRole(MANAGER)).
  * Fully localized (incidents namespace) + theme-driven (never one-theme hex).
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useRole, hasMinRole } from '@/lib/rbac';
+import { MonitorsSection, MonitoringReporting } from '@/components/reliability/MonitoringSections';
+import { FishboneChart, type FishboneCategory } from '@/components/charts/FishboneChart';
+import type { ImplicatedTicket } from '@/lib/kanban';
 import {
   incidentsApi,
+  workflowDefinitions,
   type Incident,
   type IncidentEvent,
   type IncidentSeverity,
@@ -29,12 +35,14 @@ import {
   type EscalationPolicy,
   type EscalationTargetKind,
   type BusinessContact,
+  type IncidentWorkflowRun,
+  type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -60,20 +68,33 @@ function fmt(dt: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
 
+/** Split a free-text RCA field into discrete causes — one per line / semicolon. */
+function splitCauses(s: string | null | undefined): string[] {
+  return (s ?? '')
+    .split(/[\n;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 export default function IncidentsPageClient() {
   const t = useTranslations('incidents');
+  const tm = useTranslations('monitoring');
   const tc = useTranslations('common');
   const tab = useSearchParams().get('tab') ?? '';
   const role = useRole();
   const canManage = hasMinRole(role, 'manager');
 
-  const heading = tab === 'oncall'
-    ? { title: t('tab.oncall'), subtitle: t('oncallSubtitle') }
-    : tab === 'escalation'
-      ? { title: t('tab.escalation'), subtitle: t('escalationSubtitle') }
-      : tab === 'contacts'
-        ? { title: t('tab.contacts'), subtitle: t('contactsSubtitle') }
-        : { title: t('title'), subtitle: t('subtitle') };
+  const heading = tab === 'monitors'
+    ? { title: tm('boardsTitle'), subtitle: tm('boardsSubtitle') }
+    : tab === 'reporting'
+      ? { title: tm('reportingTitle'), subtitle: tm('reportingSubtitle') }
+      : tab === 'oncall'
+        ? { title: t('tab.oncall'), subtitle: t('oncallSubtitle') }
+        : tab === 'escalation'
+          ? { title: t('tab.escalation'), subtitle: t('escalationSubtitle') }
+          : tab === 'contacts'
+            ? { title: t('tab.contacts'), subtitle: t('contactsSubtitle') }
+            : { title: t('title'), subtitle: t('subtitle') };
 
   return (
     <PageContainer>
@@ -82,7 +103,11 @@ export default function IncidentsPageClient() {
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{heading.subtitle}</p>
       </div>
 
-      {tab === 'oncall' ? (
+      {tab === 'monitors' ? (
+        <MonitorsSection />
+      ) : tab === 'reporting' ? (
+        <MonitoringReporting />
+      ) : tab === 'oncall' ? (
         <OnCallSection t={t} tc={tc} canManage={canManage} />
       ) : tab === 'escalation' ? (
         <EscalationSection t={t} tc={tc} canManage={canManage} />
@@ -111,7 +136,7 @@ function Loader({ t }: { t: T }) {
   return <div style={{ ...card, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 }
 function ErrorCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{msg}</div>;
+  return <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{msg}</div>;
 }
 function EmptyCard({ msg }: { msg: string }) {
   return <div style={{ ...card, color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>{msg}</div>;
@@ -137,6 +162,11 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
   }, [activeOnly]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Deep-link: /incidents?incident=<id> opens that incident's detail panel directly, so
+  // a monitor breach / reporting row can jump straight to its incident (not just the list).
+  const deepLinkIncidentId = useSearchParams().get('incident');
+  useEffect(() => { if (deepLinkIncidentId) setSelectedId(deepLinkIncidentId); }, [deepLinkIncidentId]);
 
   return (
     <>
@@ -334,6 +364,20 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
               <DetailRow label={t('rootCause')} value={incident.rootCause || '—'} />
             </div>
 
+            {/* Why did this occur? — fishbone RCA (renders once a root cause is known) */}
+            {incident.rootCause && (() => {
+              const categories: FishboneCategory[] = [
+                { label: t('rca.rootCause'), causes: splitCauses(incident.rootCause) },
+                ...(incident.impact ? [{ label: t('rca.impact'), causes: splitCauses(incident.impact) }] : []),
+              ];
+              return (
+                <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('rca.fishTitle')}</div>
+                  <FishboneChart problem={incident.title} categories={categories} ariaLabel={t('rca.fishAria', { title: incident.title })} />
+                </div>
+              );
+            })()}
+
             {/* Actions */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('actions')}</div>
@@ -348,6 +392,12 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
 
             {/* RCA / post-mortem */}
             <RcaSection t={t} tc={tc} canManage={canManage} incident={incident} onPublished={() => { load(); onChanged(); }} />
+
+            {/* Implicated delivery tickets + their accountability (RCA linkage, §5.10) */}
+            <ImplicatedTicketsSection t={t} canManage={canManage} incidentId={incident.id} />
+
+            {/* Runbooks — run a custom workflow against this incident + linked runs */}
+            <WorkflowRunsSection t={t} tc={tc} canManage={canManage} incidentId={incident.id} />
 
             {/* Classify */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -401,6 +451,75 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{label}</span>
       <span style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{value}</span>
+    </div>
+  );
+}
+
+/* ────────────── Implicated tickets + accountability (RCA linkage) ────────────── */
+
+function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; canManage: boolean; incidentId: string }) {
+  const [rows, setRows] = useState<ImplicatedTicket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addId, setAddId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    incidentsApi.implicated(incidentId).then(setRows).catch(() => setRows([])).finally(() => setLoading(false));
+  }, [incidentId]);
+  useEffect(() => { load(); }, [load]);
+
+  const add = async () => {
+    const taskId = Number(addId.trim());
+    if (!Number.isFinite(taskId) || taskId <= 0) return;
+    setBusy(true);
+    try { await incidentsApi.linkImplicated(incidentId, { taskId }); setAddId(''); load(); } finally { setBusy(false); }
+  };
+  const remove = async (taskId: number) => { setBusy(true); try { await incidentsApi.unlinkImplicated(incidentId, taskId); load(); } finally { setBusy(false); } };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('implicated.title')}</div>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('implicated.help')}</p>
+      {loading ? (
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('implicated.loading')}</span>
+      ) : rows.length === 0 ? (
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('implicated.empty')}</span>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {rows.map((r) => {
+            const a = r.accountability;
+            const complete = a.percentComplete >= 100;
+            return (
+              <div key={r.taskId} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>#{r.taskId} {r.title}</span>
+                  <span className="badge-muted">{r.status}</span>
+                  <div style={{ flex: 1 }} />
+                  {canManage && (
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => remove(r.taskId)}>{t('implicated.remove')}</button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep)', overflow: 'hidden' }}>
+                    <div style={{ width: `${a.percentComplete}%`, height: '100%', background: complete ? 'var(--success)' : 'var(--coral-bright)' }} />
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{t('implicated.signed', { done: a.completedCount, total: a.requiredCount })}</span>
+                </div>
+                {a.gaps.length > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--danger-text)' }}>{t('implicated.gaps', { count: a.gaps.length })}: {a.gaps.map((g) => g.roleName).join(', ')}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {canManage && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input className="input" style={{ maxWidth: 160 }} value={addId} onChange={(e) => setAddId(e.target.value)} placeholder={t('implicated.addPlaceholder')} inputMode="numeric" />
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy || !addId.trim()} onClick={add}>{t('implicated.add')}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -516,6 +635,23 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
         </Field>
       </div>
 
+      {/* Live "why did this occur?" fishbone — updates as the RCA is written */}
+      {(rootCause.trim() || contributingFactors.trim() || whatWentWrong.trim() || impact.trim()) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('rca.fishTitle')}</span>
+          <FishboneChart
+            problem={incident.title}
+            ariaLabel={t('rca.fishAria', { title: incident.title })}
+            categories={[
+              { label: t('rca.rootCause'), causes: splitCauses(rootCause) },
+              { label: t('rca.contributingFactors'), causes: splitCauses(contributingFactors) },
+              { label: t('rca.whatWentWrong'), causes: splitCauses(whatWentWrong) },
+              { label: t('rca.impact'), causes: splitCauses(impact) },
+            ].filter((c) => c.causes.length > 0)}
+          />
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('rca.actionItems')}</span>
         {actionItems.map((it, i) => (
@@ -534,7 +670,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
               onChange={(e) => setItem(i, { detail: e.target.value })}
               placeholder={t('rca.actionItemDetail')}
             />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}>✕</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}><Icon source="✕" size="1em" /></button>
           </div>
         ))}
         <div>
@@ -547,6 +683,80 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
           {saving ? tc('saving') : t('rca.submit')}
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)} disabled={saving}>{tc('cancel')}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────── Runbooks — custom workflows on an incident ─────────────────── */
+
+function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { incidentId: string }) {
+  const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
+  const [runs, setRuns] = useState<IncidentWorkflowRun[]>([]);
+  const [selectedDef, setSelectedDef] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRuns = useCallback(() => {
+    incidentsApi.listWorkflowRuns(incidentId).then(setRuns).catch(() => {});
+  }, [incidentId]);
+
+  useEffect(() => {
+    workflowDefinitions.list().then(setDefs).catch(() => {});
+    loadRuns();
+  }, [loadRuns]);
+
+  const runWorkflow = async () => {
+    if (!selectedDef) return;
+    setBusy(true); setError(null);
+    try {
+      await incidentsApi.runWorkflow(incidentId, { definitionId: selectedDef });
+      setSelectedDef('');
+      loadRuns();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Run failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('workflows.title')}</div>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('workflows.blurb')}</p>
+      {error && <ErrorCard msg={error} />}
+
+      {canManage && defs.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <Field label={t('workflows.pick')}>
+              <Select className="input" value={selectedDef} onChange={(e) => setSelectedDef(e.target.value)}>
+                <option value="">{t('workflows.pickPlaceholder')}</option>
+                {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={runWorkflow} disabled={busy || !selectedDef}>
+            {busy ? tc('saving') : t('workflows.run')}
+          </button>
+        </div>
+      )}
+      {defs.length === 0 && (
+        <Link href="/workflows" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>{t('workflows.create')}</Link>
+      )}
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>{t('workflows.runs')}</div>
+        {runs.length === 0
+          ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('workflows.noRuns')}</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {runs.map((r) => (
+                <Link key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
+                  <span className="badge-muted">{r.status}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{r.definitionName || r.description || r.id}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{fmt(r.createdAt)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
       </div>
     </div>
   );
@@ -648,7 +858,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
                           <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
                           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
                           <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}>✕</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
                         </div>
                       ))}
                   </div>
@@ -818,7 +1028,7 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
                             })}
                           </span>
                           <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}>✕</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}><Icon source="✕" size="1em" /></button>
                         </div>
                       ))}
                   </div>

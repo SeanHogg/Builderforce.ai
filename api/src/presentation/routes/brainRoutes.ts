@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Brain chat routes — thin presentation layer.
  *
@@ -5,24 +6,31 @@
  * This file maps HTTP request/response to service calls.
  */
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
-import { neon } from '@neondatabase/serverless';
+import { and, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { isValidRoomCode } from '../../application/guest/guestToken';
+import { isValidVisitorId } from '../../application/marketing/MarketingService';
+import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
-import { fetchWebDocument } from '../../application/web/webFetch';
+import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
-import { agentHosts, users } from '../../infrastructure/database/schema';
+import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { relayToRoom } from './realtimeRelay';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,6 +54,16 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
+  // One authenticated invalidation channel per chat. The relay carries no domain
+  // data; clients re-read the durable transcript after a `changed` frame.
+  router.get('/chats/:id/stream', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const allowed = await brainService.canAccess(id, c.get('tenantId'), c.get('userId'));
+    if (!allowed) return c.json({ error: 'Chat not found' }, 404);
+    return relayToRoom(c, c.env?.SESSION_ROOM, brainChatRoomName(c.get('tenantId'), id));
+  });
+
   // GET /chats
   router.get('/chats', async (c) => {
     const rows = await brainService.listChats(
@@ -62,12 +80,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
   // POST /chats
   router.post('/chats', async (c) => {
-    const body = await c.req.json<{ title?: string; projectId?: number | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }>();
     const result = await brainService.createChat({
       tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
       title: body.title,
       projectId: body.projectId,
+      capability: body.capability,
+      mode: body.mode,
     });
     if (result && 'error' in result) return c.json({ error: result.error }, 404);
     return c.json(result, 201);
@@ -116,10 +136,11 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }>();
+    const tenantId = c.get('tenantId') as number;
     const result = await brainService.updateChat(
       id,
-      c.get('tenantId') as number,
+      tenantId,
       c.get('userId') as string,
       body,
     );
@@ -127,7 +148,31 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       const status = result.error === 'Chat not found' ? 404 : 404;
       return c.json({ error: result.error }, status);
     }
-    return c.json(result);
+    // A mode switch is the moment a conversation gains (or gives up) the authority to
+    // open and dispatch work, so it belongs on the audit timeline rather than only in a
+    // column — "who turned this chat into an execution, and when". `modeChangedTo` is
+    // null for a PATCH that did not touch the mode or merely restated it, so a no-op
+    // never manufactures an audit row. Off the response path; best-effort.
+    const { modeChangedTo, ...chat } = result;
+    if (modeChangedTo) {
+      c.executionCtx.waitUntil((async () => {
+        const actor = await resolveActorFromContext(c.env as Env, db, c);
+        await recordActivity(c.env as Env, db, {
+          tenantId,
+          projectId: chat.projectId ?? null,
+          actor,
+          verb: 'chat.mode.set',
+          targetType: 'chat',
+          targetId: String(id),
+          targetLabel: chat.title ?? null,
+          summary: `Chat #${id} switched to ${modeChangedTo} mode`,
+          metadata: { chatId: id, mode: modeChangedTo },
+        }).catch((error) => {
+          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'recordChatModeSwitch' });
+        });
+      })());
+    }
+    return c.json(chat);
   });
 
   // DELETE /chats/:id
@@ -151,6 +196,23 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json({ messages: result });
   });
 
+  // POST /chats/:id/read — advance the caller's unread high-water mark. Body
+  // `{ seq? }`; seq omitted marks everything read. Fired when a chat is opened
+  // (mounted) on EITHER surface, so an execution milestone landing in a chat the
+  // user is not viewing shows an unread badge until they read it — and reading it
+  // on one surface clears it on the other (one unified conversation).
+  router.post('/chats/:id/read', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const body = await c.req.json<{ seq?: number }>().catch(() => ({} as { seq?: number }));
+    const result = await brainService.markRead(
+      id, c.get('tenantId') as number, c.get('userId') as string,
+      typeof body.seq === 'number' ? body.seq : undefined,
+    );
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result);
+  });
+
   // POST /chats/:id/messages
   router.post('/chats/:id/messages', async (c) => {
     const id = parseId(c.req.param('id'));
@@ -169,6 +231,30 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       return c.json({ error: result.error }, status);
     }
 
+    // A human posting into a chat that's linked to a ticket IS a comment on that
+    // ticket — surface it on the unified activity/audit log (verb `comment.added`),
+    // fanned to each linked ticket. Off the response path; best-effort.
+    const userText = (body.messages ?? []).filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim());
+    if (userText.length > 0) {
+      c.executionCtx.waitUntil((async () => {
+        const links = await db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef })
+          .from(chatTicketLinks)
+          .where(and(eq(chatTicketLinks.chatId, id), eq(chatTicketLinks.tenantId, tenantId)))
+          .catch(() => [] as Array<{ kind: string; ref: string }>);
+        if (!links.length) return;
+        const actor = await resolveActorFromContext(c.env as Env, db, c);
+        const summary = userText[userText.length - 1]!.content.replace(/\s+/g, ' ').trim().slice(0, 200);
+        for (const l of links) {
+          await recordActivity(c.env as Env, db, {
+            tenantId, actor, verb: 'comment.added',
+            targetType: l.kind, targetId: l.ref, summary, metadata: { chatId: id },
+          }).catch((error) => {
+            reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+          });
+        }
+      })());
+    }
+
     // Notify any HUMAN addressed in these turns (directed @human message) so an
     // offline teammate learns they were pinged — in-app + optional email.
     const mentioned = new Set<string>();
@@ -177,19 +263,23 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       try {
         const a = (JSON.parse(m.metadata) as { addressedTo?: { kind?: string; ref?: string } }).addressedTo;
         if (a?.kind === 'human' && a.ref) mentioned.add(a.ref);
-      } catch { /* not directed */ }
+      } catch (error) { /* not directed */ 
+        reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+      }
     }
     if (mentioned.size > 0) {
       c.executionCtx.waitUntil((async () => {
         for (const uid of mentioned) {
           try {
-            await notify(neon((c.env as Env).NEON_DATABASE_URL), c.env as Env, {
+            await notify(db, c.env as Env, {
               userId: uid, tenantId, kind: 'chat_mention',
               title: 'You were mentioned in a chat',
               body: 'A teammate addressed you in a Builderforce chat.',
               ref: String(id),
             });
-          } catch { /* best-effort */ }
+          } catch (error) { /* best-effort */ 
+            reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+          }
         }
       })());
     }
@@ -236,7 +326,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const body = await c.req.json<{ events?: BrainTraceEventInput[] }>().catch(() => ({} as { events?: BrainTraceEventInput[] }));
     const result = await brainService.appendTrace(id, body.events ?? []);
     // Invalidate the cached read so the next GET reflects these events.
-    await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch(() => {});
+    await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+    });
     return c.json(result, 201);
   });
 
@@ -351,6 +443,52 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json(result);
   });
 
+  /**
+   * POST /chats/claim-guest-room — keep a shared GUEST session after signing up.
+   *
+   * A logged-out visitor who invited people into a free room has the conversation
+   * living in that room's Durable Object, which expires. Signing up is exactly the
+   * moment that work should stop being disposable, so this copies the room's
+   * transcript into a real Brain chat owned by the new account — the room-side
+   * twin of the local-canvas `claim` flow.
+   *
+   * Authorization is two-sided on purpose: the tenant JWT says who is asking, and
+   * the ROOM says whether they were ever in it (by the anonymous `visitorId` on
+   * its persisted roster). Neither alone is enough. Claiming is once per visitor,
+   * enforced in the DO, so re-signing in cannot fork a second copy — and the room
+   * is left running, because other people may still be in it.
+   */
+  router.post('/chats/claim-guest-room', async (c) => {
+    const body = await c.req
+      .json<{ code?: string; visitorId?: string }>()
+      .catch((): { code?: string; visitorId?: string } => ({}));
+    if (!isValidRoomCode(body.code)) return c.json({ error: 'Invalid room code' }, 400);
+    if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+
+    const claim = await claimGuestRoom(c.env as Env, body.code, body.visitorId);
+    if (!claim) {
+      return c.json({ error: 'That shared session has ended.', code: 'guest_room_unavailable' }, 410);
+    }
+    // Already converted, or nothing was ever said — either way there is nothing to
+    // create, and creating an empty chat would just be litter in their history.
+    if (claim.alreadyClaimed || claim.messages.length === 0) {
+      return c.json({ claimed: false, reason: claim.alreadyClaimed ? 'already_claimed' : 'empty' });
+    }
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const chat = await brainService.createChat({ tenantId, userId, title: claim.title });
+    if (!chat || 'error' in chat) {
+      return c.json({ error: chat && 'error' in chat ? chat.error : 'Could not create the chat' }, 400);
+    }
+
+    const result = await brainService.appendMessages(chat.id, tenantId, userId, {
+      messages: claim.messages.map((m) => ({ role: m.role, content: m.content, metadata: m.metadata ?? undefined })),
+    });
+    if ('error' in result) return c.json({ error: result.error }, 400);
+    return c.json({ claimed: true, chat, messageCount: result.length }, 201);
+  });
+
   // GET /chats/:id/agents — agents invited into this chat.
   router.get('/chats/:id/agents', async (c) => {
     const id = parseId(c.req.param('id'));
@@ -411,7 +549,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
     if (!body.email) return c.json({ error: 'email is required' }, 400);
 
-    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) });
+    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) }, c.env as Env);
     if ('error' in result) return c.json({ error: result.error }, result.error === 'Chat not found' ? 404 : 400);
 
     // Deliver the invite (best-effort — never fails the invite itself).
@@ -423,16 +561,28 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
           const appUrl = (c.env as { APP_URL?: string }).APP_URL || 'https://builderforce.ai';
           const chatUrl = `${appUrl}/ide/dashboard?chat=${id}`;
           if (result.status === 'active' && result.memberUserId) {
-            await notify(neon((c.env as Env).NEON_DATABASE_URL), c.env as Env, {
+            await notify(db, c.env as Env, {
               userId: result.memberUserId, tenantId, kind: 'chat_invite',
               title: `${inviterName} invited you to a chat`,
               body: `You've been added to "${result.chatTitle}". Open Builderforce to join the conversation.`,
               ref: String(id),
             });
           } else {
-            await sendChatInviteEmail(c.env as Env, result.email, { chatTitle: result.chatTitle, inviterName, chatUrl });
+            // Same locale rule as the workspace invite: the invitee's own stored
+            // locale when they have an account, otherwise the inviter's request locale.
+            await sendTransactionalEmail(
+              c.env as Env,
+              db,
+              result.email,
+              ({ locale }) => sendChatInviteEmail(c.env as Env, result.email, {
+                chatTitle: result.chatTitle, inviterName, chatUrl, locale,
+              }),
+              { headers: headerHints(c.req) },
+            );
           }
-        } catch { /* delivery is best-effort */ }
+        } catch (error) { /* delivery is best-effort */ 
+          reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+        }
       })());
     }
     return c.json(result, 201);
@@ -489,7 +639,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const { url } = await c.req.json<{ url?: string }>().catch(() => ({ url: undefined }));
     if (!url || typeof url !== 'string') return c.json({ error: 'A url is required' }, 400);
 
-    const cap = await enforceOutboundFetchCap(db, tenantId);
+    const cap = await enforceOutboundFetchCap(db, tenantId, c.env as Env);
     if (!cap.allowed) {
       return c.json(
         { error: 'Monthly outbound-fetch allowance reached for your plan.', used: cap.used, limit: cap.limit },
@@ -499,7 +649,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
     let result;
     try {
-      result = await fetchWebDocument(url);
+      // Cached (L1 Map + L2 KV) like every other read of this document: the canvas
+      // Web page panel probes the SAME url on every board that frames it, and a
+      // research turn re-reads its sources. Failures throw and are never cached.
+      result = await fetchWebDocumentCached(c.env as Env, url);
     } catch (e) {
       // SSRF rejection or unreachable origin — a 400 the model can relay.
       return c.json({ error: e instanceof Error ? e.message : 'Could not fetch the URL' }, 400);
@@ -507,7 +660,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     // Meter every fetch that actually hit the wire (success OR upstream error) —
     // the outbound cost is the request, not the response. Best-effort; never fail
     // the read over a metering write.
-    c.executionCtx.waitUntil(recordOutboundFetch(db, tenantId, result.url).catch(() => {}));
+    c.executionCtx.waitUntil(recordOutboundFetch(db, tenantId, result.url).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+    }));
     if (result.status >= 400) {
       return c.json({ error: `The URL returned HTTP ${result.status}.`, url: result.url, status: result.status }, 502);
     }
@@ -692,7 +847,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
           body: JSON.stringify(payload),
         }));
         if (res.ok) dispatched++;
-      } catch { /* swallow — agentHost may be offline */ }
+      } catch (error) { /* swallow — agentHost may be offline */ 
+        reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
+      }
     }
 
     return c.json({ ok: true, dispatched, total: hostRows.length });

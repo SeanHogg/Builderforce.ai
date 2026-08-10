@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.SeanHogg/builderforce",
+  "title": "Builderforce",
+  "description": "Run tickets, boards, OKRs and cloud coding agents in your Builderforce workspace",
+  "repository": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "websiteUrl": "https://builderforce.ai",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.builderforce.ai/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <your Builderforce tenant API key>. Create one at https://builderforce.ai/settings/api-keys — the key's tenant is the scope of every tool call.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

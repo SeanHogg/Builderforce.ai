@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { TenantMember } from '@/lib/auth';
@@ -21,13 +22,13 @@ import { ContributorConsolidation } from './ContributorConsolidation';
  */
 
 const sectionStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const btn = (primary = false): React.CSSProperties => ({
-  fontSize: 13, padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+  fontSize: 13, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   border: '1px solid var(--border-subtle)',
-  background: primary ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
-  color: primary ? '#fff' : 'var(--text-secondary)',
+  background: primary ? 'var(--accent)' : 'var(--bg-base)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 
 export function MemberConsolidationPanel({
@@ -102,7 +103,7 @@ export function MemberConsolidationPanel({
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('title')}>
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {error && <div style={{ ...sectionStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+        {error && <div style={{ ...sectionStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
         {/* Selected-member merge */}
         <div style={sectionStyle}>
@@ -125,8 +126,8 @@ export function MemberConsolidationPanel({
                     disabled={busy}
                   />
                   <span style={{ fontWeight: 600 }}>{member.displayName ?? member.email}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{contributor.displayName}{contributor.userId ? ' 🔗' : ''}</span>
-                  {survivorId === contributor.id && <span style={{ fontSize: 11, color: 'var(--accent, #6366f1)' }}>{t('keep')}</span>}
+                  <span style={{ color: 'var(--text-muted)' }}>{contributor.displayName}{contributor.userId ? <Icon source="🔗" size="1em" /> : ''}</span>
+                  {survivorId === contributor.id && <span style={{ fontSize: 11, color: 'var(--accent)' }}>{t('keep')}</span>}
                 </label>
               ))}
             </div>
@@ -139,7 +140,7 @@ export function MemberConsolidationPanel({
           )}
 
           {result ? (
-            <div style={{ fontSize: 13, color: 'var(--success, #30a46c)', marginTop: 12 }}>
+            <div style={{ fontSize: 13, color: 'var(--success)', marginTop: 12 }}>
               {t('done', { merged: result.merged, moved: result.moved })}
             </div>
           ) : (

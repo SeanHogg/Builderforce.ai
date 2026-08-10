@@ -36,6 +36,11 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
+function parseProjectId(raw: string | undefined): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 /** Read a userId off the Hono context (set by authMiddleware) without a cast dance. */
 function userIdOf(c: unknown): string | null {
   return (c as { get(k: string): string | undefined }).get('userId') ?? null;
@@ -49,11 +54,11 @@ function isExportDataset(x: string): x is ExportDataset {
   return (EXPORT_DATASETS as readonly string[]).includes(x);
 }
 
-async function buildDatasetRows(db: Db, dataset: ExportDataset, tenantId: number, segmentId: string, days: number): Promise<ExportRow[]> {
+async function buildDatasetRows(db: Db, dataset: ExportDataset, tenantId: number, segmentId: string, days: number, projectId?: number): Promise<ExportRow[]> {
   const now = Date.now();
   switch (dataset) {
     case 'dora': {
-      const dora = await computeDora(db, tenantId, days);
+      const dora = await computeDora(db, tenantId, days, projectId);
       return dora.series.map((s) => ({
         week: s.bucketStart,
         deploy_freq_per_day: s.deploymentFrequencyPerDay,
@@ -66,17 +71,19 @@ async function buildDatasetRows(db: Db, dataset: ExportDataset, tenantId: number
     case 'finance': {
       const period = `${new Date(now).getUTCFullYear()}-${String(new Date(now).getUTCMonth() + 1).padStart(2, '0')}`;
       const fin = await computeFinanceInsights(db, tenantId, segmentId, period, now);
-      return fin.byProject.map((p) => ({ project: p.projectName, project_id: p.projectId, spend_usd: p.usd }));
+      return fin.byProject
+        .filter((p) => projectId == null || p.projectId === projectId)
+        .map((p) => ({ project: p.projectName, project_id: p.projectId, spend_usd: p.usd }));
     }
     case 'allocation': {
-      const alloc = await computeAllocationInsights(db, tenantId, days, now);
+      const alloc = await computeAllocationInsights(db, tenantId, days, now, { projectId });
       return alloc.byCategory.map((b) => ({
         category: b.category, label: b.label, hours: b.hours, pct: b.pct,
         task_count: b.taskCount, cost_usd: b.costUsd, capex_usd: b.capexUsd, opex_usd: b.opexUsd,
       }));
     }
     case 'benchmarking': {
-      const bench = await computeBenchmarking(db, tenantId, days);
+      const bench = await computeBenchmarking(db, tenantId, days, projectId);
       return bench.metrics.map((m) => ({
         metric: m.metric, label: m.label, value: m.value, unit: m.unit,
         percentile: m.percentile, rating: m.rating, p50: m.p50, p90: m.p90,
@@ -93,9 +100,10 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
   router.get('/benchmarking/cross-team', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
+    const projectId = parseProjectId(c.req.query('projectId'));
     const env = c.env as Env;
-    const key = `insights:xteam:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeCrossTeamBenchmark(db, tenantId, days), SHORT_TTL));
+    const key = `insights:xteam:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeCrossTeamBenchmark(db, tenantId, days, projectId), SHORT_TTL));
   });
 
   // EMP-9 — delay root-cause distribution (manager, cached). Tag writes below bump
@@ -104,9 +112,10 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
   router.get('/delay-taxonomy', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'), 90);
+    const projectId = parseProjectId(c.req.query('projectId'));
     const env = c.env as Env;
-    const key = `insights:delaytax:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeDelayTaxonomy(db, tenantId, days), SHORT_TTL));
+    const key = `insights:delaytax:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeDelayTaxonomy(db, tenantId, days, projectId), SHORT_TTL));
   });
 
   // Tag a task's delay reason (developer+ — the same audience that works the board).
@@ -153,7 +162,8 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
     }
     const format = c.req.query('format') === 'html' ? 'html' : 'csv';
     const days = parseDays(c.req.query('days'));
-    const rows = await buildDatasetRows(db, dataset, tenantId, segmentId, days);
+    const projectId = parseProjectId(c.req.query('projectId'));
+    const rows = await buildDatasetRows(db, dataset, tenantId, segmentId, days, projectId);
     const { contentType, ext } = exportContentMeta(format);
     const stamp = new Date().toISOString().slice(0, 10);
     const body = format === 'html' ? toHtmlTable(rows, { title: `${dataset} export — ${stamp}` }) : toCsv(rows);

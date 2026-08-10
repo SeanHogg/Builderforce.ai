@@ -1,27 +1,34 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
-import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { creationSessionsApi } from '@/lib/builderforceApi';
 
-function BuilderPageInner() {
-  const params = useSearchParams();
-  const scope = useOptionalProjectScope();
-  const id = params.get('id');
-  // A NEW workflow binds to its project from the global TopBar scope param
-  // `?project=` (legacy `?projectId=` honoured for old links), falling back to the
-  // current scope when neither is present. An existing definition loads its own
-  // saved binding, overriding this. One picker for the whole app.
-  const projectIdParam = params.get('project') ?? params.get('projectId');
-  const initialProjectId = projectIdParam ? Number(projectIdParam) : (scope?.currentProjectId ?? null);
-  return <WorkflowBuilder definitionId={id} initialProjectId={initialProjectId} />;
+/** Compatibility adapter: workflow authoring now opens from a Canvas object. */
+function WorkflowBuilderCanvasRedirect() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (!id) {
+      router.replace('/create?filter=workflow');
+      return;
+    }
+    let cancelled = false;
+    void creationSessionsApi.openResource('workflow', id)
+      .then(({ sessionId, objectId }) => {
+        if (!cancelled) router.replace(`/create/${sessionId}?focus=${objectId}`);
+      })
+      .catch(() => {
+        if (!cancelled) router.replace('/create?filter=workflow');
+      });
+    return () => { cancelled = true; };
+  }, [router, searchParams]);
+
+  return null;
 }
 
-export default function WorkflowBuilderPage() {
-  return (
-    <Suspense fallback={<div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Loading builder…</div>}>
-      <BuilderPageInner />
-    </Suspense>
-  );
+export default function WorkflowBuilderCompatibilityPage() {
+  return <Suspense fallback={null}><WorkflowBuilderCanvasRedirect /></Suspense>;
 }

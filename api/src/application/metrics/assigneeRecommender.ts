@@ -22,13 +22,11 @@ import {
 import { readWorkforceMetricsVersion } from './workforceMetrics';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { BUILTIN_ROLES } from '../kanban/roleCatalog';
-import { TaskStatus } from '../../domain/shared/types';
+import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { notSystemTask } from '../task/taskScope';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const DEFAULT_MAX_WIP = 5;
-/** Open lanes a task counts as WIP for (everything not done-class). */
-const DONE_CLASS = new Set<string>([TaskStatus.DONE]);
 
 export type MemberKind = 'human' | 'cloud_agent' | 'host_agent';
 const key = (kind: string, ref: string) => `${kind}:${ref}`;
@@ -156,7 +154,7 @@ async function loadWip(db: Db, tenantId: number): Promise<Map<string, number>> {
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), notInArray(tasks.status, [...DONE_CLASS]), notSystemTask))
+    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), notInArray(tasks.status, [...DONE_CLASS_STATUSES]), notSystemTask))
     .limit(10_000); // bound the WIP scan; open tasks per tenant is small in practice
   const wip = new Map<string, number>();
   for (const r of rows) {
@@ -201,6 +199,8 @@ export async function recommendAssignee(env: Env, db: Db, input: RecommendInput)
 
 export interface TopAssigneeOptions {
   requiredSkills?: string[];
+  /** Autonomous recovery work cannot be parked on a person. */
+  agentOnly?: boolean;
   /** When set, restrict the pick to members ROLE-CAPABLE of this role. This is the
    *  #467 fix: a coding ticket must not be owned by a role-incapable teammate (a PM
    *  agent), no matter how available. Returns null when nobody capable is free — the
@@ -216,6 +216,7 @@ export async function recommendTopAssignee(env: Env, db: Db, projectId: number, 
   const roleKey = opts.roleKey?.trim();
 
   let pool = ranked;
+  if (opts.agentOnly) pool = pool.filter((r) => r.memberKind !== 'human');
   if (roleKey) {
     const [proj] = await db.select({ tenantId: projects.tenantId }).from(projects).where(eq(projects.id, projectId)).limit(1);
     if (proj) {

@@ -144,9 +144,9 @@ function PendingApprovalsCard(_props: WidgetCardProps) {
   return <Stat value={int(n)} sub={n > 0 ? t('overview.requiresReview') : t('overview.allClear')} />;
 }
 
-// ── IDE dashboard (`/ide/dashboard`, group: 'ide') ─────────────────────────────
+// ── Canvas build portfolio (legacy widget ids retained for saved layouts) ─────
 
-/** IDE projects split by modality — the IDE-portfolio composition view. */
+/** Canvas builds split by modality. */
 function IdeByModalityCard(_props: WidgetCardProps) {
   const t = useTranslations('widgets');
   const modalityCopy = useModalityCopy();
@@ -172,7 +172,7 @@ function IdeByModalityCard(_props: WidgetCardProps) {
   );
 }
 
-/** IDE build count with the most-recently-touched recency badge (staleness signal). */
+/** Build count with the most-recently-touched recency badge (staleness signal). */
 function IdeRecencyCard(_props: WidgetCardProps) {
   const t = useTranslations('widgets');
   const dt = useTranslations('dashboard');
@@ -188,7 +188,7 @@ function IdeRecencyCard(_props: WidgetCardProps) {
       value={int(data.length)}
       sub={t('ide.buildsSub')}
       recencyLabel={recency}
-      href="/ide/dashboard"
+      href="/create?filter=build"
     />
   );
 }
@@ -196,7 +196,7 @@ function IdeRecencyCard(_props: WidgetCardProps) {
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 const DASHBOARD_DRILL: WidgetDrill = { kind: 'route', href: '/dashboard' };
-const IDE_DRILL: WidgetDrill = { kind: 'route', href: '/ide/dashboard' };
+const BUILDER_DRILL: WidgetDrill = { kind: 'route', href: '/create?filter=build' };
 
 export const CORE_WIDGETS: WidgetDef[] = [
   // ── Dashboard home (`/dashboard`) ──
@@ -205,7 +205,7 @@ export const CORE_WIDGETS: WidgetDef[] = [
   { id: 'core.agents-online', group: 'overview', titleKey: 'agentsOnline', size: 'md', Card: AgentsOnlineCard, drill: DASHBOARD_DRILL },
   { id: 'core.pending-approvals', group: 'overview', titleKey: 'pendingApprovals', size: 'sm', Card: PendingApprovalsCard, drill: DASHBOARD_DRILL },
 
-  // ── IDE dashboard (`/ide/dashboard`) ──
-  { id: 'core.ide-by-modality', group: 'ide', titleKey: 'ideByModality', size: 'md', Card: IdeByModalityCard, drill: IDE_DRILL },
-  { id: 'core.ide-recency', group: 'ide', titleKey: 'ideRecency', size: 'sm', Card: IdeRecencyCard, drill: IDE_DRILL },
+  // Legacy ids/groups preserve existing user dashboard layouts.
+  { id: 'core.ide-by-modality', group: 'ide', titleKey: 'ideByModality', size: 'md', Card: IdeByModalityCard, drill: BUILDER_DRILL },
+  { id: 'core.ide-recency', group: 'ide', titleKey: 'ideRecency', size: 'sm', Card: IdeRecencyCard, drill: BUILDER_DRILL },
 ];

@@ -8,6 +8,20 @@ import { TenantPlan } from '../shared/types';
  * these numbers inline.
  */
 export interface PlanLimits {
+  /** Active + archived durable Creation Sessions; -1 = unlimited. */
+  maxCreationSessions: number;
+  /** Members (including owner) allowed in one Creation Session. */
+  maxCreationSessionCollaborators: number;
+  /** Private/tenant reusable Creation Session templates. */
+  maxCreationSessionTemplates: number;
+  /** Retained revision snapshots per Creation Session. */
+  maxCreationSessionHistory: number;
+  /** Rows a Canvas Dataset may profile/process in one request. */
+  maxCreationDatasetRows: number;
+  /** Simultaneously present editors/runners/owners in a Creation Session. */
+  maxCreationRealtimeEditors: number;
+  /** Stored artifact bytes attributable to one Creation Session. */
+  maxCreationArtifactBytes: number;
   /** Maximum number of registered AgentHosts (0 = blocked, -1 = unlimited) */
   maxAgentHosts: number;
   /** Maximum number of projects */
@@ -100,6 +114,13 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
   [TenantPlan.FREE]: {
+    maxCreationSessions: 10,
+    maxCreationSessionCollaborators: 3,
+    maxCreationSessionTemplates: 3,
+    maxCreationSessionHistory: 50,
+    maxCreationDatasetRows: 500,
+    maxCreationRealtimeEditors: 3,
+    maxCreationArtifactBytes: 100_000_000,
     maxAgentHosts: 1,
     maxProjects: 5,
     maxSeats: 1,
@@ -122,6 +143,13 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: false,
   },
   [TenantPlan.PRO]: {
+    maxCreationSessions: 500,
+    maxCreationSessionCollaborators: 25,
+    maxCreationSessionTemplates: 100,
+    maxCreationSessionHistory: 500,
+    maxCreationDatasetRows: 50_000,
+    maxCreationRealtimeEditors: 25,
+    maxCreationArtifactBytes: 10_000_000_000,
     maxAgentHosts: 3,
     maxProjects: -1,
     maxSeats: 1,
@@ -144,6 +172,13 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: true,
   },
   [TenantPlan.TEAMS]: {
+    maxCreationSessions: -1,
+    maxCreationSessionCollaborators: -1,
+    maxCreationSessionTemplates: -1,
+    maxCreationSessionHistory: 5_000,
+    maxCreationDatasetRows: 1_000_000,
+    maxCreationRealtimeEditors: 100,
+    maxCreationArtifactBytes: -1,
     maxAgentHosts: -1,
     maxProjects: -1,
     maxSeats: -1,
@@ -169,7 +204,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
 
 /**
  * Anonymous guest (logged-out) chat allowance — the "try the Brain before you
- * sign up" tier. Deliberately TINY: a logged-out visitor has no account we can
+ * sign up" tier. Deliberately LIMITED: a logged-out visitor has no account we can
  * ban and their visitorId/IP are spoofable, so this is a taste, not a free ride.
  * Signing up unlocks the real FREE tier ({@link PLAN_LIMITS}.free — 10K
  * tokens/day). Metered per visitorId AND per source IP (the spoof backstop) —
@@ -178,13 +213,81 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
  */
 export const GUEST_CHAT_LIMITS = {
   /** Max assistant turns per visitorId per UTC day. */
-  messagesDailyLimit: 5,
+  messagesDailyLimit: 10,
   /** Max assistant turns per source IP per UTC day — an abuser rotating
    *  visitorIds still hits this. Higher than the per-visitor cap so a shared
    *  office/NAT IP doesn't lock out honest visitors too soon. */
-  ipMessagesDailyLimit: 25,
+  ipMessagesDailyLimit: 50,
   /** Output-token ceiling per guest request (clamped down, never rejected). */
   maxTokensPerRequest: 700,
+} as const;
+
+/**
+ * Guest RESEARCH — the server-side web search / page read / geocode a logged-out
+ * canvas turn may perform.
+ *
+ * Metered SEPARATELY from `messagesDailyLimit` because the units differ: one guest
+ * message can legitimately fan out into a whole research pipeline (search → read two
+ * sources → geocode the rows), and charging that as several messages would make the
+ * free canvas feel broken. The allowance is per CALL and generous enough for a few
+ * complete pipelines, then stops — these are outbound requests from the platform's own
+ * IP against third parties, so the cap is an abuse ceiling, not a paywall.
+ *
+ * Search itself is keyless by default (`webSearchVendors.ts`), so the marginal cost of
+ * a guest research call is bandwidth, not vendor spend — unless the operator has funded
+ * a wide-index key, in which case this cap is what bounds their bill.
+ */
+export const GUEST_RESEARCH_LIMITS = {
+  /** Research tool calls per visitorId per UTC day. */
+  callsDailyLimit: 40,
+  /** Per source IP per UTC day — the spoof backstop, same reasoning as chat. */
+  ipCallsDailyLimit: 200,
+} as const;
+
+/**
+ * Office EXPORTS for a logged-out visitor.
+ *
+ * Deliberately generous, and deliberately its own ceiling rather than a share of
+ * the chat allowance: a guest who has spent their free messages has a finished
+ * document on their board and every reason to want the file. The renders are
+ * stateless CPU over markdown the client already holds, so the numbers exist to
+ * bound abuse of an open compute endpoint, not to ration the feature — a person
+ * exporting the same deck twenty times is working, not attacking.
+ */
+export const GUEST_EXPORT_LIMITS = {
+  /** Office renders per visitorId per UTC day. */
+  exportsDailyLimit: 60,
+  /** Per source IP per UTC day — the spoof backstop, same reasoning as chat. */
+  ipExportsDailyLimit: 300,
+} as const;
+
+/**
+ * Shared guest ROOMS — a logged-out visitor can invite others into their free
+ * session (chat + camera). The room's turn allowance is exactly
+ * `GUEST_CHAT_LIMITS.messagesDailyLimit`, spent COMBINED by everyone in it: five
+ * people in one room still share ten free turns. That is deliberate — inviting
+ * people must never be a way to multiply anonymous LLM spend. Each participant's
+ * own per-visitor and per-IP counters keep running underneath, so joining a
+ * second room cannot refill an individual's exhausted allowance either.
+ */
+export const GUEST_ROOM_LIMITS = {
+  /** Simultaneous participants. Mesh WebRTC is ~N² bandwidth — keep it small. */
+  maxParticipants: 8,
+  /** Room lifetime from creation; afterwards the room is gone (with its transcript). */
+  ttlMinutes: 240,
+  /** Transcript messages retained in the room (oldest drop off). */
+  maxMessages: 200,
+  /** Characters retained per room message. */
+  maxMessageChars: 8_000,
+  /**
+   * Serialized size of the shared Creation Canvas board. Comfortably above a
+   * real free-session board and comfortably below the Durable Object per-value
+   * storage ceiling; a board that exceeds it stops syncing LOUDLY (the writer is
+   * told), because a silently-stale board is worse than a refused save.
+   */
+  maxCanvasChars: 512_000,
+  /** Sockets one room will hold open across all channels (chat + media). */
+  maxSockets: 24,
 } as const;
 
 /** Returns the limits for the tenant's effective plan. */

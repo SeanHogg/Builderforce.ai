@@ -65,6 +65,7 @@ export async function resolveRepoCredential(
     .from(integrationCredentials)
     .where(and(eq(integrationCredentials.id, repo.credentialId), eq(integrationCredentials.tenantId, tenantId)));
   if (!cred) return { error: 'Credential not found', status: 404 };
+  if (!cred.isEnabled) return { error: 'Credential is disabled', status: 400 };
 
   const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, secret, tenantId);
   const token =

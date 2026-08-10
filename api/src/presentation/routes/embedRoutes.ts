@@ -33,6 +33,39 @@ const isCapability = (v: unknown): v is Capability =>
 // acting admin consented to THIS version; bump both in lockstep.
 const EMBED_CONSENT_VERSION = 1;
 
+/** Customer-site capabilities migrated from BurnRateOS's unified embed rail. */
+const CUSTOMER_FEATURES = [
+  'usage_tracking',
+  'support_widget',
+  'feedback_widget',
+  'heatmaps',
+  'feature_management',
+  'terms_gate',
+  'sourcing',
+  'lead_forms',
+  'push_notifications',
+  'onboarding',
+  'cookie_consent',
+  'hr_widget',
+  'status_page',
+] as const;
+type CustomerFeature = (typeof CUSTOMER_FEATURES)[number];
+
+interface CustomerFeatureConfig {
+  enabled: boolean;
+  consentVersion: number | null;
+  consentedAt: string | null;
+  consentedBy: string | null;
+}
+
+interface CustomerFeatureConsentEvent {
+  feature: CustomerFeature;
+  action: 'OPT_IN' | 'OPT_OUT';
+  version: number;
+  at: string;
+  by: string;
+}
+
 interface EmbedConfig {
   enabled: boolean;
   capabilities: Capability[];
@@ -42,6 +75,45 @@ interface EmbedConfig {
   consentedAt: string | null;
   /** userId of the admin who consented. */
   consentedBy: string | null;
+}
+
+const emptyCustomerFeature = (): CustomerFeatureConfig => ({
+  enabled: false,
+  consentVersion: null,
+  consentedAt: null,
+  consentedBy: null,
+});
+
+function isCustomerFeature(value: string): value is CustomerFeature {
+  return (CUSTOMER_FEATURES as readonly string[]).includes(value);
+}
+
+function readCustomerFeatures(raw: string | null | undefined): Record<CustomerFeature, CustomerFeatureConfig> {
+  const embed = parseSettings(raw).embed as { customerFeatures?: unknown } | undefined;
+  const stored = embed?.customerFeatures && typeof embed.customerFeatures === 'object'
+    ? embed.customerFeatures as Record<string, Partial<CustomerFeatureConfig>>
+    : {};
+  return Object.fromEntries(CUSTOMER_FEATURES.map((key) => {
+    const value = stored[key];
+    return [key, {
+      enabled: value?.enabled === true,
+      consentVersion: typeof value?.consentVersion === 'number' ? value.consentVersion : null,
+      consentedAt: typeof value?.consentedAt === 'string' ? value.consentedAt : null,
+      consentedBy: typeof value?.consentedBy === 'string' ? value.consentedBy : null,
+    }];
+  })) as Record<CustomerFeature, CustomerFeatureConfig>;
+}
+
+function readCustomerConsentLog(raw: string | null | undefined): CustomerFeatureConsentEvent[] {
+  const embed = parseSettings(raw).embed as { customerConsentLog?: unknown } | undefined;
+  if (!Array.isArray(embed?.customerConsentLog)) return [];
+  return embed.customerConsentLog.filter((event): event is CustomerFeatureConsentEvent => {
+    if (!event || typeof event !== 'object') return false;
+    const row = event as Partial<CustomerFeatureConsentEvent>;
+    return typeof row.feature === 'string' && isCustomerFeature(row.feature)
+      && (row.action === 'OPT_IN' || row.action === 'OPT_OUT')
+      && typeof row.version === 'number' && typeof row.at === 'string' && typeof row.by === 'string';
+  });
 }
 
 function parseSettings(raw: string | null | undefined): Record<string, unknown> {
@@ -81,11 +153,78 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
     const embed = readEmbed(row?.settings);
     return c.json({
       ...embed,
+      customerFeatures: readCustomerFeatures(row?.settings),
+      customerConsentLog: readCustomerConsentLog(row?.settings),
+      customerFeatureKeys: CUSTOMER_FEATURES,
+      customerConsentRequiredVersion: EMBED_CONSENT_VERSION,
+      publicKey: `bf_${tenantId}`,
       isolationMode: row?.isolationMode ?? 'single',
       // The version the host must (re-)consent to before enabling. The UI compares
       // it against `consentVersion` to decide whether to show the consent modal.
       consentRequiredVersion: EMBED_CONSENT_VERSION,
     });
+  });
+
+  router.put('/features/:feature', requireRole(TenantRole.MANAGER), async (c) => {
+    const featureParam = c.req.param('feature');
+    if (!isCustomerFeature(featureParam)) return c.json({ error: 'Unknown embedded capability' }, 404);
+
+    const tenantId = c.get('tenantId');
+    const userId = c.get('userId');
+    const body = await c.req.json<{ enabled?: boolean; consentAcknowledged?: boolean }>();
+    const enabled = body.enabled === true;
+
+    const [row] = await db
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    const settings = parseSettings(row?.settings);
+    const embed = settings.embed && typeof settings.embed === 'object'
+      ? settings.embed as Record<string, unknown>
+      : {};
+    const features = readCustomerFeatures(row?.settings);
+    const prior = features[featureParam] ?? emptyCustomerFeature();
+
+    if (enabled && prior.consentVersion !== EMBED_CONSENT_VERSION && body.consentAcknowledged !== true) {
+      return c.json({
+        error: 'Consent required to enable this embedded capability',
+        code: 'EMBED_FEATURE_CONSENT_REQUIRED',
+        consentRequiredVersion: EMBED_CONSENT_VERSION,
+      }, 409);
+    }
+
+    const now = new Date().toISOString();
+    features[featureParam] = enabled
+      ? {
+          enabled: true,
+          consentVersion: EMBED_CONSENT_VERSION,
+          consentedAt: prior.consentVersion === EMBED_CONSENT_VERSION ? prior.consentedAt : now,
+          consentedBy: prior.consentVersion === EMBED_CONSENT_VERSION ? prior.consentedBy : userId,
+        }
+      : { ...prior, enabled: false };
+    const consentLog = readCustomerConsentLog(row?.settings);
+    if (prior.enabled !== enabled) {
+      consentLog.unshift({
+        feature: featureParam,
+        action: enabled ? 'OPT_IN' : 'OPT_OUT',
+        version: EMBED_CONSENT_VERSION,
+        at: now,
+        by: userId,
+      });
+    }
+
+    settings.embed = {
+      ...embed,
+      customerFeatures: features,
+      customerConsentLog: consentLog,
+    };
+    await db
+      .update(tenants)
+      .set({ settings: JSON.stringify(settings), updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId));
+
+    return c.json({ feature: featureParam, ...features[featureParam] });
   });
 
   router.put('/config', requireRole(TenantRole.MANAGER), async (c) => {
@@ -124,7 +263,10 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    settings.embed = { enabled, capabilities, consentVersion, consentedAt, consentedBy };
+    const existingEmbed = settings.embed && typeof settings.embed === 'object'
+      ? settings.embed as Record<string, unknown>
+      : {};
+    settings.embed = { ...existingEmbed, enabled, capabilities, consentVersion, consentedAt, consentedBy };
 
     await db
       .update(tenants)

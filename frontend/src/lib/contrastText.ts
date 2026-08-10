@@ -2,7 +2,7 @@
  * Pick a readable foreground (#000 / #fff) for a runtime-chosen background color.
  *
  * Several badges/pills set `color: '#fff'` on a brand color drawn from a palette
- * that includes light hues (amber #f59e0b, cyan #06b6d4) — white-on-light fails
+ * that includes light hues (amber var(--warning), cyan #06b6d4) — white-on-light fails
  * WCAG contrast in both themes. Use this so the text color tracks the background's
  * luminance instead of being hardcoded.
  */

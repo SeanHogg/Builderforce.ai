@@ -28,6 +28,7 @@ import {
   portfolios,
   projects,
   roadmapItems,
+  taskDependencies,
   tasks,
 } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../task/taskScope';
@@ -130,6 +131,8 @@ export interface RawObjectiveLink { objectiveId: string; linkKind: string; initi
 export interface RawRoadmapItem { id: string; title: string; status: string; targetDate: Date | null; projectId: number | null }
 export interface RawTaskLlm { taskId: number; millicents: number }
 export interface RawMemberRate { memberRef: string; costRateUsdCents: number | null }
+/** A finish-to-start precedence edge between two tasks (`task_dependencies`, 0121). */
+export interface RawTaskDependency { predecessorTaskId: number; successorTaskId: number; depType: string }
 
 export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number; capexUsd: number; opexUsd: number }
 
@@ -142,6 +145,20 @@ export interface SpineNode {
   status: string;
   startDate: string | null;    // ISO
   endDate: string | null;
+  /**
+   * True when this node's own dates are NOT stored on the row but derived from the
+   * span of its descendants. A container (portfolio/objective/initiative/epic) with a
+   * fully scheduled subtree and no window of its own used to render as "no dates"
+   * above dated children; deriving it makes the timeline continuous, and the flag
+   * keeps the UI honest that nobody committed to those dates explicitly.
+   */
+  datesDerived: boolean;
+  /**
+   * Keys of the nodes that must FINISH before this one starts — the precedence the
+   * Gantt draws as arrows. Sourced from `task_dependencies` (task/epic nodes only);
+   * empty for container levels, which sequence through their children.
+   */
+  dependsOn: string[];
   depth: number;
   declaredCostClass: CostClass | null;
   costClassSource: CostClassSource;
@@ -195,6 +212,8 @@ export function buildSpine(input: {
   loggedMinutesByTask?: Map<number, number>;
   /** Roadmap items folded in as leaf nodes (SPINE-4). */
   roadmapItems?: RawRoadmapItem[];
+  /** Task precedence edges (0121) surfaced as `dependsOn` so the Gantt can draw sequence. */
+  taskDeps?: RawTaskDependency[];
   /** Drop container nodes (portfolio/objective/initiative) with no leaf descendant
    *  — used by the project-scoped view (SPINE-3) so empty parents don't show. */
   prune?: boolean;
@@ -370,8 +389,52 @@ export function buildSpine(input: {
     }
   }
 
+  // ── precedence edges → dependsOn ──────────────────────────────────────────
+  // The DAG already existed (`task_dependencies`, 0121) with a validating write path,
+  // but the spine never read it — so a plan's SEQUENCE was invisible on the one
+  // surface built to show it. Both endpoints must be present (the project-scoped view
+  // prunes, and an edge to a pruned node would dangle).
+  for (const edge of input.taskDeps ?? []) {
+    const successor = exists(keyOfTask(edge.successorTaskId));
+    const predecessor = exists(keyOfTask(edge.predecessorTaskId));
+    if (!successor || !predecessor || successor === predecessor) continue;
+    const node = nodes.get(successor)!;
+    if (!node.dependsOn.includes(predecessor)) node.dependsOn.push(predecessor);
+  }
+
   // ── depth (from root) ─────────────────────────────────────────────────────
   for (const node of nodes.values()) node.depth = Math.max(0, ancestorsOf(node.key).length - 1);
+
+  // ── derive container windows from descendants (SCHED-8) ───────────────────
+  // A portfolio/objective/initiative/epic carries no dates of its own unless someone
+  // set them, so a fully scheduled subtree still rendered under a parent reading "no
+  // dates". Roll the span UP (deepest first, so a derived child feeds its own parent),
+  // filling only the ends that are actually missing and flagging the node as derived.
+  const byDepthDesc = [...nodes.values()].sort((a, b) => b.depth - a.depth);
+  const childrenIndex = new Map<string, string[]>();
+  for (const n of nodes.values()) {
+    if (n.parentKey && nodes.has(n.parentKey)) {
+      childrenIndex.set(n.parentKey, [...(childrenIndex.get(n.parentKey) ?? []), n.key]);
+    }
+  }
+  for (const node of byDepthDesc) {
+    if (node.startDate != null && node.endDate != null) continue;
+    const childKeys = childrenIndex.get(node.key) ?? [];
+    if (childKeys.length === 0) continue;
+    let min: string | null = null;
+    let max: string | null = null;
+    for (const ck of childKeys) {
+      const child = nodes.get(ck)!;
+      const lo = child.startDate ?? child.endDate;
+      const hi = child.endDate ?? child.startDate;
+      if (lo && (min == null || lo < min)) min = lo;
+      if (hi && (max == null || hi > max)) max = hi;
+    }
+    if (min == null && max == null) continue;
+    if (node.startDate == null) node.startDate = min ?? max;
+    if (node.endDate == null) node.endDate = max ?? min;
+    node.datesDerived = true;
+  }
 
   const list = [...nodes.values()];
   const totals = emptyCost();
@@ -398,7 +461,8 @@ function baseNode(
   costClassVerified: boolean, suggestion: CostClassSuggestion | null,
 ): SpineNode {
   return {
-    key: `${kind}:${id}`, id, kind, parentKey: null, title, status, startDate, endDate, depth: 0,
+    key: `${kind}:${id}`, id, kind, parentKey: null, title, status, startDate, endDate,
+    datesDerived: false, dependsOn: [], depth: 0,
     declaredCostClass, costClassSource, inheritedCostClass: null, effectiveCostClass: declaredCostClass,
     costClassVerified, anomaly: false, hasDescendantAnomaly: false, suggestion,
     cost: emptyCost(), childCount: 0,
@@ -439,10 +503,16 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
   ]);
 
   const taskIds = taskRows.map((t) => t.id);
+  // Precedence edges are project-scoped rows; the tenant filter alone is enough for
+  // the tenant-wide view, and the project filter narrows the scoped one. Loaded in
+  // the same round-trip batch as spend/rates below, not as an extra sequential hop.
+  const depsWhere = opts.projectId != null
+    ? and(eq(taskDependencies.tenantId, tenantId), eq(taskDependencies.projectId, opts.projectId))
+    : eq(taskDependencies.tenantId, tenantId);
   const llmWhere = opts.window
     ? and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds), gte(llmUsageLog.createdAt, new Date(opts.window.from)), lte(llmUsageLog.createdAt, new Date(`${opts.window.to}T23:59:59.999Z`)))
     : and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds));
-  const [llmRows, rateRows, loggedMin] = await Promise.all([
+  const [llmRows, rateRows, loggedMin, depRows] = await Promise.all([
     taskIds.length
       ? db.select({ taskId: llmUsageLog.taskId, millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
           .from(llmUsageLog).where(llmWhere).groupBy(llmUsageLog.taskId)
@@ -451,6 +521,11 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
       .from(memberProfiles)
       .where(and(eq(memberProfiles.tenantId, tenantId), eq(memberProfiles.memberKind, 'human'))),
     loggedMinutesByTask(db, tenantId, taskIds, opts.window),
+    db.select({
+      predecessorTaskId: taskDependencies.predecessorTaskId,
+      successorTaskId: taskDependencies.successorTaskId,
+      depType: taskDependencies.depType,
+    }).from(taskDependencies).where(depsWhere),
   ]);
 
   return buildSpine({
@@ -464,6 +539,7 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
     memberRates: rateRows,
     loggedMinutesByTask: loggedMin,
     roadmapItems: roadmapRows,
+    taskDeps: depRows,
     prune: opts.projectId != null,
   });
 }

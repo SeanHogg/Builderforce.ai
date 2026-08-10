@@ -23,12 +23,12 @@ type Tab = 'rollup' | 'structure' | 'cost';
 const WORKSPACE = 'workspace';
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
-  padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'pointer',
-  background: active ? 'var(--accent, #2563eb)' : 'transparent',
-  color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.85rem',
+  padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', cursor: 'pointer',
+  background: active ? 'var(--accent)' : 'transparent',
+  color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.85rem',
 });
 const selectStyle: React.CSSProperties = {
-  padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', minWidth: 200,
 };
 
@@ -123,7 +123,7 @@ export function PmoContent() {
       {/* Meetings calendar for the portfolio — scoped to the chosen project when one
           is selected, else the whole workspace. A compact month overview + booking. */}
       {tab === 'rollup' && (
-        <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 }}>
+        <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', margin: '0 0 12px' }}>
             {t('meetingsHeading')}
           </h3>

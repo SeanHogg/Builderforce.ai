@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import Link from 'next/link';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ModelSelect } from '@/components/llm/ModelSelect';
+import { RoleGate } from '@/components/RoleGate';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
 
 /**
@@ -81,7 +83,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       {/* Fills the available width and lets the two selects shrink (min-width:0
           → the trigger's label ellipsis kicks in) so long model names don't push
           the group past a narrow panel on mobile. Run stays fixed on the right. */}
-      <div style={{ display: 'flex', width: '100%', maxWidth: '100%', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', width: '100%', maxWidth: '100%', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         <Select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title={t('agentTitle')}>
           <option value="">{t('autoAnyAgent')}</option>
           {(() => {
@@ -150,27 +152,33 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
             ))}
           </Select>
         )}
-        <button
-          type="button"
-          onClick={() => run({ target, model, ...(repos.length > 1 ? { repoId } : {}) })}
-          disabled={running}
-          style={{
-            padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',
-            background: 'var(--coral-bright)', color: '#fff', cursor: running ? 'default' : 'pointer',
-            opacity: running ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
-            flexShrink: 0, whiteSpace: 'nowrap',
-          }}
-        >
-          {running ? t('running') : t('run')}
-          {!running && (
-            <svg viewBox="0 0 24 24" style={{ width: 14, height: 14, fill: 'currentColor' }}><path d="M8 5v14l11-7z" /></svg>
-          )}
-        </button>
+        {/* Only the DISPATCH is gated (DEVELOPER+, mirroring requireRole(DEVELOPER)
+            on /api/runtime/tasks/submit). The agent/model/repo pickers stay live for
+            a viewer — inspecting how a run WOULD be targeted is a read. The gate sits
+            in this shared control so every consumer inherits it. */}
+        <RoleGate capability="runtime.execute" style={{ flexShrink: 0, alignSelf: 'stretch' }}>
+          <button
+            type="button"
+            onClick={() => run({ target, model, ...(repos.length > 1 ? { repoId } : {}) })}
+            disabled={running}
+            style={{
+              padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',
+              background: 'var(--coral-bright)', color: 'var(--text-on-accent)', cursor: running ? 'default' : 'pointer',
+              opacity: running ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            {running ? t('running') : t('run')}
+            {!running && (
+              <svg viewBox="0 0 24 24" style={{ width: 14, height: 14, fill: 'currentColor' }}><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+        </RoleGate>
       </div>
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 6 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
       {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
-          <span style={{ color: 'var(--amber, #f59e0b)', fontWeight: 600 }}>⚠ {t('noWritableRepo')} </span>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+          <span style={{ color: 'var(--warning, var(--warning))', fontWeight: 600 }}><Icon source="⚠" size="1em" /> {t('noWritableRepo')} </span>
           {repoStatus.bound ? t('repoNoCredential') : t('repoUnbound')}{' '}
           <Link href={`/projects/${task.projectId}`} style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('openProjectSourceControl')}</Link>
         </div>

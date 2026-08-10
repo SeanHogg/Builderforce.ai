@@ -102,7 +102,7 @@ export default function UsersPanel() {
               style={{
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 12,
+                borderRadius: 'var(--radius-lg)',
                 padding: 18,
                 display: 'flex',
                 flexDirection: 'column',

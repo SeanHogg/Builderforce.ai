@@ -17,24 +17,27 @@
  * sign-offs with no linked contribution, audited waivers). The sign-off ledger is
  * append-only, so this record is immutable history.
  */
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
-  boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
+  boards, ideAgents, projects, swimlaneRequirements, swimlanes, tasks, tenantMembers,
+  ticketParticipants, ticketRoleSignoffs, users,
 } from '../../infrastructure/database/schema';
-import { BUILTIN_ROLES } from './roleCatalog';
+import { roleDisplayName } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
-import type { Responsibility } from './types';
+import { requirementApplies, type Responsibility } from './types';
+import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
+import { computeAccountabilityGaps, slotKey, type AccountabilityGapSeverity } from './accountabilityGaps';
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
-const ROLE_NAME = new Map(BUILTIN_ROLES.map((r) => [r.key, r.name]));
-function roleName(key: string): string {
-  return ROLE_NAME.get(key) ?? key.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-}
+// Role display names come from the ONE resolver in `roleCatalog` (this module used to
+// keep its own private copy, and it disagreed with the lane gate's).
+const roleName = roleDisplayName;
 
 const versionKey = (taskId: number) => `participants:task:${taskId}`;
 const projectVersionKey = (projectId: number) => `participants:project:${projectId}`;
@@ -69,6 +72,7 @@ export interface ManifestParticipant {
 }
 
 export interface AccountabilitySignoff {
+  laneKey: string | null;
   roleKey: string;
   roleName: string;
   memberKind: string | null;
@@ -82,10 +86,36 @@ export interface AccountabilitySignoff {
 }
 
 export type AccountabilityGapKind = 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested';
+
+/**
+ * Severity of a gap — the reason the report can no longer paint every line red.
+ *
+ * `blocking` is something actually WRONG (nobody can do the role, changes were
+ * requested and left unresolved, an approval with no evidence behind it).
+ * `advisory` is a slot that simply has not got there yet, or a recorded, reasoned
+ * waiver. Rendering the second bucket as an error contradicted the table right
+ * below it, which showed those same slots as "Assigned" / "In progress".
+ *
+ * The classification itself lives in `accountabilityGaps` (pure + unit-tested).
+ */
+export type { AccountabilityGapSeverity };
+
 export interface AccountabilityGap {
   kind: AccountabilityGapKind;
+  severity: AccountabilityGapSeverity;
   roleKey: string;
   roleName: string;
+  /**
+   * SLOT identity, not just role identity. A ticket routinely carries the same role
+   * twice (Architect as owner AND as reviewer), so a gap keyed on `roleKey` alone
+   * rendered as two identical lines that matched no particular table row.
+   */
+  stageKey: string | null;
+  responsibility: Responsibility | null;
+  /** The slot's participant state, so the gap line can say the same thing its row's State chip does. */
+  state: ParticipantState | null;
+  /** Free text for gaps that carry one (a waiver's reason). Localized copy is derived from `kind`/`state`. */
+  reason: string | null;
   detail: string;
 }
 
@@ -99,12 +129,46 @@ export interface AccountabilityReport {
   gaps: AccountabilityGap[];
 }
 
+/** A concrete participant resolved by the CALLER (kind/ref/name), bypassing role lookup. */
+export interface ExplicitAssignee {
+  kind: string;
+  ref: string;
+  name: string;
+}
+
 export interface AddParticipantInput {
   roleKey: string;
   responsibility?: Responsibility;
   stageKey?: string | null;
   note?: string | null;
-  source?: 'assessment' | 'manual';
+  /**
+   * Provenance of the slot. `lane_agent` is a slot materialised from a lane's
+   * `swimlane_agent_assignments` staffing on a board that declares no requirements
+   * (see `swimlane/laneApprover.ts`) — distinct from `template` so it never suppresses
+   * template derivation, and distinct from `assessment`/`manual` so a human's resource
+   * assessment is never confused with an inferred staffing slot.
+   */
+  source?: 'assessment' | 'manual' | 'lane_agent';
+  /**
+   * Pin the participant to a SPECIFIC resource instead of resolving one by role.
+   *
+   * Needed because the lane's staffed agent is not necessarily what `resolveAssignee`
+   * would pick (that walks project pin → first role-capable agent). A slot whose
+   * assignee is some other role-capable agent would send the sign-off request to an
+   * agent the operator never staffed on the lane.
+   */
+  assignee?: ExplicitAssignee | null;
+}
+
+export interface AssignParticipantInput {
+  roleKey: string;
+  assigneeRef: string;
+  assigneeKind: 'agent' | 'user';
+}
+
+export interface AssignParticipantResult {
+  updated: number;
+  participants: ManifestParticipant[];
 }
 
 /** Port for creating a child work-item task — injected from the route (TaskService). */
@@ -127,8 +191,8 @@ export class TicketParticipantsService {
 
   private async bump(env: Env, taskId: number): Promise<void> {
     await bumpCacheVersion(env, versionKey(taskId));
-    const projectId = await this.taskProjectId(taskId);
-    if (projectId != null) await bumpCacheVersion(env, projectVersionKey(projectId));
+    const ctx = await this.taskContext(taskId);
+    if (ctx) await bumpCacheVersion(env, projectVersionKey(ctx.projectId));
   }
 
   /** Invalidate a ticket's cached manifest/accountability + its project summary. */
@@ -136,29 +200,150 @@ export class TicketParticipantsService {
     await this.bump(env, taskId);
   }
 
-  /**
-   * Attribution (§5.6): mark a role's manifest participant as `in_progress`, linked to
-   * the execution it ran as, when that role is dispatched to work the ticket. Best-effort
-   * and non-destructive — only advances a not-yet-active slot (pending/assigned/unstaffed)
-   * so it never overwrites a completed/changes_requested state. No-op if the manifest
-   * isn't derived yet (accountability derives + syncs on read). Bumps the cache.
-   */
-  async markRoleInProgress(env: Env, tenantId: number, taskId: number, roleKey: string, stageKey: string | null, executionId: number): Promise<void> {
-    const all = await this.db
-      .select({ id: ticketParticipants.id, stageKey: ticketParticipants.stageKey, state: ticketParticipants.state, evidence: ticketParticipants.evidence })
+  /** Assign or reassign every manifest slot for one role. The role must already
+   * exist: resource assessment owns slot creation, while this operation only
+   * staffs an existing contract. Reassignment resets the slot to `assigned` so
+   * evidence produced by the previous assignee cannot silently credit the new one. */
+  async assignParticipant(
+    env: Env,
+    tenantId: number,
+    taskId: number,
+    input: AssignParticipantInput,
+  ): Promise<AssignParticipantResult> {
+    const roleKey = input.roleKey.trim();
+    const assigneeRef = input.assigneeRef.trim();
+    if (!Number.isInteger(taskId) || taskId <= 0) throw new Error('taskId must be a positive integer');
+    if (!roleKey) throw new Error('roleKey is required');
+    if (!assigneeRef) throw new Error('assigneeRef is required');
+    if (input.assigneeKind !== 'agent' && input.assigneeKind !== 'user') {
+      throw new Error('assigneeKind must be "agent" or "user"');
+    }
+
+    const [task] = await this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .innerJoin(projects, and(eq(projects.id, tasks.projectId), eq(projects.tenantId, tenantId)))
+      .where(eq(tasks.id, taskId))
+      .limit(1);
+    if (!task) throw new Error('task not found');
+
+    const slots = await this.db
+      .select({ id: ticketParticipants.id })
       .from(ticketParticipants)
-      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.roleKey, roleKey)));
+      .where(and(
+        eq(ticketParticipants.tenantId, tenantId),
+        eq(ticketParticipants.taskId, taskId),
+        eq(ticketParticipants.roleKey, roleKey),
+      ));
+    if (!slots.length) throw new Error(`participant role "${roleKey}" not found on task`);
+
+    let assigneeName: string;
+    let storedKind: 'agent' | 'human';
+    if (input.assigneeKind === 'agent') {
+      const [agent] = await this.db
+        .select({ name: ideAgents.name })
+        .from(ideAgents)
+        .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, assigneeRef), eq(ideAgents.status, 'active')))
+        .limit(1);
+      if (!agent) throw new Error('active agent assignee not found in tenant');
+      assigneeName = agent.name;
+      storedKind = 'agent';
+    } else {
+      const [member] = await this.db
+        .select({ name: users.displayName, email: users.email })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, assigneeRef)))
+        .limit(1);
+      if (!member) throw new Error('user assignee is not a tenant member');
+      assigneeName = member.name ?? member.email;
+      storedKind = 'human';
+    }
+
+    const updated = await this.db
+      .update(ticketParticipants)
+      .set({
+        assigneeKind: storedKind,
+        assigneeRef,
+        assigneeName,
+        state: 'assigned',
+        signoffId: null,
+        evidence: null,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(ticketParticipants.tenantId, tenantId),
+        eq(ticketParticipants.taskId, taskId),
+        eq(ticketParticipants.roleKey, roleKey),
+      ))
+      .returning();
+    await this.bump(env, taskId);
+    return { updated: updated.length, participants: updated.map((row) => this.mapRow(row)) };
+  }
+
+  /**
+   * Done gate (PRD §5.5 / AC-2): on a LIFECYCLE-MANAGED board, a ticket cannot reach a
+   * terminal (Done) lane while any required participant is not completed-with-evidence.
+   * Returns the outstanding role names so the caller can show why. No-op (never blocks)
+   * on un-managed boards, so legacy behaviour is unchanged.
+   */
+  async doneGate(env: Env, tenantId: number, taskId: number, targetStatus: string): Promise<{ blocked: boolean; outstanding: string[] }> {
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return { blocked: false, outstanding: [] };
+    const board = await findCanonicalBoard(this.db, ctx.projectId);
+    if (!board || !board.lifecycleManaged) return { blocked: false, outstanding: [] };
+    const [lane] = await this.db.select({ isTerminal: swimlanes.isTerminal }).from(swimlanes).where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, targetStatus))).limit(1);
+    const terminal = lane?.isTerminal ?? targetStatus === TaskStatus.DONE;
+    if (!terminal) return { blocked: false, outstanding: [] };
+    const report = await this.getAccountability(env, tenantId, taskId);
+    const outstanding = report.participants.filter(blocksCompletion).map((p) => p.roleName);
+    return { blocked: outstanding.length > 0, outstanding };
+  }
+
+  /**
+   * Attribution (§5.6): record that a role's manifest participant ran on the ticket,
+   * linked to the execution it ran AS. Best-effort and non-destructive — only advances a
+   * not-yet-terminal slot (pending/assigned/unstaffed/in_progress) and never downgrades a
+   * completed/changes_requested/waived state. No-op until the manifest is derived.
+   *
+   * IT MARKS `in_progress` AND NOTHING ELSE, DELIBERATELY. This used to complete a
+   * PRODUCER slot outright when the ticket had a pull request — a write that DID NOT
+   * SURVIVE. `syncStates` recomputes every slot from the sign-off ledger and preserves
+   * only `in_progress`, so a `completed` with no ledger row behind it was reverted to
+   * `assigned` by the next recompute; and `coordinateCompletedStage` calls `syncStates`
+   * as its FIRST act, immediately before reading the manifest to decide whether to
+   * advance. The credit was therefore erased microseconds before the only check that
+   * cared could read it — which is why 110 completed runs in a day advanced zero lanes.
+   *
+   * Completion is now recorded where it lasts: `attestCompletedRoleRun` writes a real
+   * ledger entry, and `syncStates` derives `completed` from that. This method's job is
+   * only to record that a run touched the slot.
+   */
+  async recordRunAttribution(env: Env, tenantId: number, taskId: number, opts: { roleKey: string; stageKey?: string | null; executionId?: number; prUrl?: string }): Promise<void> {
+    const all = await this.db
+      .select({ id: ticketParticipants.id, stageKey: ticketParticipants.stageKey, state: ticketParticipants.state, responsibility: ticketParticipants.responsibility, evidence: ticketParticipants.evidence })
+      .from(ticketParticipants)
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.roleKey, opts.roleKey)));
     if (!all.length) return;
-    const advanceable = new Set<ParticipantState>(['pending', 'assigned', 'unstaffed']);
-    // Prefer the slot for this exact stage; fall back to any advanceable slot for the role.
-    const exact = all.filter((r) => r.stageKey === stageKey && advanceable.has(r.state as ParticipantState));
-    const targets = exact.length ? exact : all.filter((r) => advanceable.has(r.state as ParticipantState));
+    // Prefer the slot for the exact stage the run served; else any advanceable slot.
+    const exact = opts.stageKey != null ? all.filter((r) => r.stageKey === opts.stageKey && ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState)) : [];
+    const targets = exact.length ? exact : all.filter((r) => ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState));
     if (!targets.length) return;
     for (const r of targets) {
-      const evidence = { ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}), executionId };
-      await this.db.update(ticketParticipants).set({ state: 'in_progress', evidence, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
+      const state: ParticipantState = 'in_progress';
+      const evidence = {
+        ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}),
+        ...(opts.executionId != null ? { executionId: opts.executionId } : {}),
+        ...(opts.prUrl ? { prUrl: opts.prUrl } : {}),
+      };
+      await this.db.update(ticketParticipants).set({ state, evidence, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
     }
     await this.bump(env, taskId);
+  }
+
+  /** Thin wrapper: mark a dispatched role `in_progress` with its execution (no evidence). */
+  async markRoleInProgress(env: Env, tenantId: number, taskId: number, roleKey: string, stageKey: string | null, executionId: number): Promise<void> {
+    await this.recordRunAttribution(env, tenantId, taskId, { roleKey, stageKey, executionId });
   }
 
   /**
@@ -174,13 +359,12 @@ export class TicketParticipantsService {
         .from(ticketParticipants)
         .innerJoin(tasks, eq(tasks.id, ticketParticipants.taskId))
         .where(and(eq(ticketParticipants.tenantId, tenantId), eq(tasks.projectId, projectId)));
-      const done = new Set<ParticipantState>(['completed', 'waived', 'skipped']);
       const byTask = new Map<number, { completed: number; required: number }>();
       for (const r of rows) {
         if (!r.required) continue;
         const agg = byTask.get(r.taskId) ?? { completed: 0, required: 0 };
         agg.required += 1;
-        if (done.has(r.state as ParticipantState)) agg.completed += 1;
+        if (isParticipantSatisfied(r.state)) agg.completed += 1;
         byTask.set(r.taskId, agg);
       }
       return [...byTask.entries()].map(([taskId, a]) => ({
@@ -190,14 +374,16 @@ export class TicketParticipantsService {
     });
   }
 
-  private async taskProjectId(taskId: number): Promise<number | null> {
-    const [row] = await this.db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    return row?.projectId ?? null;
+  private async taskContext(taskId: number): Promise<{ projectId: number; taskType: string | null; actionType: string | null } | null> {
+    const [row] = await this.db.select({ projectId: tasks.projectId, taskType: tasks.taskType, actionType: tasks.actionType }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    return row ? { projectId: row.projectId, taskType: row.taskType, actionType: row.actionType } : null;
   }
 
-  /** The required role/review slots across the ticket's whole board lifecycle. */
-  private async templateSlots(projectId: number): Promise<SlotSeed[]> {
-    const [board] = await this.db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, projectId)).limit(1);
+  /** The required role/review slots across the ticket's whole board lifecycle, scoped
+   *  to the ticket's type/condition (a Security ticket includes the security role; a
+   *  docs ticket excludes QA). */
+  private async templateSlots(projectId: number, task: { taskType: string | null; actionType: string | null }): Promise<SlotSeed[]> {
+    const board = await findCanonicalBoard(this.db, projectId);
     if (!board) return [];
     const laneRows = await this.db
       .select({ id: swimlanes.id, key: swimlanes.key, position: swimlanes.position })
@@ -213,6 +399,7 @@ export class TicketParticipantsService {
     const slots: SlotSeed[] = [];
     for (const r of reqRows) {
       if (r.kind !== 'role' && r.kind !== 'review') continue;
+      if (!requirementApplies({ ticketType: r.ticketType, condition: r.condition }, task)) continue;
       const lane = laneById.get(r.swimlaneId);
       const responsibility: Responsibility = (r.responsibility as Responsibility) ?? (r.kind === 'review' ? 'reviewer' : 'owner');
       slots.push({ stageKey: lane?.key ?? null, roleKey: r.ref, responsibility, required: r.isRequired });
@@ -222,11 +409,16 @@ export class TicketParticipantsService {
 
   /** Resolve the best concrete assignee for a role (explicit pin → capable agent). */
   private async resolveAssignee(env: Env, tenantId: number, projectId: number, roleKey: string): Promise<{ kind: string; ref: string; name: string } | null> {
-    const [pin] = await this.db
-      .select({ kind: projectRoleAssignments.assigneeKind, ref: projectRoleAssignments.assigneeRef, name: projectRoleAssignments.assigneeName })
+    const pins = await this.db
+      .select({ projectId: projectRoleAssignments.projectId, kind: projectRoleAssignments.assigneeKind, ref: projectRoleAssignments.assigneeRef, name: projectRoleAssignments.assigneeName })
       .from(projectRoleAssignments)
-      .where(and(eq(projectRoleAssignments.tenantId, tenantId), eq(projectRoleAssignments.roleKey, roleKey)))
-      .limit(1);
+      .where(and(
+        eq(projectRoleAssignments.tenantId, tenantId),
+        eq(projectRoleAssignments.roleKey, roleKey),
+        or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
+      ));
+    pins.sort((a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId));
+    const pin = pins[0];
     if (pin) return { kind: pin.kind, ref: pin.ref, name: pin.name ?? pin.ref };
     const [agent] = await resolveRoleCapableAgents(env, this.db, tenantId, projectId, roleKey);
     return agent ? { kind: 'agent', ref: agent.ref, name: agent.name } : null;
@@ -238,9 +430,10 @@ export class TicketParticipantsService {
    * remove assessment-added rows. Returns the number of template slots present.
    */
   async deriveManifest(env: Env, tenantId: number, taskId: number): Promise<number> {
-    const projectId = await this.taskProjectId(taskId);
-    if (projectId == null) return 0;
-    const slots = await this.templateSlots(projectId);
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return 0;
+    const projectId = ctx.projectId;
+    const slots = await this.templateSlots(projectId, { taskType: ctx.taskType, actionType: ctx.actionType });
     const now = new Date();
     for (const s of slots) {
       const assignee = await this.resolveAssignee(env, tenantId, projectId, s.roleKey);
@@ -277,13 +470,18 @@ export class TicketParticipantsService {
    * Resource Assessment — add a role the ticket needs beyond the template (designer,
    * security engineer, …). Resolves a capable resource; when none is available the
    * row lands `unstaffed` — a first-class, audited RESOURCE GAP that blocks Done.
+   *
+   * Idempotent on the slot's unique index (taskId, stageKey, roleKey, responsibility,
+   * source), so a caller on a per-lane-entry hot path may call it every hop.
    */
   async addParticipant(env: Env, tenantId: number, taskId: number, input: AddParticipantInput): Promise<ManifestParticipant | null> {
-    const projectId = await this.taskProjectId(taskId);
-    if (projectId == null) return null;
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return null;
+    const projectId = ctx.projectId;
     const responsibility = input.responsibility ?? 'owner';
     const source = input.source ?? 'assessment';
-    const assignee = await this.resolveAssignee(env, tenantId, projectId, input.roleKey);
+    // An explicitly-named resource wins over role-based resolution (see ExplicitAssignee).
+    const assignee = input.assignee ?? await this.resolveAssignee(env, tenantId, projectId, input.roleKey);
     const now = new Date();
     const [row] = await this.db
       .insert(ticketParticipants)
@@ -361,12 +559,22 @@ export class TicketParticipantsService {
 
     // Latest sign-off per role (append-only ledger — last verdict wins).
     const signoffs = await this.db
-      .select({ id: ticketRoleSignoffs.id, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
+      .select({ id: ticketRoleSignoffs.id, laneKey: ticketRoleSignoffs.laneKey, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
       .from(ticketRoleSignoffs)
       .where(eq(ticketRoleSignoffs.taskId, taskId))
       .orderBy(asc(ticketRoleSignoffs.createdAt));
+    const latestBySlot = new Map<string, { id: string; verdict: string }>();
+    // A verdict recorded WITHOUT a laneKey, indexed by role alone. `laneKey` is optional
+    // on the sign-off route and the MCP tool, so an agent that omits it produced a ledger
+    // row keyed `:role` that matched NO lane-scoped slot — the verdict was recorded and
+    // then ignored by every gate reading the manifest. An unscoped sign-off is best read
+    // as "this role approved the ticket", so it is applied to that role's slots as a
+    // FALLBACK only; an exact lane match always wins.
     const latestByRole = new Map<string, { id: string; verdict: string }>();
-    for (const s of signoffs) latestByRole.set(s.roleKey, { id: s.id, verdict: s.verdict });
+    for (const s of signoffs) {
+      latestBySlot.set(slotKey(s.laneKey, s.roleKey), { id: s.id, verdict: s.verdict });
+      if (s.laneKey == null) latestByRole.set(s.roleKey, { id: s.id, verdict: s.verdict });
+    }
 
     // Child task statuses for rollup.
     const childIds = rows.map((r) => r.childTaskId).filter((n): n is number => n != null);
@@ -377,8 +585,22 @@ export class TicketParticipantsService {
     }
 
     for (const r of rows) {
-      const so = latestByRole.get(r.roleKey);
-      let state: ParticipantState = r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending');
+      const so = latestBySlot.get(slotKey(r.stageKey, r.roleKey)) ?? latestByRole.get(r.roleKey);
+      // PRESERVE `in_progress`. It is written by run ATTRIBUTION
+      // (`recordRunAttribution`, i.e. "a run for this role/stage finalized"), which is
+      // evidence this function cannot re-derive from the ledger or the child task — so
+      // recomputing the baseline as `assigned` silently ERASED the record that a run had
+      // already served the slot. It erased it constantly, too: `listParticipants`
+      // re-derives whenever the ticket has no `template`-sourced row (which is every
+      // ticket on a board with no `swimlane_requirements`), and `deriveManifest` ends by
+      // calling this method. Any consumer keyed on `in_progress` — the producer
+      // re-dispatch guard here, and the lane-agent approval rule in
+      // `swimlane/laneApprover.ts` — therefore saw the slot bounce back to `assigned` and
+      // either re-dispatched work already in flight or never asked for the sign-off at
+      // all. A sign-off / child-task status / delegation below still overrides it.
+      let state: ParticipantState = r.state === 'in_progress'
+        ? 'in_progress'
+        : (r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending'));
       let signoffId: string | null = r.signoffId;
       if (r.childTaskId != null) {
         const st = childStatus.get(r.childTaskId);
@@ -419,8 +641,13 @@ export class TicketParticipantsService {
 
   /** Cached manifest read; derives on first access when empty. */
   async listParticipants(env: Env, tenantId: number, taskId: number): Promise<ManifestParticipant[]> {
-    const existing = await this.db.select().from(ticketParticipants).where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId)));
-    if (!existing.length) {
+    // Assessment/manual rows do not prove the board-template manifest was derived.
+    // A coordinator may assess resources before a template is applied; previously
+    // that single row permanently suppressed all BA→Architect→Developer→QA slots.
+    const [templateRow] = await this.db.select({ id: ticketParticipants.id }).from(ticketParticipants)
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.source, 'template')))
+      .limit(1);
+    if (!templateRow) {
       await this.deriveManifest(env, tenantId, taskId);
     }
     const version = await getCacheVersion(env, versionKey(taskId));
@@ -442,13 +669,17 @@ export class TicketParticipantsService {
   async getAccountability(env: Env, tenantId: number, taskId: number): Promise<AccountabilityReport> {
     const participants = await this.listParticipants(env, tenantId, taskId);
     const version = await getCacheVersion(env, versionKey(taskId));
-    return getOrSetCached(env, `participants:accountability:${taskId}:v:${version}`, async () => {
+    // `s2` = report SHAPE version. Gaps gained `severity`/slot identity, and a cached
+    // pre-`severity` payload would be read as "nothing blocking" by the UI's filter —
+    // so the key changes with the shape rather than relying on entries expiring.
+    return getOrSetCached(env, `participants:accountability:s2:${taskId}:v:${version}`, async () => {
       const soRows = await this.db
         .select()
         .from(ticketRoleSignoffs)
         .where(eq(ticketRoleSignoffs.taskId, taskId))
         .orderBy(asc(ticketRoleSignoffs.createdAt));
       const signoffs: AccountabilitySignoff[] = soRows.map((s) => ({
+        laneKey: s.laneKey,
         roleKey: s.roleKey,
         roleName: roleName(s.roleKey),
         memberKind: s.memberKind,
@@ -460,25 +691,16 @@ export class TicketParticipantsService {
         waiveReason: s.waiveReason,
         createdAt: s.createdAt.toISOString(),
       }));
-      const latestByRole = new Map<string, AccountabilitySignoff>();
-      for (const s of signoffs) latestByRole.set(s.roleKey, s);
+      const latestBySlot = new Map<string, AccountabilitySignoff>();
+      for (const s of signoffs) latestBySlot.set(slotKey(s.laneKey, s.roleKey), s);
 
       const required = participants.filter((p) => p.required);
-      const done = new Set<ParticipantState>(['completed', 'waived', 'skipped']);
-      const completedCount = required.filter((p) => done.has(p.state)).length;
+      const completedCount = required.filter((p) => isParticipantSatisfied(p.state)).length;
       const percentComplete = required.length === 0 ? 100 : Math.round((completedCount / required.length) * 100);
 
-      const gaps: AccountabilityGap[] = [];
-      for (const p of required) {
-        if (p.state === 'unstaffed') gaps.push({ kind: 'unstaffed', roleKey: p.roleKey, roleName: p.roleName, detail: 'No capable resource is available for this required role.' });
-        else if (p.state === 'changes_requested') gaps.push({ kind: 'changes_requested', roleKey: p.roleKey, roleName: p.roleName, detail: 'Changes were requested and not yet resolved.' });
-        else if (!done.has(p.state)) gaps.push({ kind: 'unsigned', roleKey: p.roleKey, roleName: p.roleName, detail: 'Required role has not signed off.' });
-      }
-      for (const s of latestByRole.values()) {
-        const hasContribution = s.contribution && Object.values(s.contribution).some((v) => v != null && (!Array.isArray(v) || v.length > 0));
-        if ((s.verdict === 'approved') && !hasContribution) gaps.push({ kind: 'no_contribution', roleKey: s.roleKey, roleName: s.roleName, detail: 'Approved with no linked contribution/interaction — a rubber-stamp risk.' });
-        if (s.verdict === 'waived') gaps.push({ kind: 'waived', roleKey: s.roleKey, roleName: s.roleName, detail: s.waiveReason ? `Waived: ${s.waiveReason}` : 'Waived without a recorded reason.' });
-      }
+      // Every gap names the SLOT it came from (lane + responsibility + state) so the
+      // banner and the table below it are two views of one list, not two lists.
+      const gaps = computeAccountabilityGaps(participants, [...latestBySlot.values()]);
 
       return { taskId, requiredCount: required.length, completedCount, percentComplete, participants, signoffs, gaps };
     });

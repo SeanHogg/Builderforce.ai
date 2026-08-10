@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Cloud workflow executor — runs `runtime='cloud'` workflows on the
  * builderforce-hosted runtime, instead of a self-hosted agentHost polling and
@@ -7,7 +8,8 @@
  * its tasks reach a terminal state.
  *
  * Node-kind coverage on cloud:
- *   - trigger / llm / transform / filter / branch / output  → executed natively.
+ *   - trigger / llm / transform / filter / branch / output / gmail → executed natively.
+ *     gmail sends through the tenant's connected Gmail integration (googleOAuth).
  *     llm runs via the gateway; the ETL kinds (transform/filter/branch) are
  *     evaluated by the sandbox-safe expression engine in `domain/workflowExpr`
  *     (an empty expression is a pass-through, so legacy workflows are unaffected).
@@ -15,7 +17,18 @@
  *     node is marked `cancelled` and `dispositionFromDeps` cascades the cancel to
  *     every dependent (a prune is a skip, not a failure — the workflow can still
  *     end `completed`).
- *   - memory / knowledge / train / agent / mcp              → these require an
+ *   - connector → executed natively. The ONE node kind through which every
+ *     connector action (Twilio, SendGrid, Slack, Stripe, a tenant's own) is
+ *     reachable from a workflow; it delegates to `executeConnectorAction`, so a
+ *     workflow's outbound call gets the same SSRF guard, credential handling and
+ *     audit log an agent's does.
+ *   - mcp → executed natively (0412). The Data + Marketing palette integrations
+ *     all compile to this kind; the node resolves the tenant's stored credential
+ *     and calls the provider through the shared catalog, so the connect form's
+ *     "Test connection" and the running node issue the same request. Providers
+ *     whose wire protocol a Worker cannot speak (MySQL/Mongo/Redis/Snowflake)
+ *     fail with that specific reason rather than a generic refusal.
+ *   - memory / knowledge / train / agent                    → these require an
  *     agentHost agent/tool/SSM runtime that has no cloud equivalent here, so the
  *     task fails with a clear, recorded message (see Gap Register). Run those
  *     workflows on a self-hosted agentHost.
@@ -28,9 +41,14 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { loadGoogleCredential } from '../integrations/googleCredential';
+import { sendGmail } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
+import { credentialSecret } from '../integrations/credentialCrypto';
+import { executeMcpNode, type McpNodeConfig } from './mcpNode';
+import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
 import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -93,11 +111,11 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       // own account) — otherwise the connected flagship leads. Without a tenant (should
       // not happen for a real workflow) fall back to the operator pool.
       const nodeModel = typeof cfg.model === 'string' ? cfg.model : undefined;
-      const { proxy, byoVendors } = usageCtx
+      const { proxy, byoVendors, registeredModels } = usageCtx
         ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
-        : { proxy: ideProxy(env), byoVendors: new Set<string>() };
+        : { proxy: ideProxy(env), byoVendors: new Set<string>(), registeredModels: [] as readonly string[] };
       const result = await proxy.complete({
-        model: byoAwareModel(nodeModel, byoVendors),
+        model: byoAwareModel(nodeModel, byoVendors, registeredModels),
         messages,
         ...(typeof cfg.temperature === 'number' ? { temperature: cfg.temperature } : {}),
       });
@@ -140,13 +158,64 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           return { output: JSON.stringify({ ...parsed, $branch: taken }) };
         }
-      } catch {
+      } catch (error) {
         /* non-JSON payload — fall through to passthrough */
+      
+        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
       }
       return { output: inputText };
     }
     case 'output':
       return { output: inputText };
+
+    case 'gmail': {
+      // Send an email through the tenant's connected Gmail integration. Fields
+      // support {{input}} so an upstream node's output can drive the recipient,
+      // subject or body. Needs the tenant context to load the (encrypted) creds.
+      if (!usageCtx) throw new Error('The Gmail node needs a tenant context to load your connected account');
+      const creds = await loadGoogleCredential(env as unknown as Env, usageCtx.db, usageCtx.tenantId, 'gmail');
+      if (!creds) throw new Error('Connect a Gmail integration under Settings ▸ Integrations to use the Gmail node');
+      const cfg = node.config;
+      const to = renderTemplate(typeof cfg.to === 'string' ? cfg.to : '', inputText).trim();
+      const subject = renderTemplate(typeof cfg.subject === 'string' ? cfg.subject : '', inputText);
+      const body = renderTemplate(typeof cfg.body === 'string' ? cfg.body : '{{input}}', inputText);
+      const sent = await sendGmail(creds, { to, subject, body });
+      return { output: JSON.stringify({ sent: true, id: sent.id, to }) };
+    }
+
+    case 'connector': {
+      // EVERY connector action — Twilio SMS/voice/WhatsApp, SendGrid, Slack,
+      // Stripe, a tenant's own connector — reaches a workflow through this one
+      // node. It takes the connector and action as CONFIG, so publishing a new
+      // connector makes it usable in a workflow with no change here.
+      if (!usageCtx) throw new Error('An integration node needs a tenant context to load your connection');
+      const outcome = await executeConnectorNode(
+        { db: usageCtx.db, env: env as unknown as Env, tenantId: usageCtx.tenantId },
+        node.config as ConnectorNodeConfig,
+        inputText,
+      );
+      if (!outcome.ok) throw new Error(outcome.error);
+      return { output: outcome.output };
+    }
+
+    case 'mcp': {
+      // Every Data + Marketing palette integration lands here. The node resolves
+      // the tenant's stored credential for its provider and issues the SAME HTTP
+      // call the connect form's "Test connection" makes, so a green test and a
+      // green node cannot mean different things (see application/workflow/mcpNode.ts).
+      if (!usageCtx) throw new Error('An integration node needs a tenant context to load your connection');
+      const outcome = await executeMcpNode(
+        {
+          db: usageCtx.db,
+          tenantId: usageCtx.tenantId,
+          encryptionSecret: credentialSecret(env as unknown as Env),
+        },
+        node.config as McpNodeConfig,
+        inputText,
+      );
+      if (!outcome.ok) throw new Error(outcome.error);
+      return { output: outcome.output };
+    }
 
     default:
       throw new Error(

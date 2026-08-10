@@ -10,7 +10,7 @@ author: Sean Hogg
 
 Run a thought experiment. Walk the org chart of any technology organization and ask, for each role, one question: *what do you need to operate well across a full year — and where do you get it today?* The answers are remarkably consistent, and so is the gap. Almost everyone is reconstructing their operating picture by hand, from tools that were never designed to give it to them.
 
-Builderforce.ai starts from a different place. Because every action — human or agent — is instrumented, costed, and attributed, every role's view is a *projection of one source of truth* rather than a separate report someone maintains. Here is what that means, role by role.
+Builderforce.ai starts from a connected record. Where actions are instrumented and attributed, role-specific views can project the same underlying delivery data instead of requiring a separate report. Coverage indicators remain necessary for unattributed work.
 
 ![Hub-and-lens diagram: one instrumented source of truth at the center, with spokes to a distinct operating-picture lens for each role — CEO innovation throughput, CTO DORA and AI effectiveness, CFO cost-per-outcome, PMO portfolio rollup, CISO immutable audit trail, and managers' blended human-plus-agent board — governed by role-based access](/blog/role-operating-picture.svg)
 

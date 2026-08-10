@@ -9,13 +9,14 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, like } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { teamMemory } from '../../infrastructure/database/schema';
+import { agentMemory } from '../../infrastructure/database/schema';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseJsonArray } from '../../domain/shared/json';
+import { remember } from '../../application/memory/memoryService';
 
 export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -64,22 +65,13 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
     const agentHostId = resolvedAgentHostIdStr ?? body.agentHostId ?? '';
     if (!agentHostId) return c.json({ error: 'agentHostId is required when not using agentHost API key auth' }, 400);
 
-    const [row] = await db
-      .insert(teamMemory)
-      .values({
-        tenantId,
-        agentHostId,
-        runId:     body.runId.trim(),
-        summary:   body.summary.trim(),
-        tags:      JSON.stringify(Array.isArray(body.tags) ? body.tags : []),
-        timestamp: body.timestamp ?? new Date().toISOString(),
-      })
-      .returning();
-
-    return c.json({
-      ...row,
-      tags: JSON.parse(row?.tags ?? '[]') as string[],
-    }, 201);
+    const runId = body.runId.trim();
+    const stored = await remember(c.env, db, { tenantId, origin: 'on-prem' }, {
+      key: `team:${agentHostId}:${runId}`, content: body.summary.trim(),
+      tags: Array.isArray(body.tags) ? body.tags : [], scope: 'tenant',
+    });
+    if (!stored.ok) return c.json({ error: stored.error }, 500);
+    return c.json({ agentHostId, runId, summary: body.summary.trim(), tags: body.tags ?? [], timestamp: new Date().toISOString() }, 201);
   });
 
   // ── GET /api/teams/memory ─────────────────────────────────────────────────
@@ -92,15 +84,15 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
 
     const rows = await db
       .select()
-      .from(teamMemory)
-      .where(eq(teamMemory.tenantId, tenantId))
-      .orderBy(desc(teamMemory.createdAt))
+      .from(agentMemory)
+      .where(and(eq(agentMemory.tenantId, tenantId), like(agentMemory.key, 'team:%')))
+      .orderBy(desc(agentMemory.createdAt))
       .limit(limit);
 
-    const entries = rows.map((r) => ({
-      ...r,
-      tags: parseJsonArray<string>(r.tags),
-    }));
+    const entries = rows.map((r) => {
+      const [, agentHostId = '', ...run] = r.key.split(':');
+      return { id: r.id, agentHostId, runId: run.join(':'), summary: r.content, tags: parseJsonArray<string>(r.tags), timestamp: r.createdAt.toISOString(), createdAt: r.createdAt };
+    });
 
     return c.json({ entries, total: entries.length });
   });

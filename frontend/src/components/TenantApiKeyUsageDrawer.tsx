@@ -54,7 +54,7 @@ const cardWrap: React.CSSProperties = {
   padding: 14,
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
 };
 
 const summaryGrid: React.CSSProperties = {
@@ -67,7 +67,7 @@ const summaryGrid: React.CSSProperties = {
 const summaryCell: React.CSSProperties = {
   padding: '10px 12px',
   background: 'var(--bg-elevated)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
 };
 

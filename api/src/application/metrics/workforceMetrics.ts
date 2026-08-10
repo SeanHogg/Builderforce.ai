@@ -235,7 +235,7 @@ export function rollupByDiscipline(cards: MemberScorecard[]): DisciplineRollup[]
  * Fetch + score every member active in the window. Tasks carry no tenant_id, so
  * scope by joining projects (same pattern as the completed-by-assignee report).
  */
-export async function computeMemberMetrics(db: Db, tenantId: number, days: number): Promise<MemberScorecard[]> {
+export async function computeMemberMetrics(db: Db, tenantId: number, days: number, projectId?: number): Promise<MemberScorecard[]> {
   const since = new Date(Date.now() - days * 24 * HOUR_MS);
 
   const rows = (await db
@@ -258,6 +258,7 @@ export async function computeMemberMetrics(db: Db, tenantId: number, days: numbe
     .leftJoin(agentHosts, eq(agentHosts.id, tasks.assignedAgentHostId))
     .where(and(
       eq(projects.tenantId, tenantId),
+      ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
       eq(tasks.archived, false),
       gte(tasks.updatedAt, since),
       notSystemTask,
@@ -459,14 +460,18 @@ export function rollupDora(days: number, leadTimesHrs: number[], deploys: Deploy
   return { windowDays: days, ...doraKeys(days, leadTimesHrs, deploys), series };
 }
 
-export async function computeDora(db: Db, tenantId: number, days: number): Promise<DoraRollup> {
+export async function computeDora(db: Db, tenantId: number, days: number, projectId?: number): Promise<DoraRollup> {
   const now = Date.now();
   const since = new Date(now - days * DAY_MS);
 
   const deploys = (await db
     .select({ deployedAt: deploymentEvents.deployedAt, isFailure: deploymentEvents.isFailure, restoredAt: deploymentEvents.restoredAt })
     .from(deploymentEvents)
-    .where(and(eq(deploymentEvents.tenantId, tenantId), gte(deploymentEvents.deployedAt, since)))) as DeployRow[];
+    .where(and(
+      eq(deploymentEvents.tenantId, tenantId),
+      ...(projectId != null ? [eq(deploymentEvents.projectId, projectId)] : []),
+      gte(deploymentEvents.deployedAt, since),
+    ))) as DeployRow[];
 
   // Lead time: completed tasks in window, createdAt → completedAt.
   const leadRows = await db
@@ -475,6 +480,7 @@ export async function computeDora(db: Db, tenantId: number, days: number): Promi
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(
       eq(projects.tenantId, tenantId),
+      ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
       eq(tasks.archived, false),
       isNotNull(tasks.completedAt),
       gte(tasks.completedAt, since),

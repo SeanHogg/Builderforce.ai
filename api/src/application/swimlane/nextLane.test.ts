@@ -52,3 +52,62 @@ describe('resolveNextLaneKey', () => {
     expect(resolveNextLaneKey([], 'todo')).toBeNull();
   });
 });
+
+describe('resolveNextLaneKey — parked lanes', () => {
+  // The SHIPPED default board, which the fixtures above never modelled: `blocked` sits at
+  // position 5, between in_review (4) and done (6). That layout is why a completing review
+  // run advanced tickets INTO `blocked` on 10 of 13 production boards — and the sweep's
+  // RUNNABLE_STATUSES excludes `blocked`, so nothing ever looked at them again.
+  const defaultSeed = [
+    { key: 'backlog', position: 0 },
+    { key: 'todo', position: 1 },
+    { key: 'ready', position: 2 },
+    { key: 'in_progress', position: 3 },
+    { key: 'in_review', position: 4 },
+    { key: 'blocked', position: 5 },
+    { key: 'done', position: 6, isTerminal: true },
+  ];
+
+  it('never advances a completing lane INTO the blocked lane', () => {
+    expect(resolveNextLaneKey(defaultSeed, 'in_review')).not.toBe('blocked');
+  });
+
+  it('skips past blocked to reach the terminal lane, which still stops the advance', () => {
+    // in_review → (skip blocked) → done is terminal → null, i.e. rest in review.
+    expect(resolveNextLaneKey(defaultSeed, 'in_review')).toBeNull();
+  });
+
+  it('skips a parked lane to reach the next real WORKING lane', () => {
+    const withWorkAfterParked = [
+      { key: 'in_progress', position: 0 },
+      { key: 'blocked', position: 1 },
+      { key: 'in_review', position: 2 },
+      { key: 'done', position: 3, isTerminal: true },
+    ];
+    expect(resolveNextLaneKey(withWorkAfterParked, 'in_progress')).toBe('in_review');
+  });
+
+  it('treats on_hold and cancelled as parked too', () => {
+    const lanes = [
+      { key: 'build', position: 0 },
+      { key: 'on_hold', position: 1 },
+      { key: 'cancelled', position: 2 },
+      { key: 'qa', position: 3 },
+    ];
+    expect(resolveNextLaneKey(lanes, 'build')).toBe('qa');
+  });
+
+  it('resolves DETERMINISTICALLY when two lanes share a position', () => {
+    // Measured live on board ad030733: `ready` and `todo` both at position 1, so the
+    // advance target depended on row order. The key tie-break makes it stable.
+    const collided = [
+      { key: 'backlog', position: 0 },
+      { key: 'todo', position: 1 },
+      { key: 'ready', position: 1 },
+      { key: 'in_progress', position: 2 },
+    ];
+    const shuffled = [collided[2]!, collided[0]!, collided[3]!, collided[1]!];
+    expect(resolveNextLaneKey(collided, 'backlog')).toBe(resolveNextLaneKey(shuffled, 'backlog'));
+    expect(resolveNextLaneKey(collided, 'backlog')).toBe('ready'); // 'ready' < 'todo'
+  });
+});

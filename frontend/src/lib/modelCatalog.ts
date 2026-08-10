@@ -13,7 +13,8 @@
  */
 
 import { BRAND } from './content';
-import { getApiBaseUrl } from './apiClient';
+import { apiRequest } from './apiClient';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
 export type ModelTier = 'FREE' | 'PRO' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
 
@@ -136,14 +137,13 @@ function toRecord(m: CatalogModel): ModelRecord {
 }
 
 // Per-tab dedupe so concurrent callers / page remounts share one request.
-let inflight: Promise<ModelRecord[]> | null = null;
+const CATALOG_CACHE_KEY = 'model-catalog:public';
 
 async function fetchCatalog(): Promise<ModelRecord[]> {
-  const res = await fetch(`${getApiBaseUrl()}/llm/v1/catalog`, {
+  const json = await apiRequest<{ data?: CatalogModel[] }>('/llm/v1/catalog', {
+    auth: 'none',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Catalog request failed (${res.status})`);
-  const json = (await res.json()) as { data?: CatalogModel[] };
   return Array.isArray(json.data) ? json.data.map(toRecord) : [];
 }
 
@@ -153,17 +153,40 @@ async function fetchCatalog(): Promise<ModelRecord[]> {
  * records so the page is useful.
  */
 export async function getModelCatalog(): Promise<ModelRecord[]> {
-  if (!inflight) {
-    inflight = fetchCatalog().catch((err) => {
-      inflight = null; // allow a retry on the next call
-      throw err;
-    });
-  }
   try {
-    return [...BUILDERFORCE_MODELS, ...(await inflight)];
+    return [...BUILDERFORCE_MODELS, ...(await getOrSetClientCached(CATALOG_CACHE_KEY, () => fetchCatalog()))];
   } catch {
     return [...BUILDERFORCE_MODELS];
   }
+}
+
+/**
+ * Is `record` a PREMIUM model — one of the paid OpenRouter models a tenant unlocks
+ * with billing details + a validated card, billed at OpenRouter cost + a flat 1¢/request?
+ *
+ * Mirrors the server's `isPremiumModelSelection`: a PAID model that the plan's own
+ * pool does NOT already route. The gateway marks pool membership on every catalog
+ * record (`pool: 'free' | 'pro'`), so "no pool + costs money" is exactly the premium
+ * long tail — the curated in-plan coders (`pool: 'pro'`) are already free to pick on
+ * a paid plan and must not be surcharged. One definition, so the picker can never
+ * offer something the gateway would reject (or vice versa).
+ */
+export function isPremiumModel(record: ModelRecord): boolean {
+  if (record.isBuilderforce) return false;
+  if (record.pool) return false; // already routed by the free/pro plan pool
+  return record.pricing.prompt > 0 || record.pricing.completion > 0;
+}
+
+/**
+ * Every PREMIUM model, cheapest-first (input price), for the model picker's premium
+ * group. Reuses the cached `/llm/v1/catalog` fetch — the premium list is deliberately
+ * NOT a second endpoint, so there is one catalog source and one dedupe.
+ */
+export async function getPremiumModelCatalog(): Promise<ModelRecord[]> {
+  const all = await getModelCatalog();
+  return all
+    .filter(isPremiumModel)
+    .sort((a, b) => (a.pricing.prompt + a.pricing.completion) - (b.pricing.prompt + b.pricing.completion));
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +202,25 @@ export function formatPricePerMillion(perToken: number): string {
   return `$${perMillion.toFixed(2)}`;
 }
 
+/**
+ * Test a model against optional USD-per-million-token price ceilings.
+ * Catalog prices are stored per token, while every marketplace price is shown
+ * per 1M tokens; keeping the conversion here prevents the filter UI from
+ * accidentally comparing values expressed in different units.
+ */
+export function modelMatchesPriceLimits(
+  record: ModelRecord,
+  maxInputPerMillion?: number,
+  maxOutputPerMillion?: number,
+): boolean {
+  const inputPerMillion = record.pricing.prompt * 1_000_000;
+  const outputPerMillion = record.pricing.completion * 1_000_000;
+  return (
+    (maxInputPerMillion === undefined || inputPerMillion <= maxInputPerMillion) &&
+    (maxOutputPerMillion === undefined || outputPerMillion <= maxOutputPerMillion)
+  );
+}
+
 /** Format a context-window token count as "128K" / "1M". */
 export function formatContext(record: ModelRecord): string {
   if (record.contextLabel) return record.contextLabel;
@@ -191,7 +233,7 @@ export function formatContext(record: ModelRecord): string {
 
 /** Free / Paid / our-product badge color. */
 export function tierColor(record: ModelRecord): string {
-  if (record.tier === 'PRO') return 'var(--coral-bright, #f4726e)';
-  if (record.tier === 'FREE') return '#22c55e';
-  return 'var(--accent, #6366f1)';
+  if (record.tier === 'PRO') return 'var(--coral-bright)';
+  if (record.tier === 'FREE') return 'var(--success)';
+  return 'var(--accent)';
 }

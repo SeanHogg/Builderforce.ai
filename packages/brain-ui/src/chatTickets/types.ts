@@ -20,6 +20,17 @@ export interface TicketLinkVM {
   ref: string;
   label: string;
   status: string;
+  /**
+   * 0–100 completion percentage for the linked work item.
+   *
+   * `progressPct === 100` is the authoritative completion signal: it is emitted
+   * ONLY once the work item is fully complete (a leaf that is marked done, or a
+   * container whose every child/target is done — i.e. `done === total`). It is
+   * never reported before completion, and a value approaching 100 (e.g. 99) does
+   * NOT mean done — only an exact 100 does. Health is derived live on every read,
+   * so 100 is an idempotent terminal state (reported on every subsequent read),
+   * not a one-shot event delivered exactly once.
+   */
   progressPct: number;
   done: number;
   total: number;
@@ -72,6 +83,14 @@ export interface ChatOptionVM {
   title: string;
 }
 
+/** A pending human question associated with one of this chat's linked tasks. */
+export interface ChatQuestionVM {
+  id: string;
+  description: string;
+  taskId: number | null;
+  createdAt?: string;
+}
+
 /**
  * Host-provided data access — the only coupling to a backend. The web app wires
  * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
@@ -99,6 +118,27 @@ export interface ChatTicketsAdapter {
   /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
    *  actually started + the agent's display name for the toast. */
   runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string }>;
+  /**
+   * Whether this host currently permits DISPATCHING a run, and if not, why.
+   *
+   * Run dispatch is role-gated in the web app (`runtime.execute`) but this package
+   * is surface-agnostic and also renders in the VS Code webview, where there is no
+   * tenant-role context at all. So the capability is asked of the HOST rather than
+   * computed here — it is the one thing the panel genuinely cannot know.
+   *
+   * OPTIONAL on purpose: a host that omits it (VS Code) is treated as permitted,
+   * which preserves today's behaviour rather than silently disabling the button in
+   * a surface that has no way to answer.
+   *
+   * `reason` is a host-LOCALIZED sentence rendered as the disabled control's
+   * tooltip. Product rule: a gated control is disabled and explained, never hidden
+   * — and never a button that looks live and throws on click.
+   */
+  canRunTicket?(): { allowed: boolean; reason?: string };
+  /** Pending question/feedback requests for work linked to this chat. */
+  listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+  /** Deliver an answer and resume the waiting run. */
+  answerQuestion(id: string, responseText: string): Promise<void>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -119,6 +159,11 @@ export interface ChatTicketsLabels {
   link: string;
   agents: string;
   merge: string;
+  questions: string;
+  noQuestions: string;
+  answerPlaceholder: string;
+  submitAnswer: string;
+  answering: string;
   linkFailed: string;
   kindLabel: string;
   pickTicket: string;
@@ -182,6 +227,11 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   link: 'Link ticket',
   agents: 'Agents',
   merge: 'Merge',
+  questions: 'Questions',
+  noQuestions: 'No pending questions.',
+  answerPlaceholder: 'Type your answer…',
+  submitAnswer: 'Answer',
+  answering: 'Sending…',
   linkFailed: 'Could not link — check the ticket exists.',
   kindLabel: 'Ticket type',
   pickTicket: 'Choose a ticket…',

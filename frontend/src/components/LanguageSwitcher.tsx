@@ -36,7 +36,7 @@ export default function LanguageSwitcher() {
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: pending ? 'wait' : 'pointer',
       }}
     >

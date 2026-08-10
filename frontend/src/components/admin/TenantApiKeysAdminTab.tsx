@@ -135,7 +135,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
           style={{
             padding: '6px 10px', fontSize: 13,
             background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
           }}
         >
           {tenants.map((t) => (
@@ -165,7 +165,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
 
       <div style={{
         padding: 16, marginBottom: 16,
-        background: 'var(--bg-base)', borderRadius: 12,
+        background: 'var(--bg-base)', borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border-subtle)',
       }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{t('apikeys.mintTitle')}</div>
@@ -178,7 +178,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
           style={{
             width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
             background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             boxSizing: 'border-box',
           }}
         />

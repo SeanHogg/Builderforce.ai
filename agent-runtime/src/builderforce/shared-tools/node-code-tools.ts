@@ -11,7 +11,7 @@
  * `builderforce-local` engine — PRD 11 §5.5(a).)
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
@@ -35,11 +35,18 @@ export interface GitHistoryOpts {
 export function runGitHistory(projectRoot: string, opts: GitHistoryOpts): Record<string, unknown> {
   const { path: targetPath, limit = 50, author } = opts;
   try {
-    let cmd = `git -C "${projectRoot}" log --format=%H%x00%an%x00%ae%x00%at%x00%s --name-only -n ${limit}`;
-    if (author) cmd += ` --author="${author}"`;
-    if (targetPath) cmd += ` -- "${targetPath}"`;
+    // SECURITY (C1): build an argv array and run WITHOUT a shell (execFileSync), so
+    // `author`/`path`/`projectRoot` — which are LLM/agent-chosen and therefore
+    // prompt-injection reachable — can never break out into shell command
+    // substitution. The previous `execSync` string-interpolation was RCE: double
+    // quotes do not stop `$(…)`. Mirrors the safe execFileSync usage in
+    // cbSearchKeyword/ssExtractSnippet below. `limit` is coerced to a bounded int.
+    const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 50)), 1000);
+    const args = ["-C", projectRoot, "log", "--format=%H%x00%an%x00%ae%x00%at%x00%s", "--name-only", "-n", String(safeLimit)];
+    if (author) args.push(`--author=${author}`);
+    if (targetPath) args.push("--", targetPath);
 
-    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    const output = execFileSync("git", args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     const commits: Array<{ sha: string; author: string; date: Date; message: string; filesChanged: string[] }> = [];
     const blocks = output.split("\n\n").filter((b) => b.trim());
     for (const block of blocks) {
@@ -204,6 +211,15 @@ function cbExtractKeywords(query: string): string[] {
     .filter((w) => w.length >= 3 && !CB_STOP_WORDS.has(w));
 }
 
+/**
+ * Repo-relative path in POSIX separators, matching what `list_files` returns from its
+ * own walk. Without this, Windows hosts hand the model `src\pricing.ts` from one tool
+ * and `src/pricing.ts` from another — two tools describing the same tree inconsistently.
+ */
+function relPosix(projectRoot: string, absPath: string): string {
+  return path.relative(projectRoot, absPath).split(path.sep).join("/");
+}
+
 function detectSearchTool(): "rg" | "grep" {
   try {
     execFileSync("rg", ["--version"], { stdio: "ignore" });
@@ -214,15 +230,29 @@ function detectSearchTool(): "rg" | "grep" {
 }
 
 function cbSearchKeyword(projectRoot: string, keyword: string, exts: string[], tool: "rg" | "grep"): string[] {
+  // GNU grep only accepts the ATTACHED `--include=GLOB` form. Passing `--include` and
+  // the glob as two argv entries makes grep swallow the glob as its pattern, leaving
+  // the real keyword in file position -> exit 2. That failure was previously caught
+  // below and returned as "no matches", so on any host without ripgrep `search_code`
+  // reported `total: 0` for code that plainly exists, and the tool then told the model
+  // the symbol was not referenced. Keep these attached.
   const args =
     tool === "rg"
       ? ["-i", "--no-heading", "-l", ...IGNORED_DIRS.flatMap((d) => ["--glob", `!${d}/**`]), ...exts.flatMap((e) => ["--glob", `*.${e}`]), "--", keyword, projectRoot]
-      : ["-ril", ...IGNORED_DIRS.flatMap((d) => ["--exclude-dir", d]), ...exts.flatMap((e) => ["--include", `*.${e}`]), "--", keyword, projectRoot];
+      : ["-ril", ...IGNORED_DIRS.map((d) => `--exclude-dir=${d}`), ...exts.map((e) => `--include=*.${e}`), "--", keyword, projectRoot];
   try {
     const output = execFileSync(tool === "rg" ? "rg" : "grep", args, { maxBuffer: 4 * 1024 * 1024, timeout: 10_000 }).toString();
     return output.split("\n").filter(Boolean);
-  } catch {
-    return [];
+  } catch (err) {
+    // Both tools exit 1 for "searched fine, found nothing" — the only genuinely empty
+    // result. Anything else (exit >= 2, ENOENT, timeout) is a BROKEN SEARCH, and
+    // reporting it as an empty result would have the agent assert the code is absent.
+    if ((err as { status?: number }).status === 1) return [];
+    throw new Error(
+      `code search failed (${tool} exited ${(err as { status?: number }).status ?? "abnormally"}): ${
+        (err as { stderr?: Buffer }).stderr?.toString().trim() || (err as Error).message
+      }`,
+    );
   }
 }
 
@@ -282,12 +312,19 @@ export async function runCodebaseSearch(projectRoot: string, opts: CodebaseSearc
   const tool = detectSearchTool();
 
   const fileHits = new Map<string, Set<string>>();
-  for (const kw of keywords) {
-    for (const f of cbSearchKeyword(projectRoot, kw, exts, tool)) {
-      const abs = path.isAbsolute(f) ? f : path.join(projectRoot, f);
-      if (!fileHits.has(abs)) fileHits.set(abs, new Set());
-      fileHits.get(abs)!.add(kw);
+  try {
+    for (const kw of keywords) {
+      for (const f of cbSearchKeyword(projectRoot, kw, exts, tool)) {
+        const abs = path.isAbsolute(f) ? f : path.join(projectRoot, f);
+        if (!fileHits.has(abs)) fileHits.set(abs, new Set());
+        fileHits.get(abs)!.add(kw);
+      }
     }
+  } catch (err) {
+    // Surface a broken search as an ERROR, never as an empty result set: the caller
+    // turns "no results" into "this symbol is not referenced, say so instead of
+    // inventing an edit", which would make the agent deny that existing code exists.
+    return { error: (err as Error).message, query, keywords };
   }
   if (fileHits.size === 0) {
     return { results: [], query, keywords, message: "No files matched the query keywords." };
@@ -295,7 +332,7 @@ export async function runCodebaseSearch(projectRoot: string, opts: CodebaseSearc
 
   const scored: Array<{ relPath: string; score: number; matchCount: number; snippet: string; matchedKeywords: string[] }> = [];
   for (const [absPath, kwSet] of Array.from(fileHits.entries()).slice(0, CB_MAX_RESULTS * 3)) {
-    const relPath = path.relative(projectRoot, absPath);
+    const relPath = relPosix(projectRoot, absPath);
     const { count: matchCount, matched: matchedKeywords } = cbCountMatches(absPath, Array.from(kwSet), tool);
     const pathBonus = keywords.filter((k) => relPath.toLowerCase().includes(k)).length * 5;
     const breadthBonus = matchedKeywords.length * 3;
@@ -426,7 +463,7 @@ async function ssBuildIndex(projectRoot: string): Promise<SearchIndex> {
   const docFreq: Record<string, number> = {};
   let totalTokens = 0;
   for (const absPath of files) {
-    const relPath = path.relative(projectRoot, absPath);
+    const relPath = relPosix(projectRoot, absPath);
     let text: string;
     let mtime: number;
     try {

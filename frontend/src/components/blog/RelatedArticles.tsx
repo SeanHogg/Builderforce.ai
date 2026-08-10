@@ -50,25 +50,25 @@ export default function RelatedArticles({
     <section className="related-articles" aria-label={heading}>
       <style>{`
         .related-articles {
-          max-width: 1100px;
+          max-width: var(--marketing-max);
           margin: 0 auto;
-          padding: 8px 24px 56px;
+          padding: 8px var(--marketing-gutter) 56px;
           width: 100%;
         }
         .related-articles-head {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: 1.5rem;
+          font-size: var(--font-size-section);
           color: var(--text-primary);
           margin: 0 0 6px;
         }
         .related-articles-head .related-accent { color: var(--coral-bright); margin-right: 8px; }
         .related-articles-sub {
-          font-size: 0.95rem;
+          font-size: var(--font-size-body);
           color: var(--text-secondary);
           margin: 0 0 20px;
         }
-        @media (max-width: 640px) { .related-articles { padding: 8px 16px 40px; } }
+        @media (max-width: 640px) { .related-articles { padding-block: 8px 40px; } }
       `}</style>
       <h2 className="related-articles-head">
         <span className="related-accent">⟩</span>{heading}

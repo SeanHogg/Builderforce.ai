@@ -92,8 +92,8 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
         avatarUrl:    teams.avatarUrl,
         createdAt:    teams.createdAt,
         updatedAt:    teams.updatedAt,
-        memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams.id})`,
-        projectCount: sql<number>`(SELECT COUNT(*)::int FROM ${teamProjects} WHERE ${teamProjects.teamId} = ${teams.id})`,
+        memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams}.id)`,
+        projectCount: sql<number>`(SELECT COUNT(*)::int FROM ${teamProjects} WHERE ${teamProjects.teamId} = ${teams}.id)`,
       })
       .from(teams)
       .where(eq(teams.tenantId, tenantId))

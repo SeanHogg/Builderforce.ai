@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * RFP Response orchestration (PRD 15).
  *
@@ -20,7 +21,6 @@
  * than blocking the proposal.
  */
 import { and, eq, desc, sql as dsql, inArray } from 'drizzle-orm';
-import type { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { ToolService } from '../tools/ToolService';
@@ -40,8 +40,6 @@ import type {
   RfpResponseBody, RfpCapabilityRoster, RfpPhase, RfpNarrative, RfpPortfolioMatch, RfpScanFreshness, BrandPalette,
 } from './types';
 
-type Sql = ReturnType<typeof neon<false, false>>;
-
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const MILLICENTS_PER_USD = 100_000;
 
@@ -50,7 +48,6 @@ export interface RfpGenerateDeps {
   db: Db;
   toolService: ToolService;
   auditRunner: AuditRunner;
-  sql: Sql;
   secret: string;
 }
 
@@ -84,7 +81,9 @@ async function readArchitectureRoster(db: Db, tenantId: number, projectId: numbe
     const latest = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
       if (latest.has(r.kind) || !r.dataJson) continue;
-      try { latest.set(r.kind, JSON.parse(r.dataJson) as Record<string, unknown>); } catch { /* skip */ }
+      try { latest.set(r.kind, JSON.parse(r.dataJson) as Record<string, unknown>); } catch (error) { /* skip */ 
+        reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "readArchitectureRoster" });
+      }
     }
     const business = latest.get('business');
     const diagnostic = latest.get('diagnostic');
@@ -146,7 +145,9 @@ async function ensureFreshScan(
     for (const d of score.diagnostics) {
       if (!lastScanAt || d.createdAt > lastScanAt) lastScanAt = d.createdAt;
     }
-  } catch { /* no prior scans */ }
+  } catch (error) { /* no prior scans */ 
+    reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "ensureFreshScan" });
+  }
 
   const ageMs = lastScanAt ? now - new Date(lastScanAt).getTime() : null;
   const ageDays = ageMs == null ? null : Math.floor(ageMs / (24 * 60 * 60 * 1000));
@@ -158,11 +159,13 @@ async function ensureFreshScan(
     // a server-side repo file-tree read → feature signals → a fresh tool_runs row).
     for (const audit of listSystemAudits()) {
       try {
-        await deps.auditRunner.runAudit(deps.env, deps.sql, {
+        await deps.auditRunner.runAudit(deps.env, {
           tenantId, projectId, auditId: audit.id, userId, secret: deps.secret,
         });
         refreshed = true;
-      } catch { /* one audit failing must not block the proposal */ }
+      } catch (error) { /* one audit failing must not block the proposal */ 
+        reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "ensureFreshScan" });
+      }
     }
   }
 
@@ -256,7 +259,9 @@ export async function matchPortfolio(
         .slice(0, 5);
       if (matches.length) return matches;
     }
-  } catch { /* fall through to keyword ranking */ }
+  } catch (error) { /* fall through to keyword ranking */ 
+    reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "matchPortfolio" });
+  }
 
   return seeded.filter((s) => s.score > 0).slice(0, 5);
 }
@@ -274,7 +279,9 @@ async function blendedWeeklyRateUsd(db: Db, tenantId: number): Promise<number> {
     if (Number.isFinite(centsPerHour) && centsPerHour > 0) {
       return Math.round((centsPerHour / 100) * 40); // 40h week
     }
-  } catch { /* default below */ }
+  } catch (error) { /* default below */ 
+    reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "blendedWeeklyRateUsd" });
+  }
   return RFP_COST_DEFAULTS.blendedWeeklyRateUsd;
 }
 
@@ -289,7 +296,9 @@ async function estimateAgenticCostUsd(db: Db, tenantId: number, projectId: numbe
         .from(llmUsageLog)
         .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.projectId, projectId)));
       historicalUsd = (Number(row?.total) || 0) / MILLICENTS_PER_USD;
-    } catch { /* default below */ }
+    } catch (error) { /* default below */ 
+      reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "estimateAgenticCostUsd" });
+    }
   }
   const floor = effortWeeks * 200; // a build of this size will burn at least this in agentic spend
   return Math.round(Math.max(historicalUsd, floor));

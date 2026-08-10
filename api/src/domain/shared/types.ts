@@ -39,6 +39,29 @@ export enum TaskStatus {
   BLOCKED = 'blocked',
 }
 
+/**
+ * The statuses a ticket is still WORKABLE in — i.e. everything the manager grooms,
+ * ranks, staffs, triages and counts as active.
+ *
+ * One definition because it was three: `ManagerService`, `runManagerSweep` and
+ * `managerRoutes` each carried a private copy of the identical array. Three copies of
+ * "which tickets are still open" is exactly the drift that lets the sweep pick up a
+ * project the pass then considers empty, or a count on one surface disagree with the
+ * board on another.
+ *
+ * `blocked` is deliberately INCLUDED: a blocked ticket has not left the board, it is
+ * waiting on something, and the manager's whole job is to notice that.
+ */
+export const NON_TERMINAL_TASK_STATUSES: string[] = [
+  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
+  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
+];
+
+/** True when the ticket has left the board (done, cancelled, or any non-workable state). */
+export function isTerminalTaskStatus(status: string | null | undefined): boolean {
+  return !NON_TERMINAL_TASK_STATUSES.includes(status ?? '');
+}
+
 export enum TaskPriority {
   LOW     = 'low',
   MEDIUM  = 'medium',
@@ -183,37 +206,4 @@ export enum AuditEventType {
   PROJECT_UPDATED       = 'project_updated',
   TASK_CREATED          = 'task_created',
   TASK_UPDATED          = 'task_updated',
-}
-
-/**
- * PRD #615 task taxonomy (per-project detailed type).
- * Used by ProgressGate and completion gate to distinguish code-driven vs
- * analysis/provisioning/decision tasks that may legitimately complete via doc-only PRs.
- */
-export enum PRDTaskType {
-  /** Implementation-driven work; must deliver code and tests before done. */
-  CODING = 'coding',
-  /** Research spikes, architectural investigation, decision docs — deliverable is analysis. */
-  ANALYSIS = 'analysis',
-  /** Infrastructure provisioning, environment setup, access grants. */
-  PROVISIONING = 'provisioning',
-  /** Formal written decision, architecture decision record, analysis docs. */
-  DECISION = 'decision',
-  /** Pure doc work scoped explicitly as such (e.g., writing build docs). */
-  DOCUMENTATION = 'documentation',
-}
-
-/**
- * PRD #615 high-level deliverable classification used by the completion gate.
- * Informs which tasks can legitimately complete via docs-only PRs.
- */
-export enum DeliverableType {
-  /** Feature/bug-fix/refactor/test suite. Requires implementation and passing tests. */
-  CODE = 'code',
-  /** Written decision or analysis document. Doc PR is acceptable. */
-  DECISION = 'decision',
-  /** PRD/design spec. Doc PR is acceptable. */
-  SPEC = 'spec',
-  /** Infrastructure provisioning, CI/CD config, environment setup. May be done via config only. */
-  OPS = 'ops',
 }

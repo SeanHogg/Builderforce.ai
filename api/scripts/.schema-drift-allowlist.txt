@@ -87,3 +87,10 @@ Column 'tasks.priority' is declared in schema.ts but never created/added by any 
 Column 'tasks.assigned_agent_type' is declared in schema.ts but never created/added by any migration.
 Column 'agent_hosts.status' is declared in schema.ts but never created/added by any migration.
 Column 'executions.status' is declared in schema.ts but never created/added by any migration.
+# Migration 0233 attempted to create a second, incompatible `soc_controls` shape with
+# CREATE TABLE IF NOT EXISTS. The live governance table already existed, so these four
+# columns were never created; migration 0254 created `finops_soc_controls` instead.
+Column 'soc_controls.objective' exists in migrations but is missing from schema.ts.
+Column 'soc_controls.owner' exists in migrations but is missing from schema.ts.
+Column 'soc_controls.note' exists in migrations but is missing from schema.ts.
+Column 'soc_controls.last_reviewed' exists in migrations but is missing from schema.ts.

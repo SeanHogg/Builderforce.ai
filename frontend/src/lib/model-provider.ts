@@ -29,6 +29,15 @@ function cacheQuery(messages: Array<{ role: string; content: string }>): string 
   return messages.map((m) => `${m.role}: ${m.content}`).join('\n');
 }
 
+/** Emit a fixed string word-by-word through `onToken` (used only for the
+ *  not-ready fallback path, where there is no real model to stream from). */
+async function wordStream(text: string, onToken: (token: string) => void): Promise<void> {
+  for (const word of text.split(' ')) {
+    onToken(word + ' ');
+    await new Promise<void>((r) => setTimeout(r, 8));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core interfaces
 // ---------------------------------------------------------------------------
@@ -178,6 +187,12 @@ export class MambaModelProvider implements ModelProvider {
       const { device } = await mamba.initWebGPU();
       this.device = device;
 
+      // GPUDevice.lost recovery — a discrete-GPU reset, tab suspension, or driver
+      // crash silently invalidates every buffer/pipeline. Subscribe once so the
+      // NEXT generate()/train() re-initialises instead of failing on dead handles.
+      // (The article calls this out; without it, on-device inference just breaks.)
+      this.watchDeviceLoss(device);
+
       // Fast path: if pre-built tokenizer assets ARE deployed, load them + build the
       // model up-front. Otherwise the tokenizer is trained from the corpus in train().
       const assetsPresent = await Promise.all([
@@ -213,16 +228,9 @@ export class MambaModelProvider implements ModelProvider {
 
   async generate(input: string, context?: ModelContext): Promise<string> {
     if (!this._ready || !this.model || !this.tokenizer) {
-      return `[Mamba provider not ready${this._failureReason ? `: ${this._failureReason}` : ' — train the model first'}]`;
+      return this.notReadyMessage();
     }
-    const prompt = this.buildPrompt(input, context);
-    const promptIds: number[] = this.tokenizer.encode(prompt);
-    const outputIds: number[] = await this.model.generate(
-      promptIds,
-      context?.maxTokens ?? 200,
-      { temperature: context?.temperature ?? 0.8 }
-    );
-    return this.tokenizer.decode(outputIds);
+    return this.runGeneration(input, context);
   }
 
   async stream(
@@ -230,16 +238,86 @@ export class MambaModelProvider implements ModelProvider {
     context?: ModelContext,
     onToken?: (token: string) => void
   ): Promise<string> {
-    const result = await this.generate(input, context);
-    // @seanhogg/builderforce-memory-engine does not expose a streaming API yet — simulate per-word
+    if (!this._ready || !this.model || !this.tokenizer) {
+      const msg = this.notReadyMessage();
+      // Preserve the word-streamed fallback so a consumer wired only to onToken
+      // still surfaces the reason (and callers can rely on ≥1 token being emitted).
+      if (onToken) await wordStream(msg, onToken);
+      return msg;
+    }
+    return this.runGeneration(input, context, onToken);
+  }
+
+  /**
+   * REAL token-by-token generation. The engine recomputes the forward pass over
+   * the full sequence each decode step (no KV cache), so decoding one token at a
+   * time here costs exactly the same as the engine's internal `generate` loop —
+   * but lets us surface each token the instant it is produced (true streaming,
+   * dominating TTFT/perceived latency) instead of faking it after the fact.
+   *
+   * The returned string is `decode(prompt + completion)` — unchanged from the
+   * prior contract — and the concatenation of streamed deltas equals it exactly.
+   */
+  private async runGeneration(
+    input: string,
+    context?: ModelContext,
+    onToken?: (token: string) => void,
+  ): Promise<string> {
+    const model = this.model!;
+    const tokenizer = this.tokenizer!;
+    const prompt = this.buildPrompt(input, context);
+    const maxTokens = context?.maxTokens ?? 200;
+    const temperature = context?.temperature ?? 0.8;
+
+    let ids: number[] = tokenizer.encode(prompt);
+    let emitted = '';
     if (onToken) {
-      const words = result.split(' ');
-      for (const word of words) {
-        onToken(word + ' ');
-        await new Promise<void>((r) => setTimeout(r, 8));
+      // Surface the (instantly available) prompt echo first so streamed deltas
+      // stay consistent with the full returned string.
+      emitted = tokenizer.decode(ids);
+      if (emitted) onToken(emitted);
+    }
+
+    for (let i = 0; i < maxTokens; i++) {
+      const next = await model.generate(ids, 1, { temperature });
+      if (next.length <= ids.length) break; // no new token → EOS reached
+      ids = next;
+      if (onToken) {
+        const full = tokenizer.decode(ids);
+        const delta = full.slice(emitted.length);
+        if (delta) {
+          onToken(delta);
+          emitted = full;
+        }
       }
     }
-    return result;
+
+    return onToken ? emitted : tokenizer.decode(ids);
+  }
+
+  private notReadyMessage(): string {
+    return `[Mamba provider not ready${this._failureReason ? `: ${this._failureReason}` : ' — train the model first'}]`;
+  }
+
+  /**
+   * Wire GPUDevice.lost so a lost device tears down the model and flips the
+   * provider back to "not ready" — a subsequent init() re-acquires cleanly.
+   * WebGPU only ever resolves `device.lost` once, so this is attached once.
+   */
+  private watchDeviceLoss(device: MambaDevice): void {
+    const lost = (device as unknown as { lost?: Promise<{ reason?: string; message?: string }> }).lost;
+    if (!lost || typeof lost.then !== 'function') return;
+    void lost.then((info) => {
+      // `reason === 'destroyed'` is our own dispose() — not an error worth surfacing.
+      if (info?.reason === 'destroyed') return;
+      console.warn('[MambaModelProvider] WebGPU device lost — will re-initialise on next use:', info);
+      this._failureReason = `WebGPU device lost${info?.message ? `: ${info.message}` : ''}`;
+      this._ready = false;
+      this.model = null;
+      this.tokenizer = null;
+      this.trainer = null;
+      this.device = null;
+    });
   }
 
   /**
@@ -419,5 +497,308 @@ export class ExternalLLMProvider implements ModelProvider {
 
     return messages;
   }
+}
+
+// ---------------------------------------------------------------------------
+// PromptApiModelProvider — Chrome's built-in Gemini Nano via the Prompt API
+// ---------------------------------------------------------------------------
+//
+// Tier-1 local backend: zero download for the app (the model ships with the
+// browser), no VRAM budget to manage, and real token streaming. Feature-detected
+// so it silently no-ops where unavailable (every non-Chrome browser today).
+
+/** Minimal structural typing for the Chrome Prompt API (`window.LanguageModel`,
+ *  Chrome 138+). Kept local so we don't depend on ambient DOM-lib updates. */
+interface PromptApiSession {
+  prompt(input: string, opts?: { signal?: AbortSignal }): Promise<string>;
+  promptStreaming(input: string, opts?: { signal?: AbortSignal }): ReadableStream<string>;
+  clone(): Promise<PromptApiSession>;
+  destroy(): void;
+  readonly inputUsage?: number;
+  readonly inputQuota?: number;
+  /** Legacy (pre-138) token accounting; guarded because newer builds drop it. */
+  countPromptTokens?(input: string): Promise<number>;
+}
+interface PromptApiFactory {
+  availability(): Promise<'unavailable' | 'downloadable' | 'downloading' | 'available'>;
+  create(opts?: {
+    temperature?: number;
+    topK?: number;
+    initialPrompts?: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    signal?: AbortSignal;
+    monitor?: (m: EventTarget) => void;
+  }): Promise<PromptApiSession>;
+}
+
+/** Resolve the Prompt API factory across the current global (`LanguageModel`) and
+ *  the legacy `self.ai.languageModel` surface, or null when the browser lacks it. */
+function promptApiFactory(): PromptApiFactory | null {
+  if (typeof globalThis === 'undefined') return null;
+  const g = globalThis as unknown as {
+    LanguageModel?: PromptApiFactory;
+    ai?: { languageModel?: PromptApiFactory };
+  };
+  return g.LanguageModel ?? g.ai?.languageModel ?? null;
+}
+
+/** True when this browser exposes the built-in Prompt API surface at all.
+ *  (Actual model availability is async — see {@link PromptApiModelProvider.init}.) */
+export function hasPromptApi(): boolean {
+  return promptApiFactory() !== null;
+}
+
+export interface PromptApiProviderConfig {
+  /** System instruction applied to every session (the article's "You are a concise…"). */
+  systemPrompt?: string;
+  temperature?: number;
+  topK?: number;
+}
+
+export class PromptApiModelProvider implements ModelProvider {
+  readonly id = 'prompt-api';
+  readonly name = 'Chrome Built-in (Gemini Nano)';
+  readonly isLocal = true;
+
+  private session: PromptApiSession | null = null;
+  private _ready = false;
+  private _failureReason: string | null = null;
+  private readonly config: PromptApiProviderConfig;
+
+  constructor(config: PromptApiProviderConfig = {}) {
+    this.config = config;
+  }
+
+  async init(): Promise<void> {
+    if (this._ready) return;
+    this._failureReason = null;
+
+    const factory = promptApiFactory();
+    if (!factory) {
+      this._failureReason = 'Chrome Prompt API (built-in AI) is not available in this browser';
+      return;
+    }
+    try {
+      const status = await factory.availability();
+      if (status === 'unavailable') {
+        this._failureReason = 'Built-in model is unavailable on this device';
+        return;
+      }
+      // 'downloadable'/'downloading' still let create() proceed — the browser
+      // fetches/awaits the model, surfacing progress via the monitor.
+      const initialPrompts = this.config.systemPrompt
+        ? [{ role: 'system' as const, content: this.config.systemPrompt }]
+        : undefined;
+      this.session = await factory.create({
+        temperature: this.config.temperature,
+        topK: this.config.topK,
+        initialPrompts,
+      });
+      this._ready = true;
+    } catch (err) {
+      this._failureReason = err instanceof Error ? err.message : String(err);
+      this._ready = false;
+    }
+  }
+
+  isReady(): boolean {
+    return this._ready && this.session !== null;
+  }
+
+  failureReason(): string | null {
+    return this._failureReason;
+  }
+
+  /** Best-effort remaining context budget, so callers can proactively trim
+   *  history before the session's fixed token quota is exhausted. */
+  tokenBudget(): { used: number; quota: number } | null {
+    const s = this.session;
+    if (!s || s.inputUsage === undefined || s.inputQuota === undefined) return null;
+    return { used: s.inputUsage, quota: s.inputQuota };
+  }
+
+  async generate(input: string, context?: ModelContext): Promise<string> {
+    if (!this.session) return `[Prompt API not ready${this._failureReason ? `: ${this._failureReason}` : ''}]`;
+    return this.session.prompt(this.buildInput(input, context));
+  }
+
+  async stream(
+    input: string,
+    context?: ModelContext,
+    onToken?: (token: string) => void,
+  ): Promise<string> {
+    if (!this.session) {
+      const msg = `[Prompt API not ready${this._failureReason ? `: ${this._failureReason}` : ''}]`;
+      if (onToken) await wordStream(msg, onToken);
+      return msg;
+    }
+    const stream = this.session.promptStreaming(this.buildInput(input, context));
+    const reader = stream.getReader();
+    let full = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (typeof value !== 'string') continue;
+        // Chrome ≥138 yields incremental deltas; older builds yielded the full
+        // cumulative string. Normalise to a delta so onToken never double-counts.
+        const delta = value.startsWith(full) ? value.slice(full.length) : value;
+        full = value.startsWith(full) ? value : full + value;
+        if (delta) onToken?.(delta);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    return full;
+  }
+
+  dispose(): void {
+    this.session?.destroy();
+    this.session = null;
+    this._ready = false;
+    this._failureReason = null;
+  }
+
+  private buildInput(input: string, context?: ModelContext): string {
+    const parts: string[] = [];
+    // The system prompt is applied at session creation; here we fold in the
+    // per-turn memory/file context the same way the other providers do.
+    if (context?.memoryContext) parts.push(`[Memory: ${context.memoryContext}]`);
+    if (context?.fileContext) parts.push(`[File context]\n${context.fileContext}`);
+    parts.push(input);
+    return parts.join('\n\n');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CascadingModelProvider — the article's progressive-enhancement chain
+// ---------------------------------------------------------------------------
+//
+// Wraps an ordered list of backends behind ONE ModelProvider. init() picks the
+// highest-priority backend that becomes ready; generate()/stream() route to it
+// and transparently fall through to the next ready backend on failure. This is
+// the single place the "which backend?" decision lives (DRY) — consumers just
+// talk to a ModelProvider and never branch on availability themselves.
+
+export class CascadingModelProvider implements ModelProvider {
+  readonly id = 'cascade';
+  readonly name = 'Local-first cascade';
+
+  private readonly tiers: ModelProvider[];
+  private _initialised = false;
+
+  constructor(tiers: ModelProvider[]) {
+    if (tiers.length === 0) throw new Error('CascadingModelProvider requires at least one tier');
+    this.tiers = tiers;
+  }
+
+  get isLocal(): boolean {
+    return this.pick().isLocal;
+  }
+
+  async init(): Promise<void> {
+    if (this._initialised) return;
+    this._initialised = true;
+    // Initialise every tier that exposes init(); a tier that fails to become
+    // ready simply won't be picked. Run sequentially so a cheap high-priority
+    // tier (Prompt API) settles before we spin up an expensive one.
+    for (const tier of this.tiers) {
+      try {
+        await tier.init?.();
+      } catch {
+        // A tier's init failure is non-fatal — the cascade falls to the next.
+      }
+    }
+  }
+
+  isReady(): boolean {
+    return this.tiers.some((t) => t.isReady());
+  }
+
+  /** The active backend: highest-priority ready tier, else the last tier
+   *  (by construction the cloud fallback, which is always ready). */
+  active(): ModelProvider {
+    return this.pick();
+  }
+
+  private pick(): ModelProvider {
+    return this.tiers.find((t) => t.isReady()) ?? this.tiers[this.tiers.length - 1]!;
+  }
+
+  /** Ready tiers in priority order, starting at `from` — the fallthrough set. */
+  private readyFrom(from: ModelProvider): ModelProvider[] {
+    const start = this.tiers.indexOf(from);
+    const rest = this.tiers.slice(start).filter((t) => t.isReady());
+    // Always keep the last tier (cloud) as a terminal fallback even if a local
+    // tier reports ready but then throws.
+    const last = this.tiers[this.tiers.length - 1]!;
+    if (!rest.includes(last)) rest.push(last);
+    return rest;
+  }
+
+  async generate(input: string, context?: ModelContext): Promise<string> {
+    let lastErr: unknown;
+    for (const tier of this.readyFrom(this.pick())) {
+      try {
+        return await tier.generate(input, context);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr ?? new Error('No inference backend available');
+  }
+
+  async stream(
+    input: string,
+    context?: ModelContext,
+    onToken?: (token: string) => void,
+  ): Promise<string> {
+    let lastErr: unknown;
+    for (const tier of this.readyFrom(this.pick())) {
+      try {
+        return await tier.stream(input, context, onToken);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr ?? new Error('No inference backend available');
+  }
+
+  dispose(): void {
+    for (const tier of this.tiers) tier.dispose?.();
+  }
+}
+
+export interface InferenceCascadeConfig {
+  /** Project/workspace id used by the cloud fallback tier. */
+  projectId: string | number;
+  /** System instruction handed to local backends that support one. */
+  systemPrompt?: string;
+  /**
+   * An already-configured on-device model to slot in as a mid-tier — typically a
+   * trained {@link MambaModelProvider} (or its worker-backed variant). Omitted
+   * when the app has no user-trained local model, in which case the cascade is
+   * simply Prompt API → cloud.
+   */
+  local?: ModelProvider;
+  /** Cloud provider label surfaced in the UI. */
+  cloudLabel?: string;
+}
+
+/**
+ * Build the local-first inference cascade: Chrome Prompt API (Tier 1, when the
+ * browser exposes it) → optional on-device trained model (Tier 2) → cloud LLM
+ * (Tier 3, always available). Returns a single ModelProvider; call `init()` once
+ * and then `generate`/`stream` — routing and fallback are handled internally.
+ */
+export function createInferenceProvider(config: InferenceCascadeConfig): CascadingModelProvider {
+  const tiers: ModelProvider[] = [];
+  if (hasPromptApi()) {
+    tiers.push(new PromptApiModelProvider({ systemPrompt: config.systemPrompt }));
+  }
+  if (config.local) {
+    tiers.push(config.local);
+  }
+  tiers.push(new ExternalLLMProvider({ projectId: config.projectId, label: config.cloudLabel }));
+  return new CascadingModelProvider(tiers);
 }
 

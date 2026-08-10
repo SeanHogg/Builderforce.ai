@@ -53,7 +53,7 @@ export function ChatMessageBubble({
           justifyContent: 'center',
           flexShrink: 0,
           background: isUser ? 'var(--accent, var(--coral-bright))' : 'var(--bg-elevated)',
-          color: isUser ? 'var(--text-on-accent, #fff)' : 'var(--text-primary)',
+          color: isUser ? 'var(--text-on-accent)' : 'var(--text-primary)',
         }}
         aria-hidden
       >

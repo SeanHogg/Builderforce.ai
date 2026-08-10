@@ -68,7 +68,7 @@ Adopting an agentic workforce is not a rip-and-replace. The shift that matters i
 
 ![Humans and AI agents on one board, orchestrated by Builderforce.ai — the same board, a bigger team](/blog/aw-workforce.svg)
 
-Builderforce.ai is the orchestration layer that makes that work: it composes, routes, meters, and governs every agent, with human-in-the-loop approval gates and a full audit trail. Your AI CTO builds and trains the workforce, your AI CIO connects it to your systems, and your AI Security Officer governs every action. The board your team already uses simply gets a bigger team on it.
+Builderforce.ai connects creative work to supported orchestration, usage records, and configurable governance. Accountable people choose approval policies and review the available execution evidence; coverage depends on the path being instrumented.
 
 ## One owned stack, from the brain to the editor
 

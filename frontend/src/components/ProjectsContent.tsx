@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -10,6 +11,7 @@ import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { toolsApi } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import { fetchProjectConnections, type ProjectConnection } from '@/lib/projectConnections';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { agentHosts } from '@/lib/builderforceApi';
@@ -24,6 +26,7 @@ import { ScheduleCalendar } from '@/components/ScheduleCalendar';
 import { ScheduleGantt } from '@/components/ScheduleGantt';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { computeProjectHealth } from '@/lib/projectHealth';
+import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 
 type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
 
@@ -41,7 +44,7 @@ export interface ProjectsContentProps {
 }
 
 /**
- * Projects content — full project list, create-project modal, open project → IDE.
+ * Projects content — full project list, create-project modal, open project → Canvas Builder.
  *
  * Reusable: rendered standalone by the Projects/Tasks page (Projects tab) and as
  * the Dashboard preview (with `limit`/`viewAllHref`), so the cards, table, button
@@ -64,6 +67,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   // without an N+1 per-card score fetch. Manager-gated: a 403 leaves the map
   // empty and the strips self-hide.
   const [diagnosticsByProject, setDiagnosticsByProject] = useState<Map<number, ProjectDiagnosticSummary[]>>(new Map());
+  // Per-project connections (repos, external boards) with live health, latest
+  // build verdict and open-PR count — one tenant-wide cached read, so every card
+  // shows its integration status without an N+1 per-card provider probe. Loaded
+  // independently of the project list so a slow provider never delays the grid.
+  const [connectionsByProject, setConnectionsByProject] = useState<Map<number, ProjectConnection[]>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -88,6 +96,12 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       .catch(() => setDiagnosticsByProject(new Map()));
   }, []);
 
+  // fetchProjectConnections already resolves to an empty map on failure — the
+  // strips self-hide, and the projects list never surfaces an error for it.
+  const loadConnections = useCallback(() => {
+    void fetchProjectConnections().then(setConnectionsByProject);
+  }, []);
+
   useEffect(() => {
     Promise.all([
       fetchProjects().catch(() => {
@@ -100,6 +114,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       setAgentHostList(agentHostsData);
     }).finally(() => setIsLoading(false));
     loadRollup();
+    loadConnections();
     // Mount-only fetch; `t` (next-intl) is stable and only used in the error path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -109,7 +124,8 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const reloadProjects = useCallback(() => {
     fetchProjects().then(setProjects).catch(() => {});
     loadRollup();
-  }, [loadRollup]);
+    loadConnections();
+  }, [loadRollup, loadConnections]);
   useBrainDataRefresh(['projects'], reloadProjects);
 
   useEffect(() => {
@@ -193,7 +209,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   }, [scope, t]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} data-tour="demo-board">
       {/* New Project panel */}
       <SlideOutPanel open={showForm} onClose={() => setShowForm(false)} title={t('newProjectTitle')} width="min(480px, 96vw)">
         <form onSubmit={handleCreate} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -212,7 +228,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 padding: '10px 14px',
                 outline: 'none',
               }}
@@ -231,7 +247,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 background: 'var(--bg-deep)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 padding: '10px 14px',
                 outline: 'none',
               }}
@@ -253,9 +269,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 fontSize: '0.875rem',
                 fontWeight: 600,
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 cursor: isCreating || !newProjectName.trim() ? 'not-allowed' : 'pointer',
                 opacity: isCreating || !newProjectName.trim() ? 0.7 : 1,
               }}
@@ -274,6 +290,10 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           {error}
         </div>
       )}
+
+      {/* Keep the live fleet and its master stop visible on the full Projects page.
+          Dashboard previews of this reusable component stay compact. */}
+      {limit == null && <ActiveRunsPanel />}
 
       {/* The project count lives on the surrounding tab (see TabCountBadge), so
           this row only holds the controls, right-aligned. */}
@@ -296,9 +316,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               fontSize: '0.875rem',
               fontWeight: 600,
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-lg)',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
               boxShadow: '0 4px 14px var(--shadow-coral-mid)',
@@ -317,11 +337,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             textAlign: 'center',
             padding: 48,
             background: 'var(--bg-elevated)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
+          <div style={{ fontSize: 56, marginBottom: 16 }}><Icon source="🚀" size="1em" /></div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{t('emptyTitle')}</p>
           <button
             type="button"
@@ -329,9 +349,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             style={{
               padding: '12px 24px',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               fontWeight: 600,
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
@@ -347,9 +367,10 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               key={project.id}
               project={project}
               diagnostics={diagnosticsByProject.get(project.id)}
+              connections={connectionsByProject.get(project.id)}
               onCardClick={(p) => openDetails(p)}
               onDetailsClick={openDetails}
-              onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
+              onOpenBuilder={(p) => router.push(`/create?filter=build&project=${p.id}`)}
               showDetailsButton
               onAssignedAgentClick={(ac) => {
                 const agentHost = agentHostList.find((c) => c.id === ac.id);
@@ -375,8 +396,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
         <ProjectTable
           projects={visibleProjects}
           diagnosticsByProject={diagnosticsByProject}
+          connectionsByProject={connectionsByProject}
           onDetailsClick={openDetails}
-          onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
+          onOpenBuilder={(p) => router.push(`/create?filter=build&project=${p.id}`)}
           onAssignedAgentClick={(ac) => {
             const agentHost = agentHostList.find((c) => c.id === ac.id);
             if (agentHost) setSelectedAgentHost(agentHost);

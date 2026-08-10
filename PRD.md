@@ -1,202 +1,125 @@
-> **PRD** — drafted by John Coder ((V2) (Durable)) · task #615
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Fix Progress/Done Accounting for Doc-Only PRs
+# PRD: Guided (Interactive) and Bulk (Import) Input Modes
 
 ## Problem & Goal
 
-### Problem
-Tasks are being marked **done at 100%** after an agent opens a pull request containing **only documentation files** (e.g., `PRD.md`, `STYLES.md`, architecture docs) with zero implementation or test code. The board's progress percentage is computed from "a PR exists and is green" plus subtask-link counts — not from delivered implementation code or passing tests.
+Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
 
-This produced a systematically misleading board state: tasks appear complete while no implementer has written a single line of source code. Affected tasks include #146, #157, #322, #329, #336, and #503. The root cause is that PM and Validator agents write a PRD, open a documentation PR, and the pipeline flips the task to `done` at 100%.
-
-### Goal
-Ensure that progress percentage and completion status accurately reflect **delivered implementation**, not the mere existence of a green PR. A doc-only PR must never trigger task completion or report 100% progress for a coding task.
+**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Role | Impact |
-|---|---|
-| **Engineering Manager / Human Overseer** | Sees accurate board state; no longer investigates phantom completions |
-| **PM Agent** | PRD PR moves task to `spec-ready`, not `done` |
-| **Coder Agent** | Receives tasks in `spec-ready` state with clear implementation requirement |
-| **Validator Agent** | Runs a systematic doc-only gate rather than ad-hoc flagging |
-| **Brain / Orchestrator** | Routes tasks correctly based on typed deliverable and real progress signals |
+| Role | Primary Mode | Context |
+|---|---|---|
+| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
+| Power User | Both | Switches between modes depending on task size |
+| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
+| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
+| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
 
 ---
 
 ## Scope
 
-This PRD covers:
-- The progress-percentage computation logic
-- The task completion (`done`) transition gate
-- The classification of tasks by deliverable type (code vs. written decision)
-- The Validator agent's completion-gate check
+### In Scope
 
-This does **not** cover re-dispatching already-affected tasks (remediated manually) or changes to how agents generate PRDs.
+- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
+- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
+- Unified data schema enforced across both modes
+- Pre-import preview and dry-run capability in Bulk Mode
+- Post-submission confirmation and summary for both modes
+- Error handling and recovery paths in both modes
+- Mode-selection entry point accessible from the primary action surface
+
+### Out of Scope
+
+- Real-time streaming ingestion or webhook-based input
+- API-only bulk endpoints (covered separately in API PRD)
+- Automated scheduling or recurring imports
+- Machine-learning-assisted field suggestions beyond basic format validation
+- Editing or deleting records post-submission (covered by record management PRD)
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Doc-Only PR Detection
+### FR-1 — Mode Selection
 
-The system must inspect the file diff of any PR associated with a task before updating progress or status.
-
-- **Doc-only PR**: A PR whose diff contains exclusively files matching one or more of the following patterns:
-  - `**/*.md`
-  - `**/docs/**`
-  - `**/*.rst`
-  - `**/*.txt` (documentation roots only, e.g., `docs/`)
-  - `CHANGELOG`, `LICENSE`, `NOTICE`, `README*`
-- If **all** changed files match doc-only patterns, the PR is classified as `doc-only`.
-- A PR with at least one changed file outside these patterns is classified as `has-implementation`.
-
-### FR-2 — Progress Cap for Doc-Only PRs on Coding Tasks
-
-For any task whose `deliverable_type` is `code` (see FR-5):
-
-| PR Classification | Max Allowed Progress% |
-|---|---|
-| No PR opened | 0–30% (planning/spec work only) |
-| `doc-only` PR open or merged | ≤ 20% |
-| `has-implementation` PR open | 21–89% (based on test signal, see FR-3) |
-| `has-implementation` PR merged, tests passing | Up to 100% |
-
-Progress must never be set to 100% while the PR is `doc-only`, regardless of PR merge status or CI color.
-
-### FR-3 — Implementation + Test Signal for Progress%
-
-Progress percentage for `deliverable_type = code` tasks must be derived from:
-
-1. **Source files changed**: At least one file changed under recognized source directories (`src/`, `lib/`, `app/`, `packages/`, language-specific roots, or any non-doc, non-config path). Required for progress > 20%.
-2. **Tests present**: At least one test file changed or added (patterns: `**/*.test.*`, `**/*.spec.*`, `**/tests/**`, `**/__tests__/**`). Required for progress > 60%.
-3. **Tests passing**: CI status checks on the PR head SHA report all required checks green. Required for progress = 100%.
-
-A suggested mapping (implementer may tune thresholds):
-
-| Condition | Progress% |
-|---|---|
-| Task created, no PR | 5% |
-| Spec/PRD PR merged | 15% |
-| Implementation PR open, source files present | 40% |
-| Implementation PR open, source + test files present | 65% |
-| Implementation PR open, source + tests + CI green | 85% |
-| Implementation PR merged, source + tests + CI green | 100% |
-
-### FR-4 — "Spec Ready / Needs Implementation" State
-
-Introduce (or map to an existing) intermediate task state: **`spec-ready`**.
-
-- When a `doc-only` PR is merged for a `deliverable_type = code` task, the task transitions to `spec-ready`, **not** `done` or `in-progress` at high %.
-- `spec-ready` signals to the Brain/Orchestrator that a Coder agent must be dispatched.
-- A task in `spec-ready` must not be displayed as complete on any board view.
-- The `spec-ready → in-progress` transition is triggered when a Coder opens a `has-implementation` PR.
-
-### FR-5 — Task Deliverable Type Classification
-
-Every task must carry an explicit `deliverable_type` field. Valid values:
-
-| Value | Meaning | May complete without code? |
-|---|---|---|
-| `code` | Feature, bug fix, refactor, test suite | No |
-| `decision` | Architecture decision, analysis, investigation, provisioning choice | Yes — written artifact is the deliverable |
-| `spec` | PRD, design doc, style guide | Yes — doc PR is the deliverable |
-| `ops` | Infra provisioning, CI config, deployment | Evaluated case-by-case (may include code) |
-
-**Rules:**
-- `deliverable_type` must be set at task creation by the PM or Brain agent.
-- It must not be inferred retroactively from PR content.
-- Tasks of type `decision` or `spec` may reach `done` via a merged doc-only PR without triggering a gap flag.
-- Tasks of type `code` or `ops` require implementation signal per FR-2/FR-3.
-- Historical untyped tasks default to `code` and are subject to the doc-only gate.
+- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
+- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
+- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
 
 ---
 
-### FR-5b — Task Type Taxonomy
+### FR-2 — Guided (Interactive) Mode
 
-Every task must carry an explicit `task_type` field. Valid values:
-
-| Value | Purpose | Example context | May complete without code? |
-|---|---|---|---|
-| `coding` | Implementation-driven work (feature/bug-fix/refactor/test authoring) | Real code deliverables | No |
-| `analysis` | Research spikes, architectural investigation | Design docs, ADRs | Yes |
-| `provisioning` | Infra, environment setup, access grants | Terraform, config files | Yes |
-| `decision` | Formal written decision or ADR | Decision records | Yes |
-| `documentation` | Pure doc work explicitly scoped as such | Style guides, tutorial docs | Yes |
-
-**Rules:**
-- `task_type` must be set at task creation by the creating agent or human; if omitted, defaults to `coding` and logs a warning.
-- `task_type` is enforced by the gate and ProgressGate.ts (defaults to `analysis` when unspecified in the gate input).
-- Only `analysis`, `provisioning`, `decision`, and `documentation` tasks may reach `done` via a `docs-only` PR (spec/documentation can also be done via impl PR).
-- `coding` tasks with a `docs-only` PR are hard-blocked from `done` (inferred spec-ready per PRD FR-3).
+- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
+- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
+- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
+- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
+- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
+- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
+- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
 
 ---
 
-### FR-5b — Task Type Taxonomy
+### FR-3 — Bulk (Import) Mode
 
-Every task must carry an explicit `task_type` field. Valid values:
+- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
+- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
+- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
+- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
+- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
+- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
+- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
+- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
+- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
+- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
 
-| Value | Purpose | Example context | May complete without code? |
-|---|---|---|---|
-| `coding` | Implementation-driven work (feature/bug-fix/refactor/test authoring) | Real code deliverables | No |
-| `analysis` | Research spikes, architectural investigation | Design docs, ADRs | Yes |
-| `provisioning` | Infra, environment setup, access grants | Terraform, config files | Yes |
-| `decision` | Formal written decision or ADR | Decision records | Yes |
-| `documentation` | Pure doc work explicitly scoped as such | Style guides, tutorial docs | Yes |
+---
 
-**Rules:**
-- `task_type` must be set at task creation by the creating agent or human; if omitted, defaults to `coding` (per PRD FR-10) and logs a warning.
-- `task_type` is enforced by the gate and ProgressGate.ts (defaults to `analysis` when unspecified in the gate input).
-- Only `analysis`, `provisioning`, `decision`, and `documentation` tasks may reach `done` via a `docs-only` PR (spec/documentation can also be done via impl PR).
-- `coding` tasks with a `docs-only` PR are hard-blocked from `done` (inferred spec-ready per PRD FR-3).
+### FR-4 — Shared / Cross-Mode Requirements
 
-### FR-6 — Systematic Validator Completion Gate
-
-The Validator agent must run a **completion gate check** as a mandatory step before approving any `done` transition:
-
-1. Retrieve the PR(s) linked to the task.
-2. Classify each PR as `doc-only` or `has-implementation` (FR-1).
-3. Retrieve the task's `deliverable_type` (FR-5).
-4. **Gate logic:**
-   - If `deliverable_type ∈ {code, ops}` AND all linked PRs are `doc-only` → **block `done`**, emit gap flag: `COMPLETION_BLOCKED: doc-only PR, no implementation detected`.
-   - If `deliverable_type ∈ {code, ops}` AND a `has-implementation` PR exists but CI is not green → **block `done`**, emit: `COMPLETION_BLOCKED: tests not passing`.
-   - If `deliverable_type ∈ {decision, spec}` → allow `done` regardless of PR content.
-5. The gap flag must be written to the task's audit log and surfaced on the board (e.g., a `⚠ blocked` badge).
-6. The Brain/Orchestrator must re-dispatch blocked tasks to a Coder agent, not leave them stalled.
-
-### FR-7 — Audit Log & Observability
-
-- Every progress% update must log: PR SHA, PR classification (`doc-only` / `has-implementation`), files-changed summary, signal conditions met, previous%, new%.
-- Every blocked `done` transition must log: blocking reason, Validator agent ID, timestamp.
-- Logs must be queryable by task ID for post-mortem review.
+- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
+- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
+- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
+- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
+- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criterion | Verification |
+| ID | Criterion | Verification Method |
 |---|---|---|
-| AC-1 | A coding task with only a merged `*.md` PR cannot reach `done` or display 100% progress. | Integration test: create task (`type=code`), merge doc-only PR, assert status ≠ `done` and progress ≤ 20%. |
-| AC-2 | Progress% for a coding task increments only when source files are present (>20%), test files are present (>60%), and CI is green (100%). | Unit tests covering each threshold boundary. |
-| AC-3 | Merging a doc-only PR on a coding task transitions it to `spec-ready`, not `done`. | Integration test: assert state = `spec-ready` after doc PR merge. |
-| AC-4 | A task explicitly typed `decision` or `spec` reaches `done` via a doc-only PR without triggering a gap flag. | Integration test: create `type=decision` task, merge doc PR, assert `done` and no gap flag. |
-| AC-5 | The Validator blocks `done` and emits `COMPLETION_BLOCKED` for any `type=code` task whose linked PRs are all doc-only. | Unit test on gate logic; end-to-end test against a mock PR with only `.md` diffs. |
-| AC-6 | `COMPLETION_BLOCKED` gap flags are written to the audit log and visible on the board within one pipeline cycle. | Manual verification + automated log-assertion test. |
-| AC-7 | Tasks without an explicit `deliverable_type` default to `code` and are subject to the doc-only gate. | Unit test: untyped task → gate applied. |
-| AC-8 | Tasks #146, #157, #322, #329, #336 (re-dispatched for real code) are not re-blocked by the new gate once a `has-implementation` PR is merged with green CI. | Regression test using task fixtures. |
-| AC-9 | The `spec-ready` state triggers automatic Brain dispatch to a Coder agent within one orchestration cycle. | Integration test: assert Coder dispatch event emitted after `spec-ready` transition. |
+| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
+| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
+| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
+| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
+| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
+| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
+| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
+| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
+| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
+| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
+| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
+| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
+| AC-13 | Switching modes before submission retains mappable field data | E2E test |
+| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
 
 ---
 
 ## Out of Scope
 
-- **Re-remediation of already-affected tasks** (#146, #157, #322, #329, #336, #503): handled manually prior to this ticket.
-- **Changes to how PM or Validator agents generate PRD content** or the format of documentation files.
-- **UI/board redesign**: badge and state label changes only; no new board views.
-- **Retroactive re-scoring of historical closed tasks**: gate applies to tasks transitioning to `done` from the deploy date forward.
-- **Code quality gates** (coverage thresholds, lint scores): out of scope for this fix; may be addressed in a follow-on ticket.
-- **Non-PR delivery mechanisms** (direct commits to main, script-based deploys): not addressed here.
-- **Changing CI/CD provider integration**: this PRD assumes existing CI status-check APIs remain available.
+- API-only or SDK-driven bulk ingestion endpoints
+- Webhook or event-stream based real-time input
+- Scheduled or recurring automated imports
+- Post-submission record editing (handled by record management module)
+- AI/ML-assisted auto-mapping or data enrichment
+- Mobile viewports below 768 px width
+- Multi-file batch uploads in a single import session
+- Localization / i18n beyond English in the initial release

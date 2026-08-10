@@ -18,6 +18,7 @@ import {
   type AdminSecurityUser,
   type AdminSecurityDetails,
 } from '@/lib/adminApi';
+import { downloadText } from '@/lib/download';
 import { Select } from '@/components/Select';
 import { AdminError, errText, fmtDateTime } from '../adminShared';
 
@@ -210,7 +211,7 @@ export default function SecurityPanel() {
                     {securityMfaManualKey && (
                       <div style={{ fontSize: 12 }}>
                         <span className="text-muted">{t('security.manualEntryKey')} </span>
-                        <code style={{ background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 4 }}>{securityMfaManualKey}</code>
+                        <code style={{ background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>{securityMfaManualKey}</code>
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -322,18 +323,16 @@ export default function SecurityPanel() {
                     {securityRecoveryCodes.length > 0 && (
                       <div style={{ fontSize: 12 }}>
                         <div className="health-label">{t('security.recoveryCodesSave')}</div>
-                        <pre style={{ background: 'var(--bg-elevated)', padding: 12, borderRadius: 8, overflow: 'auto' }}>{securityRecoveryCodes.join('\n')}</pre>
+                        <pre style={{ background: 'var(--bg-elevated)', padding: 12, borderRadius: 'var(--radius-md)', overflow: 'auto' }}>{securityRecoveryCodes.join('\n')}</pre>
                         <button
                           type="button"
                           className="btn-ghost"
                           style={{ marginTop: 4 }}
                           onClick={() => {
-                            const blob = new Blob([securityRecoveryCodes.join('\n')], { type: 'text/plain' });
-                            const a = document.createElement('a');
-                            a.href = URL.createObjectURL(blob);
-                            a.download = `recovery-codes-${securityDetails.user.email}-${new Date().toISOString().slice(0, 10)}.txt`;
-                            a.click();
-                            URL.revokeObjectURL(a.href);
+                            downloadText(
+                              securityRecoveryCodes.join('\n'),
+                              `recovery-codes-${securityDetails.user.email}-${new Date().toISOString().slice(0, 10)}.txt`,
+                            );
                           }}
                         >
                           {t('security.downloadRecoveryCodes')}
@@ -422,7 +421,7 @@ export default function SecurityPanel() {
                     <tbody>
                       {securityDetails.tokens.filter((t) => t.isActive).map((tok) => (
                         <tr key={tok.jti}>
-                          <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{tok.jti.slice(0, 12)}…</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{tok.jti.slice(0, 12)}…</td>
                           <td>{tok.tokenType}</td>
                           <td className="text-muted">{tok.tenantId ?? '—'}</td>
                           <td className="text-muted">{fmtDateTime(tok.expiresAt)}</td>

@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
  * WebContainer "Run" silently breaks in one environment but not another:
  *   - public/_headers      — the Cloudflare Workers static-asset deploy
  *   - next.config.js        — `next dev` (and prerendered routes)
- *   - src/middleware.ts     — `withCoi`, the SSR /ide/[id] route
+ *   - src/middleware.ts     — `withCoi`, SSR Creation Canvas routes
  *
  * Vitest runs from the frontend package root, so cwd-relative reads resolve.
  * Token-presence (not line-exact) so it's agnostic to each file's format

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeOutcomeScore, finalizeLearnWeight, SCORE_WEIGHTS, EFFICIENCY_STEP_NORM, type OutcomeScoreInputs } from './scoreRunOutcome';
+import { computeOutcomeScore, finalizeLearnWeight, runProducedOutput, SCORE_WEIGHTS, EFFICIENCY_STEP_NORM, type OutcomeScoreInputs } from './scoreRunOutcome';
 
 const base: OutcomeScoreInputs = {
   terminalStatus: 'completed',
@@ -94,6 +94,51 @@ describe('finalizeLearnWeight (Evermind contribution weight by run quality)', ()
             expect(w).toBeGreaterThan(0);
             expect(w).toBeLessThanOrEqual(1);
           }
+        }
+      }
+    }
+  });
+});
+
+/**
+ * THE VERDICT THE PLATFORM ALREADY HAD AND THREW AWAY (0385).
+ *
+ * `finalizeLearnWeight` has graded every run "merged > opened > wrote-files > no-op"
+ * since it replaced text length as the Evermind teaching weight — so the platform always
+ * knew which runs accomplished nothing. It spent that verdict on teaching the model and
+ * never on the one decision that would have stopped the burn: whether to dispatch the
+ * ticket AGAIN. The autonomy breaker counted `status === 'failed'` alone, so on a board
+ * where everything completed it never armed: 5,931 completed runs and 10 failures in one
+ * day on project 11, against 3 finished tickets, one agent at 5,796 runs / 0 finished.
+ *
+ * `runProducedOutput` reads the SAME facts as the learn weight, which is the property
+ * worth pinning — two graders of the same run that can disagree are how this comes back.
+ */
+describe('runProducedOutput', () => {
+  it('counts any artifact at all — deliberately generous', () => {
+    expect(runProducedOutput({ merged: true, prOpened: false, producedChanges: false })).toBe(true);
+    expect(runProducedOutput({ merged: false, prOpened: true, producedChanges: false })).toBe(true);
+    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: true })).toBe(true);
+    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: false, movedTicket: true })).toBe(true);
+  });
+
+  it('is false ONLY for a run with nothing to show for itself', () => {
+    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: false })).toBe(false);
+    expect(runProducedOutput({ merged: false, prOpened: false, producedChanges: false, movedTicket: false })).toBe(false);
+  });
+
+  /**
+   * The two graders must not drift apart. `finalizeLearnWeight` floors an unproductive
+   * run at its lowest weight (0.2) — so "the learn weight bottomed out" and "the run
+   * produced nothing" have to be the same set of runs, or one of them is lying.
+   */
+  it('agrees with the learn weight about which runs accomplished nothing', () => {
+    for (const merged of [true, false]) {
+      for (const prOpened of [true, false]) {
+        for (const producedChanges of [true, false]) {
+          const s = { merged, prOpened, producedChanges };
+          const weight = finalizeLearnWeight({ ...s, autoMergeFailed: false });
+          expect(runProducedOutput(s), JSON.stringify(s)).toBe(weight > 0.2);
         }
       }
     }

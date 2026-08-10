@@ -1,0 +1,78 @@
+'use client';
+
+/**
+ * /book-demo — public "schedule a demo with sales" page (migration 0360).
+ * Two paths side by side: talk to sales (the shared BookDemoForm) or jump into a
+ * self-serve live demo (links back to the landing's demo section). Fully
+ * localized + theme-token driven, mobile-first.
+ */
+import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { BookDemoForm } from '@/components/demo/BookDemoForm';
+
+export default function BookDemoPageClient() {
+  const t = useTranslations('bookDemo');
+
+  return (
+    <div className="bdp">
+      <div className="bdp-inner">
+        <header className="bdp-head">
+          <span className="bdp-badge">{t('badge')}</span>
+          <h1 className="bdp-title">{t('pageTitle')}</h1>
+          <p className="bdp-lead">{t('pageLead')}</p>
+        </header>
+
+        <div className="bdp-grid">
+          <section className="bdp-card">
+            <h2 className="bdp-card-title">{t('formHeading')}</h2>
+            <p className="bdp-card-sub">{t('formSub')}</p>
+            <BookDemoForm source="book-demo-page" />
+          </section>
+
+          <aside className="bdp-card bdp-card-alt">
+            <h2 className="bdp-card-title">{t('selfServeHeading')}</h2>
+            <p className="bdp-card-sub">{t('selfServeSub')}</p>
+            <ul className="bdp-list">
+              <li>{t('selfServe1')}</li>
+              <li>{t('selfServe2')}</li>
+              <li>{t('selfServe3')}</li>
+            </ul>
+            <Link href="/#demos" className="bdp-cta">{t('selfServeCta')} →</Link>
+          </aside>
+        </div>
+      </div>
+
+      <style>{styles}</style>
+    </div>
+  );
+}
+
+const styles = `
+  .bdp { padding-block: clamp(24px, 5vw, 56px); }
+  /* THE marketing column (globals.css) — same measure as the header. */
+  .bdp-inner { max-width: var(--marketing-max); margin: 0 auto; padding-inline: var(--marketing-gutter); }
+  .bdp-head { text-align: center; margin-bottom: 32px; }
+  .bdp-badge {
+    display: inline-block; font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: var(--radius-full); margin-bottom: 12px;
+    background: var(--surface-cyan-soft, rgba(0,229,204,0.16)); color: var(--cyan-bright, var(--cyan-bright));
+  }
+  .bdp-title { margin: 0 0 10px; font-size: var(--font-size-page-title); font-weight: 800; color: var(--text-primary, var(--text-primary)); }
+  .bdp-lead { margin: 0 auto; max-width: 620px; font-size: var(--font-size-card-title); line-height: 1.6; color: var(--text-secondary); }
+  .bdp-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 760px) { .bdp-grid { grid-template-columns: 1fr; } }
+  .bdp-card {
+    padding: 24px; border-radius: var(--radius-xl);
+    background: var(--surface-card, rgba(255,255,255,0.03));
+    border: 1px solid var(--border, rgba(255,255,255,0.12));
+  }
+  .bdp-card-alt { background: var(--surface-2, rgba(255,255,255,0.05)); }
+  .bdp-card-title { margin: 0 0 6px; font-size: var(--font-size-card-title); font-weight: 700; color: var(--text-primary, var(--text-primary)); }
+  .bdp-card-sub { margin: 0 0 18px; font-size: var(--font-size-small); line-height: 1.5; color: var(--text-secondary); }
+  .bdp-list { margin: 0 0 20px; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .bdp-list li { font-size: var(--font-size-small); line-height: 1.5; color: var(--text-secondary); }
+  .bdp-cta {
+    display: inline-block; padding: 11px 18px; border-radius: var(--radius-lg); text-decoration: none;
+    background: var(--accent, var(--coral-bright)); color: var(--text-on-accent); font-weight: 700; font-size: var(--font-size-body);
+  }
+`;

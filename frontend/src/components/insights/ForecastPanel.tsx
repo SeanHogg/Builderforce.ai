@@ -25,7 +25,7 @@ import { forecastApi, type ForecastInsights, type ForecastMetric, type ForecastU
 const METRICS: ForecastMetric[] = ['cost', 'cycle_time', 'cfr', 'throughput'];
 
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 
@@ -110,8 +110,8 @@ export function ForecastPanel({ initialMetric = 'cost', initialDays = 90 }: { in
   ];
 
   const series: TrendSeries[] = [
-    { key: 'history', label: t('forecast.history'), values: historyValues, color: 'var(--accent, #2563eb)' },
-    { key: 'forecast', label: t('forecast.projected'), values: forecastValues, color: '#94a3b8' },
+    { key: 'history', label: t('forecast.history'), values: historyValues, color: 'var(--accent)' },
+    { key: 'forecast', label: t('forecast.projected'), values: forecastValues, color: 'var(--text-muted)' },
   ];
 
   const trendLabel = data.slope > 0 ? t('forecast.trendUp') : data.slope < 0 ? t('forecast.trendDown') : t('forecast.trendFlat');
@@ -136,13 +136,13 @@ export function ForecastPanel({ initialMetric = 'cost', initialDays = 90 }: { in
             <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('forecast.anomalies')}</div>
             {openAnomalies.map((a) => (
               <div key={a.day} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: '0.82rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 6 }}>
-                <span style={{ color: a.z >= 0 ? 'var(--danger, #dc2626)' : '#d97706' }}>
+                <span style={{ color: a.z >= 0 ? 'var(--danger)' : 'var(--warning)' }}>
                   ● {a.day} · {format(a.value)} · {a.z >= 0 ? '+' : ''}{a.z}σ
                 </span>
                 <button
                   type="button"
                   onClick={() => dismiss(a.day)}
-                  style={{ padding: '3px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.76rem', cursor: 'pointer' }}
+                  style={{ padding: '3px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.76rem', cursor: 'pointer' }}
                 >
                   {t('forecast.dismiss')}
                 </button>

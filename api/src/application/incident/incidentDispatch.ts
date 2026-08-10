@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Incident-agent dispatch — kicks the Incident Manager agent off to triage an open
  * incident: read the ticket, confirm which SYSTEM it pertains to (incidents.classify),
@@ -48,6 +49,14 @@ export async function dispatchIncidentTriage(
   if (!incidentRef || params.boardTaskId == null) return false;
 
   const runtimeService = buildRuntimeService(env, db);
+
+  // Don't stack a second triage run on a ticket that's already being worked — the
+  // runtime has no concurrency guard, so two agents would race the same bridged board
+  // task. This makes every caller idempotent: a re-breach, an escalation paging the
+  // on-call agent, and the open-time dispatch can all call this safely.
+  const active = await runtimeService.listActiveByTasks([params.boardTaskId]).catch(() => []);
+  if (active.length > 0) return false;
+
   const payload = JSON.stringify({ cloudAgentRef: incidentRef, laneKey: INCIDENT_TRIAGE_LANE_KEY, incidentTriage: true, incidentId: params.incidentId });
   const deferred: Promise<unknown>[] = [];
   try {
@@ -60,7 +69,7 @@ export async function dispatchIncidentTriage(
     await Promise.allSettled(deferred);
     return true;
   } catch (err) {
-    console.error('[incident] triage dispatch failed', params.incidentId, err);
+    reportCaughtError(err, { source: "application/incident/incidentDispatch.ts", operation: "dispatchIncidentTriage", context: { logMessage: '[incident] triage dispatch failed', details: params.incidentId } });
     return false;
   }
 }

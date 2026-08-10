@@ -14,6 +14,7 @@ import { listMyAgents, listPurchasedAgents } from '@/lib/api';
 import { listTenantMembers } from '@/lib/auth';
 import { listEngagements } from '@/lib/freelancerApi';
 import { kanbanApi } from '@/lib/builderforceApi';
+import { Select } from '@/components/Select';
 import type { AssigneeKind } from '@/lib/kanban';
 
 export interface AssigneeCandidate { ref: string; name: string }
@@ -115,23 +116,23 @@ export function RoleAssigneePicker({
   const seg: React.CSSProperties = {
     flex: 1, padding: '5px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-secondary)',
   };
-  const segActive: React.CSSProperties = { ...seg, background: 'var(--accent, #2563eb)', color: '#fff' };
+  const segActive: React.CSSProperties = { ...seg, background: 'var(--accent)', color: 'var(--text-on-accent)' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
-      <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         {KINDS.map((k) => (
           <button key={k.id} type="button" onClick={() => setKind(k.id)} style={kind === k.id ? segActive : seg}>
             {t(k.labelKey)}
           </button>
         ))}
       </div>
-      <select
+      <Select
         value={ref}
         onChange={(e) => setRef(e.target.value)}
         disabled={workforce.loading || candidates.length === 0}
         aria-label={t('assignPick')}
-        style={{ padding: '6px 8px', borderRadius: 8, fontSize: 13, background: 'var(--surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+        style={{ width: '100%', fontSize: 13 }}
       >
         <option value="">
           {workforce.loading ? t('assignLoading') : candidates.length === 0 ? t('assignNoneOfKind') : t('assignPick')}
@@ -139,16 +140,16 @@ export function RoleAssigneePicker({
         {candidates.map((c) => (
           <option key={c.ref} value={c.ref}>{c.name}</option>
         ))}
-      </select>
+      </Select>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button type="button" onClick={onCancel} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+        <button type="button" onClick={onCancel} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
           {t('assignCancel')}
         </button>
         <button
           type="button"
           disabled={!selected || busy}
           onClick={() => selected && onAssign({ assigneeKind: kind, assigneeRef: selected.ref, assigneeName: selected.name })}
-          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, cursor: selected ? 'pointer' : 'not-allowed', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: selected && !busy ? 1 : 0.5 }}
+          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: selected ? 'pointer' : 'not-allowed', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: selected && !busy ? 1 : 0.5 }}
         >
           {busy ? t('assignSaving') : t('assignConfirm')}
         </button>

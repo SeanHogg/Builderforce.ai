@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
 export interface LegalDocument {
@@ -46,12 +46,9 @@ export function useLegalDocs(): LegalDocsState {
         if (!cancelled && data?.terms && data?.privacy) setLegal(data);
       })
       .catch(() => {});
-    fetch(`${AUTH_API_URL}/health`, { credentials: 'omit' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { version?: string } | null) => {
-        if (!cancelled && data?.version) setApiVersion(data.version);
-      })
-      .catch(() => {});
+    // Shared cache — the footer, the sidebar menu and a Brain diagnostics capture
+    // all read the same session-cached value instead of each hitting /health.
+    void fetchApiVersion().then((v) => { if (!cancelled && v) setApiVersion(v); });
     return () => {
       cancelled = true;
     };

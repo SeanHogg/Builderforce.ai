@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { BLOG_POSTS } from '@/lib/blogData';
@@ -45,10 +46,12 @@ export default function BlogPageClient() {
         }
 
         /* ── HERO ── */
+        /* THE marketing column (globals.css) — same measure as the header. */
         .blog-hero {
-          max-width: 1100px;
+          max-width: var(--marketing-max);
+          box-sizing: border-box;
           margin: 0 auto;
-          padding: 44px 24px 40px;
+          padding: 44px var(--marketing-gutter) 40px;
           text-align: center;
           animation: blog-fadeInUp 0.7s ease-out both;
         }
@@ -62,10 +65,10 @@ export default function BlogPageClient() {
           gap: 8px;
           background: var(--surface-coral-soft);
           border: 1px solid var(--border-accent);
-          border-radius: 999px;
+          border-radius: var(--radius-full);
           padding: 5px 16px;
           font-family: var(--font-display);
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
           font-weight: 600;
           color: var(--coral-bright);
           letter-spacing: 0.12em;
@@ -74,7 +77,7 @@ export default function BlogPageClient() {
         }
         .blog-hero-title {
           font-family: var(--font-display);
-          font-size: clamp(2rem, 5vw, 3.2rem);
+          font-size: var(--font-size-page-title);
           font-weight: 700;
           letter-spacing: -0.03em;
           line-height: 1.1;
@@ -85,7 +88,7 @@ export default function BlogPageClient() {
           margin-bottom: 16px;
         }
         .blog-hero-desc {
-          font-size: 1.05rem;
+          font-size: var(--font-size-card-title);
           color: var(--text-secondary);
           max-width: 520px;
           margin: 0 auto;
@@ -95,9 +98,10 @@ export default function BlogPageClient() {
         /* ── POST GRID ── */
         .blog-main {
           flex: 1;
-          max-width: 1100px;
+          max-width: var(--marketing-max);
+          box-sizing: border-box;
           margin: 0 auto;
-          padding: 8px 24px 72px;
+          padding: 8px var(--marketing-gutter) 72px;
           width: 100%;
         }
         /* Card + grid styles live in components/blog/ArticleCard.tsx */
@@ -118,12 +122,12 @@ export default function BlogPageClient() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle);
           background: var(--surface-card);
           color: var(--text-secondary);
           font-family: var(--font-display);
-          font-size: 0.9rem;
+          font-size: var(--font-size-body);
           font-weight: 600;
           cursor: pointer;
           transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
@@ -136,7 +140,7 @@ export default function BlogPageClient() {
         .blog-page-btn.is-active {
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
           border-color: transparent;
-          color: #fff;
+          color: var(--text-on-accent);
         }
 
         @media (max-width: 640px) {
@@ -150,8 +154,8 @@ export default function BlogPageClient() {
       <div className="blog-page">
         {/* ── Hero ── */}
         <div className="blog-hero">
-          <div className="blog-hero-badge">📝 {t('badge')}</div>
-          <h1 className="blog-hero-title">Builderforce Blog</h1>
+          <div className="blog-hero-badge"><Icon source="📝" size="1em" /> {t('badge')}</div>
+          <h1 className="blog-hero-title">{t('title')}</h1>
           <p className="blog-hero-desc">{t('desc')}</p>
         </div>
 

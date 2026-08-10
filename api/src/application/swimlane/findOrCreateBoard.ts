@@ -1,7 +1,9 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { eq } from 'drizzle-orm';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import type { Db } from '../../infrastructure/database/connection';
+import { findCanonicalBoard } from './canonicalBoard';
 
 type Board = typeof boards.$inferSelect;
 
@@ -74,14 +76,7 @@ export async function findOrCreateBoard(
 ): Promise<FindOrCreateBoardResult> {
   const segmentId = input.segmentId ?? null;
 
-  // Prefer the earliest board so callers agree on *which* board when a project
-  // already (legacy) holds more than one — same tiebreak as `GET /api/boards`.
-  const [existing] = await db
-    .select()
-    .from(boards)
-    .where(and(eq(boards.tenantId, input.tenantId), eq(boards.projectId, input.projectId)))
-    .orderBy(asc(boards.createdAt), asc(boards.id))
-    .limit(1);
+  const existing = await findCanonicalBoard(db, input.projectId, input.tenantId);
   if (existing) return { board: existing, created: false };
 
   const now = new Date();
@@ -113,7 +108,9 @@ export async function findOrCreateBoard(
       await db.insert(swimlanes).values(buildDefaultLaneRows(input.tenantId, segmentId, created.id, now));
     } catch (e) {
       // Lane seed failed — roll the board back so no empty board lingers.
-      await db.delete(boards).where(eq(boards.id, created.id)).catch(() => { /* best-effort */ });
+      await db.delete(boards).where(eq(boards.id, created.id)).catch((error) => { /* best-effort */ 
+        reportCaughtError(error, { source: "application/swimlane/findOrCreateBoard.ts", operation: "findOrCreateBoard" });
+      });
       throw e;
     }
   }

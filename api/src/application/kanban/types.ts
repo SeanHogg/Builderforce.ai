@@ -31,6 +31,27 @@ export interface JobRole {
   position: number;
 }
 
+/** A small enum of condition predicates that scope a requirement (start narrow, not a DSL).
+ *  All are evaluable from the ticket's task_type + action_type — no external signal. */
+export type RequirementCondition = 'is_security' | 'has_ui_change' | 'is_data_change';
+
+/** Does a requirement APPLY to a given ticket? Scoped by ticket type + an optional
+ *  condition predicate. The ONE place requirement applicability is decided, shared by
+ *  the audit engine, the participation manifest, and the lane gate (DRY). */
+export function requirementApplies(
+  req: { ticketType?: string | null; condition?: string | null },
+  task: { taskType?: string | null; actionType?: string | null },
+): boolean {
+  const taskType = task.taskType ?? 'task';
+  if (req.ticketType && req.ticketType !== taskType) return false;
+  switch (req.condition) {
+    case 'is_security':    return taskType === 'security';
+    case 'has_ui_change':  return task.actionType === 'frontend_ui';
+    case 'is_data_change': return task.actionType === 'sql' || task.actionType === 'data_migration';
+    default:               return true; // null / unknown condition ⇒ always applies
+  }
+}
+
 export interface LaneRequirement {
   kind: RequirementKind;
   /** role key (role/review) OR diagnostic tool id (diagnostic). */
@@ -39,6 +60,12 @@ export interface LaneRequirement {
   isRequired: boolean;
   description?: string;
   position: number;
+  /** null/undefined = applies to every ticket type; else scopes to one task type. */
+  ticketType?: string | null;
+  /** N-of-M for a quorum set (reviewer requirements sharing a lane); null = all required. */
+  quorum?: number | null;
+  /** Optional predicate that must hold for this requirement to apply. */
+  condition?: RequirementCondition | null;
 }
 
 export interface TemplateLane {
@@ -69,6 +96,9 @@ export interface KanbanTemplate {
   priceUnit?: string | null;
   installCount: number;
   version: number;
+  /** When true, applying this template marks the board lifecycle-managed (PRD §5.5):
+   *  the Assignee is the Coordinator and never the default per-stage executor. */
+  lifecycleManaged?: boolean;
   lanes: TemplateLane[];
 }
 

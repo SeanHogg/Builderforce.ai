@@ -8,7 +8,7 @@ import type { CSSProperties } from 'react';
 export const tableWrapStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   // Scroll horizontally instead of clipping so wide tables stay usable on
   // narrow / mobile viewports. overflowX:auto forces overflowY to a non-visible
   // value, so pin it to hidden to keep the rounded corners clipped vertically.

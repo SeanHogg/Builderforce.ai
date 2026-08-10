@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * IncidentService — the write + read path for incident management.
  *
@@ -21,19 +22,23 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   prodIncidents,
+  prodIncidentImplicatedTasks,
   tasks as tasksTable,
   incidentEvents,
   brainChats,
   projects,
 } from '../../infrastructure/database/schema';
+import { TicketParticipantsService, type AccountabilityReport } from '../kanban/ticketParticipants';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
-import { TaskType, TaskPriority } from '../../domain/shared/types';
+import { TaskType, TaskPriority, TaskStatus } from '../../domain/shared/types';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { recordIncidentLearning } from './incidentLearning';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { advertisedName } from '../llm/toolNaming';
 
 /** sev1 (most severe) … sev4. */
 export type IncidentSeverity = 'sev1' | 'sev2' | 'sev3' | 'sev4';
@@ -45,6 +50,18 @@ const SEVERITY_PRIORITY: Record<IncidentSeverity, TaskPriority> = {
   sev2: TaskPriority.HIGH,
   sev3: TaskPriority.MEDIUM,
   sev4: TaskPriority.LOW,
+};
+
+/**
+ * Map an incident's lifecycle status to the bridged board task's LANE, so the kanban
+ * column and the incident record never drift. The triage run itself holds the lane
+ * (RuntimeService), so this is the single writer of the incident ticket's lane.
+ */
+const INCIDENT_STATUS_TO_LANE: Record<IncidentStatus, TaskStatus> = {
+  open: TaskStatus.IN_PROGRESS,          // actively being triaged
+  acknowledged: TaskStatus.IN_PROGRESS,  // acknowledged, investigation underway
+  mitigated: TaskStatus.IN_REVIEW,       // mitigated, pending verification / RCA
+  resolved: TaskStatus.DONE,             // closed out
 };
 
 /** Map an ITSM ticket priority word to an incident severity. */
@@ -231,7 +248,10 @@ export class IncidentService {
       const brief = [
         `INCIDENT (incident \`${incidentId}\`, ${severity}) from ${source}. This is HELP-DESK TRIAGE, not a code change.`,
         input.description ? `\nSource ticket:\n${input.description}` : '',
-        `\nFirst search the knowledge base with knowledge.search for prior similar incidents / known-errors. Work out WHICH SYSTEM this pertains to and record it with incidents.classify; set an accurate severity with incidents.update; page whoever is on call with oncall.page; post what you find/do with incidents.add_note. When resolved, publish an RCA with incidents.postmortem (root cause + action items). Do NOT write code.`,
+        // Every tool named through `advertisedName` — a catalog id appears nowhere in the
+        // agent's tool list, and the model then describes the call instead of making it,
+        // with no failure signal anywhere. See `application/llm/toolNaming.ts`.
+        `\nFirst search the knowledge base with \`${advertisedName('knowledge.search')}\` for prior similar incidents / known-errors. Work out WHICH SYSTEM this pertains to and record it with \`${advertisedName('incidents.classify')}\`; set an accurate severity with \`${advertisedName('incidents.update')}\`; page whoever is on call with \`${advertisedName('oncall.page')}\`; post what you find/do with \`${advertisedName('incidents.add_note')}\`. When resolved, publish an RCA with \`${advertisedName('incidents.postmortem')}\` (root cause + action items). Do NOT write code.`,
       ].join('');
       const created = await this.tasks.createTask({
         projectId,
@@ -258,6 +278,20 @@ export class IncidentService {
 
     let warRoomChatId: number | null = null;
     if (input.openWarRoom) warRoomChatId = await this.ensureWarRoom(tenantId, incidentId, title, projectId);
+
+    // Fire any custom workflows listening for a new incident (best-effort — a
+    // workflow can automate the response: notify stakeholders, run a runbook, etc.).
+    try {
+      await fireEventTriggers(this.db, {
+        tenantId,
+        eventType: 'incident-created',
+        payload: { incidentId, title, severity, source, affectedSystem: affectedSystem ?? null, projectId },
+        sourceIncidentId: incidentId,
+        match: { severity, affectedSystem: affectedSystem ?? null, incidentSource: source },
+      });
+    } catch (error) { /* event-trigger dispatch is best-effort */ 
+      reportCaughtError(error, { source: "application/incident/IncidentService.ts", operation: "openIncident" });
+    }
 
     return { incidentId, boardTaskId, warRoomChatId, created: true };
   }
@@ -315,13 +349,18 @@ export class IncidentService {
     }
     const [inc] = await this.db.update(prodIncidents).set(set)
       .where(and(eq(prodIncidents.id, incidentId), eq(prodIncidents.tenantId, tenantId)))
-      .returning({ boardTaskId: prodIncidents.boardTaskId });
+      .returning({ boardTaskId: prodIncidents.boardTaskId, severity: prodIncidents.severity, affectedSystem: prodIncidents.affectedSystem, source: prodIncidents.source });
     if (!inc) throw new Error('Incident not found in workspace');
 
     if (inc.boardTaskId != null && (patch.status || patch.severity)) {
       const tset: Record<string, unknown> = { updatedAt: new Date() };
       if (patch.severity) { tset.incidentSeverity = patch.severity; tset.priority = SEVERITY_PRIORITY[patch.severity]; }
-      if (patch.status) tset.incidentStatus = patch.status === 'open' ? 'triage' : patch.status === 'acknowledged' ? 'investigating' : patch.status;
+      if (patch.status) {
+        tset.incidentStatus = patch.status === 'open' ? 'triage' : patch.status === 'acknowledged' ? 'investigating' : patch.status;
+        // Mirror the incident status onto the board LANE so the kanban column tracks the
+        // incident (the triage run no longer moves the lane itself — see RuntimeService).
+        tset.status = INCIDENT_STATUS_TO_LANE[patch.status];
+      }
       await this.db.update(tasksTable).set(tset).where(eq(tasksTable.id, inc.boardTaskId));
     }
 
@@ -331,6 +370,19 @@ export class IncidentService {
         actorRef: patch.actorRef ?? 'system',
         message: `Status → ${patch.status}`,
       });
+
+      // Fire custom workflows listening for a status transition (and, on resolve, the
+      // dedicated incident-resolved event — e.g. auto-draft a post-mortem). Best-effort.
+      const payload = { incidentId, status: patch.status, severity: inc.severity, affectedSystem: inc.affectedSystem, source: inc.source };
+      const match = { severity: inc.severity, affectedSystem: inc.affectedSystem };
+      try {
+        await fireEventTriggers(this.db, { tenantId, eventType: 'incident-status-change', payload, sourceIncidentId: incidentId, match: { ...match, status: patch.status } });
+        if (patch.status === 'resolved') {
+          await fireEventTriggers(this.db, { tenantId, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
+        }
+      } catch (error) { /* event-trigger dispatch is best-effort */ 
+        reportCaughtError(error, { source: "application/incident/IncidentService.ts", operation: "updateIncident" });
+      }
     }
   }
 
@@ -493,5 +545,44 @@ export class IncidentService {
       .orderBy(desc(incidentEvents.createdAt))
       .limit(200);
     return { incident, timeline };
+  }
+
+  /** Link a DELIVERY ticket implicated in this incident (PRD §5.10) — the change whose
+   *  ship caused the regression, so RCA can pull its Accountability Report. Idempotent. */
+  async linkImplicatedTask(tenantId: number, incidentId: string, args: { taskId: number; relation?: string; note?: string | null; createdBy?: string | null }): Promise<void> {
+    await this.db
+      .insert(prodIncidentImplicatedTasks)
+      .values({ tenantId, incidentId, taskId: args.taskId, relation: args.relation ?? 'implicated', note: args.note ?? null, createdBy: args.createdBy ?? null })
+      .onConflictDoUpdate({
+        target: [prodIncidentImplicatedTasks.incidentId, prodIncidentImplicatedTasks.taskId],
+        set: { relation: args.relation ?? 'implicated', note: args.note ?? null },
+      });
+  }
+
+  async unlinkImplicatedTask(tenantId: number, incidentId: string, taskId: number): Promise<void> {
+    await this.db.delete(prodIncidentImplicatedTasks).where(and(
+      eq(prodIncidentImplicatedTasks.tenantId, tenantId),
+      eq(prodIncidentImplicatedTasks.incidentId, incidentId),
+      eq(prodIncidentImplicatedTasks.taskId, taskId),
+    ));
+  }
+
+  /**
+   * The implicated delivery tickets for an incident, EACH with its Accountability
+   * Report — the RCA's concrete "was the process followed?" answer: which roles signed
+   * off, with what evidence, and where the process was skipped/waived. Feeds the
+   * postmortem view and process-improvement aggregation.
+   */
+  async listImplicatedTasks(env: Env, tenantId: number, incidentId: string): Promise<Array<{ taskId: number; title: string; status: string; relation: string; note: string | null; accountability: AccountabilityReport }>> {
+    const rows = await this.db
+      .select({ taskId: prodIncidentImplicatedTasks.taskId, relation: prodIncidentImplicatedTasks.relation, note: prodIncidentImplicatedTasks.note, title: tasksTable.title, status: tasksTable.status })
+      .from(prodIncidentImplicatedTasks)
+      .innerJoin(tasksTable, eq(tasksTable.id, prodIncidentImplicatedTasks.taskId))
+      .where(and(eq(prodIncidentImplicatedTasks.tenantId, tenantId), eq(prodIncidentImplicatedTasks.incidentId, incidentId)));
+    const participants = new TicketParticipantsService(this.db);
+    return Promise.all(rows.map(async (r) => ({
+      taskId: r.taskId, title: r.title, status: r.status, relation: r.relation, note: r.note,
+      accountability: await participants.getAccountability(env, tenantId, r.taskId),
+    })));
   }
 }

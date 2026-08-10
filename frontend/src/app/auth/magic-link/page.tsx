@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 
@@ -56,7 +57,7 @@ export default function MagicLinkVerifyPage() {
             width: '100%',
             background: 'var(--surface-card)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 20,
+            borderRadius: 'var(--radius-xl)',
             padding: '40px 32px',
             textAlign: 'center',
             backdropFilter: 'blur(12px)',
@@ -82,13 +83,13 @@ export default function MagicLinkVerifyPage() {
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 24 }}>
             {errorMsg}
           </p>
-          <a
+          <Link
             href="/login"
             style={{
               display: 'inline-block',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
-              borderRadius: 10,
+              color: 'var(--text-on-accent)',
+              borderRadius: 'var(--radius-lg)',
               padding: '10px 24px',
               fontFamily: 'var(--font-display)',
               fontWeight: 600,
@@ -97,7 +98,7 @@ export default function MagicLinkVerifyPage() {
             }}
           >
             Back to login
-          </a>
+          </Link>
         </div>
       </div>
     );

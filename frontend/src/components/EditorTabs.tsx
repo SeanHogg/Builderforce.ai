@@ -1,6 +1,7 @@
 'use client';
 
 import { getFileName } from '@/lib/utils';
+import { Icon } from '@/components/ui/Icon';
 
 interface EditorTabsProps {
   openFiles: string[];
@@ -32,7 +33,7 @@ export function EditorTabs({ openFiles, activeFile, onTabSelect, onTabClose }: E
               onTabClose(file);
             }}
           >
-            ✕
+            <Icon name="close" size={14} />
           </button>
         </div>
       ))}

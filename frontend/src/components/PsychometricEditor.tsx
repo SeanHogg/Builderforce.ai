@@ -13,6 +13,7 @@
  * renders a locked upsell instead of the editor (shared-component gating, so the
  * persona modal never needs to know the plan).
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -156,8 +157,8 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
 
   if (!entitled) {
     return (
-      <div style={{ border: '1px dashed var(--border)', borderRadius: 10, padding: 16, background: 'var(--surface-2)' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>🔒 {t('lockedTitle', { plan: planLabel })}</div>
+      <div style={{ border: '1px dashed var(--border)', borderRadius: 'var(--radius-lg)', padding: 16, background: 'var(--surface-2)' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}><Icon source="🔒" size="1em" /> {t('lockedTitle', { plan: planLabel })}</div>
         <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
           {t('lockedBody', { plan: planLabel })}
         </div>
@@ -166,7 +167,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
   }
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 13 }}>{t('heading')}</div>
         <span className="badge badge-gray">{t('traitsSet', { count: signalCount })}</span>
@@ -307,7 +308,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
               style={{
                 marginTop: 12,
                 padding: '8px 10px',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border)',
                 background: 'var(--surface-2)',
                 display: 'flex',
