@@ -100,6 +100,14 @@ describe('cloud-agent curated platform tool subset', () => {
     expect(resolveCloudAgentPlatformTool('builtin_tasks_delete')).toBeUndefined();
     expect(resolveCloudAgentPlatformTool('not_a_tool')).toBeUndefined();
   });
+
+  it('lets a manager agent remove a specific bad manifest slot without granting broad task deletion', () => {
+    expect(CLOUD_AGENT_PLATFORM_TOOLS).toContain('kanban.remove_participant');
+    const schema = cloudAgentPlatformToolSchemas().find((entry) =>
+      entry.function.name === 'builtin_kanban_remove_participant');
+    expect(schema?.function.parameters.required).toEqual(['taskId', 'participantId']);
+    expect(CLOUD_AGENT_PLATFORM_TOOLS).not.toContain('tasks.delete');
+  });
 });
 
 describe('chat-scoped agent tool subset (@agent addressed-reply loop)', () => {
