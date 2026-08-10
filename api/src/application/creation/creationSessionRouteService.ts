@@ -39,6 +39,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env, HonoEnv } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { resolveChatAccess } from '../brain/chatAccess';
@@ -1478,8 +1479,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const targetProjects = new Set(targetProjectLinks.map(({ projectId }) => projectId));
     const newProjectLinks = sourceProjectLinks.filter(({ projectId }) => !targetProjects.has(projectId));
     const statements: unknown[] = [
-      db.update(creationSessions).set({ canvasRevision: revision, preview: buildPreview(graphObjects), updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(eq(creationSessions.id, targetAccess.session.id)),
-      db.update(creationSessions).set({ status: 'archived', archivedAt: now, updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(eq(creationSessions.id, sourceId)),
+      db.update(creationSessions).set({ canvasRevision: revision, preview: buildPreview(graphObjects), updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(scopedToTenant(creationSessions, targetAccess.session.tenantId, eq(creationSessions.id, targetAccess.session.id))),
+      db.update(creationSessions).set({ status: 'archived', archivedAt: now, updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(scopedToTenant(creationSessions, targetAccess.session.tenantId, eq(creationSessions.id, sourceId))),
       db.insert(creationSessionEvents).values({ sessionId: targetAccess.session.id, revision, actorType: 'user', actorRef: userId, eventType: 'session.merged', payload: { sourceSessionId: sourceId, importedObjects: copiedObjects.length } }),
       db.insert(creationSessionSnapshots).values({ sessionId: targetAccess.session.id, revision, graph, viewport: targetAccess.session.viewport, createdBy: userId }),
     ];

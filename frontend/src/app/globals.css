@@ -170,6 +170,14 @@
      there, 7vw on the deck), so the page breathed unevenly as you scrolled. */
   --marketing-section-padding: clamp(76px, 9vw, 120px);
   --content-narrow: 720px;
+  /* How much of the bottom of the screen the fixed mobile bar owns — zero above
+     the breakpoint, where the bar is not rendered at all. Anything that has to
+     clear it subtracts this unconditionally instead of repeating the media
+     query, and the bar itself reads it, so the bar and the clearance cannot
+     disagree. They already had: the height was written out as `56px` in one
+     place and `64px` in another, and the roster footer (`TeamBar`) reserved
+     nothing at all, so on a phone the bar sat on top of the team. */
+  --mobile-nav-height: 0px;
   /* The three panel widths (PRD 21 §2.4 / §3.4) — sheet, wide, full, and no
      fourth. A bespoke `min(560px, 96vw)` at a call site is how twenty distinct
      panel widths arrived; `<SlideOutPanel width="sheet|wide|full">` resolves to
@@ -2261,15 +2269,10 @@ html[data-theme='light'] .nebula {
   flex-direction: column;
 }
 
-/* On phones the fixed .mobile-bottom-nav (56px + safe-area) would overlap the
-   bottom of a full-bleed IDE/project page, whose padding is 0 above. Reserve
-   exactly that clearance so the child fills the area ABOVE the bottom bar. */
-@media (max-width: 767px) {
-  .content:has(.ide-full-height),
-  .content:has(.app-full-height) {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-  }
-}
+/* The bar's clearance used to be reserved here, on the full-bleed pages that
+   noticed it first. It is reserved at `.app-frame` now (one place, one token,
+   `--mobile-nav-height`), which covers these AND the roster footer below them —
+   so this rule would double it. */
 
 /* Page title / sub (Settings, Security, Admin, etc.)
    Reconciled onto the §2.3 Page-title role — this was a flat 1.5rem, the
@@ -3148,6 +3151,16 @@ select.input option {
 .mbn-accent .mbn-label { font-weight: 700; }
 
 @media (max-width: 767px) {
+  /* The bar exists from here down, so this is where it starts costing space. */
+  :root { --mobile-nav-height: calc(56px + env(safe-area-inset-bottom, 0px)); }
+
+  /* The operator shell reserves it ONCE, at the frame — so the last thing in
+     the column clears the bar whatever that thing is. It was the roster footer
+     (§3.3, always on), and nothing reserved anything for it: the bar covered the
+     team on every phone-width board. Reserving it here rather than on `.content`
+     is why it works for the footer too. */
+  .app-frame { padding-bottom: var(--mobile-nav-height); }
+
   /* Marketplace chip lives in the bottom bar / drawer on mobile */
   .topbar-center { display: none; }
 
@@ -3179,8 +3192,9 @@ select.input option {
     --shell-nav-width-collapsed: 0px;
     /* Docked slide-out panels (Projects, IDE settings) anchor their bottom to
        --footer-height. On mobile the global footer is replaced by the fixed
-       bottom nav, so point this at the bottom-nav height to keep panels clear. */
-    --footer-height: calc(56px + env(safe-area-inset-bottom, 0px));
+       bottom nav, so point this at the bar's own height — the token, not a
+       fifth copy of the number. */
+    --footer-height: var(--mobile-nav-height);
   }
 
   .nav {
@@ -3276,7 +3290,7 @@ select.input option {
     right: 0;
     bottom: 0;
     z-index: 900;
-    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    height: var(--mobile-nav-height);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(12px);
@@ -3284,11 +3298,13 @@ select.input option {
     border-top: 1px solid var(--border);
   }
 
-  /* Tighter content padding + clearance for the bottom bar */
+  /* Tighter content padding. The bar's clearance is NOT repeated here — the
+     frame reserves it above, and doing it in both places pushed every mobile
+     page up by an extra bar's height for nothing. */
   .content {
     --content-pad-x: 6px;
     --content-pad-y: 8px;
-    padding: var(--content-pad-y) var(--content-pad-x) calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: var(--content-pad-y) var(--content-pad-x);
   }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
@@ -3743,6 +3759,10 @@ select.input option {
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
+  /* Same reservation the operator shell makes, from the same token — the fixed
+     bar covered the end of the footer on every marketing page too. Zero above
+     the breakpoint. */
+  padding-bottom: var(--mobile-nav-height);
 }
 .marketing-content {
   flex: 1 1 auto;
@@ -3760,12 +3780,9 @@ select.input option {
   min-height: 0;
   overflow: hidden;
 }
-@media (max-width: 767px) {
-  .marketing-content-full-height {
-    box-sizing: border-box;
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-  }
-}
+/* The bar's clearance is NOT repeated here — `.marketing-frame` reserves it for
+   both the scrolling and the full-height case, from `--mobile-nav-height`. This
+   was the fourth hand-written copy of the bar's height. */
 
 /* ── THE MARKETING COLUMN ──────────────────────────────────────────────────
    One container for every public band. A marketing section is full-bleed (its

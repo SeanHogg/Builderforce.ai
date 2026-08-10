@@ -1216,8 +1216,6 @@
   .saved,.secondaryButton { display:none; }
   .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:5px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
   .flowWrap {
-    --mobile-composer-space:112px;
-    --composer-space:var(--mobile-composer-space);
     /* On a phone the dock is a bottom sheet, so it claims NO side. The width is
        written inline by the component, and !important is what lets the phone
        layout win against it — otherwise the palette toggle and the board chrome
@@ -1229,15 +1227,15 @@
   /* The composer is a dock on phones, so the interactive viewport must end
      above it. Nodes and React Flow controls can no longer settle underneath
      the prompt. */
-  .flowWrap:global(.react-flow) { height:calc(100% - var(--mobile-composer-space)); }
+  .flowWrap:global(.react-flow) { height:calc(100% - var(--composer-space)); }
   .node { max-width:calc(100vw - 32px); }
   .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton,.saveButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButton { display:inline-flex; align-items:center; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
   .moreMenu { top:44px; right:0; width:min(280px,calc(100vw - 16px)); }
   .shareMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); box-sizing:border-box; }
-  .palette { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:44px; width:auto; max-height:none; }
-  .templateMenu { top:8px; right:8px; left:8px; width:auto; max-height:calc(100% - var(--mobile-composer-space) - 16px); box-sizing:border-box; }
-  .mergePanel { inset:8px 8px calc(var(--mobile-composer-space) + 8px); width:auto; box-sizing:border-box; }
-  .inspector { left:8px; right:8px; top:8px; bottom:calc(var(--mobile-composer-space) + 8px); width:auto; height:auto; }
+  .palette { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:44px; width:auto; max-height:none; }
+  .templateMenu { top:8px; right:8px; left:8px; width:auto; max-height:calc(100% - var(--composer-space) - 16px); box-sizing:border-box; }
+  .mergePanel { inset:8px 8px calc(var(--composer-space) + 8px); width:auto; box-sizing:border-box; }
+  .inspector { left:8px; right:8px; top:8px; bottom:calc(var(--composer-space) + 8px); width:auto; height:auto; }
   /* The phone session bar is 50px, not 54 — keep the board's height in step with
      it while the canvas owns the viewport. */
   .canvasShell[data-fullscreen='true'] .flowWrap { height:calc(100% - 50px); }
@@ -1255,7 +1253,7 @@
      collapses to one sheet that sits ABOVE the prompt — the prompt keeps the bottom
      edge. An inline Brain needs nothing here:it is an Object, and Objects already
      size themselves to the board. */
-  .brainDock { top:auto; left:0; right:0; bottom:var(--mobile-composer-space); width:auto; height:min(58%, 420px); max-height:none; border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
+  .brainDock { top:auto; left:0; right:0; bottom:var(--composer-space); width:auto; height:min(58%, 420px); max-height:none; border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
   .brainDock[data-size='expanded'] { height:72%; }
   .brainDockActions button[data-dock-side] { display:none; }
   .brainDockResizer { display:none; }
@@ -1263,9 +1261,16 @@
   /* The bottom sheet claims no side (the side insets zero out with the dock width
      above), so the 3D scene gives up the bottom edge instead. */
   .flowWrap[data-view='3d'] {
-    --canvas-reserved-bottom:var(--mobile-composer-space, 0px);
+    --canvas-reserved-bottom:var(--composer-space, 0px);
   }
-  .mobileCanvasActions { position:absolute; z-index:13; left:10px; bottom:calc(var(--mobile-composer-space) + 8px); display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
+  /* The rail grows upward from above the prompt. `--composer-space` is measured
+     (see `useComposerSpace`), so the execution chip that appears in the prompt's
+     utility row pushes the rail up instead of landing on its last two commands.
+     The cap is the other half: a rail with every command on it is ~9 buttons
+     tall, and on a short phone in landscape that ran off the top of the board
+     with no way to reach what had gone. */
+  .mobileCanvasActions { position:absolute; z-index:13; left:10px; bottom:calc(var(--composer-space) + 8px); display:flex; flex-direction:column; max-height:calc(100% - var(--composer-space) - 68px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
+  .mobileCanvasActions button { flex:none; }
   .mobileCanvasActions button { width:38px; height:38px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); cursor:pointer; }
   /* One drawn size for every command on the rail. Without it each icon fills the
      whole 38px cell, which is what made Files and the accessible outline tower
@@ -1284,8 +1289,8 @@
   .mobileCanvasActions button:hover,.mobileCanvasActions button:focus-visible { background:var(--canvas-hover); outline:none; }
   /* A mode that is ON is lit here exactly as it is on the desktop rail. */
   .mobileCanvasActions button[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-accent) 88%,#000); color:var(--text-on-accent); }
-  .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:8px; width:auto; }
-  .changeSetPanel { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
+  .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; }
+  .changeSetPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
   .selectionToolbar { right:8px; left:8px; max-width:none; transform:none; overflow-x:auto; justify-content:flex-start; }
   .collaborators span:nth-child(2),.collaborators span:nth-child(3) { display:none; }

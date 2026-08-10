@@ -87,6 +87,7 @@ import {
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
+import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
@@ -852,6 +853,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const pendingViewport = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const flowWrapRef = useRef<HTMLDivElement | null>(null);
+  // The prompt's real height, published to the board as `--composer-space` — the
+  // band every bottom-anchored panel and the phone command rail sit above. It
+  // was a hardcoded 112px, which the execution chip alone overran.
+  const composerDockRef = useComposerSpace(flowWrapRef);
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
   const undoStack = useRef<string[]>([]);
@@ -4834,7 +4839,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     <PromptUseCasePicker placement="top" align="end" onSelect={setPrompt} />
   </div>;
 
-  const composer = !presentMode && <div className={styles.composerDock} data-tour="creation-brain-dock">
+  const composer = !presentMode && <div ref={composerDockRef} className={styles.composerDock} data-tour="creation-brain-dock">
     <div className={styles.composerUtilities}>
       {/* Keep the settled receipt mounted after the run. Token consumption used
           to disappear at the exact moment the answer arrived because this whole

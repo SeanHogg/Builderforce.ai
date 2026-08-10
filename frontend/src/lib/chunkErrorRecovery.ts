@@ -16,6 +16,10 @@
  * dev server was running). The page is skewed against the server, not broken —
  * so the same purge-and-reload cure applies.
  *
+ * Symptom C (Turbopack async loader): `Failed to load chunk /_next/static/chunks/
+ * …js from module [project]/…`. The runtime requested a content-addressed chunk
+ * that the dev server no longer has, so this is another page/server graph skew.
+ *
  * The reliable cure is to drop the stale caches + service worker and hard-reload
  * onto the current build. A time-window guard prevents an infinite reload loop
  * when the reload doesn't fix it (genuinely broken deploy) — after one attempt
@@ -34,6 +38,7 @@ export function isChunkLoadError(err: unknown): boolean {
   const message = String((err as { message?: string }).message ?? err);
   return (
     /Loading chunk [\w-]+ failed/i.test(message) ||
+    /Failed to load chunk\b/i.test(message) ||
     /Loading CSS chunk/i.test(message) ||
     /ChunkLoadError/i.test(message) ||
     // `NN.undefined.js` / a hashed chunk that 404'd — the stale-runtime signature.
