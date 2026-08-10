@@ -36,6 +36,7 @@ import { ProjectService } from '../project/ProjectService';
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
+import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -47,7 +48,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -387,6 +388,48 @@ function compactTask(plain: Record<string, unknown>): Record<string, unknown> {
   const s = snippet(plain.description);
   if (s) out.descriptionSnippet = s;
   return out;
+}
+
+/** Bulk-load the compact progress contract without turning tasks.list into N+1 queries. */
+async function loadTaskProgress(ctx: BuiltinCtx, rows: Record<string, unknown>[]): Promise<Map<number, ReturnType<typeof buildTaskProgressBreakdown>>> {
+  const ids = rows.map((row) => Number(row.id)).filter(Number.isFinite);
+  if (!ids.length) return new Map();
+  const [children, prs, codeRows] = await Promise.all([
+    ctx.db.select({ parentTaskId: tasks.parentTaskId, status: tasks.status })
+      .from(tasks).where(inArray(tasks.parentTaskId, ids)),
+    ctx.db.select({ taskId: pullRequests.taskId, status: pullRequests.status, buildStatus: pullRequests.buildStatus })
+      .from(pullRequests)
+      .where(and(eq(pullRequests.tenantId, ctx.tenantId), inArray(pullRequests.taskId, ids)))
+      .orderBy(desc(pullRequests.updatedAt)),
+    ctx.db.select({ taskId: taskFileChanges.taskId })
+      .from(taskFileChanges)
+      .where(and(
+        eq(taskFileChanges.tenantId, ctx.tenantId),
+        inArray(taskFileChanges.taskId, ids),
+        sql`not (${taskFileChanges.path} ~* ${'(^|/)(prd\\.md|readme\\.md|roadmap\\.md|done\\.md)$|(^|/)(specs|docs)(/|$)|\\.mdx?$'})`,
+      )),
+  ]);
+  const childStatuses = new Map<number, string[]>();
+  for (const child of children) {
+    if (child.parentTaskId == null) continue;
+    const statuses = childStatuses.get(child.parentTaskId) ?? [];
+    statuses.push(child.status);
+    childStatuses.set(child.parentTaskId, statuses);
+  }
+  const latestPr = new Map<number, { status: string; buildStatus: string | null }>();
+  for (const pr of prs) if (pr.taskId != null && !latestPr.has(pr.taskId)) latestPr.set(pr.taskId, pr);
+  const codeTaskIds = new Set(codeRows.map((row) => row.taskId));
+  return new Map(rows.map((row) => {
+    const id = Number(row.id);
+    const pr = latestPr.get(id);
+    return [id, buildTaskProgressBreakdown({
+      status: typeof row.status === 'string' ? row.status : null,
+      childStatuses: childStatuses.get(id),
+      codeDelivered: codeTaskIds.has(id),
+      prStatus: pr?.status,
+      buildStatus: pr?.buildStatus,
+    })];
+  }));
 }
 
 /** Project a full project row to the identity + status fields a planner needs. */
@@ -894,7 +937,11 @@ const CATALOG: BuiltinTool[] = [
       // SECURITY tickets are included but MASKED for a caller without clearance
       // (surfaced-not-hidden; governed by security_ticket_access).
       rows = await maskSecurityTasks(ctx, rows);
-      return listEnvelope('tasks', rows.map(compactTask), clampLimit(a.limit));
+      const limit = clampLimit(a.limit);
+      const page = rows.slice(0, limit);
+      const progress = await loadTaskProgress(ctx, page.filter((row) => row.restricted !== true));
+      const projected = page.map((row) => ({ ...compactTask(row), ...(row.restricted === true ? {} : { progress: progress.get(Number(row.id)) }) }));
+      return { tasks: projected, total: rows.length, returned: projected.length, truncated: rows.length > projected.length };
     },
   },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
@@ -945,12 +992,24 @@ const CATALOG: BuiltinTool[] = [
       ))
       .limit(1);
     const [pr] = await ctx.db
-      .select({ id: pullRequests.id })
+      .select({ id: pullRequests.id, status: pullRequests.status, buildStatus: pullRequests.buildStatus })
       .from(pullRequests)
       .where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.taskId, id)))
+      .orderBy(desc(pullRequests.updatedAt))
       .limit(1);
+    const childRows = await ctx.db
+      .select({ status: tasks.status })
+      .from(tasks)
+      .where(eq(tasks.parentTaskId, id));
     return {
       ...visible,
+      progress: buildTaskProgressBreakdown({
+        status: String(visible.status ?? ''),
+        childStatuses: childRows.map((row) => row.status),
+        codeDelivered: Boolean(coderCode),
+        prStatus: pr?.status,
+        buildStatus: pr?.buildStatus,
+      }),
       activity: summarizeTaskActivity(String(visible.status ?? ''), executionRows, fileRows, Boolean(pr), {
         executionsCount: executionRows[0]?.total ?? 0,
         hasCoderCodeEver: Boolean(coderCode),
