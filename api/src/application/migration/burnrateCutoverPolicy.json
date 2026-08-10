@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "effectiveDate": "2026-08-10",
+  "principle": "Extract only capabilities that advance IDEA_TO_REAL; reuse existing owners and add no tables.",
+  "newTablesAllowed": false,
+  "capabilities": {
+    "affiliates": {
+      "decision": "retire_export",
+      "owner": "commerce",
+      "destination": "customer export; unsettled obligations reconcile through the existing payout owner",
+      "reason": "Affiliate administration is not required for IDEA_TO_REAL and Builderforce must not gain a parallel referral economy."
+    },
+    "phoneVoip": {
+      "decision": "retire_port_out",
+      "owner": "integrations",
+      "destination": "existing Twilio connector for workflow calls; customer number port-out/export for SignalWire product state",
+      "reason": "A hosted phone carrier product is outside IDEA_TO_REAL; connector actions remain available without a second phone platform."
+    },
+    "blogContent": {
+      "decision": "transform_existing",
+      "owner": "support",
+      "destination": "knowledge_documents and existing content-manager/public artifact routes",
+      "reason": "Published knowledge advances delivery and already has an owner; preserve content, canonical slugs and redirects without content_items DDL."
+    },
+    "webPush": {
+      "decision": "retire_delete_tokens",
+      "owner": "growth",
+      "destination": "existing email and in-app notification channels",
+      "reason": "Do not reverse migration 0195 or reintroduce VAPID, a queue and a PWA package solely for legacy campaign delivery."
+    },
+    "pricing": {
+      "decision": "transform_existing",
+      "owner": "finance",
+      "destination": "planFeatures, featureGate, consumption meters, kernel ledger, carts, orders and order_line_items",
+      "reason": "Builderforce pricing and consumption policy remains canonical; credits become a ledger/meter denomination or are refunded, never a parallel balance system."
+    },
+    "providers": {
+      "decision": "reauthorize_or_retire",
+      "owner": "integrations",
+      "destination": "existing connector catalog and provider seams",
+      "reason": "Secrets are not copied across products; retained integrations are reauthorized and non-target providers are disconnected after export/reconciliation."
+    }
+  },
+  "providers": {
+    "stripe": { "decision": "retain_reconcile", "owner": "payments", "credentialAction": "operator_transfer", "dataAction": "map customers, subscriptions, invoices, refunds and webhook idempotency keys" },
+    "helcim": { "decision": "retire_settle", "owner": "payments", "credentialAction": "none", "dataAction": "settle or refund open obligations before shutdown" },
+    "plaid": { "decision": "reauthorize_if_retained", "owner": "finance", "credentialAction": "customer_reconsent", "dataAction": "export finance history; reconnect only for an active retained finance workflow" },
+    "signalwire": { "decision": "retire_port_out", "owner": "integrations", "credentialAction": "none", "dataAction": "export call/SMS history and port or release every active number" },
+    "recall": { "decision": "retire_export", "owner": "canvas", "credentialAction": "none", "dataAction": "export retained recordings/transcripts into existing artifacts; do not copy bot credentials" },
+    "tavily": { "decision": "use_existing_search", "owner": "integrations", "credentialAction": "customer_reconsent", "dataAction": "use Builderforce web-search routing; no platform-key transfer" },
+    "email": { "decision": "reauthorize", "owner": "integrations", "credentialAction": "operator_or_customer_reconsent", "dataAction": "preserve suppression/unsubscribe evidence before callback switch" },
+    "slack": { "decision": "reauthorize", "owner": "integrations", "credentialAction": "customer_reconsent", "dataAction": "reconnect through the existing connector catalog" },
+    "google": { "decision": "reauthorize", "owner": "integrations", "credentialAction": "customer_reconsent", "dataAction": "reconnect and select scopes through the existing connector catalog" },
+    "microsoft": { "decision": "reauthorize", "owner": "integrations", "credentialAction": "customer_reconsent", "dataAction": "reconnect and select scopes through the existing connector catalog" },
+    "github": { "decision": "reauthorize", "owner": "integrations", "credentialAction": "customer_reconsent", "dataAction": "reconnect through the existing source-control owner" },
+    "linkedin": { "decision": "retire_export", "owner": "integrations", "credentialAction": "none", "dataAction": "export provenance; do not copy OAuth tokens" }
+  }
+}

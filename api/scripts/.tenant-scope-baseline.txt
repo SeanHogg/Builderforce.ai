@@ -84,8 +84,6 @@ application/runtime/executionSteering.ts:5
 application/runtime/runRollback.ts:1
 application/runtime/scoreRunOutcome.ts:4
 application/runtime/staleExecutionReaper.ts:5
-application/seams/burnRateService.ts:1
-application/seams/validationEngagementsService.ts:1
 application/seams/webhookService.ts:6
 application/security/SecurityAuditService.ts:3
 application/security/securityDispatch.ts:1
