@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import en from '@/i18n/messages/en.json';
+import { BRAND } from '@/lib/content';
 import {
   LEARN_COLUMNS,
   NAV_GROUPS,
@@ -124,6 +125,11 @@ describe('the marketing header renders the registry, not a raw key', () => {
 });
 
 describe('the footer is the same registry, one column deeper', () => {
+  it('includes the brand copyright in the compact auth footer', () => {
+    renderWithCopy(<AppFooter />);
+    expect(screen.getByText(`${BRAND.name} © ${BRAND.year}`)).toBeInTheDocument();
+  });
+
   it('renders each column with the destination’s own name', () => {
     renderWithCopy(<AppFooter variant="full" />);
     const nav = screen.getByRole('navigation', { name: en.footer.navLabel });

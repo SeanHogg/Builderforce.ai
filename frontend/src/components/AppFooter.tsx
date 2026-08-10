@@ -36,7 +36,10 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
   // Version + legal strip. Rendered under the copyright credit in the marketing
   // (`full`) footer; rendered as its own bottom row in the slim (`legal`) footer.
   const versionStrip = (
-    <div className="global-footer-inner">
+    <div className={`global-footer-inner${variant === 'legal' ? ' global-footer-inner--legal' : ''}`}>
+      {variant === 'legal' && (
+        <span className="global-footer-copyright">{BRAND.name} © {BRAND.year}</span>
+      )}
       <button
         type="button"
         onClick={openProductUpdates}

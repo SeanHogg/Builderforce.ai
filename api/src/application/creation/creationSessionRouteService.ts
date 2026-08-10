@@ -55,6 +55,7 @@ import { normalizeChatMode } from '../brain/chatMode';
 import { sha256Hex } from '../../domain/shared/hash';
 import { findObject, getObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
+import { creationSessionQuotaError, resolveCreationSessionQuota } from '../../domain/tenant/creationSessionQuota';
 import {
   acceptInvitation,
   acceptInvitationStatement,
@@ -323,21 +324,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const currentPlan = await creationPlan(tenantId);
     const limits = getLimits(currentPlan);
     const used = await countRows('creation_sessions', sql`tenant_id = ${tenantId} AND status <> 'deleted'`);
-    if (await resolveIsSuperadmin(c.env, c.get('userId') as string)) {
-      return { used, limit: -1, allowed: true, limits, currentPlan };
-    }
-    return { used, limit: limits.maxCreationSessions, allowed: limits.maxCreationSessions === -1 || used < limits.maxCreationSessions, limits, currentPlan };
-  }
-
-  function sessionQuotaError(quota: Awaited<ReturnType<typeof sessionQuota>>) {
-    return {
-      error: `Your account includes ${quota.limit} Creation Sessions. Upgrade your account to create another saved Session.`,
-      code: 'CREATION_SESSION_QUOTA',
-      upgradeRequired: true as const,
-      currentPlan: quota.currentPlan,
-      usage: quota.used,
-      limit: quota.limit,
-    };
+    return resolveCreationSessionQuota({
+      used,
+      planLimit: limits.maxCreationSessions,
+      currentPlan,
+      isSuperadmin: await resolveIsSuperadmin(c.env, c.get('userId') as string),
+    });
   }
 
   async function pruneHistory(sessionId: string, tenantId: number) {
@@ -694,7 +686,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const resourceError = await validateResourceAccess(objects, tenantId, segmentId, userId);
     if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED' }, 403);
     const quota = await sessionQuota(c, tenantId);
-    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const sessionId = crypto.randomUUID();
     const title = cleanTitle(body.title, 'Untitled session');
     const statements: unknown[] = [
@@ -751,7 +743,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       if (prior) return c.json({ session: prior, replayed: true });
     }
     const quota = await sessionQuota(c, tenantId);
-    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const sessionId = crypto.randomUUID();
     const projectIds = [...new Set((body.projectIds ?? []).filter((id) => Number.isInteger(id) && id > 0))].slice(0, 20);
     const validProjects = projectIds.length
@@ -1403,7 +1395,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
     const quota = await sessionQuota(c, tenantId);
-    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const [objects, connections, timeline] = await Promise.all([
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
@@ -1440,7 +1432,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
     const quota = await sessionQuota(c, access.session.tenantId);
-    if (!quota.allowed) return c.json(sessionQuotaError(quota), 402);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const body = await c.req.json<BranchBody>().catch(() => ({} as BranchBody));
     const userId = c.get('userId') as string;
     const [objects, connections, projectLinks, timeline] = await Promise.all([

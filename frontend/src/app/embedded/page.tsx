@@ -37,7 +37,10 @@ export default async function EmbeddedPage() {
   return (
     <>
       <JsonLd data={routeMarketingSchema({ path: '/embedded', title: t('title'), description: t('subtitle') })} />
-      <PageContainer width="full" style={{ padding: '32px 40px' }}><EmbeddedCapabilities /></PageContainer>
+      {/* No padding override: `.page-container` owns it precisely so it can
+          shrink, and this page now also renders inside `ShellPanel` — where a
+          hard 40px gutter was 12% of the body at sheet width. */}
+      <PageContainer width="full"><EmbeddedCapabilities /></PageContainer>
     </>
   );
 }

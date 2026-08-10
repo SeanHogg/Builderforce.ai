@@ -16299,7 +16299,34 @@
     "eyebrow": "Integrations",
     "title": "Connect your agent workforce to your stack",
     "lede": "Builderforce.ai plugs your self-hosted, model-agnostic AI agents into source control, chat channels, model providers and the tools you already use — every action governed by approvals and an audit trail.",
-    "provenCategory": "Connected services"
+    "provenCategory": "Connected services",
+    "category": {
+      "work": "Work management",
+      "devtools": "Developer tools",
+      "incident": "Incidents & on-call",
+      "communication": "Communication",
+      "crm": "CRM & sales",
+      "productivity": "Productivity",
+      "finance": "Finance & billing",
+      "marketing": "Marketing",
+      "support": "Service desk",
+      "storage": "Files & storage",
+      "data": "Data & warehouses",
+      "other": "Other"
+    },
+    "direction": {
+      "import": "Reads",
+      "export": "Writes",
+      "two-way": "Two-way",
+      "event-ingest": "Events in"
+    },
+    "surface": {
+      "connector": "Callable from any agent or workflow as a governed connector action.",
+      "board": "Connects as a synced board — work items flow both ways.",
+      "data": "Queryable from a workflow node with stored credentials.",
+      "drive": "Connect the drive and bring its files onto the canvas.",
+      "mailbox": "Connect the mailbox to read threads and send from it."
+    }
   },
   "integrationDetail": {
     "eyebrow": "{category} integration",

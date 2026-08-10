@@ -176,7 +176,13 @@
      these, so the scale is enforced by the primitive rather than by review. */
   --panel-width-sheet: min(440px, 96vw);
   --panel-width-wide: min(660px, 96vw);
-  --panel-width-full: 94vw;
+  /* `full` is 70% of the viewport, not 94%. At 94% the board behind it was a
+     30px sliver — technically still mounted, which is the letter of §0 and not
+     its point: the panel is meant to sit OVER work you can still see. 70% keeps
+     a usable strip of canvas, so closing the panel is a decision rather than a
+     rescue. Narrow viewports override this below — 70vw on a phone is a column,
+     not a panel. */
+  --panel-width-full: 70vw;
   --surface-page: var(--bg-deep);
   --surface-panel: var(--bg-surface);
   --surface-raised: var(--bg-elevated);
@@ -1091,6 +1097,23 @@ html[data-theme='light'] .nebula {
   grid-template-columns: var(--shell-nav-width-collapsed) minmax(0, 1fr);
 }
 
+/* The marketing header, seated in the shell's topbar row.
+   A logged-out visitor keeps the header they arrived with (see AppShell), and
+   `.mh` is written for a marketing PAGE — a 1320px centred column at 66px. In
+   the shell it is chrome: it spans the frame, matches the shell's own topbar
+   height, and takes the shell's gutter so the brand lines up with the rail
+   below it. Scoped to a direct child of `.shell` so the marketing pages'
+   own header is untouched. */
+.shell > .mh {
+  grid-area: topbar;
+  height: var(--shell-topbar-height);
+}
+.shell > .mh .mh-inner {
+  height: 100%;
+  max-width: none;
+  padding-inline: 12px;
+}
+
 .topbar {
   grid-area: topbar;
   display: flex;
@@ -1302,6 +1325,14 @@ html[data-theme='light'] .nebula {
   font-size: 12px;
 }
 
+/* The compact auth footer keeps ownership on the left and the operational /
+   legal links on the right. Marketing already renders the same copyright in
+   its larger brand block. */
+.global-footer-inner--legal .global-footer-copyright {
+  margin-right: auto;
+  white-space: nowrap;
+}
+
 .global-footer-links {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1480,6 +1511,9 @@ html[data-theme='light'] .nebula {
   .global-footer-links {
     flex-wrap: wrap;
     justify-content: center;
+  }
+  .global-footer-inner--legal .global-footer-copyright {
+    margin-right: 0;
   }
   /* Nested under the copyright credit, keep it left-aligned to match the credit
      above it instead of centering like the standalone bottom strip. */
@@ -2098,6 +2132,21 @@ html[data-theme='light'] .nebula {
   overflow: auto;
   container-type: inline-size;
   container-name: panel;
+}
+
+/* A reference page inside the panel gets NO wrapper padding — it brings its own
+   full-bleed bands, and boxing them produced a marketing page with a 16px frame
+   inside a drawer, which reads as a mistake in both. Its READING COLUMN still
+   needs a gutter though, and a page written against a 1320px column has none to
+   spare at panel width: the hero ran into the drawer's left border.
+   So the column's own token is widened rather than the wrapper padded — bands
+   keep painting edge to edge, and both marketing columns (`.mk-in` and
+   `.mkt-in`) read the same variable, so every reference page gets it.
+   `cqi` is the PANEL's inline size (`.ui-panel-body` is the named container), so
+   the gutter tracks how wide the reader has made the panel rather than the
+   window it happens to sit in. */
+.ref-panel-body {
+  --marketing-gutter: clamp(24px, 5cqi, 48px);
 }
 
 /* ── The eight type roles (PRD 21 §2.3) ──────────────────────────────────────
@@ -3749,6 +3798,15 @@ select.input option {
   }
 }
 
+/* A `full` panel is 70% of a desktop viewport because the board behind it is
+   worth seeing. On a phone there is no board beside it to preserve — 70vw would
+   be a 260px column — so the widest panel takes the screen. */
+@media (max-width: 900px) {
+  :root {
+    --panel-width-full: 96vw;
+  }
+}
+
 /* Top header */
 .mh {
   position: sticky;
@@ -4006,20 +4064,36 @@ select.input option {
   gap: 2px;
   padding: var(--space-2);
 }
+/* One row, whether the rail scrolls to an anchor (`<a>`) or switches a view
+   (`<button>`) — a tabbed reference page keeps one section in the DOM, so its
+   rail is a choice rather than a list of anchors. The button resets are what
+   make the two render identically. */
 .ref-index__item {
   display: block;
+  width: 100%;
   padding: var(--space-2);
+  border: 0;
   border-radius: var(--radius-md);
   border-left: 2px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
+  font: inherit;
   font-size: var(--font-size-small);
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
   transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
 .ref-index__item:hover {
   color: var(--text-primary);
   background: var(--surface-interactive);
   border-left-color: var(--border-strong);
+}
+.ref-index__item[aria-current='true'] {
+  color: var(--text-primary);
+  background: var(--surface-interactive);
+  border-left-color: var(--accent);
+  font-weight: 650;
 }
 
 /* The footer's links carry their destination's seat hue on hover, so the footer

@@ -88,7 +88,11 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   }, [hasTenant, local, sessionId]);
 
   return <>
-    <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
+    <UpgradeModal
+      error={planError}
+      onClose={() => setPlanError(null)}
+      upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'}
+    />
     {/* Theme tokens, not literals: this rides on the guest→sign-in path, which
         renders in whichever theme the visitor arrived from. */}
     {claimError && <div role="alert" style={{ position: 'fixed', zIndex: 100, top: 76, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--error)', boxShadow: '0 6px 22px var(--shadow-coral-soft)' }}>{claimError}</div>}

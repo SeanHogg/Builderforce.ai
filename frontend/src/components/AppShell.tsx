@@ -4,11 +4,13 @@ import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
+import MarketingHeader from './MarketingHeader';
 import MobileBottomNav from './MobileBottomNav';
 import EmulationBar from './EmulationBar';
 import BetaBanner from './beta/BetaBanner';
 import PermissionDebuggerPanel from './PermissionDebuggerPanel';
 import QaTelemetry from './QaTelemetry';
+import { useAuth } from '@/lib/AuthContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
@@ -58,6 +60,7 @@ function isFullScreenRoute(pathname: string | null): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { emulation } = useEmulation();
+  const { isAuthenticated } = useAuth();
 
   // Project pages force icon-only mode; otherwise use the stored choice.
   // The collapsed rail keeps the canvas spacious, which §3.2 calls the default
@@ -89,8 +92,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
         style={{ position: 'relative' }}
       >
-        <TopBar onMenuClick={openNav} />
-        <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
+        {/* One header per visitor, not one per shell.
+            The operator shell is the SAME surface signed in or out (PRD 21 §0),
+            and a guest reaches it from the marketing site — so arriving on a
+            canvas used to replace the header they had just been navigating with
+            a stub carrying a logo and a Marketplace link. Every way back into
+            the product (Product, Learn, Features, Pricing) vanished at the exact
+            moment somebody was deciding whether to sign up.
+            So the header follows the VISITOR: `MarketingHeader` while signed
+            out, `TopBar` once there is a session to switch scope, canvas and
+            workspace in. Both render in the same grid area — see `.shell > .mh`.
+            The marketing header owns its own mobile drawer, so the Sidebar's is
+            handed over with it rather than left racing a second one open. */}
+        {isAuthenticated ? <TopBar onMenuClick={openNav} /> : <MarketingHeader />}
+        <Sidebar
+          collapsed={navCollapsed}
+          onToggleCollapsed={toggleNav}
+          mobileOpen={isAuthenticated && navOpen}
+          onMobileClose={closeNav}
+        />
         <NavCountsProvider>
           <main
             id="main-content"

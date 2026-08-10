@@ -1,25 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import { ReturningVisitorBanner } from '@/components/tools/ReturningVisitorBanner';
+import {
+  referenceAnchorId, ReferenceCard, ReferenceGrid, ReferenceGroup, ReferenceHero, ReferencePage, ReferenceSection,
+} from '@/components/reference/ReferencePage';
 import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
 
-/* Width comes from `.mkt-in` — THE marketing column (globals.css). */
-const wrap: React.CSSProperties = { padding: '32px 0' };
-const cardLink: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 8, padding: 18, textDecoration: 'none',
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
-  color: 'inherit', transition: 'border-color .15s',
-};
-
 const CATEGORY_ORDER: ToolCategory[] = ['delivery', 'finops', 'governance', 'quality'];
 
+/**
+ * The diagnostics hub — a reference page (PRD 21 §11.4.5), and now built like
+ * one.
+ *
+ * It used to lay itself out in inline styles inside `.mkt-in`: a hand-rolled
+ * eyebrow/title/lede, a hand-rolled card, a hand-rolled category heading. That
+ * is the fourth copy of the vocabulary `components/reference/ReferencePage`
+ * exists to be, and it cost this page the two things a reference page gets for
+ * free — the panel's index rail, and the reading gutter that kept its hero off
+ * the drawer's left border when it opened over a board.
+ *
+ * The categories are the page's structure, so they are also the rail. One array
+ * rendered as both: it cannot advertise a category the page stopped having, and
+ * because the catalog is loaded from the API, the rail grows when a sixth
+ * diagnostic ships without anyone editing a list.
+ */
 export default function ToolsHubClient() {
   const t = useTranslations('tools');
   const [tools, setTools] = useState<ToolSummary[]>([]);
@@ -38,73 +48,74 @@ export default function ToolsHubClient() {
     }
   }, []);
 
-  const categoryLabel = (c: ToolCategory) => t(`category.${c}`);
   // agentic-maturity is featured above, so keep it out of the category grid.
   const gridTools = tools.filter((tool) => tool.id !== 'agentic-maturity');
+  const categories = CATEGORY_ORDER.filter((c) => gridTools.some((tool) => tool.category === c));
 
   return (
-    <div className="mkt-in" style={wrap}>
-      <header style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: 0 }}>
-          {t('hubEyebrow')}
-        </p>
-        <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 800, color: 'var(--text-strong)', margin: '8px 0' }}>{t('hubTitle')}</h1>
-        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', maxWidth: 680 }}>{t('hubIntro')}</p>
-      </header>
+    <ReferencePage
+      title={t('hubTitle')}
+      sections={categories.map((category) => ({
+        id: referenceAnchorId(category),
+        label: t(`category.${category}`),
+      }))}
+    >
+      <ReferenceHero eyebrow={t('hubEyebrow')} title={t('hubTitle')} lede={t('hubIntro')} />
 
-      {/* Returning visitor — recap their diagnostics + a targeted sign-up CTA. */}
-      <ReturningVisitorBanner />
+      <ReferenceSection>
+        {/* Returning visitor — recap their diagnostics + a targeted sign-up CTA. */}
+        <ReturningVisitorBanner />
 
-      {/* Workspace rating — project diagnostics rolled up to the tenant. */}
-      {rollup && rollup.projects.length > 0 && (
-        <section style={{ marginBottom: 24 }}>
-          <h2 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 4px' }}>
-            {t('rollupTitle')}
-          </h2>
-          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '0 0 12px' }}>{t('rollupDesc')}</p>
-          <ToolResultView result={rollup.result} />
-        </section>
-      )}
+        {/* Workspace rating — project diagnostics rolled up to the tenant. */}
+        {rollup && rollup.projects.length > 0 && (
+          <div style={{ marginBottom: 'var(--space-6)' }}>
+            <h3 className="mk-card__title">{t('rollupTitle')}</h3>
+            <p className="mk-card__lede">{t('rollupDesc')}</p>
+            <ToolResultView result={rollup.result} />
+          </div>
+        )}
 
-      {/* Featured: the full maturity diagnostic */}
-      <Link href="/tools/agentic-maturity" style={{ ...cardLink, marginBottom: 24, background: 'var(--bg-elevated)', borderColor: 'var(--accent)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name="insights" size={24} />
-          <span style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)' }}>{t('featuredTitle')}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--accent)' }}>{t('open')} →</span>
+        {/* Featured: the full maturity diagnostic. */}
+        <div style={{ marginBottom: 'var(--space-6)' }}>
+          <ReferenceCard
+            href="/tools/agentic-maturity"
+            mark={<Icon name="insights" size={24} />}
+            title={t('featuredTitle')}
+            badge={t('open')}
+          >
+            {t('featuredDesc')}
+          </ReferenceCard>
         </div>
-        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0 }}>{t('featuredDesc')}</p>
-      </Link>
 
-      {error && <div style={{ color: 'var(--error-text)', marginBottom: 16 }}>{error}</div>}
-      {!loaded ? (
-        <div style={{ color: 'var(--muted)' }}>{t('loading')}</div>
-      ) : (
-        CATEGORY_ORDER.filter((c) => gridTools.some((tool) => tool.category === c)).map((cat) => (
-          <section key={cat} style={{ marginBottom: 24 }}>
-            <h2 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 12px' }}>
-              {categoryLabel(cat)}
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-              {gridTools.filter((tool) => tool.category === cat).map((tool) => (
-                <Link key={tool.id} href={`/tools/${tool.id}`} style={cardLink}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span><Icon source={tool.icon} size={20} /></span>
-                    <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>{tool.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>
-                      {t(`kind.${tool.kind}`)}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0, flex: 1 }}>{tool.tagline}</p>
-                  <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--accent)' }}>{t('runFree')} →</span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))
-      )}
+        {error && <p className="mk-card__lede" role="alert" style={{ color: 'var(--error-text)' }}>{error}</p>}
+        {!loaded ? (
+          <p className="mk-card__lede">{t('loading')}</p>
+        ) : (
+          categories.map((category) => (
+            <ReferenceGroup
+              key={category}
+              id={referenceAnchorId(category)}
+              title={t(`category.${category}`)}
+            >
+              <ReferenceGrid>
+                {gridTools.filter((tool) => tool.category === category).map((tool) => (
+                  <ReferenceCard
+                    key={tool.id}
+                    href={`/tools/${tool.id}`}
+                    mark={<Icon source={tool.icon} size={20} />}
+                    title={tool.name}
+                    badge={t(`kind.${tool.kind}`)}
+                  >
+                    {tool.tagline}
+                  </ReferenceCard>
+                ))}
+              </ReferenceGrid>
+            </ReferenceGroup>
+          ))
+        )}
 
-      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 8 }}>{t('hubFootnote')}</p>
-    </div>
+        <p className="mk-card__lede">{t('hubFootnote')}</p>
+      </ReferenceSection>
+    </ReferencePage>
   );
 }

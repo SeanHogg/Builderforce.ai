@@ -17,6 +17,7 @@ import {
 } from '@/lib/navGroups';
 import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
+import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { Icon } from '@/components/ui/Icon';
 import { HeaderCartButton } from './HeaderCartButton';
@@ -278,6 +279,13 @@ export default function MarketingHeader() {
   // CTA does NOT: it is the canvas offer, and it is this header's own.
   const tc = useTranslations('common');
 
+  // "Open the canvas" is an invitation into the product, so it has nothing to
+  // say to somebody already standing in it. This header now renders inside the
+  // operator shell for logged-out visitors (AppShell), and there the CTA pointed
+  // at `/create/new` — a route that MINTS A NEW SESSION, so the most prominent
+  // control on a guest's own board was "throw this board away and start again".
+  const inProduct = rendersAppShell(pathname, false);
+
   return (
     <header className="mh">
       <div className="mh-inner">
@@ -323,7 +331,9 @@ export default function MarketingHeader() {
           <HeaderCartButton className="mh-cart" />
           <ThemeToggleButton />
           <Link href="/login" className="mh-signin">{tc('signIn')}</Link>
-          <Link href="/create/new" className="mh-cta">{t('openCanvas')}</Link>
+          {inProduct
+            ? <Link href="/register" className="mh-cta">{tc('getStarted')}</Link>
+            : <Link href="/create/new" className="mh-cta">{t('openCanvas')}</Link>}
           <button type="button" className="mh-hamburger" onClick={open ? closeNav : openNav} aria-label={t('toggleMenu')} aria-expanded={open}>
             {open ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
@@ -365,7 +375,9 @@ export default function MarketingHeader() {
 
         <div className="mh-drawer-cta">
           <Link href="/login" className="mh-signin" onClick={closeNav}>{tc('signIn')}</Link>
-          <Link href="/create/new" className="mh-cta" onClick={closeNav}>{t('openCanvas')}</Link>
+          {inProduct
+            ? <Link href="/register" className="mh-cta" onClick={closeNav}>{tc('getStarted')}</Link>
+            : <Link href="/create/new" className="mh-cta" onClick={closeNav}>{t('openCanvas')}</Link>}
         </div>
       </div>
       {open && <div className="mh-drawer-backdrop" onClick={closeNav} aria-hidden="true" />}

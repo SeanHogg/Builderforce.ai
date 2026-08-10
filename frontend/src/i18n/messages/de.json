@@ -16298,7 +16298,34 @@
     "eyebrow": "Integrationen",
     "title": "Verbinden Sie Ihre Agenten mit Ihrem Stack",
     "lede": "Builderforce.ai bindet Ihre selbst gehosteten, modellunabhängigen KI-Agenten an Versionsverwaltung, Chat-Kanäle, Modellanbieter und die Werkzeuge an, die Sie bereits nutzen — jede Aktion mit Freigaben und Audit-Protokoll.",
-    "provenCategory": "Verbundene Dienste"
+    "provenCategory": "Verbundene Dienste",
+    "category": {
+      "work": "Arbeitsmanagement",
+      "devtools": "Entwickler-Tools",
+      "incident": "Vorfälle & Rufbereitschaft",
+      "communication": "Kommunikation",
+      "crm": "CRM & Vertrieb",
+      "productivity": "Produktivität",
+      "finance": "Finanzen & Abrechnung",
+      "marketing": "Marketing",
+      "support": "Service-Desk",
+      "storage": "Dateien & Speicher",
+      "data": "Daten & Warehouses",
+      "other": "Weitere"
+    },
+    "direction": {
+      "import": "Liest",
+      "export": "Schreibt",
+      "two-way": "Bidirektional",
+      "event-ingest": "Ereigniseingang"
+    },
+    "surface": {
+      "connector": "Aus jedem Agenten oder Workflow als kontrollierte Connector-Aktion aufrufbar.",
+      "board": "Verbindet sich als synchronisiertes Board – Arbeitselemente fließen in beide Richtungen.",
+      "data": "Aus einem Workflow-Knoten mit hinterlegten Zugangsdaten abfragbar.",
+      "drive": "Laufwerk verbinden und dessen Dateien auf das Canvas holen.",
+      "mailbox": "Postfach verbinden, um Threads zu lesen und daraus zu senden."
+    }
   },
   "integrationDetail": {
     "eyebrow": "{category}-Integration",

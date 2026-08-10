@@ -31,7 +31,8 @@ import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/navGroups';
 import { seatHueVar } from '@/lib/seats';
 import { ShellIndex, useShellIndex } from './ShellIndex';
-import { useReferenceChrome, type ReferenceChromeSection } from '@/lib/referenceChrome';
+import { useReferenceChrome, useReferenceSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
+import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 
 /**
  * The index rail for a reference page opened as a panel (§11.4.5).
@@ -59,7 +60,39 @@ import { useReferenceChrome, type ReferenceChromeSection } from '@/lib/reference
  * namespace. One list component, one label type, translated by whoever owns the
  * copy.
  */
-function ReferenceIndex({ sections, label }: { sections: ReferenceChromeSection[]; label: string }) {
+function ReferenceIndex({ sections, label, activeId, onSelect }: {
+  sections: ReferenceChromeSection[];
+  label: string;
+  /** Set only on a selector rail — which row is showing. */
+  activeId?: string | undefined;
+  /** Set when the page's sections are VIEWS rather than anchors. */
+  onSelect?: ((id: string) => void) | undefined;
+}) {
+  // A tabbed reference page keeps one section in the DOM at a time, so its rail
+  // cannot be a list of anchors — there is nothing to scroll to. It is a choice
+  // instead, and it is spelled as buttons so it reads as one to a screen reader
+  // too. Same component, because it is the same rail in the same place.
+  if (onSelect) {
+    return (
+      <nav className="ref-index" aria-label={label}>
+        {sections.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            className="ref-index__item"
+            aria-current={section.id === activeId ? 'true' : undefined}
+            onClick={() => onSelect(section.id)}
+          >
+            {section.label}
+          </button>
+        ))}
+      </nav>
+    );
+  }
+  return <AnchorIndex sections={sections} label={label} />;
+}
+
+function AnchorIndex({ sections, label }: { sections: ReferenceChromeSection[]; label: string }) {
   // Anchor links rather than router pushes: the target is inside the panel's own
   // scroller, so this is a scroll, not a navigation, and it must not touch the
   // board behind it. `nearest` rather than `start` for the same reason — `start`
@@ -96,8 +129,23 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || '';
   const router = useRouter();
   const { group, items } = useShellIndex();
+  const canvas = useOptionalActiveCanvas();
+  const boardSessionId = canvas?.active?.sessionId ?? null;
 
-  const close = useCallback(() => router.push('/create'), [router]);
+  /**
+   * Closing the panel is closing the PAGE — so it navigates to the BOARD, by id.
+   *
+   * It used to push the literal `/create`, which is itself a panel destination
+   * (the canvas library). On every other route that read as "close", and on
+   * `/create` it read as nothing at all: the push resolved to the route already
+   * on screen, so the ✕ and the scrim and Escape were all inert and the only way
+   * out of your own canvas list was the browser's Back button. The stage knows
+   * which board it is holding; that is the thing to go back to.
+   */
+  const close = useCallback(
+    () => router.push(boardSessionId ? `/create/${boardSessionId}` : '/create'),
+    [boardSessionId, router],
+  );
 
   // A reference page has no nav group — it is an explainer, not a destination —
   // so without this it opened under the generic panel crumb with no title and no
@@ -118,6 +166,7 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   // (`/integrations`' categories, `/tools/<id>`'s diagnostics) from having a
   // rail at all.
   const published = useReferenceChrome();
+  const selectSection = useReferenceSelect();
   const sections: ReferenceChromeSection[] | undefined = published?.sections?.length ? published.sections : undefined;
 
   return (
@@ -141,14 +190,28 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       // null for it — so the column is offered only when there is something in it.
       index={
         sections
-          ? <ReferenceIndex sections={sections} label={tRefSection('label')} />
+          ? (
+            <ReferenceIndex
+              sections={sections}
+              label={tRefSection('label')}
+              activeId={published?.activeId}
+              onSelect={selectSection ?? undefined}
+            />
+          )
           : items.length > 1 ? <ShellIndex orientation="vertical" /> : undefined
       }
     >
       {/* A reference page brings its own full-bleed layout (hero, bands, wraps),
           so it gets no panel padding — padding it produced a marketing page with
-          a 16px gutter inside a panel, which reads as a mistake in both. */}
-      <div style={reference ? undefined : { padding: 'var(--space-4)' }}>{children}</div>
+          a 16px gutter inside a panel, which reads as a mistake in both. It gets
+          `.ref-panel-body` instead, which widens the marketing COLUMN's gutter so
+          the hero stops running into the drawer's left border while the bands
+          still paint edge to edge. */}
+      <div
+        {...(reference ? { className: 'ref-panel-body' } : { style: { padding: 'var(--space-4)' } })}
+      >
+        {children}
+      </div>
     </SlideOutPanel>
   );
 }

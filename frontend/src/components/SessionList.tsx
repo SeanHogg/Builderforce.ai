@@ -11,8 +11,7 @@
  * being lost and therefore the work that most needs to be visible.
  *
  * It reads `fetchRecentCanvases()` and `listPendingDrafts()` — the shared answers
- * to "what was I working on", so mounting beside the canvas switcher costs one
- * request rather than two. The PRD recorded this step as blocked on
+ * to "what was I working on". The PRD recorded this step as blocked on
  * `listLocalCreationSessions()` not existing; it does exist, and the block was
  * stale — a guest's session list is complete.
  */

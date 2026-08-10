@@ -16298,7 +16298,34 @@
     "eyebrow": "Integraciones",
     "title": "Conecta tu equipo de agentes con tu stack",
     "lede": "Builderforce.ai conecta tus agentes de IA autoalojados e independientes del modelo con el control de versiones, los canales de chat, los proveedores de modelos y las herramientas que ya usas: cada acción queda sujeta a aprobaciones y a un registro de auditoría.",
-    "provenCategory": "Servicios conectados"
+    "provenCategory": "Servicios conectados",
+    "category": {
+      "work": "Gestión del trabajo",
+      "devtools": "Herramientas de desarrollo",
+      "incident": "Incidentes y guardias",
+      "communication": "Comunicación",
+      "crm": "CRM y ventas",
+      "productivity": "Productividad",
+      "finance": "Finanzas y facturación",
+      "marketing": "Marketing",
+      "support": "Mesa de servicio",
+      "storage": "Archivos y almacenamiento",
+      "data": "Datos y almacenes",
+      "other": "Otros"
+    },
+    "direction": {
+      "import": "Lectura",
+      "export": "Escritura",
+      "two-way": "Bidireccional",
+      "event-ingest": "Eventos entrantes"
+    },
+    "surface": {
+      "connector": "Invocable desde cualquier agente o flujo como una acción de conector gobernada.",
+      "board": "Se conecta como tablero sincronizado: los elementos de trabajo fluyen en ambos sentidos.",
+      "data": "Consultable desde un nodo de flujo con credenciales guardadas.",
+      "drive": "Conecta la unidad y lleva sus archivos al lienzo.",
+      "mailbox": "Conecta el buzón para leer hilos y enviar desde él."
+    }
   },
   "integrationDetail": {
     "eyebrow": "Integración de {category}",

@@ -10,9 +10,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { embedApi, type CustomerEmbedFeatureKey, type EmbedConfigResult } from '@/lib/builderforceApi';
 import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type EmbeddedCapabilityCategory } from '@/lib/embeddedCapabilities';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { usePublishReferenceChrome, usePublishReferenceSelect } from '@/lib/referenceChrome';
 import styles from './EmbeddedCapabilities.module.css';
 
-type Tab = 'features' | 'install' | 'consent' | 'surfaces';
+const TABS = ['features', 'install', 'consent', 'surfaces'] as const;
+type Tab = (typeof TABS)[number];
 type Filter = 'all' | EmbeddedCapabilityCategory;
 
 export function EmbeddedCapabilities() {
@@ -81,7 +83,18 @@ export function EmbeddedCapabilities() {
     else setPending(key);
   };
 
-  const tabs: Tab[] = ['features', 'install', 'consent', 'surfaces'];
+  // §11.4.5 — signed in, this page opens as a panel over the board, so it names
+  // itself for the panel header and hands over its four views as the index rail.
+  // Its sections are TABS rather than anchors (only one is in the DOM at a
+  // time), so the rail switches instead of scrolling. Both calls are no-ops on
+  // the signed-out page render, where there is no panel and no provider.
+  usePublishReferenceChrome({
+    title: t('title'),
+    sections: TABS.map((item) => ({ id: item, label: t(`tabs.${item}`) })),
+    activeId: tab,
+  });
+  usePublishReferenceSelect((id) => setTab(id as Tab));
+
   const filters: Filter[] = ['all', 'engage', 'measure', 'govern', 'operate'];
 
   return <div className={styles.page}>
@@ -99,7 +112,7 @@ export function EmbeddedCapabilities() {
     </section>
 
     <div className={styles.tabs} role="tablist" aria-label={t('tabsLabel')}>
-      {tabs.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={`${styles.tab} ${tab === item ? styles.tabActive : ''}`} onClick={() => setTab(item)}>{t(`tabs.${item}`)}</button>)}
+      {TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={`${styles.tab} ${tab === item ? styles.tabActive : ''}`} onClick={() => setTab(item)}>{t(`tabs.${item}`)}</button>)}
     </div>
 
     {error && <div className={styles.error} role="alert">{error}</div>}
