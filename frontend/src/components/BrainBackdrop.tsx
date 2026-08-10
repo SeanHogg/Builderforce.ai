@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useRef } from 'react';
+import { observeResizeOnAnimationFrame } from '../lib/observeResize';
 
 type Point = { x: number; y: number };
 
@@ -122,15 +123,14 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
     };
 
     resize();
-    const observer = new ResizeObserver(() => { resize(); restart(); });
-    observer.observe(host);
+    const disconnectResize = observeResizeOnAnimationFrame(host, () => { resize(); restart(); });
     document.addEventListener('visibilitychange', onVisibility);
     restart();
 
     return () => {
       visible = false;
       cancelAnimationFrame(frameId);
-      observer.disconnect();
+      disconnectResize();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);

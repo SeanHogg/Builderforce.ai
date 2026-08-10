@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 
 /**
  * Publish the band the prompt actually owns, as `--composer-space` on the board.
@@ -49,11 +50,9 @@ export function useComposerSpace(board: React.RefObject<HTMLElement | null>): (n
 
     // BOTH boxes: the dock's height changes when a run starts, and the board's
     // changes on rotation and when the Brain sheet opens — either moves the gap.
-    const observer = new ResizeObserver(publish);
-    observer.observe(dock);
-    observer.observe(host);
+    const disconnectResize = observeResizeOnAnimationFrame([dock, host], publish);
     return () => {
-      observer.disconnect();
+      disconnectResize();
       host.style.removeProperty('--composer-space');
     };
   }, [board, dock]);

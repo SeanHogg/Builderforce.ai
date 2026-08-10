@@ -13,6 +13,7 @@ import { scaleTime } from 'd3-scale';
 import { select } from 'd3-selection';
 import { axisBottom } from 'd3-axis';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
+import { observeResizeOnAnimationFrame } from '../lib/observeResize';
 
 export interface ExecutionTrack {
   label: string;
@@ -103,12 +104,10 @@ export function ExecutionTimelineChart({ tracks, colorForKey }: ExecutionTimelin
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver((entries) => {
+    return observeResizeOnAnimationFrame(el, (entries) => {
       const w = entries[0]?.contentRect.width;
       if (w && w > 0) setWidth(w);
     });
-    ro.observe(el);
-    return () => ro.disconnect();
   }, []);
 
   const { laid, bands, rows } = useMemo(() => layout(tracks), [tracks]);

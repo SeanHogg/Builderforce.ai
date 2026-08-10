@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { brain } from '@/lib/builderforceApi';
+import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import {
   canvasWebPageUrl, hasWebPageProbe, isLocalWebPageUrl, isMixedContentFrame, normalizeWebPageUrl,
   webPageHost, webPageViewport, WEB_PAGE_VIEWPORT_WIDTHS,
@@ -110,10 +111,9 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
     const wrap = frameWrapRef.current;
     if (!wrap || !deviceWidth || typeof ResizeObserver === 'undefined') { setScale(1); return; }
     const measure = () => setScale(Math.min(1, wrap.clientWidth / deviceWidth));
-    const observer = new ResizeObserver(measure);
-    observer.observe(wrap);
+    const disconnectResize = observeResizeOnAnimationFrame(wrap, measure);
     measure();
-    return () => observer.disconnect();
+    return disconnectResize;
   }, [deviceWidth]);
 
   const load = useCallback((raw: string) => {
