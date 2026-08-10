@@ -34,7 +34,7 @@ import { sql } from 'drizzle-orm';
 import { approvalStatusEnum, privacyRequestStatusEnum, privacyRequestTypeEnum, sourceControlProviderEnum } from './kernel';
 import { segments, tenants, users } from './identity';
 import { agentHosts, agents } from './agents';
-import { boards, projects, tasks } from './delivery';
+import { boards, initiatives, projects, tasks } from './delivery';
 
 
 export const privacyRequests = pgTable('privacy_requests', {
@@ -197,6 +197,124 @@ export const adminAuditLog = pgTable('admin_audit_log', {
   ipAddress:    varchar('ip_address', { length: 64 }),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Stakeholder alignment — project priorities, sign-off and escalation (0452)
+// ---------------------------------------------------------------------------
+
+export const stakeholderMapEntries = pgTable('stakeholder_map_entries', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  initiativeId:   uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
+  stakeholderRef: varchar('stakeholder_ref', { length: 64 }).notNull(),
+  displayName:    varchar('display_name', { length: 255 }).notNull(),
+  role:           varchar('role', { length: 24 }).notNull(), // required_approver | informed
+  teamScope:      varchar('team_scope', { length: 120 }),
+  priority:       text('priority'),
+  active:         boolean('active').notNull().default(true),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_stakeholder_map_project_ref').on(t.tenantId, t.projectId, t.stakeholderRef),
+  index('idx_stakeholder_map_project').on(t.tenantId, t.segmentId, t.projectId, t.active),
+]);
+
+export const stakeholderHealthProfiles = pgTable('stakeholder_health_profiles', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  answers:   jsonb('answers').notNull(),
+  score:     integer('score').notNull(),
+  updatedBy: varchar('updated_by', { length: 64 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_stakeholder_health_project').on(t.tenantId, t.projectId),
+]);
+
+export const stakeholderPrioritySubmissions = pgTable('stakeholder_priority_submissions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  stakeholderRef: varchar('stakeholder_ref', { length: 64 }).notNull(),
+  teamScope:      varchar('team_scope', { length: 120 }).notNull(),
+  priorityKey:    varchar('priority_key', { length: 160 }).notNull(),
+  rationale:      text('rationale'),
+  submittedAt:    timestamp('submitted_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_stakeholder_priority_window').on(t.tenantId, t.projectId, t.teamScope, t.submittedAt),
+]);
+
+export const stakeholderConflicts = pgTable('stakeholder_conflicts', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  signature:   varchar('signature', { length: 255 }).notNull(),
+  teamScope:   varchar('team_scope', { length: 120 }).notNull(),
+  priorityKeys: jsonb('priority_keys').notNull(),
+  stakeholderRefs: jsonb('stakeholder_refs').notNull(),
+  summary:     text('summary').notNull(),
+  status:      varchar('status', { length: 16 }).notNull().default('open'),
+  detectedAt:  timestamp('detected_at').notNull().defaultNow(),
+  resolvedAt:  timestamp('resolved_at'),
+}, (t) => [
+  uniqueIndex('uq_stakeholder_conflict_signature').on(t.tenantId, t.projectId, t.signature),
+  index('idx_stakeholder_conflicts_project').on(t.tenantId, t.projectId, t.status, t.detectedAt),
+]);
+
+export const stakeholderAlignmentReviews = pgTable('stakeholder_alignment_reviews', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  subjectRef:  varchar('subject_ref', { length: 160 }).notNull(),
+  summary:     text('summary').notNull(),
+  requiredApproverRefs: jsonb('required_approver_refs').notNull(),
+  status:      varchar('status', { length: 16 }).notNull().default('in_review'),
+  dueAt:       timestamp('due_at').notNull(),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_stakeholder_reviews_project').on(t.tenantId, t.projectId, t.status, t.dueAt),
+]);
+
+export const stakeholderAlignmentResponses = pgTable('stakeholder_alignment_responses', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  reviewId:       uuid('review_id').notNull().references(() => stakeholderAlignmentReviews.id, { onDelete: 'cascade' }),
+  stakeholderRef: varchar('stakeholder_ref', { length: 64 }).notNull(),
+  response:       varchar('response', { length: 32 }).notNull(),
+  comment:        text('comment'),
+  respondedAt:    timestamp('responded_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_stakeholder_response_reviewer').on(t.reviewId, t.stakeholderRef),
+]);
+
+export const stakeholderEscalations = pgTable('stakeholder_escalations', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  reviewId:       uuid('review_id').notNull().references(() => stakeholderAlignmentReviews.id, { onDelete: 'cascade' }),
+  level:          integer('level').notNull().default(1),
+  ownerRef:       varchar('owner_ref', { length: 64 }),
+  status:         varchar('status', { length: 16 }).notNull().default('open'),
+  deadlineAt:     timestamp('deadline_at').notNull(),
+  reminder24hAt:  timestamp('reminder_24h_at'),
+  reminder4hAt:   timestamp('reminder_4h_at'),
+  outcome:        text('outcome'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  resolvedAt:     timestamp('resolved_at'),
+}, (t) => [
+  uniqueIndex('uq_stakeholder_escalation_level').on(t.reviewId, t.level),
+  index('idx_stakeholder_escalations_due').on(t.tenantId, t.status, t.deadlineAt),
+]);
 
 // ---------------------------------------------------------------------------
 // Governance & Security compliance trackers (doc 07, Phase 2; migration 0057).

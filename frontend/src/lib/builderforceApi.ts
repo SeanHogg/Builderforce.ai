@@ -4999,6 +4999,33 @@ export interface SocControl {
   updatedAt?: string;
 }
 
+export type StakeholderQuestionKey = 'priorities_clear' | 'competing_p0s_reconciled' | 'approvers_current' | 'conflicts_within_sla' | 'delivery_reflects_priorities';
+export type StakeholderAnswer = 'yes' | 'no' | 'unknown';
+
+export interface StakeholderMapEntry {
+  id: string;
+  stakeholderRef: string;
+  displayName: string;
+  role: 'required_approver' | 'informed';
+  teamScope: string | null;
+  priority: string | null;
+}
+
+export interface StakeholderDashboard {
+  approved: number;
+  pending: number;
+  overdue: number;
+  activeConflicts: number;
+  openEscalations: number;
+  urgent: string[];
+  digest: string;
+}
+
+export interface StakeholderHealthProfile {
+  score: number;
+  answers: Record<StakeholderQuestionKey, StakeholderAnswer>;
+}
+
 export const governanceApi = {
   soc2: {
     listControls: () => request<SocControl[]>('/api/governance/soc2/controls'),
@@ -5007,6 +5034,16 @@ export const governanceApi = {
       request<SocControl>(`/api/governance/soc2/controls/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     addEvidence: (id: string, body: { title: string; evidenceType: string; url?: string; note?: string }) =>
       request<{ id: string }>(`/api/governance/soc2/controls/${id}/evidence`, { method: 'POST', body: JSON.stringify(body) }),
+  },
+  stakeholder: {
+    map: (projectId: number) => request<{ stakeholders: StakeholderMapEntry[] }>(`/api/governance/stakeholder-alignment/projects/${projectId}/map`),
+    upsertMapEntry: (projectId: number, body: Omit<StakeholderMapEntry, 'id'>) =>
+      request<StakeholderMapEntry>(`/api/governance/stakeholder-alignment/projects/${projectId}/map`, { method: 'POST', body: JSON.stringify(body) }),
+    removeMapEntry: (id: string) => request<{ deactivated: string }>(`/api/governance/stakeholder-alignment/map/${id}`, { method: 'DELETE' }),
+    dashboard: (projectId: number) => request<StakeholderDashboard>(`/api/governance/stakeholder-alignment/projects/${projectId}/dashboard`),
+    healthProfile: (projectId: number) => request<{ profile: StakeholderHealthProfile | null }>(`/api/governance/stakeholder-alignment/projects/${projectId}/health-profile`),
+    saveHealthProfile: (projectId: number, answers: Record<StakeholderQuestionKey, StakeholderAnswer>) =>
+      request<StakeholderHealthProfile>(`/api/governance/stakeholder-alignment/projects/${projectId}/health-profile`, { method: 'PUT', body: JSON.stringify({ answers }) }),
   },
 };
 

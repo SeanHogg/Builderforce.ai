@@ -1,8 +1,9 @@
-import { and, eq, or, isNull } from 'drizzle-orm';
+import { eq, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { integrationCredentials } from '../../infrastructure/database/schema';
 import { BOARD_PROVIDERS } from '../boardsync/providerCatalog';
 import { CONNECTABLE_PROVIDERS, connectableCatalog } from './providerTests';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export interface IntegrationCatalogCandidate {
   provider: string;
@@ -126,12 +127,6 @@ export async function getMissingIntegrationRecommendations(
   tenantId: number,
   projectId?: number,
 ): Promise<MissingIntegrationRecommendation[]> {
-  const scope = projectId == null
-    ? eq(integrationCredentials.tenantId, tenantId)
-    : and(
-      eq(integrationCredentials.tenantId, tenantId),
-      or(isNull(integrationCredentials.projectId), eq(integrationCredentials.projectId, projectId)),
-    );
   const configured = await db
     .select({
       provider: integrationCredentials.provider,
@@ -139,7 +134,11 @@ export async function getMissingIntegrationRecommendations(
       isEnabled: integrationCredentials.isEnabled,
     })
     .from(integrationCredentials)
-    .where(scope);
+    .where(scopedToTenant(
+      integrationCredentials,
+      tenantId,
+      projectId == null ? undefined : or(isNull(integrationCredentials.projectId), eq(integrationCredentials.projectId, projectId)),
+    ));
 
   return deriveMissingIntegrationRecommendations(integrationRecommendationCatalog(), configured, projectId);
 }
