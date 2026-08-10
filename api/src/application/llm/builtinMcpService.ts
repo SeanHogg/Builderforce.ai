@@ -239,13 +239,15 @@ async function replayRoute(
   // Dynamic import avoids a static import cycle (index → routes → this module).
   const { buildApp } = await import('../../index');
   const app = buildApp(ctx.env);
-  const tok = ctx.authToken ?? '';
-  const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(tok);
-  const bearer = tok && !isGatewayKey
-    ? tok
+  const auth = resolveReplayAuth({
+    authToken: ctx.authToken,
+    agentRef: ctx.agentRef,
+  });
+  const bearer = auth.forwardToken
+    ? auth.forwardToken
     : await signJwt(
         {
-          sub: ctx.userId && !isGatewayKey ? ctx.userId : 'agentHost:mcp',
+          sub: auth.subject,
           tid: ctx.tenantId,
           role: ctx.role ?? TenantRole.DEVELOPER,
           // Signed authorship: when an AGENT is driving this call, the replayed route
@@ -273,6 +275,35 @@ async function replayRoute(
     throw new Error(`${method} ${path} → ${res.status} ${detail}`.slice(0, 400));
   }
   return parsed;
+}
+
+export interface ReplayAuthPlan {
+  /** A real person's still-authoritative bearer token. Never set for an agent run. */
+  forwardToken?: string;
+  /** Machine subject used when the platform must mint a fresh in-process token. */
+  subject: 'agentHost:mcp';
+}
+
+/**
+ * Decide how an in-process route replay authenticates.
+ *
+ * Cloud agents must never inherit the web/session JWT that happened to launch a
+ * run. A run can outlive that token, and an agent UUID is not a user with an
+ * `auth_tokens` row. Minting a fresh machine token per replay keeps the call
+ * bounded by the run's tenant/role while the signed `agt` claim above preserves
+ * the real agent authorship. Human MCP calls still forward their bearer so
+ * session revocation and exact user permissions remain authoritative.
+ */
+export function resolveReplayAuth(args: {
+  authToken?: string | null;
+  agentRef?: string | null;
+}): ReplayAuthPlan {
+  const token = args.authToken?.trim() ?? '';
+  const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(token);
+  if (!args.agentRef && token && !isGatewayKey) {
+    return { forwardToken: token, subject: 'agentHost:mcp' };
+  }
+  return { subject: 'agentHost:mcp' };
 }
 
 interface BuiltinTool {

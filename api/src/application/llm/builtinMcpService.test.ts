@@ -27,13 +27,33 @@ vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskReposit
 import {
   listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID,
   CLOUD_AGENT_PLATFORM_TOOLS, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool,
-  CHAT_SCOPED_AGENT_TOOLS,
+  CHAT_SCOPED_AGENT_TOOLS, resolveReplayAuth,
 } from './builtinMcpService';
 
 const db = {} as never;
 const TENANT = 7;
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('route replay authentication', () => {
+  it('mints a machine token for a cloud agent instead of forwarding its launching user session', () => {
+    expect(resolveReplayAuth({ authToken: 'expired.user.jwt', agentRef: 'agent-ada' })).toEqual({
+      subject: 'agentHost:mcp',
+    });
+  });
+
+  it('mints a machine token for gateway-key and server-side callers', () => {
+    expect(resolveReplayAuth({ authToken: 'bfk_secret' })).toEqual({ subject: 'agentHost:mcp' });
+    expect(resolveReplayAuth({})).toEqual({ subject: 'agentHost:mcp' });
+  });
+
+  it('preserves a real human bearer so revocation and user permissions still apply', () => {
+    expect(resolveReplayAuth({ authToken: 'header.payload.signature' })).toEqual({
+      forwardToken: 'header.payload.signature',
+      subject: 'agentHost:mcp',
+    });
+  });
+});
 
 describe('cloud-agent curated platform tool subset', () => {
   const allToolIds = new Set(listBuiltinTools().map((t) => t.tool));
