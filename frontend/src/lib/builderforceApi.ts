@@ -4,76 +4,33 @@
  * Uses tenant JWT from auth.
  */
 
-import { attachEvermindLearn } from '@seanhogg/builderforce-brain-embedded';
-import {
-  AUTH_API_URL,
-  checkUnauthorizedAndRedirect,
-  getStoredTenantToken,
-  getStoredWebToken,
-} from './auth';
+import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
+import { AUTH_API_URL, getStoredTenantToken } from './auth';
+import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
-import { dispatchApiError } from './errors/apiErrorEvent';
+import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /**
- * Surface a non-ok response as the global error toast (so failures like a board
- * move 500 are visible and copyable instead of failing silently) and throw.
- * Shared by request()/webRequest() so both paths report errors identically.
+ * `request` / `webRequest` are the two credential flavours this module's ~250
+ * consumers call. They are THIN WRAPPERS over `apiClient.apiRequest` — not
+ * re-implementations.
+ *
+ * They used to be their own copy of the fetch wrapper, and that copy was missing
+ * two headers `apiClient` sends: `X-Emulation-Token` and the locale header. Since
+ * 236 modules import from here and only 30 imported `apiClient` directly, the
+ * practical effect was that superadmin emulation showed the ADMIN's own data on
+ * almost every screen, and the API never learned which language the user had
+ * picked. Both are fixed by construction now: there is one place that builds
+ * headers, and it is `apiClient.getAuthHeaders`.
  */
-async function throwApiError(res: Response, method: string, path: string): Promise<never> {
-  const body = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
-  const message = body.error || res.statusText || `Request failed (${res.status})`;
-  dispatchApiError({
-    method: (method || 'GET').toUpperCase(),
-    url: `${AUTH_API_URL}${path}`,
-    status: res.status,
-    code: body.code,
-    message,
-    details: body.details,
-    requestId: res.headers.get('x-request-id') ?? undefined,
-  });
-  throw new Error(message);
+export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return apiRequest<T>(path, opts);
 }
 
-function authHeaders(): Record<string, string> {
-  const token = getStoredTenantToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
-
-function webAuthHeaders(): Record<string, string> {
-  const token = getStoredWebToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
-
-async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const headers = webAuthHeaders();
-  const hadToken = !!headers.Authorization;
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
-    ...opts,
-    headers: { ...headers, ...(opts.headers as Record<string, string>) },
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
-}
-
-export async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const headers = authHeaders();
-  const hadToken = !!headers.Authorization;
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
-    ...opts,
-    headers: { ...headers, ...(opts.headers as Record<string, string>) },
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+/** Same transport, carrying the person-level web JWT instead of the workspace one. */
+async function webRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return apiRequest<T>(path, { ...opts, auth: 'web' });
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +111,7 @@ export const toolsApi = {
 
 import type {
   JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
-  RoleAssignment, AssigneeKind,
+  RoleAssignment, AssigneeKind, AccountabilityReport, ManifestParticipant, SignoffContribution, ParticipantsSummaryRow, ImplicatedTicket,
 } from './kanban';
 
 export interface AssignableWorkforceDto {
@@ -234,8 +191,23 @@ export const kanbanApi = {
     request<{ audit: TicketAudit | null }>(`/api/kanban/tasks/${taskId}/audit`).then((r) => r.audit),
   recomputeAudit: (taskId: number): Promise<TicketAudit> =>
     request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/audit/recompute`, { method: 'POST' }).then((r) => r.audit),
-  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string }): Promise<TicketAudit> =>
+  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested' | 'waived' | 'delegated'; summary?: string; waiveReason?: string; contribution?: SignoffContribution }): Promise<TicketAudit> =>
     request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/signoff`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.audit),
+  // Coordinated Role Participation — manifest + accountability record.
+  accountability: (taskId: number): Promise<AccountabilityReport> =>
+    request<{ accountability: AccountabilityReport }>(`/api/kanban/tasks/${taskId}/accountability`).then((r) => r.accountability),
+  participants: (taskId: number): Promise<ManifestParticipant[]> =>
+    request<{ participants: ManifestParticipant[] }>(`/api/kanban/tasks/${taskId}/participants`).then((r) => r.participants),
+  assessResource: (taskId: number, body: { roleKey: string; responsibility?: 'owner' | 'reviewer' | 'contributor'; stageKey?: string; note?: string }): Promise<ManifestParticipant | null> =>
+    request<{ participant: ManifestParticipant | null }>(`/api/kanban/tasks/${taskId}/participants`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.participant),
+  removeParticipant: (taskId: number, participantId: string): Promise<void> =>
+    request<{ ok: boolean }>(`/api/kanban/tasks/${taskId}/participants/${participantId}`, { method: 'DELETE' }).then(() => undefined),
+  materializeParticipants: (taskId: number): Promise<number> =>
+    request<{ created: number }>(`/api/kanban/tasks/${taskId}/participants/materialize`, { method: 'POST' }).then((r) => r.created),
+  participantsSummary: (projectId: number): Promise<ParticipantsSummaryRow[]> =>
+    request<{ summary: ParticipantsSummaryRow[] }>(`/api/kanban/projects/${projectId}/participants-summary`).then((r) => r.summary),
+  coordinate: (taskId: number): Promise<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }> =>
+    request<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }>(`/api/kanban/tasks/${taskId}/coordinate`, { method: 'POST' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -310,25 +282,13 @@ export interface GenerateDeckResponse {
   downloadUrl: string;
 }
 
-/** Trigger a browser download of a Blob (the .pptx). */
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 export const decksApi = {
   /** List built-in + tenant deck templates. */
   listTemplates: (): Promise<DeckTemplateSummary[]> =>
     request<{ templates: DeckTemplateSummary[] }>('/api/decks/templates').then((r) => r.templates),
 
   /** Generate a deck (Brain path) — returns the id + warnings, no binary. */
-  generate: (args: { mode?: 'generative' | 'fill'; templateId?: string; quarter?: string; prompt?: string }): Promise<GenerateDeckResponse> =>
+  generate: (args: { mode?: 'generative' | 'fill'; templateId?: string; quarter?: string }): Promise<GenerateDeckResponse> =>
     request<GenerateDeckResponse>('/api/decks/generate', { method: 'POST', body: JSON.stringify(args) }),
 
   /** Promote an already-uploaded .pptx (brain upload key) into a tenant template. */
@@ -344,19 +304,17 @@ export const decksApi = {
     if (args.templateId) q.set('template', args.templateId);
     if (args.quarter) q.set('quarter', args.quarter);
     if (args.mode) q.set('mode', args.mode);
-    const res = await fetch(`${AUTH_API_URL}/api/decks/download?${q.toString()}`, { headers: authHeaders() });
-    if (!res.ok) await throwApiError(res, 'GET', '/api/decks/download');
+    const res = await apiRequestStream(`/api/decks/download?${q.toString()}`);
+    if (!res.ok) throw new Error(`Deck download failed (${res.status})`);
     const blob = await res.blob();
-    const cd = res.headers.get('content-disposition') ?? '';
-    const m = /filename="?([^"]+)"?/.exec(cd);
-    saveBlob(blob, m?.[1] ?? `deck-${args.quarter ?? 'latest'}.pptx`);
+    downloadBlob(blob, filenameFromResponse(res, `deck-${args.quarter ?? 'latest'}.pptx`));
   },
 
   /** Download a previously generated deck by id. */
   async downloadById(deckId: string, filename = 'deck.pptx'): Promise<void> {
-    const res = await fetch(`${AUTH_API_URL}/api/decks/${encodeURIComponent(deckId)}/download`, { headers: authHeaders() });
-    if (!res.ok) await throwApiError(res, 'GET', `/api/decks/${deckId}/download`);
-    saveBlob(await res.blob(), filename);
+    const res = await apiRequestStream(`/api/decks/${encodeURIComponent(deckId)}/download`);
+    if (!res.ok) throw new Error(`Deck download failed (${res.status})`);
+    downloadBlob(await res.blob(), filename);
   },
 };
 
@@ -380,6 +338,12 @@ export interface BrainChat {
   projectId: number | null;
   /** Where the chat was created: 'brainstorm' | 'ide' | 'project'. Tells the page which tools to load. */
   origin?: string;
+  /** What the chat is making — a capability id (see lib/brain/capabilities.ts).
+   *  Shapes the system prompt and the export format; null = no capability. */
+  capability?: string | null;
+  /** What the chat is FOR — 'chat' (a conversation) or 'work' (an execution that
+   *  creates, links and dispatches real work). See lib/brain/chatModes.ts. */
+  mode?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -406,7 +370,7 @@ export const brain = {
     return request<{ chats: BrainChat[] }>(`/api/brain/chats${query ? `?${query}` : ''}`).then((r) => r.chats);
   },
 
-  createChat: (body: { title?: string; projectId?: number | null }) =>
+  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }) =>
     request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Resolve-or-create the canonical TEAM chat for a scope: a project when
@@ -424,7 +388,7 @@ export const brain = {
 
   getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
-  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }) =>
+  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }) =>
     request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   deleteChat: (id: number) =>
@@ -438,6 +402,17 @@ export const brain = {
     const q = limit != null ? `?limit=${limit}` : '';
     return request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages${q}`).then((r) => r.messages);
   },
+
+  subscribeMessages: (chatId: number, onChanged: () => void) =>
+    subscribeToChatMessages(AUTH_API_URL, getStoredTenantToken, chatId, onChanged),
+
+  /** Advance the caller's unread high-water mark for a chat (clears its unread
+   *  badge). `seq` omitted marks everything read. Best-effort on the client. */
+  markChatRead: (chatId: number, seq?: number) =>
+    request<{ lastReadSeq: number }>(`/api/brain/chats/${chatId}/read`, {
+      method: 'POST',
+      body: JSON.stringify(seq != null ? { seq } : {}),
+    }),
 
   sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
     request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {
@@ -458,24 +433,14 @@ export const brain = {
 
   /** Upload a file for use as an attachment in chat. Returns key, name, type. */
   upload: async (file: File): Promise<{ key: string; name: string; type: string }> => {
-    const token = getStoredTenantToken();
-    const hadToken = !!token;
     const form = new FormData();
     form.append('file', file);
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${AUTH_API_URL}/api/brain/upload`, {
+    // apiRequest leaves Content-Type unset for FormData so the multipart
+    // boundary survives — no hand-built header block needed.
+    return request<{ key: string; name: string; type: string }>('/api/brain/upload', {
       method: 'POST',
-      headers,
       body: form,
     });
-    checkUnauthorizedAndRedirect(res, hadToken);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error || res.statusText || 'Upload failed');
-    }
-    const data = (await res.json()) as { key: string; name: string; type: string };
-    return data;
   },
 
   /** URL to view/download an uploaded file by key. */
@@ -575,21 +540,28 @@ export const brain = {
    *  the timeline can rehydrate them after a reload. Best-effort; the caller drops
    *  the promise. Clears the local read cache so the next GET reflects the append. */
   appendChatTrace: (chatId: number, events: BrainChatTraceEventInput[]) => {
-    brainTraceCache.delete(chatId);
+    invalidateClientCache(`brain-trace:${chatId}`);
     return request<{ appended: number }>(`/api/brain/chats/${chatId}/trace`, {
       method: 'POST',
       body: JSON.stringify({ events }),
     });
   },
 
-  /** Load a chat's persisted run trace (oldest-first). Cached per-chat client-side
-   *  (invalidated by appendChatTrace) so switching chats back and forth is cheap. */
-  getChatTrace: async (chatId: number): Promise<BrainChatTraceRow[]> => {
-    const cached = brainTraceCache.get(chatId);
-    if (cached) return cached;
-    const { trace } = await request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`);
-    brainTraceCache.set(chatId, trace);
-    return trace;
+  /**
+   * Load a chat's persisted run trace (oldest-first). Cached per-chat client-side so
+   * switching chats back and forth is cheap.
+   *
+   * `refresh` bypasses that cache, and exists because the trace is no longer written
+   * only by this client: an addressed-agent reply now appends its tool trace SERVER-side,
+   * and a client cache invalidated solely by `appendChatTrace` can never learn about a
+   * write it did not make. A diagnostics capture that silently returned a pre-reply trace
+   * would be wrong in precisely the way that wastes the session it was captured for.
+   */
+  getChatTrace: async (chatId: number, opts?: { refresh?: boolean }): Promise<BrainChatTraceRow[]> => {
+    const key = `brain-trace:${chatId}`;
+    if (opts?.refresh) invalidateClientCache(key);
+    return getOrSetClientCached(key, () =>
+      request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`).then(({ trace }) => trace));
   },
 };
 
@@ -618,9 +590,6 @@ export interface BrainChatTraceEventInput {
   ttftMs?: number;
   turnSeq?: number;
 }
-
-/** Per-chat client cache for the persisted trace GET (cleared on append). */
-const brainTraceCache = new Map<number, BrainChatTraceRow[]>();
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
 export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
@@ -687,6 +656,10 @@ export interface WebFetchResult {
   /** Plain-text content (HTML stripped), capped server-side. */
   text: string;
   truncated: boolean;
+  /** Whether the origin lets us frame the page (read off X-Frame-Options / CSP frame-ancestors). */
+  frameable: boolean;
+  /** Which header refused the frame, else null. */
+  frameBlockedBy: 'x-frame-options' | 'frame-ancestors' | null;
 }
 
 /** Structured error from the LLM gateway, with the fields callers branch on. */
@@ -727,19 +700,20 @@ export async function llmChat(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   options?: { temperature?: number; maxTokens?: number; model?: string }
 ): Promise<{ content: string }> {
-  const headers = authHeaders();
-  const hadToken = !!headers.Authorization;
-  const res = await fetch(`${AUTH_API_URL}/llm/v1/chat/completions`, {
+  // Streams through the shared transport for headers + the 401 redirect, but
+  // keeps its own error parsing: the gateway returns OpenAI-shaped error
+  // envelopes that callers branch on via `.code`/`.body` (see parseLlmError),
+  // which the generic handler would flatten to a message string.
+  const res = await apiRequestStream('/llm/v1/chat/completions', {
     method: 'POST',
-    headers,
     body: JSON.stringify({
       model: options?.model ?? 'openai/gpt-4o-mini',
       messages,
       temperature: options?.temperature ?? 0.3,
       max_tokens: options?.maxTokens ?? 4096,
     }),
+    expectedErrors: [400, 402, 403, 429, 500, 502, 503],
   });
-  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) throw await parseLlmError(res);
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content?.trim() ?? '';
@@ -793,15 +767,18 @@ export const agentHosts = {
     return `${base}/api/agent-hosts/${agentHostId}/ws?token=${encodeURIComponent(token || '')}`;
   },
 
-  /** Tool audit events for timeline/observability. */
+  /** Tool audit events for timeline/observability. Pass executionId to scope to a
+   *  single run (parity with cloudAgents.toolAuditEvents) so a host run's Logs/Timeline
+   *  isolates one execution and surfaces its terminal run.failed. */
   toolAuditEvents: (
     agentHostId: number,
-    params?: { runId?: string; sessionKey?: string; limit?: number }
+    params?: { runId?: string; sessionKey?: string; limit?: number; executionId?: number }
   ) => {
     const q = new URLSearchParams();
     if (params?.runId) q.set('runId', params.runId);
     if (params?.sessionKey) q.set('sessionKey', params.sessionKey);
     if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.executionId != null) q.set('executionId', String(params.executionId));
     const query = q.toString();
     return request<{ events: ToolAuditEvent[] }>(
       `/api/agent-hosts/${agentHostId}/tool-audit${query ? `?${query}` : ''}`
@@ -980,7 +957,9 @@ export type EvermindBuildKind =
 
 export type WorkflowNodeKind =
   | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
-  | 'transform' | 'filter' | 'branch' | 'output'
+  | 'transform' | 'filter' | 'branch' | 'output' | 'gmail'
+  /** The ONE node through which every connector action is reachable. */
+  | 'connector'
   | EvermindBuildKind;
 
 export interface WorkflowDefNode {
@@ -1088,6 +1067,16 @@ export const workflowDefinitions = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /**
+   * Compile a Creation Canvas workflow object's authored `steps` into a real,
+   * runnable definition. All-or-nothing: on 400 the thrown `ApiRequestError`
+   * carries `details.issues` naming each step that is not runnable and why.
+   */
+  fromCanvas: (body: { name: string; description?: string; steps: unknown; triggerType?: string } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
+    request<WorkflowDefinitionDetail & { compiledCount: number }>('/api/workflow-definitions/from-canvas', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
       method: 'PATCH',
@@ -1112,9 +1101,7 @@ export const workflowDefinitions = {
     }),
   /** Export a definition as YAML text (for download / hand-editing). */
   exportYaml: async (id: string): Promise<string> => {
-    const res = await fetch(`${AUTH_API_URL}/api/workflow-definitions/${id}/export`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('Export failed');
-    return res.text();
+    return apiRequestText(`/api/workflow-definitions/${id}/export`);
   },
   /** Create a definition from a hand-authored YAML/JSON document. */
   importYaml: (name: string, yaml: string) =>
@@ -1151,6 +1138,8 @@ export interface MarketplaceSkill {
   repo_url: string | null;
   downloads: number;
   likes: number;
+  price_cents: number;
+  pricing_model: 'flat_fee' | 'consumption';
   created_at: string;
   author_username?: string;
   author_display_name?: string;
@@ -1170,18 +1159,12 @@ export async function listMarketplaceSkills(params?: {
   if (params?.page != null) q.set('page', String(params.page));
   if (params?.limit != null) q.set('limit', String(params.limit));
   const query = q.toString();
-  const res = await fetch(`${AUTH_API_URL}/marketplace/skills${query ? `?${query}` : ''}`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || 'Request failed');
-  }
-  const data = (await res.json()) as {
+  return apiRequest<{
     skills: MarketplaceSkill[];
     total: number;
     page: number;
     limit: number;
-  };
-  return data;
+  }>(`/marketplace/skills${query ? `?${query}` : ''}`, { auth: 'none' });
 }
 
 // ---------------------------------------------------------------------------
@@ -1448,9 +1431,36 @@ export type AutoRunReason =
   | 'terminal_lane'
   | 'human_gate'
   | 'no_agent'
+  /** LIFECYCLE-MANAGED board: every run must be attributed to a role the stage
+   *  authorizes, and none resolves to an agent here. Distinct from `no_agent`
+   *  because the fix is different — assigning an owner does nothing on a managed
+   *  board, where the assignee is the Coordinator rather than an executor. */
+  | 'managed_no_role'
+  /** LIFECYCLE-MANAGED board: the stage authorizes NO role at all — no requirement
+   *  declared and no agent staffed — so there is nothing to bind rather than nothing
+   *  bound. The repair configures the lane; no amount of staffing reaches it (0386). */
+  | 'lane_unconfigured'
   | 'capability_mismatch'
+  /** A live (pending/submitted/running/paused) run exists on the ticket. */
   | 'already_running'
-  | 'not_executable';
+  /** The run that just finished already SERVED this lane, so the loop guard
+   *  suppressed an immediate re-dispatch. Distinct from `already_running`: nothing
+   *  is executing. The two shared one reason until a report claimed a live run
+   *  directly above its own `liveExecution: (none)`. */
+  | 'same_lane_reentry'
+  | 'run_cap_exhausted'
+  /** The TENANT is over its monthly cloud-run allowance. Unlike every other
+   *  refusal this one does not clear by retrying, and a human "Run now" does not
+   *  override it — it is an entitlement, not backpressure. */
+  | 'cloud_run_limit'
+  /** The WORKSPACE is out of token budget — this pauses EVERY ticket the tenant
+   *  owns, so a ticket showing it is not individually stuck. */
+  | 'tenant_token_limit'
+  | 'cooldown_active'
+  | 'not_executable'
+  | 'pending_approval'
+  /** The lane owes a role sign-off, so its normal agent is suppressed. */
+  | 'lane_requirement_gate';
 
 export interface AutoRunDiagnostic {
   status: string;
@@ -1469,6 +1479,267 @@ export interface AutoRunDiagnostic {
   liveExecution: { id: number; status: string } | null;
   canRunNow: boolean;
   reason: AutoRunReason;
+  /** Milliseconds still owed on the per-ticket re-run cooldown (0 unless the reason
+   *  is `cooldown_active`) — lets triage say when the ticket resumes. */
+  cooldownRemainingMs?: number;
+  /** Trailing consecutive FAILED runs. Reported even when it did not decide the
+   *  reason — a stall shown with a deep streak is a retry storm, not a quiet wait. */
+  consecutiveFailures?: number;
+  /** The server's breaker threshold, so the UI compares without duplicating it. */
+  failureBreakerAt?: number;
+}
+
+// ── Ticket lifecycle / autonomy proof (GET /api/tasks/:id/lifecycle) ────────
+// The audit read behind the Lifecycle panel. Every field mirrors the api's
+// `ticketLifecycleLedger` wire shape — the ledger JOINs four collectors that were
+// already writing, which is why it answers for tickets closed weeks ago too.
+// PER-TICKET only; the fleet-wide funnel over the same ledger is
+// `lib/autonomyApi.ts` (`GET /api/insights/autonomy`).
+
+/** Which table a ledger row was READ FROM — the chain of custody for an audit. */
+export type LifecycleEventSource =
+  | 'activity_log'
+  | 'task_status_transitions'
+  | 'executions'
+  | 'tool_audit_events';
+
+export type LifecycleEventKind =
+  | 'created'
+  | 'lane_moved'
+  | 'run_dispatched'
+  | 'run_completed'
+  | 'run_failed'
+  | 'autorun_dispatched'
+  | 'autorun_skipped'
+  | 'autorun_error'
+  | 'autorun_awaiting_approval'
+  /** A non-terminal RUN state that held the ticket still — an abandoned agent
+   *  question timing out, a self-heal re-queue, a backplane crash, a queued run. */
+  | 'run_lifecycle'
+  | 'role_event';
+
+/** Who drove one event. 'system' covers agents + automation (the `actor_kind` the
+ *  lane-transition log records for every non-human write). */
+export type LifecycleActorKind = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'unknown';
+
+/** One ordered, provenance-tagged fact in a ticket's life. */
+export interface LifecycleEvent {
+  at: string;
+  kind: LifecycleEventKind;
+  actorKind: LifecycleActorKind;
+  actorName: string | null;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  /** Backward lane move (a redo / another pass). */
+  isBackward?: boolean | null;
+  /** The auto-run gate that fired, for the `autorun_*` kinds. */
+  reason?: AutoRunReason | null;
+  executionId?: number | null;
+  agentRef?: string | null;
+  detail?: string | null;
+  /** `executions.submitted_by` — WHICH dispatcher started this run
+   *  (`system:lane-auto`, `system:coordinator`, `manager:signoff-request:…`, …). */
+  dispatchedBy?: string | null;
+  /** How long a `run_dispatched` waited between being created and actually starting,
+   *  ms — present only when the wait was long enough to matter. A queued run holds
+   *  the ticket's live-run guard, so this is the fact that explains a long stretch
+   *  of `already_running` skips with nothing visibly happening. */
+  queuedMs?: number | null;
+  source: LifecycleEventSource;
+}
+
+/** Failed runs collapsed by cause — the retry-storm rollup. */
+export interface LifecycleFailureGroup {
+  /** The error message with its volatile parts (ids, counters) stripped. */
+  signature: string;
+  /** One verbatim message, so collapsing never loses the exact text. */
+  sample: string;
+  runs: number;
+  firstAt: string;
+  lastAt: string;
+  exampleExecutionIds: number[];
+  dispatchers: string[];
+  /** Median gap between consecutive failures — a tight regular interval across many
+   *  runs is an automated retry loop, not a few unlucky attempts. */
+  medianIntervalMs: number | null;
+}
+
+/** What one dispatcher did to this ticket — names the subsystem to go and stop. */
+export interface LifecycleDispatcher {
+  submittedBy: string;
+  runs: number;
+  completed: number;
+  failed: number;
+  firstAt: string;
+  lastAt: string;
+}
+
+/** The LIVE gate evaluation: why it is not running right now, WITH the evidence. */
+export interface LifecycleGateSnapshot {
+  canRunNow: boolean;
+  reason: AutoRunReason;
+  reasonText: string;
+  laneGate: 'auto' | 'human' | null;
+  laneResolved: boolean;
+  isTerminalLane: boolean;
+  assignedAgentRef: string | null;
+  staffedAgentRefs: string[];
+  candidateAgentRef: string | null;
+  liveExecution: { id: number; status: string } | null;
+  capabilityMismatches: { agentRef: string; missing: string[] }[];
+  consecutiveFailures: number;
+  failureBreakerAt: number;
+  cooldownRemainingMs: number;
+  /** The WORKSPACE token verdict. Null means the evaluator never reached it (an
+   *  earlier gate decided) — NOT that the workspace has budget. When it is present
+   *  and exhausted, every ticket the tenant owns is paused, which is why a ticket can
+   *  show an open lane gate and a qualified agent and still never dispatch. */
+  tenantTokens: LifecycleTenantTokens | null;
+  /** The board is lifecycle-managed, so a run must be role-attributed — which makes
+   *  `staffedAgentRefs` / `assignedAgentRef` insufficient to answer "can this run". */
+  lifecycleManaged: boolean;
+  /** Roles this stage authorizes for this ticket. Empty on a managed board = nothing runs. */
+  authorizedRoleKeys: string[];
+  /** The role-attributed run that would go out, when one resolves. */
+  // `roster` = resolved from the workspace roster (a project_role_assignments pin,
+  // declared role_keys, builtin_kind, or a title/skill match) rather than from the lane's
+  // own staffing. See api `managedLaneRoles.bindStaffedAgentsToRoles`.
+  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' | 'roster' } | null;
+}
+
+/** Workspace token budget as the lifecycle report needs it: blocked or not, which
+ *  window blew, and the usage/limit pair that proves it. */
+export interface LifecycleTenantTokens {
+  hasTokens: boolean;
+  reason: 'daily_exhausted' | 'monthly_exhausted' | null;
+  usageToday: number;
+  dailyLimit: number;
+  usageMonth: number;
+  monthlyLimit: number;
+  effectivePlan: 'free' | 'pro' | 'teams';
+}
+
+/** How the ticket came into existence — `manager_card` is a grooming card that is
+ *  never executable by design, so "it never ran" is intended, not a failure. */
+export type TicketOrigin = 'human' | 'agent' | 'system' | 'manager_card' | 'unknown';
+
+/** The verdict: did autonomy move this ticket, or did a person push every hop? */
+export interface TicketAutonomyVerdict {
+  origin: TicketOrigin;
+  currentStatus: string;
+  isTerminal: boolean;
+  /** Lane moves written by an agent / automation. */
+  autonomousHops: number;
+  /** Lane moves a person made. */
+  humanHops: number;
+  /** Backward lane moves (redo). */
+  backwardHops: number;
+  runsDispatched: number;
+  runsCompleted: number;
+  runsFailed: number;
+  hasLiveRun: boolean;
+  reachedTerminal: boolean;
+  /** Reached a terminal lane with ZERO human lane moves. */
+  fullyAutonomous: boolean;
+  progressedAutonomously: boolean;
+  stalled: boolean;
+  stallReason: AutoRunReason | null;
+  /** The api's plain-English sentence for `stallReason` (fallback for locales /
+   *  reasons the UI has no catalog entry for). */
+  stallText: string | null;
+  /** The most recent recorded auto-run refusal, before the live re-evaluation. */
+  lastSkipReason?: AutoRunReason | null;
+}
+
+export interface TicketLifecycle {
+  taskId: number;
+  projectId: number;
+  title: string;
+  key: string;
+  createdAt: string;
+  events: LifecycleEvent[];
+  verdict: TicketAutonomyVerdict;
+  /** Failed runs collapsed by cause, dominant cause first. */
+  failures: LifecycleFailureGroup[];
+  /** Which subsystem dispatched the runs, busiest first. */
+  dispatchers: LifecycleDispatcher[];
+  /** The live gate evaluation (null when the server could not evaluate it). */
+  gate: LifecycleGateSnapshot | null;
+}
+
+// ---------------------------------------------------------------------------
+// Ticket context — the drawer header's "why does this matter / how far along" read
+// ---------------------------------------------------------------------------
+
+/** One contributing signal behind a ticket's headline %-complete. */
+export interface CompletionBasis {
+  kind: 'lane' | 'signoff' | 'children';
+  percent: number;
+  /** Weight this signal carried in the headline number (0..1). */
+  weight: number;
+  done: number;
+  total: number;
+}
+
+export interface TicketCompletion {
+  percent: number;
+  laneKey: string;
+  /** 0-based index of this ticket's lane among the board's ordered lanes (-1 = unplaceable). */
+  laneIndex: number;
+  laneCount: number;
+  isTerminal: boolean;
+  basis: CompletionBasis[];
+}
+
+/** A parent Epic (or this ticket's own children when IT is the Epic). */
+export interface TicketEpicRollup {
+  id: number;
+  key: string;
+  title: string;
+  status: string;
+  total: number;
+  done: number;
+  percent: number;
+}
+
+export interface TicketKeyResult {
+  id: string;
+  title: string;
+  status: string;
+  unit: string | null;
+  currentValue: number;
+  targetValue: number;
+  percent: number;
+}
+
+export interface TicketObjective {
+  id: string;
+  title: string;
+  status: string;
+  period: string | null;
+  /** 0..100 — mean attainment of the objective's key results. */
+  percent: number;
+  /** How this ticket reaches the objective (nearest link wins). */
+  via: 'task' | 'epic' | 'project' | 'initiative';
+  /** Human anchor for `via`: the Epic's title, the initiative's name, etc. */
+  viaLabel: string | null;
+  keyResults: TicketKeyResult[];
+  linkedTaskCount: number;
+  linkedTaskDone: number;
+  /** This ticket's share of the objective's linked delivery, 0..100 (0 = inherited scope). */
+  sharePercent: number;
+}
+
+export interface TicketContext {
+  taskId: number;
+  projectId: number;
+  completion: TicketCompletion;
+  signoff: { completed: number; required: number; percent: number; gaps: number; outstandingRoles: string[] };
+  /** The Epic this ticket belongs to, with ITS rollup. Null when top-level. */
+  epic: TicketEpicRollup | null;
+  /** This ticket's own children rollup — set only when the ticket IS an Epic. */
+  children: TicketEpicRollup | null;
+  objectives: TicketObjective[];
 }
 
 /** The three work-item types you can convert between across the board ⇄ OKR boundary. */
@@ -1547,6 +1818,10 @@ export const tasksApi = {
     request<Task>(`/api/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+      // A lifecycle-managed board intentionally returns 409 when required role
+      // sign-offs still block Done. The board renders that explanation inline;
+      // it is a workflow decision, not a global support-ticket-worthy API fault.
+      expectedErrors: [409],
     }),
 
   delete: (id: number): Promise<void> =>
@@ -1565,6 +1840,16 @@ export const tasksApi = {
   /** Triage: why a ticket will / will not auto-run its assigned agent. */
   autorunDiagnostics: (id: number): Promise<AutoRunDiagnostic> =>
     request<AutoRunDiagnostic>(`/api/tasks/${id}/autorun-diagnostics`),
+
+  /** AUDIT: the ticket's whole life as an ordered, provenance-tagged chain of
+   *  custody, plus the verdict on whether autonomy or a human moved it. */
+  lifecycle: (id: number): Promise<TicketLifecycle> =>
+    request<TicketLifecycle>(`/api/tasks/${id}/lifecycle`),
+
+  /** CONTEXT: %-complete (and what it's made of), the parent Epic's rollup, the
+   *  outstanding sign-offs, and the objective(s) this ticket serves. */
+  context: (id: number): Promise<TicketContext> =>
+    request<TicketContext>(`/api/tasks/${id}/context`),
 
   /** Triage: dispatch the ticket's owner / first-capable lane agent now,
    *  overriding the lane gate (an explicit human click is the approval). */
@@ -1632,7 +1917,33 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 
 /** The action types the manager records on each run (drives the activity feed). */
 export type ManagerActionType =
-  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'flag';
+  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag'
+  /** Placed previously-undated tickets on the timeline (0364). */
+  | 'schedule'
+  /** Staffed a flagged ticket's missing role owner/reviewer (the fix for a flag). */
+  | 'coordinate'
+  /** A PR was ready but the effective policy withholds merge authority (0363) — the
+   *  manager stopped and said so instead of skipping silently. */
+  | 'merge_blocked'
+  /** The provider REFUSED the merge (0381). Its own type because the merge ceiling
+   *  counts these: the Nth refusal retires the PR to a human instead of retrying
+   *  every pass forever. */
+  | 'merge_failed'
+  /** The PR's branch conflicts with its base (0381). Its own type because it is the
+   *  only record that the PR loop worked a conflicting PR, and the manager's
+   *  least-recently-worked rotation orders by exactly that. */
+  | 'pr_conflict'
+  /** Reconciled provider PR state and handed any follow-up work to the manager queue. */
+  | 'reconcile_pr'
+  /** A stalled ticket was diagnosed and its remedy applied (0367 stall triage). */
+  | 'triage'
+  /** The manager's own remedy stopped working, so the ticket went to a human (0367). */
+  | 'escalate'
+  /**
+   * A whole COHORT of tickets stalled for one reason was judged a platform defect, and
+   * the manager filed a ticket for the root cause rather than remediating each one (0373).
+   */
+  | 'systemic';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {
@@ -1643,6 +1954,23 @@ export interface ManagerConfig {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** May the manager place UNDATED tickets on the timeline (0364)? Ranking says what
+   *  comes first; this says WHEN. Only ever fills tickets carrying neither date. */
+  autoSchedule: boolean;
+  /** Autonomous completion/merge requires unanimous role sign-off (0362). */
+  requireSignoffToComplete: boolean;
+  /** Whether the manager may merge this project's PRs unattended (0363) — SEPARATE from
+   *  `prMergePolicy`, which only says HOW a permitted merge happens. `null` = inherit the
+   *  workspace default (see `ManagerTenantDefaults`). */
+  allowAutoMerge: boolean | null;
+  /** Ceremony autonomy for THIS project (0365). `null` = inherit the workspace default. */
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  /** May the manager configure a lane that authorises NO role (0386)? `null` = inherit. */
+  allowAutoStaffLanes: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
+  managerType: ManagerTypeId;
   lastRunAt: string | null;
 }
 
@@ -1662,7 +1990,13 @@ export interface ManagerTypeOption {
   description: string;
 }
 
-/** Effective policy (config merged with defaults + resolved manager kind). */
+/**
+ * The EFFECTIVE policy — the resolved answer, computed SERVER-SIDE by the one shared
+ * three-tier fold (hardcoded default ← workspace defaults ← project row). Never re-derive
+ * it on the client: precedence is not uniformly "nearest tier wins" (the authority gates
+ * resolve most-restrictive-wins), and a second implementation of that rule is a second
+ * chance to disagree with the manager about what it may actually do.
+ */
 export interface ManagerPolicy {
   enabled: boolean;
   managerRef: string | null;
@@ -1671,8 +2005,66 @@ export interface ManagerPolicy {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** May the manager place UNDATED tickets on the timeline (0364) — the resolved grant. */
+  autoSchedule: boolean;
   /** The manager's domain type / role. */
   managerType: ManagerTypeId;
+  /** Autonomous completion/merge is gated on unanimous role sign-off (0362). */
+  requireSignoffToComplete: boolean;
+  /** Whether the manager may merge unattended at all (0363) — the resolved grant. */
+  allowAutoMerge: boolean;
+  /** May the manager CONDUCT a ceremony with no humans present (0365)? When false, a
+   *  standup nobody joined is recorded as abandoned and acts on nothing. */
+  allowUnattendedCeremonies: boolean;
+  /** May a ceremony move an absent human's ticket onto an agent (0365)? Absence alone
+   *  never suffices — the ticket must also be idle past `agentReassignIdleHours`. */
+  allowAgentReassignment: boolean;
+  /** Hours a ticket must have sat untouched before an absent owner's claim lapses. */
+  agentReassignIdleHours: number;
+  /** Hard cap on reassignments one ceremony may make. */
+  agentReassignMaxPerSession: number;
+  /**
+   * May the manager staff a lane that authorises NO role at all (0386)?
+   *
+   * Such a lane can never dispatch on a lifecycle-managed board, and the manager can fix
+   * it — but doing so starts every ticket sitting in the lane, so the grant is withheld
+   * until an operator gives it. The gap is REPORTED either way.
+   */
+  allowAutoStaffLanes: boolean;
+}
+
+/**
+ * The WORKSPACE tier (migration 0363) — the autonomy defaults every project inherits
+ * unless its own config row says otherwise. Every field is nullable and `null` means
+ * "this workspace expresses no opinion, use the built-in default", which is exactly what
+ * the settings UI renders as the "Not set / inherit" choice.
+ */
+export interface ManagerTenantDefaults {
+  enabled: boolean | null;
+  prMergePolicy: PrMergePolicy | null;
+  autoAssign: boolean | null;
+  autoBusinessValue: boolean | null;
+  autoPrioritize: boolean | null;
+  autoSchedule: boolean | null;
+  requireSignoffToComplete: boolean | null;
+  allowAutoMerge: boolean | null;
+  /** Ceremony autonomy (0365) — same tier, same fold, same null-means-inherit rule. */
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  /** May the manager configure a lane that authorises NO role (0386)? `null` = inherit. */
+  allowAutoStaffLanes: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
+}
+
+/** GET/PATCH /api/manager/defaults. Every resolved value is server-computed. */
+export interface ManagerDefaultsResponse {
+  /** The raw stored opinions — nulls kept, so "not set" stays distinguishable. */
+  defaults: ManagerTenantDefaults | null;
+  /** What a project with no config row of its own resolves to. */
+  policy: ManagerPolicy;
+  /** The tier BELOW the workspace — what a field left unset resolves to. */
+  builtinPolicy: ManagerPolicy;
 }
 
 /** One standing coaching directive that steers the manager (project-scoped, or
@@ -1693,8 +2085,15 @@ export interface ManagerStats {
   total: number;
   unscored: number;
   unranked: number;
+  /** Tickets with NEITHER a start nor a due date — invisible on every dated surface. */
+  undated: number;
   unowned: number;
   openPullRequests: number;
+  /** Of those, the ones the manager RETIRED to a human — it will not try them again.
+   *  Optional: an older API omits it. */
+  blockedPullRequests?: number;
+  /** Tickets whose required role/reviewer coverage is unmet (the manager staffs these). */
+  flagged: number;
   lastRunAt: string | null;
 }
 
@@ -1718,6 +2117,8 @@ export interface ManagerBacklogItem {
 export interface ManagerAction {
   id: string;
   taskId: number | null;
+  ticketKey?: string | null;
+  ticketTitle?: string | null;
   actionType: ManagerActionType;
   summary: string;
   detail: string | null;
@@ -1750,12 +2151,73 @@ export interface ManagerAutonomy {
 }
 
 /** The full manager overview returned by GET /api/manager/:projectId. */
+/**
+ * An open pull request the manager has RETIRED to a human (0386): a ceiling was spent
+ * and the manager stopped trying. Ranked by the business value of the ticket it would
+ * deliver, because the merge queue turns a livelock into a pile and a pile nobody can
+ * rank is only marginally better than the livelock.
+ */
+export interface ManagerBlockedPr {
+  id: string;
+  number: number | null;
+  url: string | null;
+  taskId: number | null;
+  taskKey: string | null;
+  title: string | null;
+  businessValue: number | null;
+  /** `done` here means the PR is a bulk-close candidate — its ticket finished elsewhere. */
+  taskStatus: string | null;
+  /** Why the manager gave up: sync_exhausted | merge_failed_exhausted. Conflicts are
+   *  recoverable and stay in the autonomous merge train. */
+  reason: string | null;
+  blockedAt: string | null;
+}
+
+/** One standing manager verdict — a decision written only when its answer changes. */
+export interface ManagerStateDecision {
+  summary: string;
+  detail: string | null;
+  createdAt: string;
+}
+
 export interface ManagerOverview {
   config: ManagerConfig | null;
   policy: ManagerPolicy;
+  /** Raw workspace-tier opinions. Optional for compatibility with older APIs; null or
+   * null-valued fields mean the built-in default applies, not an explicit workspace veto. */
+  tenantConfig?: ManagerTenantDefaults | null;
+  /** Open PRs waiting on a person, highest-value ticket first. Optional — an older API
+   *  omits it entirely, so always `?? []`. */
+  blockedPrs?: ManagerBlockedPr[];
+  /**
+   * Whether the scheduled sweep will actually run this project — the server's answer
+   * from the one shared predicate, never re-derived on the client.
+   *
+   * NOT the same as `policy.enabled`, and the difference is the whole point: a project
+   * with no manager config row of its own folds to the built-in `enabled: true` default,
+   * so `policy.enabled` reads true for a project the sweep never selects. Optional
+   * because a client can be newer than the API it is talking to; `=== false` is the only
+   * safe test (see `managerFindings`).
+   */
+  managed?: boolean;
   stats: ManagerStats;
   backlog: ManagerBacklogItem[];
   actions: ManagerAction[];
+  /**
+   * The manager's STANDING verdicts, whatever their age.
+   *
+   * Two of its decisions are STATES rather than events — the board-staffing sweep's
+   * verdict and the triage stage's ceiling picture — so they are journalled only when
+   * they change. Everything that used to find them by scanning `actions` went blind the
+   * moment that landed: the diagnostics report announced "no board-staffing decision in
+   * the last 30" beside a 306-ticket cohort of stages authorising no role. Read them from
+   * here, never from the feed window, and show `createdAt` so an old answer reads as old
+   * rather than as absent. Optional — an older API omits it.
+   */
+  stateDecisions?: {
+    boardStaffing: ManagerStateDecision | null;
+    triageLimits: ManagerStateDecision | null;
+  };
   /** The manager's own run tasks (open / in-progress / done), newest first. */
   runTasks: ManagerRunTask[];
   /** Autonomy health — whether the cron sweeps are paused (e.g. tenant out of tokens). */
@@ -1764,6 +2226,10 @@ export interface ManagerOverview {
   managerTypes: ManagerTypeOption[];
   /** Standing coaching directives that steer this project's passes (incl. tenant-wide). */
   directives: ManagerDirective[];
+  /** What this project INHERITS when its own row says nothing — the workspace tier already
+   *  resolved by the server. Distinct from `policy`, which includes this project's row.
+   *  Shipped so the form can say "inherited: on/off" without re-folding the tiers. */
+  tenantPolicy: ManagerPolicy;
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */
@@ -1775,8 +2241,23 @@ export type ManagerConfigPatch = Partial<{
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  autoSchedule: boolean;
   managerType: ManagerTypeId;
+  requireSignoffToComplete: boolean;
+  /** Tri-state: true/false = an explicit project decision, `null` = inherit the workspace
+   *  default. Omitting the key leaves whatever is stored alone. */
+  allowAutoMerge: boolean | null;
+  /** Ceremony autonomy (0365) — tri-state for the same reason. */
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  /** May the manager configure a lane that authorises NO role (0386)? `null` = inherit. */
+  allowAutoStaffLanes: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
 }>;
+
+/** Editable subset accepted by PATCH /api/manager/defaults. `null` clears an opinion. */
+export type ManagerDefaultsPatch = Partial<ManagerTenantDefaults>;
 
 export const managerApi = {
   /** Full manager overview for a project (config, effective policy, stats, backlog, activity). */
@@ -1787,6 +2268,18 @@ export const managerApi = {
   update: (projectId: number, patch: ManagerConfigPatch): Promise<{ config: ManagerConfig; policy: ManagerPolicy }> =>
     request<{ config: ManagerConfig; policy: ManagerPolicy }>(`/api/manager/${projectId}`, {
       method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+
+  /** The workspace-wide autonomy defaults every project inherits (0363). */
+  defaults: (): Promise<ManagerDefaultsResponse> =>
+    request<ManagerDefaultsResponse>('/api/manager/defaults'),
+
+  /** Set the workspace-wide defaults (manager-role only). Send `null` for a field to
+   *  clear that workspace opinion and fall back to the built-in default. */
+  updateDefaults: (patch: ManagerDefaultsPatch): Promise<ManagerDefaultsResponse> =>
+    request<ManagerDefaultsResponse>('/api/manager/defaults', {
+      method: 'PATCH',
       body: JSON.stringify(patch),
     }),
 
@@ -1819,7 +2312,256 @@ export const managerApi = {
     const q = limit != null ? `?limit=${limit}` : '';
     return request<{ actions: ManagerAction[] }>(`/api/manager/${projectId}/activity${q}`).then((r) => r.actions);
   },
+
+  /** The stuck-ticket register (0367): what is not moving, why, and what has been tried. */
+  stalls: (projectId: number): Promise<StallRegister> =>
+    request<StallRegister>(`/api/manager/${projectId}/stalls`),
+
+  /**
+   * The FULL-COVERAGE stall census (0373) plus the systemic findings raised from it.
+   *
+   * Distinct from `stalls`, and the distinction is the point: that register is bounded
+   * by what the manager's deep triage stage has had budget to diagnose, so its own
+   * `byCause` summary is a sample. This is the count across EVERY ticket.
+   */
+  census: (projectId: number): Promise<StallCensusResponse> =>
+    request<StallCensusResponse>(`/api/manager/${projectId}/census`),
+
+  /**
+   * TODAY's digest — what the manager and the team actually accomplished.
+   *
+   * The offset is sent so "today" is the READER's day: the server cuts the window on
+   * the caller's midnight rather than UTC's, which is otherwise wrong for most of the
+   * world for most of the day. `getTimezoneOffset` returns minutes to SUBTRACT from
+   * local to reach UTC, so it is negated into the "minutes to add to UTC" the API takes.
+   */
+  digest: (projectId: number): Promise<ManagerDailyDigest> =>
+    request<ManagerDailyDigest>(`/api/manager/${projectId}/digest?tz=${-new Date().getTimezoneOffset()}`),
+
+  /**
+   * Resolve (creating on first access) the project's manager ACCOUNTABILITY chat, and
+   * who answers in it.
+   *
+   * The conversation itself runs on the ordinary Brain chat endpoints — `brain.getMessages`,
+   * `brain.sendMessages`, `brain.requestAgentReply` — because it IS an ordinary Brain chat.
+   * This call only says which chat and which agent.
+   */
+  chat: (projectId: number): Promise<ManagerChatHandle> =>
+    request<ManagerChatHandle>(`/api/manager/${projectId}/chat`),
 };
+
+/** GET /api/manager/:projectId/chat — where to talk to the manager, and who replies. */
+export interface ManagerChatHandle {
+  chatId: number;
+  /** `ide_agents.id` to address. Null when this workspace has no manager agent at all —
+   *  the transcript still reads, but nobody can answer, and the UI must say so. */
+  agentRef: string | null;
+  agentName: string | null;
+  /** True when this is the project's DESIGNATED manager rather than the built-in one. */
+  designated: boolean;
+}
+
+/** A digest number that carries its own trend, so a headline is never a bare count. */
+export interface DigestDelta {
+  today: number;
+  yesterday: number;
+}
+
+/** Who owns a piece of work — the audit timeline's actor vocabulary. */
+export type DigestOwnerKind = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'unassigned';
+
+/** One ticket that reached a done lane today. */
+export interface DigestShippedTicket {
+  id: number;
+  key: string;
+  title: string;
+  completedAt: string;
+  /** Resolved owner label ('' when it finished with nobody assigned). */
+  ownerName: string;
+  ownerKind: DigestOwnerKind;
+  businessValue: number | null;
+}
+
+/**
+ * One person or agent who moved work today.
+ *
+ * The three metrics are deliberately NOT summed by the API and must not be summed
+ * here: a finished ticket, a completed run and a lane hop are different units, and a
+ * total would be a score the data does not support.
+ */
+export interface DigestContributor {
+  id: string;
+  kind: Exclude<DigestOwnerKind, 'unassigned'>;
+  name: string;
+  shipped: number;
+  runs: number;
+  /** Forward lane moves today, for people AND agents alike — the transition log names
+   *  the mover of every hop. Backward hops (redo) are excluded server-side. */
+  moves: number;
+}
+
+/** One class of decision the manager took today. */
+export interface DigestManagerDecision {
+  actionType: ManagerActionType | string;
+  count: number;
+}
+
+/** Work autonomy has handed back to a person. */
+export interface DigestAttentionItem {
+  taskId: number;
+  key: string | null;
+  title: string | null;
+  reason: 'escalated';
+  since: string | null;
+}
+
+/** GET /api/manager/:projectId/digest — the answer to "what got done today?". */
+export interface ManagerDailyDigest {
+  projectId: number;
+  /** The reader's local day as absolute instants. */
+  dayStart: string;
+  dayEnd: string;
+  manager: {
+    passes: number;
+    decisions: DigestDelta;
+    byType: DigestManagerDecision[];
+    lastRunAt: string | null;
+  };
+  team: {
+    shipped: DigestDelta;
+    opened: DigestDelta;
+    laneMoves: { forward: number; backward: number; byHuman: number; byAgent: number;
+      /** Hops whose actor the log cannot name — automation with no identity. Its own
+       *  bucket because folding it into byAgent claimed credit for agents the
+       *  contributor table simultaneously showed at zero. */
+      bySystem: number };
+    runs: {
+      completed: number; failed: number;
+      /**
+       * WHY the failures failed, largest class first. Optional because a client can be
+       * newer than the API it talks to — always `?? []`.
+       *
+       * `sample` is only populated where the raw text adds something (`unknown` and the
+       * crash classes); for a named reason it would just repeat three sentences of
+       * advice per row. `platform: true` means the class is the platform getting in the
+       * way rather than the work failing, which is the difference between "this board is
+       * healthy and being interrupted" and "this board is broken".
+       */
+      failureReasons?: Array<{
+        reason: string; label: string; count: number; sample: string | null; platform: boolean;
+      }>;
+      /** Failures past the API's 50-distinct-message cap. Surfaced so the breakdown can
+       *  never read as complete when it is not. */
+      failuresUnaccounted?: number;
+    };
+    prs: { merged: DigestDelta; opened: number };
+    contributors: DigestContributor[];
+  };
+  shipped: DigestShippedTicket[];
+  needsAttention: {
+    escalatedToday: number;
+    openEscalations: number;
+    items: DigestAttentionItem[];
+  };
+  computedAt: string;
+}
+
+/** Why a ticket is not moving — mirrors the API's `StallCause`.
+ *
+ * This is a runtime registry, not only a union, so the message-catalog test can prove
+ * every cause the server may return has a `manager.stalls.cause.*` label. */
+export const STALL_CAUSES = [
+  'live', 'cooling_down', 'moving', 'never_started', 'unassigned',
+  'managed_no_role',
+  /** The stage authorises NO role at all — nothing declared, nobody staffed. Distinct
+   * from `managed_no_role` because there is no role to fill: the repair configures the
+   * lane rather than staffing a name (0386). */
+  'lane_unconfigured',
+  'capability_gap', 'human_gate', 'failure_breaker', 'missing_deliverable',
+  'build_failed', 'awaiting_signoff', 'pr_conflict', 'pr_unreconciled',
+  'merge_withheld', 'blocked', 'unknown',
+] as const;
+
+export type StallCause = (typeof STALL_CAUSES)[number];
+
+/** What the manager did (or handed over) about it — mirrors the API's `StallRemedy`. */
+export type StallRemedy =
+  | 'none' | 'assign' | 'dispatch' | 'coordinate' | 'return_to_implementation'
+  | 'drive_signoff' | 'reset_breaker' | 'reconcile_pr' | 'resolve_conflict' | 'escalate_human';
+
+/** One stuck ticket in the register. */
+export interface StallWatchRow {
+  taskId: number;
+  title: string;
+  status: string;
+  cause: StallCause;
+  remedy: StallRemedy;
+  detail: string;
+  /** Consecutive applications of `remedy` that did NOT move the ticket. */
+  attempts: number;
+  idleMs: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastAttemptAt: string | null;
+  /** Set once the manager conceded its own remedy is not working. */
+  escalatedAt: string | null;
+}
+
+export interface StallRegister {
+  rows: StallWatchRow[];
+  /** Open stalls handed to a human. */
+  escalated: number;
+  /** Open stalls the manager is still working itself. */
+  working: number;
+  byCause: Array<{ cause: StallCause; count: number }>;
+  /** The attempt ceiling at which a remedy converts to an escalation. */
+  maxAttempts: number;
+}
+
+/** One cause bucket of the census — every ticket sharing a single stall cause. */
+export interface CensusCohort {
+  cause: StallCause;
+  count: number;
+  /** Longest-idle members, so an operator can open a concrete instance. */
+  sampleTaskIds: number[];
+  maxIdleMs: number;
+}
+
+/**
+ * A stall cohort the manager judged a PLATFORM defect rather than ticket work, with the
+ * root cause and remediation it reasoned out and the ticket it filed.
+ */
+export interface SystemicFindingRow {
+  id: string;
+  cause: StallCause;
+  ticketCount: number;
+  summary: string;
+  remediation: string;
+  /** 'ai' when a model produced it, 'heuristic' when the deterministic fallback did. */
+  source: string;
+  createdTaskId: number | null;
+  createdTaskKey: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface StallCensusResponse {
+  projectId: number;
+  /** Non-terminal, non-archived tickets the manager is accountable for. */
+  managed: number;
+  stalled: number;
+  moving: number;
+  cohorts: CensusCohort[];
+  /**
+   * How many of the stalled set the DEEP triage stage has confirmed.
+   *
+   * Reported so breadth is never mistaken for certainty: the census classifies every
+   * ticket cheaply, and this says how much of it has been verified in depth.
+   */
+  deepDiagnosed: number;
+  computedAt: string;
+  findings: SystemicFindingRow[];
+}
 
 /** Dependency edge semantics (mirrors the API's DEP_TYPES). */
 export type DepType = 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish';
@@ -1893,6 +2635,10 @@ export interface TaskFileChange {
   agent: string;
   executionId: number | null;
   createdAt: string;
+  /** Models observed in llm.complete telemetry for the execution that made this change. */
+  models?: string[];
+  /** Authoritative usage provenance: whether the tenant's own provider key served it. */
+  modelUsage?: Array<{ model: string; byo: boolean; provider: string | null }>;
 }
 
 /**
@@ -1953,8 +2699,11 @@ export interface ActiveRun {
   status: 'pending' | 'submitted' | 'running';
   taskId: number;
   taskTitle: string;
+  projectId: number;
+  projectName: string;
   agentHostId: number | null;
   cloudAgentRef: string | null;
+  agentName: string | null;
   submittedBy: string;
   startedAt: string | null;
   createdAt: string;
@@ -1991,9 +2740,18 @@ export interface AttentionResponse {
   tasks: Record<number, AttentionItem>;
   /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
   chats: Record<number, AttentionItem & { taskId?: number }>;
-  counts: { running: number; awaiting: number };
+  /** Unread message COUNT keyed by Brain chat id — new messages (an execution
+   *  milestone, a teammate/agent turn) in a chat the user has read before but is
+   *  not currently viewing. Only chats with ≥1 unread appear. */
+  chatUnread: Record<number, number>;
+  counts: { running: number; awaiting: number; unread: number };
   /** AI Manager cadence (present on every response). */
   manager: AttentionManager;
+}
+
+export interface ExecutionControlResponse {
+  enabled: boolean;
+  stopped?: { requested: number; cancelled: number; failed: number[] };
 }
 
 export const runtimeApi = {
@@ -2061,6 +2819,36 @@ export const runtimeApi = {
   /** Cancel a running/queued execution. */
   cancel: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}/cancel`, { method: 'POST' }),
+
+  /** Emergency tenant-wide stop for every queued or running agent execution. */
+  cancelAll: (): Promise<{ requested: number; cancelled: number; failed: number[] }> =>
+    request<{ requested: number; cancelled: number; failed: number[] }>(
+      '/api/runtime/executions/cancel-all', { method: 'POST' },
+    ),
+
+  /** Authoritative workspace kill switch. Disabling also cancels every current
+   * non-terminal run; all future RuntimeService submissions are refused. */
+  executionControl: (): Promise<ExecutionControlResponse> =>
+    request<ExecutionControlResponse>('/api/runtime/execution-control'),
+
+  setExecutionControl: (enabled: boolean): Promise<ExecutionControlResponse> =>
+    request<ExecutionControlResponse>('/api/runtime/execution-control', {
+      method: 'PUT', body: JSON.stringify({ enabled }),
+    }),
+
+  /**
+   * Revert a finished run: close the PR it opened and delete the ticket branch it
+   * wrote. Manager-gated and destructive — always confirm before calling.
+   *
+   * The server REFUSES with a 409 (message = the exact reason) whenever it cannot
+   * prove the artifacts are still only this run's: a merged PR, a branch that
+   * advanced, foreign commits or paths, unreadable evidence, or a provider that
+   * cannot support the operation. Surface that message verbatim.
+   */
+  revert: (id: number): Promise<{ reverted: true; branch: string; branchDeleted: boolean; prClosed: boolean; commits: number }> =>
+    request<{ reverted: true; branch: string; branchDeleted: boolean; prClosed: boolean; commits: number }>(
+      `/api/runtime/executions/${id}/revert`, { method: 'POST' },
+    ),
 
   /**
    * Send a direction to an execution from the Output tab. If the run is still
@@ -2148,12 +2936,31 @@ export interface MeterSnapshot {
   /** Month-to-date daily series (one entry per elapsed UTC day) for a sparkline;
    *  omitted for meters without a daily trend. */
   trend?: number[];
+  /** Optional month-to-date totals scoped beneath this meter. */
+  breakdown?: Array<{ key: string; used: number }>;
 }
+
+/** A boolean plan-feature flag, named exactly as the server's `PlanFeature`. */
+export type PlanFeatureKey =
+  | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
+  | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
+  | 'voiceCloning' | 'advancedInsights';
 
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
   plan: { effective: 'free' | 'pro' | 'teams'; billingStatus: string };
   meters: MeterSnapshot[];
+  /**
+   * Plan features resolved BY THE SERVER, from the same evaluator the routes
+   * gate on. The client never derives entitlement from `plan.effective` — that
+   * would be a second evaluator, and it would disagree the first time a flag
+   * moved between plans. Optional so a client running against an older API
+   * degrades to "nothing is known to be locked" rather than locking everything.
+   */
+  features?: {
+    entitled: Partial<Record<PlanFeatureKey, boolean>>;
+    requiredPlan: Partial<Record<PlanFeatureKey, 'free' | 'pro' | 'teams'>>;
+  };
 }
 
 export const consumptionApi = {
@@ -2450,20 +3257,10 @@ export const empMetricsApi = {
 
   /** EMP-20 — download the member metrics as CSV/JSON (auth'd blob → browser save). */
   exportMetrics: async (days = 30, format: 'csv' | 'json' = 'csv'): Promise<void> => {
-    const token = getStoredTenantToken();
-    const res = await fetch(`${AUTH_API_URL}/api/members/metrics/export?days=${days}&format=${format}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await apiRequestStream(`/api/members/metrics/export?days=${days}&format=${format}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`);
   },
 };
 
@@ -2473,20 +3270,212 @@ export const empMetricsApi = {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta';
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'moonshot' | 'qwen' | 'minimax' | 'xai';
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
 export type ProviderAuthType = 'api_key' | 'oauth';
+/**
+ * A dispatch-observed rejection of a connected account — the gateway authenticated
+ * with the stored credential and the upstream refused it (401/403).
+ *
+ * This is deliberately NOT derivable from `ProviderDiagnostic.status`: that field
+ * reports whether the credential RESOLVES, and the worst case here — a ChatGPT
+ * account whose plan lapsed or that lacks Codex entitlement — resolves perfectly and
+ * still 403s on every call. Without this signal the card reads "● connected" forever
+ * while the account silently serves nothing.
+ */
+export interface ProviderAuthAlert {
+  provider: LlmProvider;
+  /** `not_entitled` — the account authenticated but the plan doesn't cover this
+   *  surface (reconnect a different account, or upgrade the plan). `rejected` — the
+   *  credential itself was refused (expired/revoked/rotated; reconnect the same one).
+   *  `capacity` — the credential is valid but the ACCOUNT is out of budget (top up;
+   *  reconnecting would be wrong advice). `unresolved` — the stored secret could not
+   *  be decrypted or refreshed, so nothing was ever sent upstream. */
+  reason: 'not_entitled' | 'rejected' | 'capacity' | 'unresolved';
+  /** Upstream status that produced the alert (401 / 403 / 429), or `0` when the
+   *  credential failed before any request was made. */
+  status: number;
+  /** The gateway vendor that was rejected — `openai-codex` (a ChatGPT subscription)
+   *  reads differently to the operator than `openai` (an API key). */
+  vendor: string;
+  /** Epoch-ms of the most recent rejection. */
+  at: number;
+}
+
 export interface ProviderKeySummary {
   provider: LlmProvider;
   authType: ProviderAuthType;
+  /** Tenant-set BYO precedence — LOWER = tried first by the auto-select cloud pin;
+   *  `null` = unset (falls back to catalog-tier ordering). */
+  priority: number | null;
+  /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
+  authAlert?: ProviderAuthAlert;
+  /** BuilderForce-attributed calls served by this provider credential. This is not the
+   * provider account's plan/quota meter; that remains authoritative in its own console. */
+  usage?: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }
+export interface ProviderDiagnostic {
+  provider: LlmProvider;
+  configured: boolean;
+  usable: boolean;
+  status: 'ready' | 'capacity' | 'needs_attention' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
+  usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
+  /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
+  authAlert?: ProviderAuthAlert;
+}
+
+/**
+ * Redacted evidence about ONE failed upstream call — safe to paste into a provider
+ * support ticket. Carries no credential, no prompt, and no request body: only where the
+ * call went, what came back, the provider's own correlation headers, and our trace id.
+ *
+ * `edgeBlocked` is the load-bearing field: it separates "the provider rejected this
+ * credential" from "the provider's CDN refused us before the API ever read it", which
+ * look identical in an error message but need opposite responses.
+ */
+export interface ProbeDiagnostic {
+  endpoint: string;
+  status: number;
+  headers: Record<string, string>;
+  edgeBlocked: boolean;
+  observedAt: string;
+  traceId: string;
+  model: string;
+}
+
+export interface ProviderConnectionTestResult {
+  ok: boolean;
+  status: string;
+  model?: string;
+  testedAt?: string;
+  error?: string;
+  code?: string;
+  /** The alert the probe just persisted, echoed so the card can repaint from THIS
+   *  response instead of waiting out the status read's cache window. */
+  authAlert?: ProviderAuthAlert;
+  /** Redacted upstream evidence for a failed test — see {@link ProbeDiagnostic}. */
+  diagnostic?: ProbeDiagnostic;
+  /** `attempts` is the per-model failover breakdown — the only place the real
+   *  upstream status survives when the gateway collapses a retryable failure
+   *  into its cascade summary. */
+  details?: {
+    provider: LlmProvider;
+    model: string;
+    upstreamStatus: number;
+    attempts?: Array<{ model: string; vendor: string; code: number; durationMs: number; kind: string }>;
+  };
+}
+
+export interface OpenRouterConnection {
+  id: number;
+  label: string;
+  /** Bare OpenRouter model ids, in the order selected during registration. */
+  models: string[];
+  hasKey: boolean;
+  priority: number | null;
+  /** Present when this registration was rejected on a recent call or probe. Keyed by
+   *  connection id server-side, so a broken registration surfaces the same "needs
+   *  attention" prompt a connected provider does. */
+  authAlert?: ConnectionAuthAlert;
+  /** What this registration consumed in the list's rolling window. Absent only when the
+   *  usage read failed — the list still renders, without the strip. */
+  usage?: OpenRouterConnectionUsage;
+}
+
+/** One registration's consumption over the list's rolling window. */
+export interface OpenRouterConnectionUsage {
+  requests: number;
+  tokens: number;
+  /**
+   * What BUILDERFORCE billed, in millicents (1/100000 USD). For a registration on the
+   * tenant's OWN key this is the flat routing surcharge only — OpenRouter bills their own
+   * account for the tokens, and that spend lives on their OpenRouter dashboard, not in our
+   * ledger. For a managed-key registration it is surcharge + token cost.
+   */
+  costMillicents: number;
+  lastUsedAt: string | null;
+}
+
+/** A rejected-registration notice. Same facts as {@link ProviderAuthAlert} minus the
+ *  provider id, which a connection does not have — `vendor` is always `openrouter`. */
+export interface ConnectionAuthAlert {
+  connectionId: number;
+  reason: ProviderAuthAlert['reason'];
+  status: number;
+  vendor: string;
+  at: number;
+}
+
+export interface OpenRouterConnectionTestResult {
+  ok: boolean;
+  /** `key_unresolved` = the saved key could not be applied to any of this connection's
+   *  models (it no longer decrypts, or a higher-priority connection already claims them).
+   *  `upstream_error` = the key WORKED and the model provider then errored — an outage on
+   *  that model, not a broken registration. */
+  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
+  /** The bare OpenRouter id the probe pinned. */
+  model?: string;
+  /** Selected ids skipped because OpenRouter reported a model/account limiter. The
+   *  connection remains usable when at least one other selected model succeeds. */
+  limitedModels?: string[];
+  /** True when the dispatch rode the tenant's OWN OpenRouter key rather than the managed one. */
+  ownKey: boolean;
+  testedAt?: string;
+  error?: string;
+  code?: string;
+  /** The alert the probe just persisted, echoed so the card can repaint from THIS
+   *  response instead of waiting out the list read's cache window. */
+  authAlert?: ConnectionAuthAlert;
+  /** Redacted upstream evidence for a failed test — see {@link ProbeDiagnostic}. */
+  diagnostic?: ProbeDiagnostic;
+  details?: { connectionId: number; model?: string; upstreamStatus?: number };
+}
+
+export type ByoPrecedenceEntry =
+  | { ref: string; kind: 'provider'; provider: LlmProvider; priority: number | null }
+  | { ref: string; kind: 'connection'; connection: OpenRouterConnection; priority: number | null };
+
+export interface OpenRouterCatalogModel {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  contextLength: number;
+  pricing: { prompt: number; completion: number };
+  tier: 'FREE' | 'STANDARD';
+}
+
+export const openRouterConnectionsApi = {
+  /** Registrations with their health alert and consumption attached — one read, because
+   *  "is it working" and "is it being used" are asked together. */
+  list: (): Promise<{ connections: OpenRouterConnection[]; usageWindowDays?: number }> =>
+    request<{ connections: OpenRouterConnection[]; usageWindowDays?: number }>('/llm/openrouter-connections'),
+  catalog: (): Promise<{ data: OpenRouterCatalogModel[] }> =>
+    request<{ data: OpenRouterCatalogModel[] }>('/llm/v1/catalog'),
+  create: (body: { label: string; models: string[]; apiKey?: string }): Promise<OpenRouterConnection> =>
+    request<OpenRouterConnection>('/llm/openrouter-connections', {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+  update: (id: number, body: { label: string; models: string[]; apiKey?: string; clearKey?: boolean }): Promise<OpenRouterConnection> =>
+    request<OpenRouterConnection>(`/llm/openrouter-connections/${id}`, {
+      method: 'PUT', body: JSON.stringify(body),
+    }),
+  remove: (id: number): Promise<{ ok: true }> =>
+    request<{ ok: true }>(`/llm/openrouter-connections/${id}`, { method: 'DELETE' }),
+  /** Dispatch a tiny strict-pinned request down this registration's own model list (on its
+   *  own key when it has one) and report whether it actually works. */
+  test: (id: number): Promise<OpenRouterConnectionTestResult> =>
+    request<OpenRouterConnectionTestResult>(`/llm/openrouter-connections/${id}/test`, { method: 'POST' }),
+  precedence: (): Promise<{ entries: ByoPrecedenceEntry[] }> =>
+    request<{ entries: ByoPrecedenceEntry[] }>('/llm/byo-precedence'),
+};
 
 export const providerKeysApi = {
   /** Configured providers + how each authenticates (no secrets returned). */
-  list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[] }> =>
-    request<{ providers: LlmProvider[]; details: ProviderKeySummary[] }>('/llm/provider-keys'),
+  list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[]; usageWindowDays?: number }> =>
+    request<{ providers: LlmProvider[]; details: ProviderKeySummary[]; usageWindowDays?: number }>('/llm/provider-keys'),
 
   set: (provider: LlmProvider, apiKey: string): Promise<{ ok: true; provider: LlmProvider }> =>
     request<{ ok: true; provider: LlmProvider }>(`/llm/provider-keys/${provider}`, {
@@ -2497,19 +3486,33 @@ export const providerKeysApi = {
   remove: (provider: LlmProvider): Promise<{ ok: true }> =>
     request<{ ok: true }>(`/llm/provider-keys/${provider}`, { method: 'DELETE' }),
 
+  status: (provider: LlmProvider): Promise<ProviderDiagnostic> =>
+    request<ProviderDiagnostic>(`/llm/provider-keys/${provider}/status`),
+
+  test: (provider: LlmProvider): Promise<ProviderConnectionTestResult> =>
+    request<ProviderConnectionTestResult>(`/llm/provider-keys/${provider}/test`, { method: 'POST' }),
+
+  /** Set the BYO precedence — the ordered provider list (most-preferred first) the
+   *  auto-select cloud pin leads its connected flagships by (e.g. Meta first). */
+  setPriority: (order: string[]): Promise<{ ok: true; order: string[] }> =>
+    request<{ ok: true; order: string[] }>('/llm/provider-keys/priority', {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+    }),
+
   /** Begin connecting a Claude subscription — returns the Claude.ai authorize URL
    *  the user opens to grant access (PKCE verifier is held server-side). */
-  oauthStart: (): Promise<{ authorizeUrl: string; state: string }> =>
-    request<{ authorizeUrl: string; state: string }>('/llm/provider-keys/anthropic/oauth/start', {
+  oauthStart: (provider: LlmProvider): Promise<{ authorizeUrl: string; state: string }> =>
+    request<{ authorizeUrl: string; state: string }>(`/llm/provider-keys/${provider}/oauth/start`, {
       method: 'POST',
     }),
 
   /** Finish connecting a Claude subscription with the `code#state` the user
    *  pasted from Claude.ai's consent page. */
-  oauthComplete: (code: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
+  oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
     request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
-      '/llm/provider-keys/anthropic/oauth/complete',
-      { method: 'POST', body: JSON.stringify({ code }) },
+      `/llm/provider-keys/${provider}/oauth/complete`,
+      { method: 'POST', body: JSON.stringify({ code, ...(state ? { state } : {}) }) },
     ),
 };
 
@@ -2527,6 +3530,10 @@ export interface Approval {
   id: string;
   tenantId: number;
   agentHostId: number | null;
+  /** Ticket that caused this request, when it originated from a task execution. */
+  taskId: number | null;
+  /** Project containing the related ticket. */
+  projectId: number | null;
   requestedBy: string | null;
   kind: RequestKind;
   actionType: string;
@@ -2853,6 +3860,107 @@ export const securityApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Governance policy packs — the gates the agent runtime hard-enforces at its
+// tool-call seam (`evaluatePolicyGate`). A pack is a named, toggleable bundle of
+// gates; NULL projectId/agentRef mean "applies to every project / every agent".
+// ---------------------------------------------------------------------------
+
+/** The three effects the runtime evaluator switches on. */
+export type PolicyGateEffect = 'inject-directive' | 'require-approval' | 'block';
+
+export interface PolicyGate {
+  id: string;
+  packId: string;
+  /** The gate id carried on the wire and echoed back in a block/approval decision. */
+  gateKey: string;
+  /** null or '*' governs EVERY tool — how a broad deny posture is authored. */
+  tool: string | null;
+  effect: PolicyGateEffect;
+  directive: string | null;
+  reason: string | null;
+  position: number;
+}
+
+export interface PolicyPack {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  projectId: number | null;
+  agentRef: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  gates: PolicyGate[];
+}
+
+export interface PolicyPackInput {
+  name?: string;
+  description?: string | null;
+  enabled?: boolean;
+  projectId?: number | null;
+  agentRef?: string | null;
+}
+
+export interface PolicyGateInput {
+  gateKey?: string;
+  tool?: string | null;
+  effect?: PolicyGateEffect;
+  directive?: string | null;
+  reason?: string | null;
+  position?: number;
+}
+
+/** The resolved wire shape a run actually receives (preview of enforcement). */
+export interface EffectivePolicyGate {
+  id: string;
+  tool?: string;
+  effect: PolicyGateEffect;
+  directive?: string;
+  reason?: string;
+}
+
+export const policyPacksApi = {
+  list: (): Promise<PolicyPack[]> =>
+    request<PolicyPack[]>('/api/governance/policy-packs'),
+
+  create: (input: PolicyPackInput): Promise<PolicyPack> =>
+    request<PolicyPack>('/api/governance/policy-packs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  update: (packId: string, input: PolicyPackInput): Promise<void> =>
+    request(`/api/governance/policy-packs/${packId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }).then(() => undefined),
+
+  remove: (packId: string): Promise<void> =>
+    request(`/api/governance/policy-packs/${packId}`, { method: 'DELETE' }).then(() => undefined),
+
+  addGate: (packId: string, input: PolicyGateInput): Promise<PolicyGate> =>
+    request<PolicyGate>(`/api/governance/policy-packs/${packId}/gates`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  updateGate: (gateId: string, input: PolicyGateInput): Promise<void> =>
+    request(`/api/governance/policy-gates/${gateId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }).then(() => undefined),
+
+  removeGate: (gateId: string): Promise<void> =>
+    request(`/api/governance/policy-gates/${gateId}`, { method: 'DELETE' }).then(() => undefined),
+
+  /** What a run in this scope would actually be gated by — the same resolver dispatch uses. */
+  effective: (projectId?: number | null, agentRef?: string | null): Promise<EffectivePolicyGate[]> => {
+    const qs = new URLSearchParams();
+    if (projectId != null) qs.set('project', String(projectId));
+    if (agentRef) qs.set('agent', agentRef);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<{ gates: EffectivePolicyGate[] }>(`/api/governance/policy-gates/effective${suffix}`)
+      .then((r) => r.gates ?? []);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Security agent — SOC 2 audit + access-restricted SECURITY tickets
 // ---------------------------------------------------------------------------
 
@@ -2891,6 +3999,52 @@ export interface SecurityAuditFinding {
   tsc: string | null;
 }
 
+/** One external website security-scan run (a security_audits row, scanKind='web'). */
+export interface WebScanRun {
+  id: number;
+  status: 'running' | 'complete' | 'failed';
+  targetUrl: string | null;
+  score: number | null;
+  summary: string | null;
+  findingsCount: number;
+  countsBySeverity: Record<string, number> | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/** A single finding from the deterministic web scan (before it becomes a ticket). */
+export interface WebScanFinding {
+  checkId: string;
+  title: string;
+  detail: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  recommendation: string;
+  tsc: string;
+  marker: string;
+}
+
+export interface WebScanBaseline {
+  previousScore: number | null;
+  previousFindings: number | null;
+  scoreDelta: number | null;
+  newFindings: number;
+  resolvedFindings: number;
+}
+
+export interface WebScanRunResult {
+  ok: true;
+  auditId: number;
+  projectId: number;
+  targetUrl: string;
+  finalUrl: string;
+  score: number;
+  recorded: number;
+  deduped: number;
+  taskIds: number[];
+  findings: WebScanFinding[];
+  baseline: WebScanBaseline;
+}
+
 export const securityAgentApi = {
   getAccess: (): Promise<SecurityAccessConfig> =>
     request<SecurityAccessConfig>('/api/security/access'),
@@ -2908,6 +4062,25 @@ export const securityAgentApi = {
     request<{ auditId: number }>('/api/security/audits/run', {
       method: 'POST',
       body: JSON.stringify(projectId != null ? { projectId } : {}),
+    }),
+
+  // ── Web (external URL) security scan ──────────────────────────────────────
+  getWebScanConfig: (): Promise<{ projectId: number | null; targetUrl: string | null }> =>
+    request<{ projectId: number | null; targetUrl: string | null }>('/api/security/web-scan/config'),
+
+  setWebScanTarget: (url: string | null): Promise<{ projectId: number; targetUrl: string | null }> =>
+    request<{ projectId: number; targetUrl: string | null }>('/api/security/web-scan/config', {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
+    }),
+
+  listWebScans: (): Promise<WebScanRun[]> =>
+    request<{ scans: WebScanRun[] }>('/api/security/web-scan').then((r) => r.scans ?? []),
+
+  runWebScan: (url?: string): Promise<WebScanRunResult> =>
+    request<WebScanRunResult>('/api/security/web-scan/run', {
+      method: 'POST',
+      body: JSON.stringify(url ? { url } : {}),
     }),
 };
 
@@ -3107,6 +4280,7 @@ export interface LlmUsageStats {
   promptTokens: number;
   completionTokens: number;
   byModel: Array<{ model: string; requests: number; tokens: number }>;
+  byCredential: Array<{ type: 'integration' | 'api_key'; id: string; name: string; requests: number; modelCount: number; tokens: number }>;
   period: string;
 }
 
@@ -3154,9 +4328,26 @@ export interface ByoModel { id: string; vendor: string; tier: string; contextWin
  *  connected provider (BYO), so the model choices follow the connected providers. */
 export interface ByoModelInfo { providers: string[]; models: ByoModel[] }
 
+/** How a tenant's card-validation flow stands — the gate on PREMIUM model selection. */
+export type CardValidationStatus = 'none' | 'pending' | 'validated' | 'failed';
+
+/** PREMIUM (any-paid-OpenRouter) model selection: the tenant may pick ANY paid
+ *  OpenRouter model, billed at OpenRouter's own price + a flat per-request surcharge.
+ *  It needs billing details and a validated card because it routes on Builderforce's
+ *  metered key. This is independent of subscription tier.
+ *  Mirrors `evaluatePremiumModelAccess` (the api is the source of truth). */
+export interface PremiumModelInfo {
+  entitled: boolean;
+  reason: 'superadmin' | 'premium_override' | 'paid_card' | 'card_required';
+  unlock?: 'validate_card';
+  cardValidationStatus: CardValidationStatus;
+  /** Flat surcharge added per request, in millicents (1/100000 USD). 1000 = 1¢. */
+  surchargeMillicents: number;
+}
+
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
  *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */
@@ -3185,9 +4376,64 @@ export interface ModelAnalyticsResponse {
   byAction: ModelAnalyticsAction[];
 }
 
+/** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection.
+ *  Mirrors exactly what `GET /api/tenants/:id/card-validation` returns; a field the
+ *  route doesn't send has no business being declared here (a non-optional
+ *  `paymentProvider: string` used to be, so any reader would have got `undefined`
+ *  from a type that promised a string). */
+export interface CardValidationState {
+  status: CardValidationStatus;
+  validated: boolean;
+  validatedAt: string | null;
+  brand: string | null;
+  last4: string | null;
+}
+
+/**
+ * Explicit card validation (Stripe SetupIntent / $0 verify). A tenant on any plan runs
+ * this once to add billing details and unlock metered model selection. No charge is made.
+ */
+export const cardValidationApi = {
+  get: (tenantId: number): Promise<CardValidationState> =>
+    request<CardValidationState>(`/api/tenants/${tenantId}/card-validation`),
+
+  /** Start validation. Hosted providers return a `checkoutUrl` to send the user to;
+   *  the manual provider validates immediately (`validated: true`). */
+  start: (tenantId: number, body?: { billingEmail?: string; successUrl?: string; cancelUrl?: string }) =>
+    request<{ checkoutUrl: string | null; sessionId: string; validated: boolean; status: CardValidationStatus }>(
+      `/api/tenants/${tenantId}/card-validation`,
+      { method: 'POST', body: JSON.stringify(body ?? {}) },
+    ),
+
+  /**
+   * Remove the card on file — detached at the processor, then cleared here. This
+   * REVOKES premium model selection, which is the point of removing it.
+   *
+   * 409 `card_backs_active_subscription` when a paid plan still bills this card:
+   * downgrade to Free first. Manager role required.
+   */
+  remove: (tenantId: number): Promise<CardValidationState> =>
+    request<CardValidationState>(`/api/tenants/${tenantId}/card-validation`, { method: 'DELETE' }),
+};
+
 export const llmApi = {
-  usage: (): Promise<LlmUsageStats> =>
-    request<LlmUsageStats>('/llm/v1/usage'),
+  usage: async (): Promise<LlmUsageStats> => {
+    const raw = await request<{
+      days: number;
+      totals: { requests: number; totalTokens: number; promptTokens: number; completionTokens: number };
+      byModel: Array<{ model: string; requests: number; total_tokens: string | number }>;
+      byCredential?: Array<{ type: 'integration' | 'api_key'; id: string; name: string; requests: number; modelCount: number; tokens: string | number }>;
+    }>('/llm/v1/usage');
+    return {
+      totalRequests: raw.totals.requests,
+      totalTokens: raw.totals.totalTokens,
+      promptTokens: raw.totals.promptTokens,
+      completionTokens: raw.totals.completionTokens,
+      byModel: raw.byModel.map((m) => ({ model: m.model, requests: m.requests, tokens: Number(m.total_tokens) })),
+      byCredential: (raw.byCredential ?? []).map((c) => ({ ...c, requests: Number(c.requests), modelCount: Number(c.modelCount), tokens: Number(c.tokens) })),
+      period: `${raw.days} days`,
+    };
+  },
 
   health: (): Promise<LlmHealthResponse> =>
     request<LlmHealthResponse>('/llm/v1/health'),
@@ -3336,16 +4582,19 @@ function mpHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function mpRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
+/**
+ * The public marketplace carries its OWN credential (a marketplace token in
+ * localStorage), not the workspace or web JWT — so it opts out of the transport's
+ * auth modes and supplies the Authorization header itself. Everything else about
+ * the request (locale header, error reporting, 402 handling) still comes from the
+ * one transport.
+ */
+async function mpRequest<T>(path: string, init?: RequestOptions): Promise<T> {
+  return apiRequest<T>(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...mpHeaders(), ...(init?.headers as Record<string, string> ?? {}) },
+    auth: 'none',
+    headers: { ...mpHeaders(), ...(init?.headers ?? {}) },
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? res.statusText ?? 'Request failed');
-  }
-  return res.json() as Promise<T>;
 }
 
 export interface MarketplaceUser {
@@ -3564,6 +4813,57 @@ export const tenantApiKeysApi = {
 // ---------------------------------------------------------------------------
 
 export type EmbedCapabilityKey = 'product' | 'agile' | 'security';
+export type CustomerEmbedFeatureKey =
+  | 'usage_tracking'
+  | 'support_widget'
+  | 'feedback_widget'
+  | 'heatmaps'
+  | 'feature_management'
+  | 'terms_gate'
+  | 'sourcing'
+  | 'lead_forms'
+  | 'push_notifications'
+  | 'onboarding'
+  | 'cookie_consent'
+  | 'hr_widget'
+  | 'status_page';
+
+export interface CustomerEmbedFeatureConfig {
+  enabled: boolean;
+  consentVersion: number | null;
+  consentedAt: string | null;
+  consentedBy: string | null;
+}
+
+export interface MarketplacePurchase {
+  id: number;
+  userId: string;
+  artifactType: 'skill' | 'persona' | 'content';
+  artifactSlug: string;
+  priceCents: number;
+  pricingModel: 'flat_fee' | 'consumption';
+  stripePaymentIntentId: string | null;
+  createdAt: string;
+}
+
+export const marketplacePurchaseApi = {
+  purchase: (item: { artifactType: 'skill' | 'persona' | 'content'; artifactSlug: string; stripePaymentIntentId?: string }) =>
+    mpRequest<{ ok: true; priceCents: number; pricingModel: 'flat_fee' | 'consumption' }>('/marketplace/purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    }),
+  list: () => mpRequest<{ purchases: MarketplacePurchase[] }>('/marketplace/purchases')
+    .then((result) => result.purchases ?? []),
+};
+
+export interface CustomerEmbedConsentEvent {
+  feature: CustomerEmbedFeatureKey;
+  action: 'OPT_IN' | 'OPT_OUT';
+  version: number;
+  at: string;
+  by: string;
+}
 
 export interface EmbedConfigResult {
   enabled: boolean;
@@ -3575,6 +4875,11 @@ export interface EmbedConfigResult {
   consentedBy: string | null;
   /** The version the host must (re-)consent to before enabling. */
   consentRequiredVersion: number;
+  customerFeatures: Record<CustomerEmbedFeatureKey, CustomerEmbedFeatureConfig>;
+  customerConsentLog: CustomerEmbedConsentEvent[];
+  customerFeatureKeys: CustomerEmbedFeatureKey[];
+  customerConsentRequiredVersion: number;
+  publicKey: string;
 }
 
 export interface EmbedSetConfigResult {
@@ -3585,32 +4890,45 @@ export interface EmbedSetConfigResult {
   consentedBy: string | null;
 }
 
+/** Embed administration is always workspace-scoped. Fail locally instead of
+ * emitting a guaranteed unauthenticated request (and a misleading API ticket)
+ * while the shell is still exchanging/selecting the workspace JWT. */
+function embedRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  if (!getStoredTenantToken()) return Promise.reject(new Error('Workspace token required'));
+  return request<T>(path, opts);
+}
+
 export const embedApi = {
   /** Current tenant's embed enablement + capabilities (any member). */
-  getConfig: () => request<EmbedConfigResult>('/api/embed/config'),
+  getConfig: () => embedRequest<EmbedConfigResult>('/api/embed/config'),
   /**
    * Enable/disable + set capabilities (manager+). Pass `consentAcknowledged: true`
    * when enabling for the first time (or after a consent-version bump) — the API
    * returns 409 `EMBED_CONSENT_REQUIRED` otherwise.
    */
   setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[]; consentAcknowledged?: boolean }) =>
-    request<EmbedSetConfigResult>('/api/embed/config', {
+    embedRequest<EmbedSetConfigResult>('/api/embed/config', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  setFeature: (feature: CustomerEmbedFeatureKey, body: { enabled: boolean; consentAcknowledged?: boolean }) =>
+    embedRequest<{ feature: CustomerEmbedFeatureKey } & CustomerEmbedFeatureConfig>(`/api/embed/features/${feature}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
 };
 
 // ---------------------------------------------------------------------------
-// Host BI bridge (/api/bi/*) — burn-rate pull + self-serve host-BI config +
-// validation-engagements overlay (spec 05 §4.1/§4.2).
+// Consolidated tenant-local BI reads (/api/bi/*).
 // ---------------------------------------------------------------------------
 
 export interface BurnRateResult {
   available: boolean;
   monthlyBurn?: number;
   runwayMonths?: number;
-  source?: 'host';
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+  source?: 'builderforce';
+  asOf?: string;
+  reason?: 'no_data';
 }
 
 export interface ValidationEngagement {
@@ -3623,23 +4941,15 @@ export interface ValidationEngagement {
 
 export interface ValidationEngagementsResult {
   available: boolean;
-  engagements?: ValidationEngagement[];
-  source?: 'host';
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+  engagements: ValidationEngagement[];
+  source: 'builderforce';
 }
 
 export const biApi = {
-  /** Pull the segment's burn/runway from the host BI endpoint. */
+  /** Read the segment's locally-computed burn/runway metrics. */
   getBurnRate: () => request<BurnRateResult>('/api/bi/burn-rate'),
-  /** List the host's validation engagements (feedback widgets/cohorts) for this segment. */
+  /** List local validation results, dashboards and feedback collectors. */
   getValidationEngagements: () => request<ValidationEngagementsResult>('/api/bi/validation-engagements'),
-  /** Read the stored host-BI config (token never returned — only `hasToken`). */
-  getConfig: () => request<{ baseUrl: string | null; hasToken: boolean }>('/api/bi/config'),
-  /** Set/rotate the host BI base URL + token (manager+). Omit token to keep the existing one. */
-  setConfig: (body: { baseUrl: string; token?: string }) =>
-    request<{ baseUrl: string; hasToken: boolean }>('/api/bi/config', { method: 'PUT', body: JSON.stringify(body) }),
-  /** Clear the host BI config (disconnect, manager+). */
-  clearConfig: () => request<{ ok: boolean }>('/api/bi/config', { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -3689,6 +4999,33 @@ export interface SocControl {
   updatedAt?: string;
 }
 
+export type StakeholderQuestionKey = 'priorities_clear' | 'competing_p0s_reconciled' | 'approvers_current' | 'conflicts_within_sla' | 'delivery_reflects_priorities';
+export type StakeholderAnswer = 'yes' | 'no' | 'unknown';
+
+export interface StakeholderMapEntry {
+  id: string;
+  stakeholderRef: string;
+  displayName: string;
+  role: 'required_approver' | 'informed';
+  teamScope: string | null;
+  priority: string | null;
+}
+
+export interface StakeholderDashboard {
+  approved: number;
+  pending: number;
+  overdue: number;
+  activeConflicts: number;
+  openEscalations: number;
+  urgent: string[];
+  digest: string;
+}
+
+export interface StakeholderHealthProfile {
+  score: number;
+  answers: Record<StakeholderQuestionKey, StakeholderAnswer>;
+}
+
 export const governanceApi = {
   soc2: {
     listControls: () => request<SocControl[]>('/api/governance/soc2/controls'),
@@ -3697,6 +5034,16 @@ export const governanceApi = {
       request<SocControl>(`/api/governance/soc2/controls/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     addEvidence: (id: string, body: { title: string; evidenceType: string; url?: string; note?: string }) =>
       request<{ id: string }>(`/api/governance/soc2/controls/${id}/evidence`, { method: 'POST', body: JSON.stringify(body) }),
+  },
+  stakeholder: {
+    map: (projectId: number) => request<{ stakeholders: StakeholderMapEntry[] }>(`/api/governance/stakeholder-alignment/projects/${projectId}/map`),
+    upsertMapEntry: (projectId: number, body: Omit<StakeholderMapEntry, 'id'>) =>
+      request<StakeholderMapEntry>(`/api/governance/stakeholder-alignment/projects/${projectId}/map`, { method: 'POST', body: JSON.stringify(body) }),
+    removeMapEntry: (id: string) => request<{ deactivated: string }>(`/api/governance/stakeholder-alignment/map/${id}`, { method: 'DELETE' }),
+    dashboard: (projectId: number) => request<StakeholderDashboard>(`/api/governance/stakeholder-alignment/projects/${projectId}/dashboard`),
+    healthProfile: (projectId: number) => request<{ profile: StakeholderHealthProfile | null }>(`/api/governance/stakeholder-alignment/projects/${projectId}/health-profile`),
+    saveHealthProfile: (projectId: number, answers: Record<StakeholderQuestionKey, StakeholderAnswer>) =>
+      request<StakeholderHealthProfile>(`/api/governance/stakeholder-alignment/projects/${projectId}/health-profile`, { method: 'PUT', body: JSON.stringify({ answers }) }),
   },
 };
 
@@ -3749,6 +5096,10 @@ export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number;
 export interface SpineNode {
   key: string; id: string; kind: SpineNodeKind; parentKey: string | null;
   title: string; status: string; startDate: string | null; endDate: string | null; depth: number;
+  /** Dates inferred from the span of descendants rather than set on the row itself. */
+  datesDerived: boolean;
+  /** Keys of the nodes that must finish before this one starts (drawn as arrows). */
+  dependsOn: string[];
   declaredCostClass: CostClass | null; costClassSource: string;
   inheritedCostClass: CostClass | null; effectiveCostClass: CostClass | null;
   costClassVerified: boolean; anomaly: boolean; hasDescendantAnomaly: boolean;
@@ -3868,9 +5219,7 @@ export const pmoApi = {
     const q = new URLSearchParams();
     if (params.from && params.to) { q.set('from', params.from); q.set('to', params.to); }
     if (params.projectId != null) q.set('project', String(params.projectId));
-    const res = await fetch(`${AUTH_API_URL}/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`, { headers: authHeaders() });
-    if (!res.ok) throw new Error(`Export failed (${res.status})`);
-    return res.text();
+    return apiRequestText(`/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`);
   },
   /** Set (or clear, with null) the CAPEX/OPEX class on any level. A PM 'manual'
    *  set also verifies the row; pass source:'agent' for an applied suggestion. */
@@ -3958,11 +5307,22 @@ export interface Sprint {
 // ── Ceremony sessions (standup / planning tracking; /api/agile/ceremonies) ──
 export type CeremonyKind = 'standup' | 'planning';
 
+/** How a session ended (migration 0365). */
+export type CeremonyCloseReason = 'facilitator' | 'unattended' | 'no_humans' | 'expired';
+/** Resolved attendance verdict per seat (migration 0365). */
+export type CeremonyAttendance = 'unknown' | 'present' | 'absent' | 'excused';
+/** Where that verdict came from (migration 0366). `manual` is never recomputed. */
+export type CeremonyAttendanceSource = 'derived' | 'pto' | 'manual';
+/** The verdicts a manager may assert. 'unknown' means "not concluded", not a correction. */
+export const CEREMONY_CORRECTABLE: readonly CeremonyAttendance[] = ['present', 'absent', 'excused'];
+
 export interface CeremonySession {
   id: string;
   projectId: number;
   kind: CeremonyKind;
-  status: 'active' | 'completed';
+  /** 'abandoned' = concluded without being conducted (nobody came, and the workspace
+   *  has not granted unattended ceremonies). */
+  status: 'active' | 'completed' | 'abandoned';
   facilitatorId: string | null;
   turnMode: 'facilitator' | 'timeboxed';
   turnSeconds: number;
@@ -3971,6 +5331,20 @@ export interface CeremonySession {
   turnStartedAt: string | null;
   startedAt: string;
   endedAt: string | null;
+  /** Set when the cron sweep auto-opened this session from a schedule. */
+  scheduleId?: string | null;
+  /** Outcome (0365) — who closed it, why, and what it did. */
+  concludedBy?: 'human' | 'manager' | 'system' | null;
+  closeReason?: CeremonyCloseReason | null;
+  humansExpected?: number;
+  humansPresent?: number;
+  reassignedCount?: number;
+  dispatchedCount?: number;
+  /** The companion meeting this ceremony is held in (0366). */
+  meetingId?: string | null;
+  /** Its media relay key, resolved SERVER-SIDE — never derived on the client, so the
+   *  round table and the meetings surface join literally the same room. */
+  meetingRoomKey?: string | null;
 }
 
 export interface CeremonyParticipant {
@@ -3981,11 +5355,42 @@ export interface CeremonyParticipant {
   memberName: string;
   turnOrder: number;
   durationMs: number;
+  /** Attendance (0365). `required` false = an ad-hoc joiner, never a no-show. */
+  required?: boolean;
+  joinedAt?: string | null;
+  leftAt?: string | null;
+  attendance?: CeremonyAttendance;
+  /** Provenance (0366) — 'manual' means a person asserted it and it is never recomputed. */
+  attendanceSource?: CeremonyAttendanceSource;
+  attendanceNote?: string | null;
+  attendanceSetBy?: string | null;
+  attendanceSetAt?: string | null;
+}
+
+/** One journal row — an `activity_log` event targeting this session. */
+export interface CeremonyJournalEvent {
+  id: number;
+  actorType: string;
+  actorName: string | null;
+  verb: string;
+  targetLabel: string | null;
+  summary: string | null;
+  occurredAt: string;
+  metadata: unknown;
 }
 
 export interface CeremonySessionDetail {
   session: CeremonySession | null;
   participants?: CeremonyParticipant[];
+  /** Present only on the by-id detail read. */
+  journal?: CeremonyJournalEvent[];
+}
+
+/** A page of concluded ceremonies for one project. */
+export interface CeremonyHistoryPage {
+  sessions: CeremonySession[];
+  /** ISO `startedAt` of the last row; pass as `before` for the next page. */
+  nextCursor: string | null;
 }
 
 /** Tenant-wide ceremonies rollup — cadence + engagement across all projects. */
@@ -3994,6 +5399,8 @@ export interface CeremonyRollup {
   totals: {
     sessions: number;
     completed: number;
+    /** Concluded without being conducted — nobody attended (0365). */
+    abandoned: number;
     active: number;
     completionRate: number;
     projects: number;
@@ -4018,8 +5425,94 @@ export const ceremonySessionsApi = {
     request(`${CEREMONY_BASE}/sessions`, { method: 'POST', body: JSON.stringify({ projectId, kind, participants }) }),
   advanceTurn: (id: string, currentTurn: number): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/turn`, { method: 'PATCH', body: JSON.stringify({ currentTurn }) }),
+  /** End the session. The server resolves attendance, applies the ceremony autonomy
+   *  rules and dispatches the project's agent-owned work through the canonical
+   *  lane-entry gate (bounded) — the client does NOT submit executions itself. */
   complete: (id: string): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/complete`, { method: 'POST' }),
+  /** "I am in the room" (0365). Records the CALLER's own presence — the server takes
+   *  no identity from the body — so an attendance record can never be forged for
+   *  someone else. Member-level, not manager-gated: recording that you turned up is
+   *  not an act of facilitation. */
+  heartbeat: (id: string): Promise<{ recorded: boolean; reason?: string }> =>
+    request(`${CEREMONY_BASE}/sessions/${id}/attendance`, { method: 'POST' }),
+  /** Ceremonies that have already run, newest first. Keyset-paginated on startedAt. */
+  history: (projectId: number, opts?: { kind?: CeremonyKind; limit?: number; before?: string | null }): Promise<CeremonyHistoryPage> => {
+    const q = new URLSearchParams({ projectId: String(projectId) });
+    if (opts?.kind) q.set('kind', opts.kind);
+    if (opts?.limit) q.set('limit', String(opts.limit));
+    if (opts?.before) q.set('before', opts.before);
+    return request<CeremonyHistoryPage>(`${CEREMONY_BASE}/sessions/history?${q.toString()}`);
+  },
+  /** One past ceremony in full: roster + attendance verdicts + the journal of what
+   *  it did (reassignments, the close), read from the shared activity log. */
+  detail: (id: string): Promise<CeremonySessionDetail> =>
+    request<CeremonySessionDetail>(`${CEREMONY_BASE}/sessions/${id}`),
+  /** CORRECT one seat's attendance verdict (0366, MANAGER+). Stored as `manual`, which
+   *  is what makes it survive a re-conclude — the server never recomputes a manual row.
+   *  Allowed on concluded sessions: most corrections are noticed after the fact. */
+  correctAttendance: (
+    sessionId: string,
+    participantId: string,
+    attendance: CeremonyAttendance,
+    note?: string,
+  ): Promise<CeremonySessionDetail> =>
+    request<CeremonySessionDetail>(
+      `${CEREMONY_BASE}/sessions/${sessionId}/participants/${participantId}/attendance`,
+      { method: 'PATCH', body: JSON.stringify({ attendance, note }) },
+    ),
+};
+
+/** A recurring standup/planning. The frequent cron sweep opens a session for every
+ *  due row with its roster pre-seeded, then re-arms nextRunAt from the cron. */
+export interface CeremonySchedule {
+  id: string;
+  projectId: number;
+  kind: CeremonyKind;
+  /** 5-field cron — the same cadence language as QA schedules / workflow triggers. */
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  turnMode: 'facilitator' | 'timeboxed' | null;
+  turnSeconds: number | null;
+  /** 'members' derives the roster from member metrics; 'roster' uses `participants`. */
+  participantScope: 'members' | 'roster';
+  /** JSON array of { kind, ref, name }; only meaningful for the 'roster' scope. */
+  participants: string;
+  maxParticipants: number;
+  autoDispatch: boolean;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastSessionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CeremonyScheduleInput {
+  projectId?: number;
+  kind?: CeremonyKind;
+  cron?: string;
+  timezone?: string;
+  enabled?: boolean;
+  turnMode?: 'facilitator' | 'timeboxed' | null;
+  turnSeconds?: number | null;
+  participantScope?: 'members' | 'roster';
+  participants?: Array<{ kind: string; ref: string; name: string }>;
+  maxParticipants?: number;
+  autoDispatch?: boolean;
+}
+
+/** Ceremony cadence CRUD. Reads are member-level; writes are MANAGER+. */
+export const ceremonySchedulesApi = {
+  list: (projectId: number): Promise<{ schedules: CeremonySchedule[] }> =>
+    request(`${CEREMONY_BASE}/schedules?projectId=${projectId}`),
+  create: (body: CeremonyScheduleInput): Promise<{ schedule: CeremonySchedule }> =>
+    request(`${CEREMONY_BASE}/schedules`, { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: CeremonyScheduleInput): Promise<{ schedule: CeremonySchedule }> =>
+    request(`${CEREMONY_BASE}/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: string): Promise<{ deleted: boolean }> =>
+    request(`${CEREMONY_BASE}/schedules/${id}`, { method: 'DELETE' }),
 };
 
 // Member metrics & profiles (the workforce scorecard system) live in `membersApi`
@@ -4129,7 +5622,8 @@ export const meetingsApi = {
   start: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/start`, { method: 'POST' }),
   end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
   cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
-  ice: (): Promise<{ iceServers: unknown[] }> => request(`${MEETINGS_BASE}/ice`),
+  ice: (mode: 'direct-only' | 'relay-fallback' = 'relay-fallback'): Promise<{ iceServers: unknown[]; mode: 'direct-only' | 'relay-fallback'; turnEnabled: boolean }> =>
+    request(`${MEETINGS_BASE}/ice?mode=${mode}`),
 
   // Recording / transcription + agent voice (0330).
   transcript: (id: string): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript`),
@@ -4205,7 +5699,8 @@ export const sprintsApi = {
 
 /** Derived sprint velocity from real task story points (EMP-4). */
 export const agileMetricsApi = {
-  derivedVelocity: (): Promise<VelocityInsights> => request<VelocityInsights>('/api/agile/velocity/derived'),
+  derivedVelocity: (projectId?: number | null): Promise<VelocityInsights> =>
+    request<VelocityInsights>(`/api/agile/velocity/derived${projectId != null ? `?projectId=${projectId}` : ''}`),
 };
 
 // Planning Poker + Retrospectives (nested session models; /api/agile/*).
@@ -4584,6 +6079,155 @@ export const factsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// RFP / RFQ Response — /api/rfp  (PRD 15). Pre-sales proposal generation.
+// ---------------------------------------------------------------------------
+
+export interface BrandPalette {
+  primary: string;
+  secondary: string;
+  accent: string;
+  text: string;
+  background: string;
+  logoUrl?: string | null;
+}
+
+export interface RfpCostLineItem {
+  label: string;
+  category: 'build' | 'agentic' | 'marketing' | 'contingency' | 'margin';
+  amountUsd: number;
+}
+
+export interface RfpCostModel {
+  buildCostUsd: number;
+  agenticCostUsd: number;
+  marketingCostUsd: number;
+  contingencyUsd: number;
+  subtotalCostUsd: number;
+  marginPct: number;
+  marginUsd: number;
+  quotedPriceUsd: number;
+  effortWeeks: number;
+  lineItems: RfpCostLineItem[];
+}
+
+export interface RfpCapabilityRoster {
+  capabilities: string[];
+  keyComponents: { name: string; responsibility: string }[];
+  frameworks: string[];
+  primaryLanguages: string[];
+  valueProps: string[];
+  source: 'diagnostics' | 'audit' | 'greenfield';
+}
+
+export interface RfpPhase {
+  name: string;
+  startDate: string;
+  endDate: string;
+  milestones: { name: string; date: string }[];
+}
+
+export interface RfpRisk { title: string; severity: 'low' | 'medium' | 'high'; mitigation: string }
+export interface RfpDependency { title: string; type: 'internal' | 'external' | 'third_party'; note: string }
+export interface RfpPortfolioMatch { projectId: number; name: string; score: number; rationale: string }
+
+export interface RfpScanFreshness {
+  toolId: string;
+  lastScanAt: string | null;
+  ageDays: number | null;
+  refreshed: boolean;
+}
+
+export interface RfpResponseBody {
+  executiveSummary: string;
+  grounding: { mode: 'new' | 'existing'; projectId?: number; projectName?: string; scanFreshness?: RfpScanFreshness };
+  capabilityRoster: RfpCapabilityRoster;
+  costModel: RfpCostModel;
+  plan: { phases: RfpPhase[] };
+  risks: RfpRisk[];
+  dependencies: RfpDependency[];
+  timeline: { startDate: string; endDate: string; weeks: number };
+  branding: { requester: BrandPalette; tenant: BrandPalette; blended: BrandPalette };
+  portfolioMatches?: RfpPortfolioMatch[];
+}
+
+export interface RfpRequestRow {
+  id: string;
+  tenantId: number;
+  title: string;
+  requesterOrgName: string | null;
+  requesterBrand: BrandPalette | null;
+  requirements: string | null;
+  sourceMode: 'new' | 'existing_project';
+  basedOnProjectId: number | null;
+  marginPct: number | null;
+  marketingPct: number | null;
+  contingencyPct: number | null;
+  dueDate: string | null;
+  status: 'draft' | 'analyzing' | 'ready' | 'submitted';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RfpResponseRow {
+  id: string;
+  tenantId: number;
+  requestId: string;
+  projectId: number | null;
+  status: 'draft' | 'ready' | 'submitted';
+  body: RfpResponseBody | null;
+  docHtml: string | null;
+  quotedPriceUsdCents: number | null;
+  marginPct: number | null;
+  scanRefreshed: boolean;
+  generatedBy: { cto: string | null; productOwner: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RfpResponseSummary = Pick<RfpResponseRow, 'id' | 'requestId' | 'status' | 'quotedPriceUsdCents' | 'marginPct' | 'scanRefreshed' | 'createdAt'>;
+export type RfpRequestListRow = RfpRequestRow & { latestResponse: RfpResponseSummary | null };
+
+export interface RfpRequestInput {
+  title: string;
+  requesterOrgName?: string | null;
+  requesterBrand?: BrandPalette | null;
+  requirements?: string | null;
+  sourceMode?: 'new' | 'existing_project';
+  basedOnProjectId?: number | null;
+  marginPct?: number | null;
+  marketingPct?: number | null;
+  contingencyPct?: number | null;
+  dueDate?: string | null;
+}
+
+export interface RfpGenerateResult {
+  responseId: string;
+  body: RfpResponseBody;
+  quotedPriceUsdCents: number;
+  marginPct: number;
+  scanRefreshed: boolean;
+  generatedBy: { cto: string | null; productOwner: string | null };
+  docHtml: string;
+}
+
+export const rfpApi = {
+  list: (): Promise<{ requests: RfpRequestListRow[] }> =>
+    request<{ requests: RfpRequestListRow[] }>('/api/rfp'),
+  getRequest: (id: string): Promise<{ request: RfpRequestRow; responses: RfpResponseRow[] }> =>
+    request<{ request: RfpRequestRow; responses: RfpResponseRow[] }>(`/api/rfp/requests/${id}`),
+  createRequest: (body: RfpRequestInput): Promise<RfpRequestRow> =>
+    request<RfpRequestRow>('/api/rfp/requests', { method: 'POST', body: JSON.stringify(body) }),
+  updateRequest: (id: string, body: Partial<RfpRequestInput>): Promise<RfpRequestRow> =>
+    request<RfpRequestRow>(`/api/rfp/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  generate: (id: string): Promise<RfpGenerateResult> =>
+    request<RfpGenerateResult>(`/api/rfp/requests/${id}/generate`, { method: 'POST' }),
+  getResponse: (id: string): Promise<RfpResponseRow> =>
+    request<RfpResponseRow>(`/api/rfp/responses/${id}`),
+  portfolioMatch: (requirements: string, excludeProjectId?: number | null): Promise<{ matches: RfpPortfolioMatch[] }> =>
+    request<{ matches: RfpPortfolioMatch[] }>('/api/rfp/portfolio-match', { method: 'POST', body: JSON.stringify({ requirements, excludeProjectId }) }),
+};
+
+// ---------------------------------------------------------------------------
 // Integration credentials — /api/integrations  (GitHub / GitLab / Bitbucket /
 // Jira / Confluence / Freshservice keys). Workspace-global when projectId is
 // omitted, project-scoped when set (0074).
@@ -4591,7 +6235,13 @@ export const factsApi = {
 
 export type IntegrationProvider =
   | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
-  | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup';
+  | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
+  // BYO web-search vendor keys — widen `web_search` from the keyless encyclopedic
+  // floor to a full open-web index. Optional: search works without any of them.
+  | 'tavily' | 'exa' | 'linkup'
+  // Google connectors (OAuth offline credentials): Gmail powers the email
+  // workflow node; Google Drive can back a project's file storage.
+  | 'gmail' | 'google_drive';
 
 export interface IntegrationCredential {
   id: string;
@@ -4720,6 +6370,18 @@ export interface CreateIncidentBody {
   page?: boolean;
 }
 
+/** A workflow run spawned by an incident — via an event trigger or a manual runbook. */
+export interface IncidentWorkflowRun {
+  id: string;
+  description: string | null;
+  status: string;
+  runtime: string;
+  createdAt: string;
+  completedAt: string | null;
+  definitionId: string | null;
+  definitionName: string | null;
+}
+
 export interface OnCallRotationMember {
   id: string;
   memberRef: string;
@@ -4784,6 +6446,14 @@ export const incidentsApi = {
   get: (id: string): Promise<{ incident: Incident; timeline: IncidentEvent[] }> =>
     request(`/api/incidents/${id}`),
 
+  // RCA linkage: implicated delivery ticket(s) + each one's Accountability Report.
+  implicated: (id: string): Promise<ImplicatedTicket[]> =>
+    request<{ implicated: ImplicatedTicket[] }>(`/api/incidents/${id}/implicated`).then((r) => r.implicated ?? []),
+  linkImplicated: (id: string, body: { taskId: number; relation?: string; note?: string }): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/implicated`, { method: 'POST', body: JSON.stringify(body) }),
+  unlinkImplicated: (id: string, taskId: number): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/implicated/${taskId}`, { method: 'DELETE' }),
+
   update: (id: string, body: Partial<{ severity: IncidentSeverity; status: IncidentStatus; impact: string; rootCause: string }>): Promise<{ ok: boolean }> =>
     request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
@@ -4804,6 +6474,13 @@ export const incidentsApi = {
 
   publishPostmortem: (id: string, body: PublishPostmortemBody): Promise<PublishPostmortemResult> =>
     request(`/api/incidents/${id}/postmortem`, { method: 'POST', body: JSON.stringify(body) }),
+
+  // Custom workflows (runbooks) attached to an incident
+  listWorkflowRuns: (id: string): Promise<IncidentWorkflowRun[]> =>
+    request<{ runs: IncidentWorkflowRun[] }>(`/api/incidents/${id}/workflow-runs`).then((r) => r.runs ?? []),
+
+  runWorkflow: (id: string, body: { definitionId: string; runtime?: string; agentHostId?: number; cloudAgentRef?: string }): Promise<{ workflowId: string; taskCount: number }> =>
+    request(`/api/incidents/${id}/run-workflow`, { method: 'POST', body: JSON.stringify(body) }),
 
   // On-call rotations
   listRotations: (): Promise<OnCallRotation[]> =>
@@ -5002,6 +6679,24 @@ export interface ProjectRepository {
   updatedAt: string;
 }
 
+/** Per-repo readiness of the GitHub Actions execution surface. */
+export interface GithubActionsRepoStatus {
+  repoId: string;
+  /** Only GitHub has Actions — a GitLab/Bitbucket repo has nothing to enable. */
+  supported: boolean;
+  /** The Builderforce agent workflow is present on the repo's default branch. */
+  enabled: boolean;
+  isDefault: boolean;
+}
+
+export interface GithubActionsStatus {
+  /** The repo dispatch would actually use (the default) carries the workflow, so
+   *  an agent set to the `github_actions` surface will really run there. */
+  ready: boolean;
+  workflowPath: string;
+  repositories: GithubActionsRepoStatus[];
+}
+
 export interface AddRepositoryBody {
   provider: string;
   owner: string;
@@ -5055,6 +6750,27 @@ export const reposApi = {
   remove: (id: string): Promise<void> =>
     request<void>(`/api/repos/repositories/${id}`, { method: 'DELETE' }),
 
+  /**
+   * Is the GitHub Actions execution surface usable for this project's repos?
+   * `ready` answers the question the agent surface picker asks (the DEFAULT repo
+   * carries the agent workflow); `repositories` answers the per-row question the
+   * Source control panel asks. Server-side this is read-through cached and
+   * invalidated by `enableGithubActions`, so callers may refetch freely.
+   */
+  githubActionsStatus: (projectId: number): Promise<GithubActionsStatus> =>
+    request<GithubActionsStatus>(`/api/repos/projects/${projectId}/github-actions`),
+
+  /** Commit the Builderforce agent workflow into a repo's default branch — what
+   *  makes the `github_actions` surface actually runnable for this project. */
+  enableGithubActions: (id: string): Promise<{ ok: true; created: boolean; path: string }> =>
+    request(`/api/repos/repositories/${id}/github-actions/enable`, { method: 'POST' }),
+
+  /** Ingest every OPEN code-scanning / Dependabot alert as a security finding —
+   *  for a repo connected after alerts accumulated, or whose webhook never fired.
+   *  Idempotent (ingestion dedupes against open findings). */
+  backfillSecurityAlerts: (id: string): Promise<{ ok: true; ingested?: number; deduped?: number }> =>
+    request(`/api/repos/repositories/${id}/security/backfill-alerts`, { method: 'POST' }),
+
   listPullRequests: (projectId: number) =>
     request<{ pullRequests: unknown[] }>(`/api/repos/projects/${projectId}/pull-requests`).then((r) => r.pullRequests ?? []),
 
@@ -5098,8 +6814,10 @@ export interface PullRequestDetail {
   supported: boolean;
   state: string | null;
   merged: boolean;
+  draft: boolean;
   mergeable: boolean | null;
   mergeableState: string | null;
+  allowedMergeMethods: MergeMethod[] | null;
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
@@ -5195,7 +6913,7 @@ export interface BoardProviderMeta {
 
 export type MigrationMode = 'migrate' | 'sync' | 'both';
 export type MigrationStatus =
-  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'failed' | 'cancelled';
+  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'rolled_back' | 'failed' | 'cancelled';
 
 export interface MigrationRun {
   id: string;
@@ -5284,6 +7002,9 @@ export const migrationsApi = {
 
   commit: (id: string): Promise<MigrationRun> =>
     request(`/api/migrations/${id}/commit`, { method: 'POST' }),
+
+  rollback: (id: string): Promise<MigrationRun> =>
+    request(`/api/migrations/${id}/rollback`, { method: 'POST' }),
 
   discard: (id: string): Promise<void> =>
     request<void>(`/api/migrations/${id}`, { method: 'DELETE' }),
@@ -5404,6 +7125,12 @@ export interface QualityStats {
   daily: { day: string; count: number }[];
 }
 
+/** Month-to-date event consumption attributable to one error collector. */
+export interface QualityCollectorConsumption {
+  used: number;
+  trend: number[];
+}
+
 export const qualityApi = {
   sourceCatalog: (): Promise<QualitySourceCatalogEntry[]> =>
     request<{ sources: QualitySourceCatalogEntry[] }>('/api/quality/source-catalog').then((r) => r.sources ?? []),
@@ -5415,6 +7142,10 @@ export const qualityApi = {
       request('/api/quality/collectors', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: { name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }): Promise<{ ok: true }> =>
       request(`/api/quality/collectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    test: (id: string): Promise<{ ok: true; accepted: number; dropped: number }> =>
+      request(`/api/quality/collectors/${id}/test`, { method: 'POST' }),
+    consumption: (id: string): Promise<QualityCollectorConsumption> =>
+      request(`/api/quality/collectors/${id}/consumption`),
     remove: (id: string): Promise<void> =>
       request<void>(`/api/quality/collectors/${id}`, { method: 'DELETE' }),
 
@@ -5677,10 +7408,11 @@ export const pendingPromptsApi = {
   save(prompt: string, path?: string): void {
     const anonId = getAnonId();
     if (!anonId || !prompt.trim()) return;
-    void fetch(`${AUTH_API_URL}/api/pending-prompts`, {
+    void apiRequest('/api/pending-prompts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      auth: 'none',
       body: JSON.stringify({ anonId, prompt: prompt.trim(), path }),
+      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
     }).catch(() => {});
   },
 
@@ -5689,13 +7421,10 @@ export const pendingPromptsApi = {
     const anonId = getAnonId();
     if (!anonId) return null;
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/pending-prompts/claim`, {
+      const body = await webRequest<{ prompt?: string | null }>('/api/pending-prompts/claim', {
         method: 'POST',
-        headers: webAuthHeaders(),
         body: JSON.stringify({ anonId }),
       });
-      if (!res.ok) return null;
-      const body = (await res.json().catch(() => ({}))) as { prompt?: string | null };
       return body.prompt ?? null;
     } catch {
       return null;
@@ -5775,13 +7504,10 @@ export const personasApi = {
     if (params?.sort) qs.set('sort', params.sort);
     const query = qs.toString();
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/personas/public${query ? `?${query}` : ''}`);
-      if (res.status === 404) return [];
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
-      }
-      const data = (await res.json()) as { personas?: PublicPersona[] } | PublicPersona[];
+      const data = await apiRequest<{ personas?: PublicPersona[] } | PublicPersona[]>(
+        `/api/personas/public${query ? `?${query}` : ''}`,
+        { auth: 'none', expectedErrors: [404] },
+      );
       return Array.isArray(data) ? data : data.personas ?? [];
     } catch (e) {
       if (isNotFound(e)) return [];
@@ -5792,13 +7518,10 @@ export const personasApi = {
   /** Fetch a single public persona by slug. Returns null when missing / unsupported. */
   getBySlug: async (slug: string): Promise<PublicPersona | null> => {
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/personas/${encodeURIComponent(slug)}`);
-      if (res.status === 404) return null;
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
-      }
-      const data = (await res.json()) as { persona?: PublicPersona } | PublicPersona;
+      const data = await apiRequest<{ persona?: PublicPersona } | PublicPersona>(
+        `/api/personas/${encodeURIComponent(slug)}`,
+        { auth: 'none', expectedErrors: [404] },
+      );
       return (data as { persona?: PublicPersona }).persona ?? (data as PublicPersona);
     } catch (e) {
       if (isNotFound(e)) return null;
@@ -6072,10 +7795,16 @@ export const releasesApi = {
 export interface AllocationQuery { days?: number; period?: string; projectId?: number; teamId?: number }
 export interface AllocationHistoryQuery { months?: number; projectId?: number; teamId?: number }
 
+function insightScopeQuery(days: number, projectId?: number | null): string {
+  const q = new URLSearchParams({ days: String(days) });
+  if (projectId != null) q.set('projectId', String(projectId));
+  return q.toString();
+}
+
 export const insightsApi = {
   engineering: (days = 30): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?days=${days}`),
-  dora: (days = 30): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?days=${days}`),
-  bottlenecks: (days = 30): Promise<BottleneckInsights> => request<BottleneckInsights>(`/api/insights/bottlenecks?days=${days}`),
+  dora: (days = 30, projectId?: number | null): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?${insightScopeQuery(days, projectId)}`),
+  bottlenecks: (days = 30, projectId?: number | null): Promise<BottleneckInsights> => request<BottleneckInsights>(`/api/insights/bottlenecks?${insightScopeQuery(days, projectId)}`),
   finance: (period?: string): Promise<FinanceInsights> => request<FinanceInsights>(`/api/insights/finance${period ? `?period=${period}` : ''}`),
   compliance: (days = 30): Promise<ComplianceSummary> => request<ComplianceSummary>(`/api/insights/compliance?days=${days}`),
   allocation: (q: AllocationQuery = {}): Promise<AllocationInsights> => {
@@ -6106,8 +7835,8 @@ export const insightsApi = {
     return request<ScenarioResponse>(`/api/insights/delivery/scenario?${p.toString()}`);
   },
   /** Time per SDLC phase + end-to-end lifecycle trend (Life Cycle Explorer). */
-  lifecycle: (days = 30): Promise<LifecycleInsights> =>
-    request<LifecycleInsights>(`/api/insights/delivery/lifecycle?days=${days}`),
+  lifecycle: (days = 30, projectId?: number | null): Promise<LifecycleInsights> =>
+    request<LifecycleInsights>(`/api/insights/delivery/lifecycle?${insightScopeQuery(days, projectId)}`),
   deliverableUpdates: {
     list: (scope: DeliverableScope, id: string): Promise<DeliverableUpdate[]> =>
       request<DeliverableUpdate[]>(`/api/insights/deliverable-updates?scope=${scope}&id=${encodeURIComponent(id)}`),
@@ -6245,12 +7974,533 @@ export const alertsApi = {
 };
 
 export const innovationApi = {
-  funnel: (initiativeId?: string): Promise<FunnelMetrics> =>
-    request<FunnelMetrics>(`/api/innovation/funnel${initiativeId ? `?initiative=${encodeURIComponent(initiativeId)}` : ''}`),
+  funnel: (initiativeId?: string, projectId?: number | null): Promise<FunnelMetrics> => {
+    const q = new URLSearchParams();
+    if (initiativeId) q.set('initiative', initiativeId);
+    if (projectId != null) q.set('projectId', String(projectId));
+    return request<FunnelMetrics>(`/api/innovation/funnel${q.size ? `?${q.toString()}` : ''}`);
+  },
   ideas: {
-    list: () => ideaTracker.list() as unknown as Promise<InnovationIdea[]>,
+    list: (projectId?: number | null) => request<InnovationIdea[]>(`/api/innovation/ideas${projectId != null ? `?projectId=${projectId}` : ''}`),
     create: (body: Partial<Omit<InnovationIdea, 'id'>>) => ideaTracker.create(body) as unknown as Promise<InnovationIdea>,
     update: (id: string, body: Partial<Omit<InnovationIdea, 'id'>>) => ideaTracker.update(id, body) as unknown as Promise<InnovationIdea>,
     remove: (id: string) => ideaTracker.remove(id),
   },
+};
+
+// ---------------------------------------------------------------------------
+// Create — durable collaborative canvas sessions.
+// ---------------------------------------------------------------------------
+
+export interface CreationSessionSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  folder?: string | null;
+  status: 'active' | 'archived' | 'deleted';
+  preview: { objectCount?: number; kinds?: string[]; objects?: Array<{ id: string; kind: string; x: number; y: number; title: string; status?: string; resourceType?: string; resourceId?: string }> } | null;
+  revision: number;
+  lastActivityAt: string;
+  createdAt: string;
+  role: 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
+  pinned?: boolean;
+  unread?: boolean;
+  collaboratorCount?: number;
+  projectIds?: number[];
+  /** Conversation ('chat') or execution ('work') — the same vocabulary as
+   *  `BrainChat.mode`. See lib/brain/chatModes.ts. */
+  mode?: string | null;
+}
+
+export interface CreationSessionObject {
+  id: string;
+  kind: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  canvasData: { x?: number; y?: number; [key: string]: unknown };
+  content: Record<string, unknown> | null;
+  lockedBy?: string | null;
+  lockExpiresAt?: string | null;
+}
+
+export interface CreationSessionConnection {
+  id: string;
+  sourceObjectId: string;
+  targetObjectId: string;
+  kind: string;
+  label: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface CreationSessionDetail {
+  session: CreationSessionSummary & { viewport?: Record<string, unknown> | null; canvasRevision: number; branchParentSessionId?: string | null; branchBaseRevision?: number | null };
+  role: CreationSessionSummary['role'];
+  currentUserId?: string;
+  objects: CreationSessionObject[];
+  connections: CreationSessionConnection[];
+  projectIds: number[];
+  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null }>;
+  personalViewport?: { x?: number; y?: number; zoom?: number } | null;
+}
+
+export interface CreationProjectPrdVersion {
+  id: string;
+  specId: string;
+  version: number;
+  prd: string | null;
+  archSpec: string | null;
+  taskList: string | null;
+  origin: string;
+  frozen: boolean;
+  frozenAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface CreationProjectPrd extends Spec {
+  versions: CreationProjectPrdVersion[];
+}
+
+export interface CreationProjectPrdContext {
+  project: { id: number; name: string; description: string | null; status: string };
+  tickets: Array<Pick<Task, 'id' | 'key' | 'title' | 'description' | 'status' | 'updatedAt'> & {
+    prds: Array<CreationProjectPrd & { isPrimary: boolean }>;
+  }>;
+  projectPrds: CreationProjectPrd[];
+}
+
+export interface CreationGraphInput {
+  objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>;
+  connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }>;
+  expectedRevision?: number;
+  viewport?: Record<string, unknown>;
+}
+
+export interface CreationSessionComment {
+  id: string;
+  objectId: string | null;
+  parentCommentId: string | null;
+  body: string;
+  mentions: string[];
+  createdBy: string | null;
+  authorName: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreationSessionActivity {
+  id: string;
+  kind: 'event' | 'comment';
+  type: string;
+  objectId: string | null;
+  actorRef: string | null;
+  actorName: string | null;
+  createdAt: string;
+  body?: string;
+  payload?: Record<string, unknown>;
+  revision?: number;
+  resolvedAt?: string | null;
+}
+
+export interface CreationTimelineMessage {
+  id: number;
+  clientMessageId: string;
+  messageRole: 'user' | 'assistant' | 'system';
+  body: string;
+  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string } };
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface CreationOutcomeMetric {
+  key: string;
+  label: string;
+  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
+  direction: 'higher' | 'lower';
+  current: number | null;
+  baseline: number | null;
+}
+
+export interface CreationOutcomeMetrics {
+  sessionId: string;
+  scope: 'tenant';
+  sampleSize: number;
+  metrics: CreationOutcomeMetric[];
+}
+
+export interface CreationCommandResult {
+  accepted: Array<{ index: number; type: string; id?: string; clientId?: string }>;
+  rejected: Array<{ index: number; error: string }>;
+  serverIds: Record<string, string>;
+  revision: number;
+  savedAt: string;
+}
+
+export interface CreationSnapshotSummary { revision: number; label?: string | null; createdBy: string | null; createdAt: string }
+export interface CreationSnapshot extends CreationSnapshotSummary { graph: { objects: CreationGraphInput['objects']; connections: CreationGraphInput['connections'] }; viewport: Record<string, unknown> }
+export interface CreationTemplate { id: string; name: string; description: string | null; category: string; visibility: 'private' | 'tenant'; graph: CreationGraphInput; createdBy: string | null; updatedAt: string }
+export interface CreationSessionInvitation { id: string; email: string; role: CreationSessionSummary['role']; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; createdAt: string }
+
+export const creationSessionsApi = {
+  list: (status: 'active' | 'archived' = 'active'): Promise<{ sessions: CreationSessionSummary[] }> => request(`/api/creation-sessions?status=${status}`),
+  search: (input: { q: string; status?: 'active' | 'archived'; kind?: string; projectId?: number; collaborator?: string; limit?: number }) => {
+    const params = new URLSearchParams({ q: input.q });
+    if (input.status) params.set('status', input.status);
+    if (input.kind) params.set('kind', input.kind);
+    if (input.projectId) params.set('projectId', String(input.projectId));
+    if (input.collaborator) params.set('collaborator', input.collaborator);
+    if (input.limit) params.set('limit', String(input.limit));
+    return request<{ sessions: Array<CreationSessionSummary & { matchingObjectId?: string | null }> }>(`/api/creation-sessions/search?${params}`);
+  },
+  quotas: () => request<{ usage: { sessions: number; templates: number }; limits: { sessions: number; collaboratorsPerSession: number; templates: number; historyPerSession: number; datasetRows: number; realtimeEditors: number; artifactBytesPerSession: number } }>('/api/creation-sessions/quotas'),
+  create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>
+    request<{ session: { id: string; title: string; revision: number } }>('/api/creation-sessions', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
+  claim: (body: CreationGraphInput & { clientSessionId: string; title: string; initialPrompt?: string; timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: CreationTimelineMessage['metadata']; createdAt: string }> }) =>
+    request<{ session: { id: string; title?: string; revision?: number; claimed: true; replayed?: boolean } }>('/api/creation-sessions/claim', { method: 'POST', body: JSON.stringify(body) }),
+  get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
+  outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
+  recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
+    request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: { title?: string; description?: string | null; folder?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
+    request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  preview: (id: string) => request<{ sessionId: string; title: string; revision: number; preview: CreationSessionSummary['preview']; lastActivityAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/preview`),
+  export: (id: string) => request<{ format: string; exportedAt: string; session: Record<string, unknown>; objects: CreationSessionObject[]; connections: CreationSessionConnection[]; timeline: CreationTimelineMessage[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/export`),
+  events: (id: string, after = 0) => request<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/events?after=${Math.max(0, Math.floor(after))}`),
+  timeline: {
+    list: (id: string, after = 0, limit = 200) => request<{ messages: CreationTimelineMessage[]; lastId: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline?after=${Math.max(0, Math.floor(after))}&limit=${Math.min(500, Math.max(1, Math.floor(limit)))}`),
+    append: (id: string, message: { clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: CreationTimelineMessage['metadata'] }) => request<CreationTimelineMessage>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline`, { method: 'POST', body: JSON.stringify(message) }),
+  },
+  liveUrl: (id: string): string | null => {
+    const token = getStoredTenantToken();
+    if (!token) return null;
+    const base = AUTH_API_URL.replace(/^http/, 'ws');
+    return `${base}/api/creation-sessions/${encodeURIComponent(id)}/ws?token=${encodeURIComponent(token)}`;
+  },
+  pin: (id: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) }),
+  duplicate: (id: string) => request<{ session: { id: string; title: string; revision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: '{}' }),
+  merge: (targetId: string, sourceSessionId: string) => request<{ session: { id: string; title: string; revision: number }; mergedSessionId: string }>(`/api/creation-sessions/${encodeURIComponent(targetId)}/merge`, { method: 'POST', body: JSON.stringify({ sourceSessionId }) }),
+  branch: (id: string, title?: string) => request<{ session: { id: string; title: string; revision: number; parentSessionId: string; baseRevision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/branches`, { method: 'POST', body: JSON.stringify({ title }) }),
+  watch: (id: string, state: 'all' | 'mentions' | 'muted') => request<{ state: 'all' | 'mentions' | 'muted' }>(`/api/creation-sessions/${encodeURIComponent(id)}/watch`, { method: 'PATCH', body: JSON.stringify({ state }) }),
+  lock: (id: string, objectId: string, action: 'acquire' | 'renew' | 'release' = 'acquire', leaseSeconds = 60) => request<{ objectId: string; lockedBy: string | null; lockExpiresAt: string | null }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/lock`, { method: 'POST', body: JSON.stringify({ action, leaseSeconds }) }),
+  requestObjectAccess: (id: string, objectId: string) => request<{ requested: true }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/request-access`, { method: 'POST', body: '{}' }),
+  saveGraph: (id: string, graph: CreationGraphInput) =>
+    request<{ revision: number; savedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/graph`, { method: 'PUT', body: JSON.stringify(graph) }),
+  applyCommands: (id: string, revision: number, idempotencyKey: string, commands: Array<Record<string, unknown>>, atomic = true) =>
+    request<CreationCommandResult>(`/api/creation-sessions/${encodeURIComponent(id)}/commands`, { method: 'POST', headers: { 'If-Match': String(revision), 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ commands, atomic }), expectedErrors: [409] }),
+  history: {
+    list: (id: string) => request<{ snapshots: CreationSnapshotSummary[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/history`),
+    get: (id: string, revision: number) => request<CreationSnapshot>(`/api/creation-sessions/${encodeURIComponent(id)}/history/${revision}`),
+    checkpoint: (id: string, label: string) => request<{ revision: number; label: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/checkpoints`, { method: 'POST', body: JSON.stringify({ label }) }),
+  },
+  invite: (id: string, invitee: { userId?: string; email?: string }, role: CreationSessionSummary['role'] = 'editor') =>
+    request<{ userId: string; role: string; emailSent?: boolean } | { invitationId: string; email: string; role: string; expiresAt: string; acceptPath: string; emailSent?: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
+  invitations: {
+    accept: (token: string) => request<{ sessionId: string; role: CreationSessionSummary['role'] }>(`/api/creation-sessions/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
+    acceptWithAccount: (token: string) => webRequest<{ sessionId: string; tenantId: number; role: CreationSessionSummary['role'] }>(`/api/tenants/creation-invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
+    list: (id: string) => request<{ invitations: CreationSessionInvitation[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/invitations`),
+    revoke: (id: string, invitationId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, { method: 'DELETE' }),
+  },
+  members: {
+    update: (id: string, userId: string, role: CreationSessionSummary['role']) => request<{ userId: string; role: CreationSessionSummary['role'] }>(`/api/creation-sessions/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+    remove: (id: string, userId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+  },
+  presence: (id: string, body: { revision: number; viewport?: Record<string, unknown>; cursor?: { x: number; y: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }) =>
+    request<{ revision: number; currentUserId?: string; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenRevision: number; lastSeenAt: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify(body) }),
+  activity: (id: string, limit = 50) =>
+    request<{ activity: CreationSessionActivity[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/activity?limit=${Math.min(200, Math.max(1, limit))}`),
+  comments: {
+    list: (id: string, objectId?: string) =>
+      request<{ comments: CreationSessionComment[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/comments${objectId ? `?objectId=${encodeURIComponent(objectId)}` : ''}`),
+    create: (id: string, body: { body: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] }) =>
+      request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments`, { method: 'POST', body: JSON.stringify(body) }),
+    resolve: (id: string, commentId: string, resolved: boolean) =>
+      request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
+  },
+  templates: {
+    list: () => request<{ builtInIds: string[]; templates: CreationTemplate[] }>('/api/creation-sessions/templates'),
+    create: (body: { name: string; description?: string; category?: string; visibility?: 'private' | 'tenant'; graph: CreationGraphInput }) => request<{ template: { id: string; name: string } }>('/api/creation-sessions/templates', { method: 'POST', body: JSON.stringify(body) }),
+    remove: (templateId: string) => request<void>(`/api/creation-sessions/templates/${encodeURIComponent(templateId)}`, { method: 'DELETE' }),
+    apply: (id: string, templateId: string, revision: number) => request<{ revision: number; objectIds: string[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/templates/${encodeURIComponent(templateId)}/apply`, { method: 'POST', headers: { 'If-Match': String(revision) }, body: '{}' }),
+  },
+  openProject: (projectId: number) =>
+    request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
+  openIdeProject: (ideProjectId: number) =>
+    request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/ide-projects/${ideProjectId}/open`, { method: 'POST' }),
+  expandProject: (id: string, projectId: number, lens: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' = 'everything') =>
+    request<{ project: { id: number; name: string; description: string | null; status: string }; lens: string; resources: Array<{ kind: string; resourceType: string; resourceId: string; title: string; subtitle: string | null; status: string; workflowExecutable?: boolean; resourceSubtype?: string }>; generated: Array<{ key: string; kind: string; title: string; status: string }>; fetchedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/expand`, { method: 'POST', body: JSON.stringify({ lens }) }),
+  projectPrdContext: (id: string, projectId: number) =>
+    request<CreationProjectPrdContext>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/prd-context`),
+  openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
+    request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Challenges — paste a brief, get a working system
+// ---------------------------------------------------------------------------
+
+export interface ChallengeSpec {
+  title: string;
+  sponsor: string | null;
+  goal: string;
+  capabilities: string[];
+  integrations: string[];
+  deliverables: string[];
+  constraints: string[];
+  successCriteria: string[];
+}
+
+export interface ChallengeRequiredConnector { key: string; label: string; why: string }
+export interface ChallengeRequiredSecret { name: string; label: string; where: string }
+
+export interface ChallengePlan {
+  blueprintKey: string;
+  blueprintName: string;
+  matchScore: number;
+  matchReasons: string[];
+  considered: Array<{ key: string; name: string; score: number; reasons: string[] }>;
+  strategy: 'declarative' | 'github-worker';
+  summary: string;
+  files: Record<string, string>;
+  handlers: Record<string, unknown>;
+  handlerWarnings: string[];
+  tasks: Array<{ title: string; description: string; order: number }>;
+  requiredConnectors: ChallengeRequiredConnector[];
+  requiredSecrets: ChallengeRequiredSecret[];
+  successCriteria: string[];
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  sponsor: string | null;
+  status: 'parsed' | 'planned' | 'building' | 'built' | 'failed';
+  blueprintKey: string | null;
+  projectId: number | null;
+  brief: string;
+  spec: ChallengeSpec;
+  plan: ChallengePlan;
+  error: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/** A remaining human action before the built system is live. */
+export interface ChallengeSetupStep {
+  key: string;
+  label: string;
+  detail: string;
+  url?: string;
+  blocking: boolean;
+}
+
+export interface ChallengeBuildResult {
+  projectId: number;
+  projectKey: string;
+  ingressUrl: string;
+  filesWritten: string[];
+  handlersWritten: string[];
+  tasksCreated: number;
+  tasksSkipped: number;
+  /** Seeded BUILD tickets autonomy actually started a run for. */
+  tasksDispatched: number;
+  readiness: ChallengeSetupStep[];
+  warnings: string[];
+}
+
+export interface BlueprintSummary {
+  key: string;
+  name: string;
+  summary: string;
+  capabilities: string[];
+  strategy: string;
+  requiredConnectors: ChallengeRequiredConnector[];
+  requiredSecrets: ChallengeRequiredSecret[];
+  handlerCount: number;
+  successCriteria: string[];
+}
+
+export interface HostingStrategySummary {
+  key: string;
+  label: string;
+  summary: string;
+  zeroSetup: boolean;
+}
+
+export const challengeApi = {
+  list: (): Promise<Challenge[]> =>
+    request<{ challenges: Challenge[] }>('/api/challenges').then((r) => r.challenges),
+
+  get: (id: string): Promise<Challenge> =>
+    request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}`).then((r) => r.challenge),
+
+  /** Read + plan a pasted brief. Builds nothing. */
+  create: (brief: string, projectId?: number): Promise<Challenge> =>
+    request<{ challenge: Challenge }>('/api/challenges', {
+      method: 'POST',
+      body: JSON.stringify({ brief, projectId }),
+    }).then((r) => r.challenge),
+
+  /** Re-read the same brief — useful after connecting an integration. */
+  replan: (id: string): Promise<Challenge> =>
+    request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}/replan`, { method: 'POST' })
+      .then((r) => r.challenge),
+
+  /** Materialise the plan: canvas files, live handlers, tickets. Idempotent. */
+  build: (id: string): Promise<{ challenge: Challenge | null; result: ChallengeBuildResult }> =>
+    request<{ challenge: Challenge | null; result: ChallengeBuildResult }>(
+      `/api/challenges/${encodeURIComponent(id)}/build`,
+      { method: 'POST' },
+    ),
+
+  remove: (id: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/challenges/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  blueprints: (): Promise<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }> =>
+    request<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }>('/api/challenges/blueprints'),
+};
+
+// ---------------------------------------------------------------------------
+// Project backends — the server-side half of a project
+// ---------------------------------------------------------------------------
+
+/** Every way a handler can prove who called it. Mirrors VERIFY_KINDS on the api. */
+export const HANDLER_VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
+export type HandlerVerifyKind = (typeof HANDLER_VERIFY_KINDS)[number];
+
+export const HANDLER_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ANY'] as const;
+export type HandlerMethod = (typeof HANDLER_METHODS)[number];
+
+/** The canvas document a handler IS — edited as a whole and re-parsed on save. */
+export interface HandlerSpecDocument {
+  name?: string;
+  route: string;
+  method: HandlerMethod;
+  verify: HandlerVerifyKind;
+  /** Overrides the kind's default secret name — Stripe issues one per endpoint. */
+  verifySecret?: string;
+  /** Origins a browser may call this handler from. Absent means none — the
+   *  project's own site is same-origin and never needs it. `["*"]` means any. */
+  cors?: string[];
+  description?: string;
+  steps: unknown[];
+  respond: Record<string, unknown>;
+}
+
+export interface ProjectBackendHandler {
+  name: string;
+  route: string;
+  method: string;
+  verify: HandlerVerifyKind;
+  description: string | null;
+  url: string;
+  /** The same handler on the published site's own origin, when there is one. */
+  siteUrl: string | null;
+  stepCount: number;
+  /** The parsed spec, so the editor opens without a second round trip. */
+  spec: HandlerSpecDocument;
+}
+
+/** What a deployed `github-worker` backend reports about itself. */
+export interface WorkerHealth {
+  reachable: boolean;
+  /** Expected secret name → whether the Worker has it bound. Never a value. */
+  secrets: Record<string, boolean>;
+  handlers: Array<{ method: string; route: string; verify?: string }>;
+  reason?: string;
+}
+
+export interface ProjectSecretSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  hint: string | null;
+  updatedAt: string | null;
+}
+
+export interface ProjectBackendView {
+  backend: {
+    strategy: 'declarative' | 'github-worker';
+    status: string;
+    ingressUrl: string;
+    deployedUrl: string | null;
+    /** `https://<site>/api` once the project has published a site. */
+    siteUrl: string | null;
+    lastDeployedAt: string | null;
+    handlerCount: number;
+  };
+  strategies: HostingStrategySummary[];
+  handlers: ProjectBackendHandler[];
+  handlerErrors: Array<{ path: string; reason: string }>;
+  secrets: ProjectSecretSummary[];
+  missingSecrets: string[];
+  /** Present only for a deployed `github-worker` backend. */
+  workerHealth: WorkerHealth | null;
+}
+
+export interface ProjectBackendRequestRow {
+  id: number;
+  route: string;
+  method: string;
+  statusCode: number;
+  verdict: 'ok' | 'unverified' | 'no-handler' | 'rate-limited' | 'error';
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string | null;
+}
+
+export const projectBackendApi = {
+  get: (projectId: number): Promise<ProjectBackendView> =>
+    request<ProjectBackendView>(`/api/projects/${projectId}/backend`),
+
+  setStrategy: (projectId: number, strategy: string) =>
+    request<{ backend: { strategy: string; status: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ strategy }),
+    }),
+
+  /** Pause or resume the public ingress. A paused backend 404s every delivery. */
+  setStatus: (projectId: number, status: 'active' | 'paused') =>
+    request<{ backend: { strategy: string; status: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  /** Create or replace one handler. Rejected if the document does not parse. */
+  saveHandler: (projectId: number, name: string, document: unknown) =>
+    request<{ ok: boolean; path: string; spec: HandlerSpecDocument }>(
+      `/api/projects/${projectId}/backend/handlers/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ document }) },
+    ),
+
+  deleteHandler: (projectId: number, name: string) =>
+    request<{ ok: boolean }>(`/api/projects/${projectId}/backend/handlers/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
+
+  /** Re-run the hosting strategy (regenerate the endpoint map / the Worker). */
+  materialize: (projectId: number) =>
+    request<{ result: { setupSteps: ChallengeSetupStep[]; written: string[]; handlerCount: number } }>(
+      `/api/projects/${projectId}/backend/materialize`,
+      { method: 'POST' },
+    ),
+
+  requests: (projectId: number): Promise<ProjectBackendRequestRow[]> =>
+    request<{ requests: ProjectBackendRequestRow[] }>(`/api/projects/${projectId}/backend/requests`)
+      .then((r) => r.requests),
+
+  /** Store or rotate a secret. The value is never readable afterwards. */
+  setSecret: (projectId: number, name: string, value: string, description?: string) =>
+    request<{ ok: boolean; secrets: ProjectSecretSummary[] }>(
+      `/api/projects/${projectId}/backend/secrets/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ value, description }) },
+    ),
+
+  deleteSecret: (projectId: number, name: string) =>
+    request<{ ok: boolean; secrets: ProjectSecretSummary[] }>(
+      `/api/projects/${projectId}/backend/secrets/${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    ),
 };

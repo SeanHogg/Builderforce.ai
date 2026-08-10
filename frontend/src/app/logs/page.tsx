@@ -8,13 +8,13 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import PageContainer from '@/components/PageContainer';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
-  user_registered: 'var(--cyan-bright, #00e5cc)',
-  user_login: 'var(--cyan-bright, #00e5cc)',
+  user_registered: 'var(--cyan-bright, var(--cyan-bright))',
+  user_login: 'var(--cyan-bright, var(--cyan-bright))',
   task_created: 'var(--text-secondary)',
   task_updated: 'var(--text-secondary)',
-  task_submitted: 'var(--coral-bright, #f4726e)',
+  task_submitted: 'var(--coral-bright)',
   execution_completed: 'rgba(34,197,94,0.9)',
-  execution_failed: 'var(--coral-bright, #f4726e)',
+  execution_failed: 'var(--coral-bright)',
   agent_host_registered: 'var(--text-secondary)',
   approval_created: 'rgba(245,158,11,0.9)',
   approval_decided: 'rgba(245,158,11,0.9)',
@@ -41,7 +41,7 @@ function EventTypeBadge({ type }: { type: string }) {
         fontSize: 11,
         fontWeight: 700,
         padding: '2px 8px',
-        borderRadius: 5,
+        borderRadius: 'var(--radius-sm)',
         background: `${color}22`,
         color,
         whiteSpace: 'nowrap',
@@ -53,7 +53,7 @@ function EventTypeBadge({ type }: { type: string }) {
   );
 }
 
-export default function LogsPage() {
+export default function AuditLogsContent() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +80,7 @@ export default function LogsPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <PageContainer style={{ padding: '32px 40px' }}>
+    <PageContainer style={{ padding: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>
@@ -102,7 +102,7 @@ export default function LogsPage() {
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -122,7 +122,7 @@ export default function LogsPage() {
             background: 'var(--bg-base)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
           }}
         >
           <option value="">All event types</option>
@@ -139,7 +139,7 @@ export default function LogsPage() {
             background: 'var(--bg-base)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
           }}
         >
           <option value="">All resource types</option>
@@ -156,9 +156,9 @@ export default function LogsPage() {
         <div
           style={{
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
             background: 'rgba(244,114,94,0.1)',
-            color: 'var(--coral-bright, #f4726e)',
+            color: 'var(--coral-bright)',
             fontSize: 13,
             marginBottom: 16,
           }}
@@ -176,7 +176,7 @@ export default function LogsPage() {
             color: 'var(--text-muted)',
             background: 'var(--bg-base)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
           }}
         >
           No audit events found.
@@ -196,7 +196,7 @@ export default function LogsPage() {
               style={{
                 background: 'var(--bg-base)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                borderRadius: 'var(--radius-lg)',
                 overflow: 'hidden',
               }}
             >
@@ -265,7 +265,7 @@ export default function LogsPage() {
                           color: 'var(--text-secondary)',
                           background: 'var(--bg-elevated)',
                           padding: '8px 10px',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           overflowX: 'auto',
                           margin: 0,
                         }}
@@ -293,7 +293,7 @@ export default function LogsPage() {
                 style={{
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-lg)',
                   padding: 18,
                   display: 'flex',
                   flexDirection: 'column',
@@ -327,7 +327,7 @@ export default function LogsPage() {
                     fontWeight: 600,
                     background: 'none',
                     border: 'none',
-                    color: 'var(--coral-bright, #f4726e)',
+                    color: 'var(--coral-bright)',
                     cursor: 'pointer',
                   }}
                 >
@@ -361,7 +361,7 @@ export default function LogsPage() {
                             color: 'var(--text-secondary)',
                             background: 'var(--bg-base)',
                             padding: '8px 10px',
-                            borderRadius: 6,
+                            borderRadius: 'var(--radius-sm)',
                             overflowX: 'auto',
                             margin: 0,
                           }}

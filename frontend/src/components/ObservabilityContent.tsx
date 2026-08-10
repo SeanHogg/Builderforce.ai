@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   agentHosts,
   cloudAgents as cloudAgentsApi,
@@ -17,12 +18,13 @@ import {
 } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { ExecutionTimelineChart } from './ExecutionTimelineChart';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -134,11 +136,11 @@ function isErrorEvent(ev: ToolAuditEvent): boolean {
 }
 
 const AGENT_COLORS = [
-  'var(--coral-bright, #f97316)',
-  'var(--accent, #6366f1)',
-  'var(--green, #22c55e)',
-  'var(--blue, #3b82f6)',
-  'var(--amber, #f59e0b)',
+  'var(--coral-bright)',
+  'var(--accent)',
+  'var(--success, var(--success))',
+  'var(--info)',
+  'var(--warning, var(--warning))',
 ];
 
 /** Stable per-agent color, indexed by position in the current selection. */
@@ -159,7 +161,7 @@ function pillStyle(bg: string, color: string): React.CSSProperties {
     fontWeight: 700,
     letterSpacing: 0.3,
     padding: '1px 6px',
-    borderRadius: 9999,
+    borderRadius: 'var(--radius-full)',
     background: bg,
     color,
   };
@@ -178,6 +180,8 @@ export function ObservabilityContent({
   reportMaterials,
   reportTransaction,
 }: ObservabilityContentProps) {
+  const t = useTranslations('observability');
+  const tc = useTranslations('common');
   // Scoped mode pins the directory to a single agent (a host OR a cloud agent)
   // instead of showing the full, selectable directory.
   const scopedHostKey = propAgentHostId != null ? `host:${propAgentHostId}` : null;
@@ -213,14 +217,16 @@ export function ObservabilityContent({
   const [diagError, setDiagError] = useState<string | null>(null);
   const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'gantt'>('gantt');
   const [categoryFilter, setCategoryFilter] = useState('');
-  // Triage capture: "Copied" / "Failed" flash after the copy button is pressed.
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  // Triage capture: "Copied" / "Failed" flash after the copy button is pressed. The
+  // write, that flash and its 2000ms reset are the shared hook's (same states, same
+  // window as the local enum it replaces).
+  const triageCopy = useCopyToClipboard();
 
   // ---- Unified directory + selection derivation -----------------------------
   const scopedAgent: UnifiedAgent | null = scopedHostKey != null
-    ? { key: scopedHostKey, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? `Agent ${propAgentHostId}` }
+    ? { key: scopedHostKey, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? t('agentNumbered', { id: String(propAgentHostId ?? '') }) }
     : scopedCloudKey != null
-      ? { key: scopedCloudKey, kind: 'cloud', cloudRef: propCloudAgentRef, name: propCloudAgentName ?? 'Cloud agent' }
+      ? { key: scopedCloudKey, kind: 'cloud', cloudRef: propCloudAgentRef, name: propCloudAgentName ?? t('cloudAgentFallback') }
       : null;
   const unifiedAgents: UnifiedAgent[] = scopedAgent
     ? [scopedAgent]
@@ -249,7 +255,7 @@ export function ObservabilityContent({
     setDirError(null);
     Promise.all([
       agentHosts.list().catch((e) => {
-        setDirError(e instanceof Error ? e.message : 'Failed to load agents');
+        setDirError(e instanceof Error ? e.message : t('errLoadAgents'));
         return [] as AgentHost[];
       }),
       // Registered workforce cloud agents (may not have run yet)…
@@ -306,7 +312,9 @@ export function ObservabilityContent({
     const updateConnState = () => setConnState(connectedIds.size > 0 ? 'connected' : 'offline');
 
     for (const hostId of selectedHostIds) {
-      const name = agentByKey.get(`host:${hostId}`)?.name ?? `Agent ${hostId}`;
+      // String, not number: an ICU number arg would gain a locale thousands separator
+      // ("Agent 1,234") where the old template literal produced the raw id.
+      const name = agentByKey.get(`host:${hostId}`)?.name ?? t('agentNumbered', { id: String(hostId) });
       const gw = new AgentHostGateway({
         url: agentHosts.wsUrl(hostId),
         onEvent: (ev) => {
@@ -384,7 +392,7 @@ export function ObservabilityContent({
       setWfListByHost(wfMap);
       setCloudEventsByRef(cloudMap);
     } catch (e) {
-      setDiagError((e as Error).message ?? 'Failed to load diagnostics');
+      setDiagError((e as Error).message ?? t('errLoadDiagnostics'));
     } finally {
       setDiagLoading(false);
     }
@@ -405,8 +413,8 @@ export function ObservabilityContent({
   // Logs/Timeline keep parity with the auto-polling Tools tab next to them.
   useEffect(() => {
     if (!embedded || !hasSelection) return;
-    const t = setInterval(() => { void loadDiagnostics(); }, 5000);
-    return () => clearInterval(t);
+    const poll = setInterval(() => { void loadDiagnostics(); }, 5000);
+    return () => clearInterval(poll);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [embedded, selectionKey, loadDiagnostics]);
 
@@ -457,16 +465,16 @@ export function ObservabilityContent({
     const name = nameForKey(key);
     for (const wf of wfList) {
       if (!wf.tasks) continue;
-      for (const t of wf.tasks) {
-        const startMs = t.startedAt ? new Date(t.startedAt).getTime() : new Date(t.createdAt).getTime();
-        const endMs = t.completedAt ? new Date(t.completedAt).getTime() : startMs + 1;
+      for (const task of wf.tasks) {
+        const startMs = task.startedAt ? new Date(task.startedAt).getTime() : new Date(task.createdAt).getTime();
+        const endMs = task.completedAt ? new Date(task.completedAt).getTime() : startMs + 1;
         tracks.push({
-          label: `${t.agentRole}: ${truncate(t.description, 60)}`,
+          label: `${task.agentRole}: ${truncate(task.description, 60)}`,
           kind: 'workflow-task',
           startMs,
           endMs,
-          status: t.status,
-          detail: t.output ? truncate(t.output, 120) : undefined,
+          status: task.status,
+          detail: task.output ? truncate(task.output, 120) : undefined,
           agentKey: key,
           agentName: name,
         });
@@ -575,20 +583,19 @@ export function ObservabilityContent({
     return lines.join('\n');
   };
 
+  // Thunk form: the report serialises every event, log line and (optionally) every
+  // diff, so it is built on the click rather than on each render. A builder that
+  // throws lands on `error`, exactly as the old try/catch around it did.
   const copyTriage = async () => {
-    try {
+    await triageCopy.copy(async () => {
       const extras: string[] = [];
       if (reportMaterials) extras.push(reportMaterials);
       if (reportTransaction) {
         try { const tx = await reportTransaction(); if (tx) extras.push(tx); }
         catch { /* a diff fetch failed — copy the rest rather than nothing */ }
       }
-      await navigator.clipboard.writeText(buildTriageReport(extras));
-      setCopyState('copied');
-    } catch {
-      setCopyState('error');
-    }
-    setTimeout(() => setCopyState('idle'), 2000);
+      return buildTriageReport(extras);
+    });
   };
 
   // --------------------------------------------------------------------------
@@ -598,34 +605,34 @@ export function ObservabilityContent({
       {!embedded && (
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Agents</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('agents')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Click an agent to view its diagnostics. Select more than one to compare.
+            {t('agentsHint')}
           </span>
           {!scoped && unifiedAgents.length > 0 && (
             <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-              <button type="button" onClick={selectAll} style={smallBtn}>Select all</button>
-              <button type="button" onClick={clearSelection} style={smallBtn}>Clear</button>
+              <button type="button" onClick={selectAll} style={smallBtn}>{t('selectAll')}</button>
+              <button type="button" onClick={clearSelection} style={smallBtn}>{t('clear')}</button>
             </div>
           )}
         </div>
 
         {scoped ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            {scopedAgent?.name ?? 'Agent'} (scoped from panel)
+            {t('scopedFromPanel', { name: scopedAgent?.name ?? t('agentFallback') })}
           </div>
         ) : dirLoading ? (
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading agents…</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingAgents')}</div>
         ) : unifiedAgents.length === 0 ? (
           <div style={emptyBox}>
             {dirError ? (
               <span>{dirError}</span>
             ) : (
-              <>
-                No agents yet. Register a self-hosted agent in{' '}
-                <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Workforce</Link>{' '}
-                or create a cloud agent — both appear here once they run.
-              </>
+              t.rich('noAgents', {
+                link: (chunks) => (
+                  <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</Link>
+                ),
+              })
             )}
           </div>
         ) : (
@@ -645,7 +652,7 @@ export function ObservabilityContent({
                     padding: '6px 12px',
                     background: checked ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
                     border: `1px solid ${checked ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     cursor: 'pointer',
                     fontSize: 13,
                     color: checked ? 'var(--coral-bright)' : 'var(--text-secondary)',
@@ -663,7 +670,7 @@ export function ObservabilityContent({
                         a.online ? 'rgba(34,197,94,0.95)' : 'var(--text-muted)'
                       )}
                     >
-                      {a.online ? 'ONLINE' : 'OFFLINE'}
+                      {a.online ? t('online') : t('offline')}
                     </span>
                   )}
                 </button>
@@ -677,9 +684,9 @@ export function ObservabilityContent({
       {/* Single view toggle — diagnostics as a log view or a timeline view */}
       {!embedded && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>View:</span>
-        <button type="button" onClick={() => setView('logs')} style={toggleBtn(view === 'logs')}>Log view</button>
-        <button type="button" onClick={() => setView('timeline')} style={toggleBtn(view === 'timeline')}>Timeline view</button>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('viewLabel')}</span>
+        <button type="button" onClick={() => setView('logs')} style={toggleBtn(view === 'logs')}>{t('logView')}</button>
+        <button type="button" onClick={() => setView('timeline')} style={toggleBtn(view === 'timeline')}>{t('timelineView')}</button>
       </div>
       )}
 
@@ -697,18 +704,18 @@ export function ObservabilityContent({
                       borderRadius: '50%',
                       background:
                         connState === 'connected'
-                          ? 'var(--green, #22c55e)'
+                          ? 'var(--success, var(--success))'
                           : connState === 'offline'
-                            ? 'var(--red, #ef4444)'
+                            ? 'var(--danger)'
                             : 'var(--text-muted)',
                     }}
                   />
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{connState}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t(`conn.${connState}`)}</span>
                 </>
               )}
               {hasCloudSelection && (
                 <button type="button" onClick={() => void loadDiagnostics()} disabled={diagLoading} style={smallBtn}>
-                  {diagLoading ? 'Refreshing…' : 'Refresh cloud'}
+                  {diagLoading ? t('refreshing') : t('refreshCloud')}
                 </button>
               )}
               <Select value={logLevel} onChange={(e) => setLogLevel(e.target.value)} style={selectStyle}>
@@ -720,36 +727,37 @@ export function ObservabilityContent({
               </Select>
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
-                Auto-scroll
+                {t('autoScroll')}
               </label>
-              <button type="button" onClick={() => setLogLines([])} style={smallBtn}>Clear</button>
+              <button type="button" onClick={() => setLogLines([])} style={smallBtn}>{t('clear')}</button>
               <button
                 type="button"
                 onClick={copyTriage}
-                title={reportTransaction
-                  ? 'Copy a full report — materials/PRD, the code changes (diffs), telemetry, errors, and logs — to the clipboard'
-                  : 'Copy a full triage report (agents, telemetry, errors, logs) to the clipboard'}
-                style={copyState === 'error' ? { ...smallBtn, color: 'var(--red, #ef4444)', borderColor: 'var(--red, #ef4444)' } : smallBtn}
+                title={reportTransaction ? t('copyReportTitle') : t('copyTriageTitle')}
+                style={triageCopy.state === 'error' ? { ...smallBtn, color: 'var(--danger)', borderColor: 'var(--danger)' } : smallBtn}
               >
-                {copyState === 'copied' ? 'Copied ✓' : copyState === 'error' ? 'Copy failed' : reportTransaction ? 'Copy report (+diffs)' : 'Copy triage info'}
+                {triageCopy.state === 'copied'
+                  ? `${tc('copied')} ✓`
+                  : triageCopy.state === 'error'
+                    ? tc('copyFailed')
+                    : reportTransaction ? t('copyReport') : t('copyTriage')}
               </button>
             </div>
           )}
           {hasCloudSelection && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-              Cloud agents run server-side via the gateway (no live relay stream); their log lines are
-              derived from execution telemetry. Use “Refresh cloud” for the latest.
+              {t('cloudNote')}
             </div>
           )}
           <div style={logPaneStyle}>
             {!hasSelection ? (
               <div style={{ color: 'var(--text-muted)' }}>
                 {unifiedAgents.length === 0 && !dirLoading
-                  ? 'Register or create an agent first, then select it above.'
-                  : 'Select one or more agents above to view diagnostics.'}
+                  ? t('registerThenSelect')
+                  : t('selectForLogs')}
               </div>
             ) : filteredLogs.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)' }}>Waiting for log output…</div>
+              <div style={{ color: 'var(--text-muted)' }}>{t('waitingForLogs')}</div>
             ) : (
               filteredLogs.map((l, i) => (
                 <div
@@ -758,9 +766,9 @@ export function ObservabilityContent({
                     marginBottom: 4,
                     color:
                       l.level === 'error'
-                        ? 'var(--red, #ef4444)'
+                        ? 'var(--danger)'
                         : l.level === 'warn'
-                          ? 'var(--amber, #f59e0b)'
+                          ? 'var(--warning, var(--warning))'
                           : 'var(--text-secondary)',
                   }}
                 >
@@ -770,11 +778,11 @@ export function ObservabilityContent({
                       display: 'inline-block',
                       marginRight: 8,
                       padding: '1px 6px',
-                      borderRadius: 4,
+                      borderRadius: 'var(--radius-sm)',
                       fontSize: 10,
                       fontWeight: 600,
                       background: colorForKey(selectedKeys, l.agentKey),
-                      color: '#fff',
+                      color: 'var(--text-on-accent)',
                       opacity: 0.9,
                     }}
                   >
@@ -795,52 +803,53 @@ export function ObservabilityContent({
       {/* TIMELINE VIEW */}
       {view === 'timeline' && (
         <div style={cardStyle}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Timeline</div>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('timeline')}</div>
           {hasSelection ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                 <input
                   type="text"
-                  placeholder="Category filter (e.g. llm, thinking)"
+                  placeholder={t('categoryFilterPlaceholder')}
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
                   style={{ ...selectStyle, width: 200 }}
                 />
                 <button type="button" onClick={() => void loadDiagnostics()} disabled={diagLoading} style={toggleBtn(true)}>
-                  {diagLoading ? 'Loading…' : 'Refresh'}
+                  {diagLoading ? tc('loading') : t('refresh')}
                 </button>
                 <button type="button" onClick={() => setTimelineViewMode(timelineViewMode === 'list' ? 'gantt' : 'list')} style={smallBtn}>
-                  {timelineViewMode === 'list' ? 'Gantt' : 'List'}
+                  {timelineViewMode === 'list' ? t('viewGantt') : t('viewList')}
                 </button>
               </div>
-              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
+              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
                 {diagError ? (
-                  <div style={{ color: 'var(--red, #ef4444)', fontSize: 13 }}>{diagError}</div>
+                  <div style={{ color: 'var(--danger)', fontSize: 13 }}>{diagError}</div>
                 ) : diagLoading && tracks.length === 0 ? (
-                  <div style={centerMuted}>Loading timeline…</div>
+                  <div style={centerMuted}>{t('loadingTimeline')}</div>
                 ) : tracks.length === 0 ? (
                   <div style={{ ...centerMuted, flexDirection: 'column', gap: 8 }}>
-                    <div>No timeline events</div>
-                    <div style={{ fontSize: 12 }}>Tool-call audit events and workflow tasks appear here once the agents run.</div>
+                    <div>{t('noTimelineEvents')}</div>
+                    <div style={{ fontSize: 12 }}>{t('noTimelineHint')}</div>
                   </div>
                 ) : timelineViewMode === 'list' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {tracks.map((t, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+                    {/* `track`, not `t` — `t` is the translations function in this scope. */}
+                    {tracks.map((track, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
                         <span
                           style={{
                             width: 8,
                             height: 8,
                             borderRadius: '50%',
                             background:
-                              t.status === 'failed'
-                                ? 'var(--red, #ef4444)'
-                                : t.kind === 'tool'
-                                  ? 'var(--accent, #6366f1)'
-                                  : t.status === 'completed'
-                                    ? 'var(--green, #22c55e)'
-                                    : t.status === 'running'
-                                      ? 'var(--blue, #3b82f6)'
+                              track.status === 'failed'
+                                ? 'var(--danger)'
+                                : track.kind === 'tool'
+                                  ? 'var(--accent)'
+                                  : track.status === 'completed'
+                                    ? 'var(--success, var(--success))'
+                                    : track.status === 'running'
+                                      ? 'var(--info)'
                                       : 'var(--text-muted)',
                             marginTop: 5,
                             flexShrink: 0,
@@ -848,21 +857,21 @@ export function ObservabilityContent({
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: colorForKey(selectedKeys, t.agentKey), color: '#fff', flexShrink: 0 }}>
-                              {t.agentName}
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: colorForKey(selectedKeys, track.agentKey), color: 'var(--text-on-accent)', flexShrink: 0 }}>
+                              {track.agentName}
                             </span>
-                            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t.label}</span>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{track.label}</span>
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {fmtTime(t.startMs)}
-                            {t.endMs > t.startMs ? ` → ${fmtTime(t.endMs)} (${fmtDuration(t.endMs - t.startMs)})` : ''}
+                            {fmtTime(track.startMs)}
+                            {track.endMs > track.startMs ? ` → ${fmtTime(track.endMs)} (${fmtDuration(track.endMs - track.startMs)})` : ''}
                           </div>
-                          {t.detail && (
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{t.detail}</div>
+                          {track.detail && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{track.detail}</div>
                           )}
                         </div>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--bg-deep)', color: 'var(--text-secondary)', flexShrink: 0 }}>
-                          {t.status}
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-deep)', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                          {track.status}
                         </span>
                       </div>
                     ))}
@@ -876,11 +885,11 @@ export function ObservabilityContent({
             <div style={{ ...centerMuted, flexDirection: 'column', minHeight: 240, gap: 8 }}>
               {unifiedAgents.length === 0 && !dirLoading ? (
                 <>
-                  <span>Register or create an agent first.</span>
-                  <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Go to Workforce →</Link>
+                  <span>{t('registerFirst')}</span>
+                  <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('goToWorkforce')}</Link>
                 </>
               ) : (
-                <span>Select one or more agents above to view the execution timeline.</span>
+                <span>{t('selectForTimeline')}</span>
               )}
             </div>
           )}
@@ -896,7 +905,7 @@ const smallBtn: React.CSSProperties = {
   fontSize: 11,
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   color: 'var(--text-secondary)',
   cursor: 'pointer',
 };
@@ -906,7 +915,7 @@ const selectStyle: React.CSSProperties = {
   padding: '3px 8px',
   fontSize: 12,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
 };
@@ -916,14 +925,14 @@ const emptyBox: React.CSSProperties = {
   color: 'var(--text-muted)',
   padding: 12,
   background: 'var(--bg-deep)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)',
 };
 
 const logPaneStyle: React.CSSProperties = {
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   padding: 12,
   minHeight: 280,
   maxHeight: 480,
@@ -949,7 +958,7 @@ function toggleBtn(active: boolean): React.CSSProperties {
     background: active ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
     color: active ? 'var(--coral-bright)' : 'var(--text-secondary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
   };
 }

@@ -7,14 +7,18 @@ import {
   type DatasetEnv,
 } from '../services/dataset';
 import { requireGatewayAuthToken } from '../services/gateway';
+import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
-interface Env extends DatasetEnv {
+interface Env extends DatasetEnv, WorkerAuthBindings {
   NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
   BUILDERFORCE_API_BASE_URL?: string;
 }
 
 const datasets = new Hono<{ Bindings: Env }>();
+
+// SECURITY (H9): require a valid Bearer session token for all dataset routes.
+datasets.use('*', requireAuth);
 
 function generateId(): string {
   return crypto.randomUUID();

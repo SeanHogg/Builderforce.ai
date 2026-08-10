@@ -1,13 +1,17 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { generateId } from './projects';
+import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
-interface Env {
+interface Env extends WorkerAuthBindings {
   NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
 }
 
 const agents = new Hono<{ Bindings: Env }>();
+
+// SECURITY (H9): require a valid Bearer session token for all agent routes.
+agents.use('*', requireAuth);
 
 agents.get('/', async (c) => {
   const sql = neon(c.env.NEON_DATABASE_URL);

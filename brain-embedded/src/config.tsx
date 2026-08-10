@@ -28,11 +28,19 @@ import {
 export interface BrainPersistenceAdapter {
   listChats(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
   getChat(id: number): Promise<BrainChat>;
-  createChat(body: { title?: string; projectId?: number | null }): Promise<BrainChat>;
-  updateChat(id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }): Promise<BrainChat>;
+  createChat(body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
+  updateChat(id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
   deleteChat(id: number): Promise<unknown>;
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+  /** Subscribe to durable message invalidations for one chat. The callback carries
+   * no data; the hook reconciles from persistence as the source of truth. */
+  subscribeMessages?(chatId: number, onChanged: () => void): () => void;
+  /** Advance the caller's unread high-water mark for a chat to `seq` (a message's
+   * seq; omit to mark everything read). Called when a chat is OPEN/mounted so an
+   * unread badge clears — on either surface, since it's the same server chat.
+   * Optional: a guest/offline backend that has no unread concept simply omits it. */
+  markChatRead?(chatId: number, seq?: number): Promise<unknown>;
   sendMessages(
     chatId: number,
     messages: Array<{ role: string; content: string; metadata?: string }>,

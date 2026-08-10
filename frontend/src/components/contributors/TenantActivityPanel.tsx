@@ -11,7 +11,7 @@ import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
@@ -31,7 +31,7 @@ function Spark({ daily, ariaLabel }: { daily: TenantActivityRollup['daily']; ari
     <svg width={daily.length * (W + GAP)} height={H} role="img" aria-label={ariaLabel} style={{ display: 'block' }}>
       {daily.map((d, i) => {
         const h = Math.max(1, Math.round((d.count / max) * H));
-        return <rect key={d.date} x={i * (W + GAP)} y={H - h} width={W} height={h} fill="var(--accent, #6366f1)" rx={1}><title>{`${d.date}: ${d.count}`}</title></rect>;
+        return <rect key={d.date} x={i * (W + GAP)} y={H - h} width={W} height={h} fill="var(--accent)" rx={1}><title>{`${d.date}: ${d.count}`}</title></rect>;
       })}
     </svg>
   );
@@ -57,24 +57,24 @@ export function TenantActivityPanel() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           {[7, 30, 90].map((d) => (
             <button key={d} onClick={() => setDays(d)} style={{
-              padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer',
               border: '1px solid var(--border-subtle)',
-              background: days === d ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
-              color: days === d ? '#fff' : 'var(--text-secondary)',
+              background: days === d ? 'var(--accent)' : 'var(--bg-base)',
+              color: days === d ? 'var(--text-on-accent)' : 'var(--text-secondary)',
             }}>{d}d</button>
           ))}
         </div>
       </div>
 
-      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
+      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {data && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
             <Stat label={t('tenant.events', { days: data.windowDays })} value={data.totalEvents.toLocaleString()} />
             <Stat label={t('tenant.activeContributors')} value={data.activeContributors.toLocaleString()} />
-            <Stat label={t('tenant.linesAdded')} value={data.totals.linesAdded.toLocaleString()} accent="#30a46c" />
-            <Stat label={t('tenant.linesRemoved')} value={data.totals.linesRemoved.toLocaleString()} accent="#e5484d" />
+            <Stat label={t('tenant.linesAdded')} value={data.totals.linesAdded.toLocaleString()} accent="var(--success)" />
+            <Stat label={t('tenant.linesRemoved')} value={data.totals.linesRemoved.toLocaleString()} accent="var(--error)" />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>

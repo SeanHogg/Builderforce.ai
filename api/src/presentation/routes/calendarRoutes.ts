@@ -1,10 +1,13 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Calendar connections — /api/calendar/*
  *
  * Per-USER OAuth grants (Google Calendar / Microsoft Graph) used to schedule
- * meetings and surface upcoming events. Reuses the shared OAuth state/token
- * primitives ({@link ../../infrastructure/auth/oauthState}) and the provider
- * adapters ({@link ../../application/calendar/calendarProviders}).
+ * meetings and surface upcoming events. The connect/callback dance itself is the
+ * shared one ({@link ../../application/shared/providerOAuthConnect}, the same
+ * primitive the mailbox and drive flows use); this file adds only the calendar
+ * provider adapters ({@link ../../application/calendar/calendarProviders}) and
+ * its own redirect vocabulary.
  *
  * Auth model: every endpoint is bearer-authed EXCEPT the OAuth `/callback/:provider`,
  * which is a top-level browser redirect FROM the provider (no bearer available) —
@@ -13,22 +16,21 @@
  */
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { calendarConnections } from '../../infrastructure/database/schema';
-import { signState, verifyState, exchangeCodeForTokens } from '../../infrastructure/auth/oauthState';
+import {
+  buildProviderConsentUrl,
+  completeProviderOAuthCallback,
+} from '../../application/shared/providerOAuthConnect';
 import {
   getCalendarProvider, availableCalendarProviders, type CalendarProviderName, type CalendarEvent,
 } from '../../application/calendar/calendarProviders';
 import { freshAccessToken } from '../../application/calendar/calendarService';
 
-interface CalendarState extends Record<string, unknown> {
-  provider: string;
-  userId: string;
-  tenantId: number;
-  returnTo: string;
-}
+/** Where the connect flow sends the browser back to when it is not told. */
+const DEFAULT_RETURN_TO = '/meetings';
 
 export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -41,7 +43,6 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
 
   const callbackUrl = (c: { req: { url: string } }, provider: string) =>
     `${new URL(c.req.url).origin}/api/calendar/callback/${provider}`;
-  const appBase = (env: Env) => (env.APP_URL ?? 'https://builderforce.ai').replace(/\/$/, '');
 
   // GET /providers — which calendar providers are configured, + this user's connections.
   r.get('/providers', async (c) => {
@@ -63,24 +64,17 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
     const name = c.req.param('provider');
     const provider = getCalendarProvider(name);
     if (!provider) return c.json({ error: 'Unknown provider' }, 400);
-    const rec = env as unknown as Record<string, string | undefined>;
-    const clientId = rec[provider.clientIdKey as string];
-    if (!clientId) return c.json({ error: `${name} calendar is not configured` }, 503);
 
-    const returnTo = c.req.query('returnTo') || '/meetings';
-    const state = await signState(env.JWT_SECRET, {
-      provider: name, userId: c.get('userId'), tenantId: c.get('tenantId'), returnTo,
-    } satisfies CalendarState);
-
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: callbackUrl(c, name),
-      response_type: 'code',
-      scope: provider.scopes.join(' '),
-      state,
-      ...(provider.extraAuthParams ?? {}),
+    const authUrl = await buildProviderConsentUrl(env, provider, {
+      providerName: name,
+      redirectUri: callbackUrl(c, name),
+      userId: c.get('userId') as string,
+      tenantId: c.get('tenantId') as number,
+      returnTo: c.req.query('returnTo'),
+      returnToFallback: DEFAULT_RETURN_TO,
     });
-    return c.json({ authUrl: `${provider.authUrl}?${params}` });
+    if (!authUrl) return c.json({ error: `${name} calendar is not configured` }, 503);
+    return c.json({ authUrl });
   });
 
   // GET /callback/:provider — provider redirect (PUBLIC; authed by signed state).
@@ -88,29 +82,33 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const name = c.req.param('provider');
     const provider = getCalendarProvider(name);
-    const base = appBase(env);
+    const base = resolveAppBaseUrl(env);
     const code = c.req.query('code');
     const rawState = c.req.query('state');
-    if (!provider || !code || !rawState) return c.redirect(`${base}/meetings?calendar=error`);
+    if (!provider || !code || !rawState) return c.redirect(`${base}${DEFAULT_RETURN_TO}?calendar=error`);
 
-    const state = await verifyState<CalendarState>(env.JWT_SECRET, rawState);
-    if (!state || state.provider !== name) return c.redirect(`${base}/meetings?calendar=invalid_state`);
-
-    const rec = env as unknown as Record<string, string | undefined>;
-    const clientId = rec[provider.clientIdKey as string];
-    const clientSecret = rec[provider.clientSecretKey as string];
-    if (!clientId || !clientSecret) return c.redirect(`${base}${state.returnTo}?calendar=unavailable`);
+    const result = await completeProviderOAuthCallback(env, provider, {
+      providerName: name, code, rawState, redirectUri: callbackUrl(c, name),
+    });
+    if (!result.ok) {
+      if (result.reason === 'exchange_failed') {
+        reportCaughtError(result.error, { source: 'presentation/routes/calendarRoutes.ts', operation: 'callback' });
+      }
+      const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
+      const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
+      return c.redirect(`${base}${returnTo}?calendar=${outcome}`);
+    }
+    const { state, tokens: tok } = result;
 
     try {
-      const tok = await exchangeCodeForTokens(
-        { tokenUrl: provider.tokenUrl, clientId, clientSecret }, code, callbackUrl(c, name),
-      );
       // Resolve the connected account email.
       let accountEmail = '';
       try {
         const info = await fetch(provider.accountInfoUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
         if (info.ok) accountEmail = provider.parseAccountEmail(await info.json() as Record<string, unknown>);
-      } catch { /* email is best-effort */ }
+      } catch (error) { /* email is best-effort */ 
+        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
+      }
 
       const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
       await db.insert(calendarConnections).values({
@@ -136,7 +134,8 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
         },
       });
       return c.redirect(`${base}${state.returnTo}?calendar=connected`);
-    } catch {
+    } catch (error) {
+      reportCaughtError(error, { source: 'presentation/routes/calendarRoutes.ts', operation: 'callback' });
       return c.redirect(`${base}${state.returnTo}?calendar=error`);
     }
   });
@@ -175,7 +174,9 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
       try {
         const events = await provider.listUpcoming(token, conn.calendarId, { maxResults: 25, timeMinISO, timeMaxISO });
         for (const e of events) all.push({ ...e, provider: conn.provider as CalendarProviderName });
-      } catch { /* skip a failing provider, still return the rest */ }
+      } catch (error) { /* skip a failing provider, still return the rest */ 
+        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
+      }
     }
     all.sort((a, b) => a.startISO.localeCompare(b.startISO));
     return c.json({ events: all });

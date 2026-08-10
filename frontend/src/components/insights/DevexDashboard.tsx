@@ -30,8 +30,8 @@ function DrillButton({ label, onClick }: { label: string; onClick: () => void })
       type="button"
       onClick={onClick}
       style={{
-        padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
-        background: 'transparent', color: 'var(--accent, #2563eb)', cursor: 'pointer',
+        padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
+        background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
         fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap',
       }}
     >
@@ -61,8 +61,8 @@ export function DevexDashboard() {
             type="button"
             onClick={() => open('surveys')}
             style={{
-              padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
-              background: 'var(--coral-bright, #f4726e)', color: '#fff', cursor: 'pointer',
+              padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
+              background: 'var(--coral-bright)', color: 'var(--text-on-accent)', cursor: 'pointer',
               fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap',
             }}
           >
@@ -78,7 +78,7 @@ export function DevexDashboard() {
         return (
           <PmCard
             key={id}
-            title={`${def.icon} ${t(def.titleKey)}`}
+            title={t(def.titleKey)}
             action={<DrillButton label={t('viewReport')} onClick={() => open(id)} />}
           >
             <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>

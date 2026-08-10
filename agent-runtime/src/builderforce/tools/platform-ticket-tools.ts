@@ -73,6 +73,9 @@ const TicketsFromDeltaSchema = Type.Object({
   ),
   modality: Type.Optional(Type.String()),
   chatId: Type.Optional(Type.Number()),
+  taskId: Type.Optional(
+    Type.Number({ description: "Existing project ticket that already tracks this change." }),
+  ),
   createTicket: Type.Optional(
     Type.Boolean({ description: "Whether to open a board ticket for the delta." }),
   ),
@@ -86,6 +89,7 @@ type TicketsFromDeltaParams = {
   files?: string[];
   modality?: string;
   chatId?: number;
+  taskId?: number;
   createTicket?: boolean;
 };
 
@@ -93,7 +97,7 @@ export const ticketsFromDeltaTool: AgentTool<typeof TicketsFromDeltaSchema, stri
   name: "tickets_from_delta",
   label: "Record Code Delta",
   description:
-    "Record a code change as a ticket on the Builderforce board so the change is visible. Provide a one-line summary, the kind (improvement | fix | bug), and the files touched.",
+    "Record a code change on the Builderforce board so it is visible. Pass taskId when an existing ticket tracks the work; otherwise a ticket is created. Provide a one-line summary, kind, and files touched.",
   parameters: TicketsFromDeltaSchema,
   async execute(_toolCallId: string, params: TicketsFromDeltaParams) {
     return jsonResult(

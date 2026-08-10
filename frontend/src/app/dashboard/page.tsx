@@ -4,13 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { Project, Tenant } from '@/lib/types';
+import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { getMe } from '@/lib/auth';
+import { useOnboardingPrompt } from '@/lib/onboarding';
 import { ChatInput } from '@/components/ChatInput';
-import PageContainer from '@/components/PageContainer';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import { TabCountBadge } from '@/components/TabCountBadge';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
@@ -20,17 +19,19 @@ import { InsightStat } from '@/components/dashboard/InsightStat';
 import { PulseSubmitCard } from '@/components/insights/PulseWidget';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, dailyCounts } from '@/components/dashboard/seriesFromTimestamps';
-import { IdeProjectsContent } from '@/components/ide/IdeProjectsContent';
-import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
+import { DashboardCreationLauncher, DashboardCreationSessions } from '@/components/dashboard/DashboardCreationSessions';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
 import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
-import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
+import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
+import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
+import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
+import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
+import styles from './Dashboard.module.css';
+import { signInHref } from '@/lib/auth';
 
-const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
-
-const DASHBOARD_TABS = ['projects', 'workforce', 'ide', 'ideas', 'quality', 'knowledge'] as const;
+const DASHBOARD_TABS = ['create', 'projects', 'workforce', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
 
 /**
@@ -41,7 +42,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations('dashboard');
-  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
+  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant } = useAuth();
   const { currentProjectId } = useProjectScope();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
@@ -49,81 +50,42 @@ export default function DashboardPage() {
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
+  const [building, setBuilding] = useState(false);
+  const [creationQuota, setCreationQuota] = useState<{ usage: number; limit: number } | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [approvalDates, setApprovalDates] = useState<string[]>([]);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
   const [taskDates, setTaskDates] = useState<string[]>([]);
 
-  // Active tab is driven by ?tab= so it deep-links and survives reload (matches
-  // the /projects convention). Unknown/absent → the default Projects tab.
+  // Create is the default home. Projects remain an optional organizational lens.
   const tabParam = searchParams.get('tab');
   const activeTab: DashboardTab = (DASHBOARD_TABS as readonly string[]).includes(tabParam ?? '')
     ? (tabParam as DashboardTab)
-    : 'projects';
+    : 'create';
   const selectTab = useCallback(
     (key: DashboardTab) => {
-      router.replace(key === 'projects' ? '/dashboard' : `/dashboard?tab=${key}`, { scroll: false });
+      router.replace(key === 'create' ? '/dashboard' : `/dashboard?tab=${key}`, { scroll: false });
     },
     [router],
   );
 
-  // Onboarding stepper state
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  // Onboarding wizard — the show/dismiss decision is shared with the hired
+  // dashboard (useOnboardingPrompt); the stepper picks its own account-type track.
+  const {
+    show: showOnboarding,
+    progress: onboardingProgress,
+    complete: handleOnboardingComplete,
+    dismiss: handleOnboardingDismiss,
+  } = useOnboardingPrompt();
 
-  // Auth guard — allow staying on dashboard if not yet onboarded (no tenant yet)
+  // Auth guard. A brand-new builder's named workspace is auto-provisioned by the
+  // onboarding gate before this page renders, so reaching here without a tenant means
+  // the picker is the right destination (multi-workspace, or provisioning fell back).
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/dashboard');
+      router.replace(signInHref('/dashboard'));
     }
-    // No redirect to /tenants here — the onboarding stepper handles workspace creation
   }, [isAuthenticated, router]);
-
-  // Check onboarding status once we have a web token.
-  // Only owners go through onboarding — invited members skip it entirely.
-  useEffect(() => {
-    if (!isAuthenticated || !webToken || onboardingChecked) return;
-
-    // If the user has a workspace selected and they're not an owner in it, skip onboarding.
-    if (hasTenant && tenant?.role && tenant.role !== 'owner') {
-      setOnboardingChecked(true);
-      return;
-    }
-
-    const dismissed = typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1';
-    if (dismissed) {
-      setOnboardingChecked(true);
-      return;
-    }
-    getMe(webToken)
-      .then(({ onboardingCompletedAt }) => {
-        if (!onboardingCompletedAt) {
-          setShowOnboarding(true);
-        }
-      })
-      .catch(() => {
-        // If the check fails, don't block the user — just skip onboarding
-      })
-      .finally(() => setOnboardingChecked(true));
-  }, [isAuthenticated, webToken, onboardingChecked, hasTenant, tenant]);
-
-  const handleOnboardingWorkspaceCreated = useCallback(
-    async (newTenant: Tenant) => {
-      await selectTenant(newTenant);
-    },
-    [selectTenant]
-  );
-
-  const handleOnboardingComplete = useCallback(() => {
-    setShowOnboarding(false);
-  }, []);
-
-  const handleOnboardingDismiss = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
-    }
-    setShowOnboarding(false);
-  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
@@ -141,6 +103,11 @@ export default function DashboardPage() {
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !hasTenant) return;
+    void creationSessionsApi.quotas().then((result) => setCreationQuota({ usage: result.usage.sessions, limit: result.limits.sessions })).catch(() => undefined);
+  }, [hasTenant, isAuthenticated]);
 
   // Task stats follow the global project scope: when a project is selected the
   // dashboard reflects just that project's tasks (re-fetched on scope change).
@@ -161,15 +128,23 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [isAuthenticated, hasTenant, currentProjectId]);
 
-  // The dashboard prompt opens Brain Storm and auto-executes there: Brain creates
-  // a chat on demand and streams a reply, then the user can promote it to a
-  // project / IDE. (Direct dispatch to an agent host stays on /tasks + /workforce.)
-  const handlePromptSubmit = () => {
+  // A prompt creates a session, not a project. Project context can be added later.
+  const handlePromptSubmit = useCallback(async () => {
     const p = prompt.trim();
-    if (!p) return;
-    setPrompt('');
-    router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
-  };
+    if (!p || building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)) return;
+    setBuilding(true);
+    try {
+      const created = await creationSessionsApi.create({ title: p.slice(0, 80), initialPrompt: p });
+      setPrompt('');
+      router.push(`/create/${created.session.id}`);
+    } catch {
+      // Preserve intent locally if server persistence is briefly unavailable.
+      const { createLocalCreationSession } = await import('@/lib/creationSessions');
+      router.push(`/create/${createLocalCreationSession(p)}`);
+    } finally {
+      setBuilding(false);
+    }
+  }, [prompt, building, creationQuota, router]);
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
   // Live "who's online / what's working" across humans AND agents — powers the
@@ -190,245 +165,98 @@ export default function DashboardPage() {
   const taskSeries = useMemo(() => cumulativeDailySeries(taskDates), [taskDates]);
   const approvalSeries = useMemo(() => dailyCounts(approvalDates), [approvalDates]);
 
+  // The five tabs, once. `tabRows` is the list; the inline bar and the panel's
+  // index rail are two renderings of it, so a sixth view is one entry here and
+  // appears in both. Declared below `scopedProjects` so the rail carries the same
+  // counts the bar does rather than a second, unlabelled copy of the same tabs.
+  const tabRows = DASHBOARD_TABS.map((key) => ({
+    key,
+    label: t(`tabs.${key}`),
+    count: key === 'projects' && !loading ? scopedProjects.length : undefined,
+  }));
+
+  // Opened from anywhere in the operator shell this route renders inside
+  // `ShellPanel`, which without this called it "Panel" — the generic fallback —
+  // because the dashboard is not a nav group. It names itself, and hands over its
+  // five tabs as the panel's index rail; they are VIEWS, not anchors, so the rail
+  // switches rather than scrolls (`usePublishReferenceSelect`).
+  usePublishReferenceChrome({
+    title: t('title'),
+    sections: tabRows.map(({ key, label, count }) => ({
+      id: key,
+      label: count != null ? `${label} · ${count}` : label,
+    })),
+    activeId: activeTab,
+  });
+  usePublishReferenceSelect((key) => selectTab(key as DashboardTab));
+  // Opened as a panel, the rail IS the tab bar — so the inline one below would be
+  // the same five buttons a second time. Standalone there is no rail, and the
+  // inline bar is the only way to change view, so it must stay.
+  const railHasTabs = useReferenceRailActive();
+
   if (!isAuthenticated) return null;
 
-  // If we don't have a tenant AND we're still checking or showing onboarding, render the stepper overlay only
-  if (!hasTenant && (showOnboarding || !onboardingChecked)) {
-    return showOnboarding ? (
-      <OnboardingStepper
-        webToken={webToken!}
-        tenantToken={tenantToken}
-        tenant={tenant}
-        existingProjectsCount={projects.length}
-        onWorkspaceCreated={handleOnboardingWorkspaceCreated}
-        onComplete={handleOnboardingComplete}
-        onDismiss={handleOnboardingDismiss}
-      />
-    ) : null;
-  }
-
-  // If no tenant and onboarding was dismissed/complete, send to tenant picker
+  // No tenant → the picker (a brand-new builder's named workspace is provisioned
+  // upstream by the onboarding gate, so this is the multi-workspace / fallback path).
   if (!hasTenant) {
     router.replace('/tenants?next=/dashboard');
     return null;
   }
 
-  return (
-    <PageContainer style={{ padding: 0 }}>
-      {showOnboarding && webToken && (
-        <OnboardingStepper
-          webToken={webToken}
-          tenantToken={tenantToken}
-          tenant={tenant}
-          existingProjectsCount={projects.length}
-          onWorkspaceCreated={handleOnboardingWorkspaceCreated}
-          onComplete={handleOnboardingComplete}
-          onDismiss={handleOnboardingDismiss}
-        />
-      )}
-      <main style={{ padding: '24px 16px' }}>
-        {/* Prompt — What should we build? */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-            {t('heading')}
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 20px' }}>
-            {t.rich('subheading', {
-              brainstorm: (chunks) => <Link href="/brainstorm" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>{chunks}</Link>,
-              tasks: (chunks) => <Link href="/projects?tab=tasks" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>{chunks}</Link>,
-              workforce: (chunks) => <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>{chunks}</Link>,
-            })}
-          </p>
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <ChatInput
-              value={prompt}
-              onChange={setPrompt}
-              onSubmit={handlePromptSubmit}
-              placeholder={t('promptPlaceholder')}
-              submitLabel={t('brainStorm')}
-              rows={1}
-              submitOnEnter={false}
-              showBrainIcon={true}
-              showVoice={true}
-              secondaryContent={
-                connectedAgentHosts.length > 0 ? (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {t('agentsConnected', { count: connectedAgentHosts.length })} · {connectedAgentHosts.map((c) => c.name).join(', ')}
-                  </span>
-                ) : (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {t('noAgents')}{' '}
-                    <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-                      {t('setUpInWorkforce')}
-                    </Link>
-                  </span>
-                )
-              }
-            />
-          </div>
-          {pendingApprovalsCount > 0 && (
-            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warning-text)' }}>
-              {t('pendingRequests', { count: pendingApprovalsCount })} ·{' '}
-              <Link href="/workforce?tab=approvals" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
-                {t('reviewNow')}
-              </Link>
-            </div>
-          )}
+  const metricPanels: WorkspaceCanvasPanel[] = loading ? [] : [
+    { id: 'dashboard-projects', title: t('metric.projects'), icon: '▦', width: 270, content: <InsightStat label={t('metric.projects')} value={String(scopedProjects.length)} sub={t('metric.projectsActive', { count: scopedProjects.filter((p) => (p as { status?: string }).status === 'active').length })} series={projectSeries} delta={buildInsightDelta(projectSeries, true)} href="/projects" color="var(--coral-bright)" style={{ minWidth: 0, border: 0, padding: 4 }} /> },
+    { id: 'dashboard-tasks', title: t('metric.tasks'), icon: '✓', width: 270, content: <InsightStat label={t('metric.tasks')} value={taskStats ? String(taskStats.total) : '—'} sub={taskStats ? t('metric.tasksInProgress', { count: taskStats.inProgress }) : ''} series={taskSeries} delta={buildInsightDelta(taskSeries, null)} href="/projects?tab=tasks" color="var(--cyan-bright, var(--cyan-bright))" style={{ minWidth: 0, border: 0, padding: 4 }} /> },
+    { id: 'dashboard-workforce', title: t('metric.workforceOnline'), icon: '●', width: 270, content: <InsightStat label={t('metric.workforceOnline')} value={String(presence.onlineCount)} sub={t('metric.workingNow', { count: presence.workingCount })} series={presence.activitySeries} delta={buildInsightDelta(presence.activitySeries, null)} href="/workforce" color={presence.onlineCount > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)'} style={{ minWidth: 0, border: 0, padding: 4 }} /> },
+    { id: 'dashboard-approvals', title: t('metric.pendingRequests'), icon: '!', width: 270, content: <InsightStat label={t('metric.pendingRequests')} value={String(pendingApprovalsCount)} sub={pendingApprovalsCount > 0 ? t('metric.requiresReview') : t('metric.allClear')} series={approvalSeries} delta={buildInsightDelta(approvalSeries, false)} href="/workforce?tab=approvals" color={pendingApprovalsCount > 0 ? 'rgba(245,158,11,0.9)' : 'var(--text-muted)'} style={{ minWidth: 0, border: 0, padding: 4 }} /> },
+    { id: 'dashboard-ai-usage', title: t('panel.aiUsage'), icon: '↗', width: 270, content: <AiUsageCard style={{ minWidth: 0, border: 0, padding: 4 }} /> },
+  ];
+
+  const panels: WorkspaceCanvasPanel[] = [
+    {
+      id: 'dashboard-prompt', title: t('heading'), subtitle: t('panel.promptSubtitle'), icon: '⚡',
+      content: <div className={styles.promptWidget}>
+        <p>{t.rich('subheading', {
+          brainstorm: (chunks) => <Link href="/brainstorm">{chunks}</Link>,
+          tasks: (chunks) => <Link href="/projects?tab=tasks">{chunks}</Link>,
+          workforce: (chunks) => <Link href="/workforce">{chunks}</Link>,
+        })}</p>
+        <div data-tour="demo-build"><ChatInput value={prompt} onChange={setPrompt} onSubmit={handlePromptSubmit} disabled={building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)} placeholder={t('promptPlaceholder')} submitLabel={building ? t('building') : t('build')} rows={1} submitOnEnter={false} showBrainIcon showVoice secondaryContent={connectedAgentHosts.length > 0 ? <span>{t('agentsConnected', { count: connectedAgentHosts.length })} · {connectedAgentHosts.map((c) => c.name).join(', ')}</span> : <span>{t('noAgents')} <Link href="/workforce">{t('setUpInWorkforce')}</Link></span>} /></div>
+        {creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit && <p role="alert" className={styles.warning}>{t('sessionLimitReached')}</p>}
+        {pendingApprovalsCount > 0 && <p className={styles.warning}>{t('pendingRequests', { count: pendingApprovalsCount })} · <Link href="/workforce?tab=approvals">{t('reviewNow')}</Link></p>}
+      </div>,
+    },
+    ...metricPanels,
+    { id: 'dashboard-pulse', title: t('panel.pulse'), subtitle: t('panel.pulseSubtitle'), icon: '♡', content: <PulseSubmitCard /> },
+    ...(activeTab === 'create' ? [{
+      id: 'dashboard-create', title: t('panel.create'), subtitle: t('panel.createSubtitle'), icon: '✦',
+      content: <DashboardCreationLauncher />,
+    } satisfies WorkspaceCanvasPanel] : []),
+    {
+      id: activeTab === 'create' ? 'dashboard-artifacts' : `dashboard-view-${activeTab}`,
+      title: activeTab === 'create' ? t('panel.creations') : t(`tabs.${activeTab}`),
+      subtitle: activeTab === 'create' ? t('panel.creationsSubtitle') : t('panel.workspaceWidget'),
+      icon: activeTab === 'quality' ? '◆' : activeTab === 'knowledge' ? '▤' : '◇',
+      content: <div className={styles.workspaceWidget}>
+        {!railHasTabs && (
+          <nav aria-label={t('widgetsLabel')}>{tabRows.map(({ key, label, count }) => (
+            <button key={key} type="button" data-active={activeTab === key} onClick={() => selectTab(key)}>
+              {label}<TabCountBadge count={loading ? null : count ?? undefined} />
+            </button>
+          ))}</nav>
+        )}
+        <div className={styles.workspaceContent}>
+          {activeTab === 'create' && <DashboardCreationSessions />}
+          {activeTab === 'projects' && <ProjectsContent limit={6} viewAllHref="/projects" />}
+          {activeTab === 'workforce' && <><WorkforcePresenceStripView presence={presence} /><WorkforceAgents tenantId={tenantId} /></>}
+          {activeTab === 'quality' && <DashboardQualityTab />}
+          {activeTab === 'knowledge' && <DashboardKnowledgeTab limit={8} />}
         </div>
+      </div>,
+    },
+  ];
 
-        {/* Stats strip — five compact tiles in one row (incl. AI usage), each with
-            a 14-day trend sparkline + delta chip (InsightStat). 2 columns on
-            mobile, 3 from the small breakpoint, all 5 from large up. minWidth:0
-            lets the tiles shrink to the narrow columns without overflowing. */}
-        {!loading && (
-          <div
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
-            style={{ marginBottom: 32 }}
-          >
-            <InsightStat
-              label={t('metric.projects')}
-              value={String(scopedProjects.length)}
-              sub={t('metric.projectsActive', { count: scopedProjects.filter((p) => (p as { status?: string }).status === 'active').length })}
-              series={projectSeries}
-              delta={buildInsightDelta(projectSeries, true)}
-              href="/projects"
-              color="var(--coral-bright, #f4726e)"
-              style={{ minWidth: 0 }}
-            />
-            <InsightStat
-              label={t('metric.tasks')}
-              value={taskStats ? String(taskStats.total) : '—'}
-              sub={taskStats ? t('metric.tasksInProgress', { count: taskStats.inProgress }) : ''}
-              series={taskSeries}
-              delta={buildInsightDelta(taskSeries, null)}
-              href="/projects?tab=tasks"
-              color="var(--cyan-bright, #00e5cc)"
-              style={{ minWidth: 0 }}
-            />
-            <InsightStat
-              label={t('metric.workforceOnline')}
-              value={String(presence.onlineCount)}
-              sub={t('metric.workingNow', { count: presence.workingCount })}
-              series={presence.activitySeries}
-              delta={buildInsightDelta(presence.activitySeries, null)}
-              href="/workforce"
-              color={presence.onlineCount > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)'}
-              style={{ minWidth: 0 }}
-            />
-            <InsightStat
-              label={t('metric.pendingRequests')}
-              value={String(pendingApprovalsCount)}
-              sub={pendingApprovalsCount > 0 ? t('metric.requiresReview') : t('metric.allClear')}
-              series={approvalSeries}
-              delta={buildInsightDelta(approvalSeries, false)}
-              href="/workforce?tab=approvals"
-              color={pendingApprovalsCount > 0 ? 'rgba(245,158,11,0.9)' : 'var(--text-muted)'}
-              style={{ minWidth: 0 }}
-            />
-            {/* AI usage (month-to-date) — self-gating peer tile; renders null until
-                there's trend data, so the row simply shows 4 tiles until then. */}
-            <AiUsageCard style={{ minWidth: 0 }} />
-          </div>
-        )}
-
-        {/* Team pulse (EMP-15) — a member-facing single-tap sentiment card that
-            self-hides when there is no open survey (or once the user has answered). */}
-        <div style={{ marginBottom: 24 }}>
-          <PulseSubmitCard />
-        </div>
-
-        {/* Tabs — at-a-glance across the whole workspace. Counts are shown only
-            where the dashboard actually knows the total; the shared tab
-            components (Workforce, IDE, Ideas, Quality, Knowledge) own their own
-            data, so a count badge there would be a misleading partial number. */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 4,
-            borderBottom: '1px solid var(--border-subtle)',
-            marginBottom: 24,
-            overflowX: 'auto',
-          }}
-        >
-          {([
-            { key: 'projects', label: t('tabs.projects'), count: scopedProjects.length as number | undefined },
-            { key: 'workforce', label: t('tabs.workforce'), count: undefined },
-            { key: 'ide', label: t('tabs.ide'), count: undefined },
-            { key: 'ideas', label: t('tabs.ideas'), count: undefined },
-            { key: 'quality', label: t('tabs.quality'), count: undefined },
-            { key: 'knowledge', label: t('tabs.knowledge'), count: undefined },
-          ] as const).map(({ key, label, count }) => {
-            const active = activeTab === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => selectTab(key)}
-                style={{
-                  padding: '10px 16px',
-                  fontSize: '0.9rem',
-                  fontWeight: 600,
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: active ? '2px solid var(--coral-bright)' : '2px solid transparent',
-                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  marginBottom: -1,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {label}
-                <TabCountBadge count={loading ? null : count} />
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Projects tab (preview) — reuses ProjectsContent so the cards, table,
-            button group, and data shape match the /projects page exactly. */}
-        {activeTab === 'projects' && (
-          <section style={{ marginBottom: 40 }}>
-            <ProjectsContent limit={6} viewAllHref="/projects" />
-          </section>
-        )}
-
-        {/* Talent / Workforce tab — live "who's online" presence strip on top of
-            the shared /workforce roster (cloud agents AND remote hosts). */}
-        {activeTab === 'workforce' && (
-          <>
-            <WorkforcePresenceStripView presence={presence} />
-            <WorkforceAgents tenantId={tenantId} />
-          </>
-        )}
-
-        {/* IDE tab — reuses IdeProjectCard via the shared IdeProjectsContent. */}
-        {activeTab === 'ide' && (
-          <section style={{ marginBottom: 40 }}>
-            <IdeProjectsContent limit={6} viewAllHref="/ide/dashboard" />
-          </section>
-        )}
-
-        {/* Ideas / Brainstorm tab — the tenant's Brain chats, deep-linked. */}
-        {activeTab === 'ideas' && (
-          <section style={{ marginBottom: 40 }}>
-            <DashboardIdeasTab limit={9} />
-          </section>
-        )}
-
-        {/* Quality tab — registered collectors + slide-out create. */}
-        {activeTab === 'quality' && (
-          <section style={{ marginBottom: 40 }}>
-            <DashboardQualityTab />
-          </section>
-        )}
-
-        {/* Knowledge tab — the tenant's SOP/process/doc base. */}
-        {activeTab === 'knowledge' && (
-          <section style={{ marginBottom: 40 }}>
-            <DashboardKnowledgeTab limit={8} />
-          </section>
-        )}
-      </main>
-    </PageContainer>
-  );
+  return <>
+    {showOnboarding && webToken && <OnboardingStepper webToken={webToken} tenantToken={tenantToken} tenant={tenant} initialProgress={onboardingProgress} onComplete={handleOnboardingComplete} onDismiss={handleOnboardingDismiss} />}
+    <WorkspacePanelList panels={panels} />
+  </>;
 }

@@ -82,7 +82,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
     background: 'var(--bg-base)',
     color: 'var(--text-secondary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
   };
 
@@ -102,7 +102,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
         <ScheduleLegend />
       </div>
 
-      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         {/* Scroll the 7-column grid horizontally on narrow viewports instead of
             squishing each day below a usable width and clipping its pills. */}
         <div style={{ overflowX: 'auto' }}>
@@ -139,7 +139,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                     fontWeight: isToday ? 700 : 500,
                     borderRadius: '50%',
                     marginBottom: 4,
-                    color: isToday ? '#fff' : 'var(--text-secondary)',
+                    color: isToday ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                     background: isToday ? 'var(--coral-bright)' : 'transparent',
                   }}
                 >
@@ -169,7 +169,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                           background: 'var(--bg-base)',
                           border: '1px solid var(--border-subtle)',
                           borderLeft: `3px solid ${DEADLINE_COLORS[status]}`,
-                          borderRadius: 5,
+                          borderRadius: 'var(--radius-sm)',
                           cursor: 'pointer',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -211,7 +211,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                   color: 'var(--text-secondary)',
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 999,
+                  borderRadius: 'var(--radius-full)',
                   cursor: 'pointer',
                 }}
               >

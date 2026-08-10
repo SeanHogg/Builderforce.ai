@@ -140,7 +140,7 @@ export function ScheduleMeetingPanel({
     } finally { setBusy(false); }
   }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, linkChat, teamId, user, onCreated, onClose]);
 
-  const field: React.CSSProperties = { fontSize: 13, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', width: '100%' };
+  const field: React.CSSProperties = { fontSize: 13, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', width: '100%' };
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, display: 'block' };
   const slotFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -207,7 +207,7 @@ export function ScheduleMeetingPanel({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button type="button" onClick={findTimes} disabled={finding}
                 style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 700, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: finding ? 0.6 : 1 }}>
-                {finding ? t('finding') : `✨ ${t('findATime')}`}
+                {finding ? t('finding') : `${t('findATime')}`}
               </button>
               {slots && (
                 slots.length === 0 ? (
@@ -216,7 +216,7 @@ export function ScheduleMeetingPanel({
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {slots.map((s) => (
                       <button key={s.startISO} type="button" onClick={() => { setScheduledAt(isoToLocalInput(s.startISO)); setSlots(null); }}
-                        style={{ fontSize: 12, padding: '5px 10px', borderRadius: 999, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}>
+                        style={{ fontSize: 12, padding: '5px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}>
                         {slotFmt.format(new Date(s.startISO))}
                       </button>
                     ))}
@@ -229,11 +229,11 @@ export function ScheduleMeetingPanel({
 
         <div>
           <label style={label}>{t('invite')}</label>
-          <div style={{ maxHeight: 240, overflow: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ maxHeight: 240, overflow: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {others.length === 0 ? (
               <span style={{ fontSize: 12, color: 'var(--text-muted)', padding: 6 }}>{t('noTeammates')}</span>
             ) : others.map((o) => (
-              <label key={`${o.kind}:${o.ref}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+              <label key={`${o.kind}:${o.ref}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
                 <input type="checkbox" checked={selected.has(o.ref)} onChange={() => toggle(o.ref)} />
                 <span>{o.name}</span>
                 {o.kind !== 'human' && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {t('agent')}</span>}
@@ -245,10 +245,10 @@ export function ScheduleMeetingPanel({
         {error && <div style={{ fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+          <button type="button" onClick={onClose} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
             {t('cancel')}
           </button>
-          <button type="button" onClick={submit} disabled={busy} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}>
+          <button type="button" onClick={submit} disabled={busy} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}>
             {scheduled ? t('schedule') : t('startNow')}
           </button>
         </div>

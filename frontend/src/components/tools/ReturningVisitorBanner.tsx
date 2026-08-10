@@ -23,12 +23,12 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
   if (isAuthed || loading || !session?.session || session.runs.length === 0) return null;
 
   const bannerWrap: React.CSSProperties = {
-    border: '1px solid var(--accent)', borderRadius: 12, padding: 18, marginBottom: 20,
+    border: '1px solid var(--accent)', borderRadius: 'var(--radius-lg)', padding: 18, marginBottom: 20,
     background: 'var(--bg-elevated)',
   };
   const cta: React.CSSProperties = {
-    padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 10, border: 'none',
-    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff',
+    padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 'var(--radius-lg)', border: 'none',
+    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)',
     textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-block',
   };
   const eyebrow: React.CSSProperties = {
@@ -44,7 +44,7 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
           <div>
             <p style={eyebrow}>{t('welcomeBack')}</p>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t('welcomeBackTool')}</p>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t('welcomeBackTool')}</p>
           </div>
           <Link href={`/register?next=/tools/${toolId}`} style={cta}>{t('saveMyResult')} →</Link>
         </div>
@@ -59,7 +59,7 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <p style={eyebrow}>{t('welcomeBack')}</p>
-          <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', margin: '4px 0 2px' }}>
+          <p style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)', margin: '4px 0 2px' }}>
             {t('welcomeBackHub', { count: session.runs.length })}
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
@@ -68,7 +68,7 @@ export function ReturningVisitorBanner({ toolId }: { toolId?: string }) {
                 key={r.toolId}
                 href={`/tools/${r.toolId}`}
                 style={{
-                  fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 999, textDecoration: 'none',
+                  fontSize: 'var(--font-size-small)', fontWeight: 600, padding: '5px 10px', borderRadius: 'var(--radius-full)', textDecoration: 'none',
                   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--accent)',
                 }}
               >

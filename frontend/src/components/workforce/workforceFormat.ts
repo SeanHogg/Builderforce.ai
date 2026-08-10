@@ -23,9 +23,9 @@ export function fmtScore(n: number | null): string {
 /** Traffic-light colour for a 0–100 score (≥75 green, ≥50 amber, else red). */
 export function scoreColor(n: number | null): string {
   if (n == null) return 'var(--muted)';
-  if (n >= 75) return 'var(--success, #30a46c)';
-  if (n >= 50) return 'var(--warning, #f5a623)';
-  return 'var(--danger, #e5484d)';
+  if (n >= 75) return 'var(--success)';
+  if (n >= 50) return 'var(--warning)';
+  return 'var(--danger)';
 }
 
 /** member_kind → fallback English label (callers localize where a catalog exists). */
@@ -35,10 +35,10 @@ export const MEMBER_KIND_LABEL: Record<MemberKind, string> = {
 
 export const ENGAGEMENT_LEVEL_COLOR: Record<EngagementLevel, string> = {
   inactive: 'var(--muted)',
-  low: 'var(--danger, #e5484d)',
-  moderate: 'var(--warning, #f5a623)',
-  high: 'var(--accent, #6366f1)',
-  very_high: 'var(--success, #30a46c)',
+  low: 'var(--danger)',
+  moderate: 'var(--warning)',
+  high: 'var(--accent)',
+  very_high: 'var(--success)',
 };
 
 /** Order of engagement levels (low → high) for any scale/legend rendering. */

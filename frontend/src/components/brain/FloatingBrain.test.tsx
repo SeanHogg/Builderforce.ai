@@ -70,6 +70,12 @@ describe('FloatingBrain visibility + auth gating', () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it('renders nothing in a Creation Session because Canvas Brain owns that conversation', () => {
+    state.pathname = '/create/local-session';
+    const { container } = render(<FloatingBrain />);
+    expect(container.firstChild).toBeNull();
+  });
+
   it('renders nothing on the auth pages where a sign-in CTA would be redundant', () => {
     for (const path of ['/login', '/register']) {
       state.pathname = path;

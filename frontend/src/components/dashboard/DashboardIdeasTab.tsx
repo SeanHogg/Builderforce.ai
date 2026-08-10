@@ -26,7 +26,7 @@ export function DashboardIdeasTab({ limit }: { limit?: number }) {
       <div
         style={{
           border: '1px dashed var(--border-subtle)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           padding: '28px 16px',
           textAlign: 'center',
           color: 'var(--text-secondary)',
@@ -38,9 +38,9 @@ export function DashboardIdeasTab({ limit }: { limit?: number }) {
           style={{
             display: 'inline-block',
             padding: '8px 16px',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             background: 'var(--coral-bright)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             textDecoration: 'none',
             fontSize: 14,
             fontWeight: 600,
@@ -66,7 +66,7 @@ export function DashboardIdeasTab({ limit }: { limit?: number }) {
             gap: 6,
             padding: '14px 16px',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-lg)',
             background: 'var(--bg-elevated)',
             textDecoration: 'none',
             color: 'var(--text-primary)',

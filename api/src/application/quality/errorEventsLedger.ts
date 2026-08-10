@@ -11,12 +11,11 @@
  */
 
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { errorEvents, tenants } from '../../infrastructure/database/schema';
+import { errorEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import type { Env } from '../../env';
 import { resolveErrorEventsMonthly } from '../../domain/tenant/PlanLimits';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { utcMonthStart } from '../llm/tokenUsage';
+import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 
 /** Error events ingested by a tenant since `since` — the single window-sum the
  *  meter and the gate share. */
@@ -45,9 +44,7 @@ export async function dailyTenantErrorEvents(
   return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
 }
 
-export type ErrorEventsCapResult =
-  | { allowed: true }
-  | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };
+export type ErrorEventsCapResult = MonthlyTenantCapResult;
 
 /**
  * Gate NEW error ingestion against the tenant's monthly event allowance.
@@ -55,34 +52,12 @@ export type ErrorEventsCapResult =
  * Unlimited plans (and superadmin-unlimited tenants) always pass. Fails OPEN on a
  * query error — a metering hiccup must not drop a legitimate error report.
  */
-export async function enforceErrorEventsCap(db: Db, tenantId: number): Promise<ErrorEventsCapResult> {
-  try {
-    const [tenantRow] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    const effectivePlan = resolveEffectivePlan({
-      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
-      billingStatus: (tenantRow?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: tenantRow?.trialEndsAt ?? null,
-    });
-    const limit = resolveErrorEventsMonthly({
-      effectivePlan,
-      tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
-    });
-    if (limit < 0) return { allowed: true }; // unlimited
-
-    const used = await sumTenantErrorEvents(db, tenantId, utcMonthStart());
-    if (used >= limit) return { allowed: false, effectivePlan, used, limit };
-    return { allowed: true };
-  } catch {
-    return { allowed: true };
-  }
+export async function enforceErrorEventsCap(db: Db, tenantId: number, env?: Env): Promise<ErrorEventsCapResult> {
+  return enforceMonthlyTenantCap({
+    db,
+    tenantId,
+    env,
+    resolveLimit: resolveErrorEventsMonthly,
+    sumUsage: sumTenantErrorEvents,
+  });
 }

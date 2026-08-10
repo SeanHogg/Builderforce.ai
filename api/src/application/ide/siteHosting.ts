@@ -12,8 +12,10 @@
  * the hot path (every asset request resolves it), so it's served through the
  * canonical read-through cache and invalidated on publish via `version_token`.
  */
-import { neon } from '@neondatabase/serverless';
+import { and, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { projectSites } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 /** R2 key prefix all hosted sites live under. */
@@ -81,7 +83,10 @@ export function subdomainFromHost(host: string | undefined): string | null {
 
 /** The resolved, cacheable shape the asset server needs. JSON-serializable. */
 export interface SiteRecord {
+  /** The site row id — the join key for traffic counting and collections. */
+  siteId: number;
   projectId: number;
+  tenantId: number;
   r2Prefix: string;
   status: string;
   versionToken: string;
@@ -92,6 +97,24 @@ function siteCacheKey(subdomain: string): string {
   return `site-lookup:${subdomain}`;
 }
 
+/** Cache key for the custom-hostname index. Separate keyspace from the label
+ *  index so releasing a domain cannot evict an unrelated subdomain. */
+function customDomainCacheKey(hostname: string): string {
+  return `site-domain:${hostname.toLowerCase()}`;
+}
+
+/** The columns every lookup path selects — one definition so the two indexes
+ *  (subdomain and custom hostname) can never return different shapes. */
+const SITE_LOOKUP_COLUMNS = {
+  siteId: projectSites.id,
+  projectId: projectSites.projectId,
+  tenantId: projectSites.tenantId,
+  r2Prefix: projectSites.r2Prefix,
+  status: projectSites.status,
+  versionToken: projectSites.versionToken,
+  indexDocument: projectSites.indexDocument,
+} as const;
+
 /**
  * Resolve a subdomain to its site record, cached read-through. Returns null when
  * no active site owns the subdomain.
@@ -101,21 +124,37 @@ export async function lookupSite(env: Env, subdomain: string): Promise<SiteRecor
     env,
     siteCacheKey(subdomain),
     async () => {
-      const rows = await neon(env.NEON_DATABASE_URL)`
-        SELECT project_id, r2_prefix, status, version_token, index_document
-        FROM project_sites WHERE subdomain = ${subdomain} LIMIT 1`;
-      const row = rows[0] as {
-        project_id: number; r2_prefix: string; status: string;
-        version_token: string; index_document: string;
-      } | undefined;
+      const [row] = await buildDatabase(env)
+        .select(SITE_LOOKUP_COLUMNS)
+        .from(projectSites)
+        .where(eq(projectSites.subdomain, subdomain))
+        .limit(1);
       if (!row || row.status === 'disabled') return null;
-      return {
-        projectId: row.project_id,
-        r2Prefix: row.r2_prefix,
-        status: row.status,
-        versionToken: row.version_token,
-        indexDocument: row.index_document,
-      };
+      return row;
+    },
+    { kvTtlSeconds: 600 },
+  );
+}
+
+/**
+ * Resolve a tenant's OWN hostname to its site record. Only an `active` custom
+ * domain resolves: a domain that is merely claimed (`pending_dns`) must NOT
+ * serve, or claiming a hostname you don't control would hijack it the moment
+ * someone pointed DNS at us.
+ */
+export async function lookupSiteByCustomDomain(env: Env, hostname: string): Promise<SiteRecord | null> {
+  const host = hostname.toLowerCase();
+  return getOrSetCached<SiteRecord | null>(
+    env,
+    customDomainCacheKey(host),
+    async () => {
+      const [row] = await buildDatabase(env)
+        .select(SITE_LOOKUP_COLUMNS)
+        .from(projectSites)
+        .where(and(eq(projectSites.customDomain, host), eq(projectSites.customDomainStatus, 'active')))
+        .limit(1);
+      if (!row || row.status === 'disabled') return null;
+      return row;
     },
     { kvTtlSeconds: 600 },
   );
@@ -124,6 +163,31 @@ export async function lookupSite(env: Env, subdomain: string): Promise<SiteRecor
 /** Drop the cached lookup for a subdomain (call after a publish / status change). */
 export async function invalidateSite(env: Env, subdomain: string): Promise<void> {
   await invalidateCached(env, siteCacheKey(subdomain));
+}
+
+/** Drop the cached custom-hostname lookup (call on claim / verify / release). */
+export async function invalidateCustomDomain(env: Env, hostname: string): Promise<void> {
+  await invalidateCached(env, customDomainCacheKey(hostname));
+}
+
+/**
+ * Resolve ANY inbound Host header to a site, or null when the host is not a
+ * published site. This is THE routing entry point — the middleware, the site
+ * data API and the traffic counter all go through it, so a custom domain and a
+ * platform subdomain can never diverge in what they serve.
+ *
+ * Order matters: the platform-label check runs first and is cheap/synchronous,
+ * so normal `<sub>.builderforce.ai` traffic never pays for a second lookup.
+ */
+export async function resolveSiteForHost(env: Env, host: string | undefined): Promise<SiteRecord | null> {
+  if (!host) return null;
+  const subdomain = subdomainFromHost(host);
+  if (subdomain) return lookupSite(env, subdomain);
+  const bare = (host.split(':')[0] ?? '').toLowerCase();
+  // Anything on our own apex that wasn't a valid site label (reserved, or the
+  // apex itself) is platform traffic — never look it up as a customer domain.
+  if (!bare || bare === HOSTING_APEX || bare.endsWith(`.${HOSTING_APEX}`)) return null;
+  return lookupSiteByCustomDomain(env, bare);
 }
 
 /** A short, URL-safe cache-bust token. */

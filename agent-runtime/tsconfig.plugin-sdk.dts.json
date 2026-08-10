@@ -7,7 +7,9 @@
     "noEmit": false,
     "noEmitOnError": true,
     "outDir": "dist/plugin-sdk",
-    "rootDir": "src",
+    // The public SDK reaches shared agent-tools and agent-stall source through workspace
+    // aliases. Use their common parent so declaration emit can mirror the full type graph.
+    "rootDir": "..",
     "tsBuildInfoFile": "dist/plugin-sdk/.tsbuildinfo"
   },
   "include": ["src/plugin-sdk/index.ts", "src/plugin-sdk/account-id.ts", "src/types/**/*.d.ts"],

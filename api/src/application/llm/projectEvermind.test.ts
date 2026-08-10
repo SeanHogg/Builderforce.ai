@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   projectEvermindBase,
   projectEvermindRef,
@@ -6,9 +6,15 @@ import {
   getProjectEvermindHead,
   resolveProjectEvermindModelPin,
   resolveProjectInferenceModel,
+  setProjectEvermindInference,
+  recordEvermindServeOutcome,
   computeProjectAffect,
+  extractMemoriesToEvermind,
+  QUARANTINE_FAILURE_STREAK,
+  reseedProjectEvermind,
   PROJECT_EVERMIND_MODEL_PREFIX,
   type ProjectEvermindRecentEntry,
+  type EvermindServeReadiness,
 } from './projectEvermind';
 import type { Env } from '../../env';
 
@@ -25,6 +31,30 @@ function makeDb(row: Record<string, unknown> | null) {
   } as never;
 }
 
+/** db mock that also supports the update chain (`.set().where()[.returning()]`),
+ *  recording each `.set()` payload and returning queued `.returning()` result sets
+ *  in order. `where()` is awaitable AND exposes `.returning()`. */
+function updatableDb(row: Record<string, unknown> | null, returningQueue: Array<Array<Record<string, unknown>>> = []) {
+  const setCalls: Array<Record<string, unknown>> = [];
+  let ri = 0;
+  const db = {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => (row ? [row] : []) }) }) }),
+    update: () => {
+      const chain = {
+        set: (values: Record<string, unknown>) => { setCalls.push(values); return chain; },
+        where: () => {
+          const rows = returningQueue[ri++] ?? [];
+          const thenable = Promise.resolve(rows) as Promise<unknown> & { returning: () => Promise<unknown> };
+          thenable.returning = async () => rows;
+          return thenable;
+        },
+      };
+      return chain;
+    },
+  } as never;
+  return { db, setCalls };
+}
+
 // No AUTH_CACHE_KV → getCacheVersion/getOrSetCached fall through to the loader.
 const env = {} as Env;
 
@@ -35,6 +65,41 @@ describe('project Evermind R2 layout helpers', () => {
   });
   it('names the coordinator DO deterministically per project', () => {
     expect(coordinatorName(7, 42)).toBe('proj:7:42');
+  });
+});
+
+describe('extractMemoriesToEvermind', () => {
+  const entries = [
+    { key: 'a', text: 'too short' },
+    { key: 'b', text: 'This is a durable fact long enough to be learnable by the model.' },
+  ];
+
+  it('rejects an unseeded Evermind (nothing to learn into)', async () => {
+    const out = await extractMemoriesToEvermind(env, makeDb(null), 7, 42, entries);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.status).toBe(400);
+  });
+
+  it('rejects a frozen Evermind', async () => {
+    const db = makeDb({ name: 'PM', version: 2, mode: 'offline-frozen', contributions: 1 });
+    const out = await extractMemoriesToEvermind(env, db, 7, 42, entries);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.status).toBe(400);
+  });
+
+  it('skips too-short entries and reports per-key outcomes (no coordinator bound → no absorb)', async () => {
+    const db = makeDb({ name: 'PM', version: 1, mode: 'connected', contributions: 0 });
+    const out = await extractMemoriesToEvermind(env, db, 7, 42, entries);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      // 'a' is below the 20-char floor; 'b' attempts dispatch but no DO binding exists in
+      // the test env, so it is reported skipped rather than silently absorbed.
+      expect(out.result.absorbed).toEqual([]);
+      expect(out.result.skipped.map((s) => s.key).sort()).toEqual(['a', 'b']);
+      expect(out.result.skipped.find((s) => s.key === 'a')?.reason).toMatch(/short/i);
+      expect(out.result.merged).toBe(0);
+      expect(out.result.version).toBe(1);
+    }
   });
 });
 
@@ -145,6 +210,81 @@ describe('resolveProjectInferenceModel (opt-in consumer emitter)', () => {
   });
 });
 
+describe('setProjectEvermindInference (benchmark-gated promotion)', () => {
+  const ready: EvermindServeReadiness = { ready: true, passRate: 1, samples: [] };
+  const notReady: EvermindServeReadiness = {
+    ready: false, passRate: 0,
+    samples: [{
+      prompt: 'Summarize the status.',
+      text: 'commit commit commit the the in the in the',
+      coherent: false,
+      failure: 'repetition',
+      detail: 'the decoder is stuck repeating the same word or phrase',
+    }],
+  };
+
+  it('REFUSES to enable a head that fails the coherence probe (no DB write)', async () => {
+    const { db, setCalls } = updatableDb({ name: 'PM', version: 100, mode: 'connected', contributions: 1, inferenceEnabled: false });
+    const assessReadiness = vi.fn(async () => notReady);
+    const res = await setProjectEvermindInference(env, db, 7, 30, true, { assessReadiness });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe('not_ready');
+      expect(res.readiness.passRate).toBe(0);
+    }
+    expect(assessReadiness).toHaveBeenCalledWith('evermind/project/7/30/v100');
+    expect(setCalls).toHaveLength(0); // never promoted
+  });
+
+  it('enables a head that PASSES the probe and clears the quarantine slate', async () => {
+    const { db, setCalls } = updatableDb({ name: 'PM', version: 5, mode: 'connected', contributions: 1, inferenceEnabled: false });
+    const res = await setProjectEvermindInference(env, db, 7, 42, true, { assessReadiness: async () => ready });
+    expect(res.ok).toBe(true);
+    expect(setCalls[0]).toMatchObject({ inferenceEnabled: true, serveFailureStreak: 0, quarantinedAt: null, quarantineReason: null });
+  });
+
+  it('disabling is never gated and needs no probe', async () => {
+    const { db, setCalls } = updatableDb({ name: 'PM', version: 5, mode: 'connected', contributions: 1, inferenceEnabled: true });
+    const assessReadiness = vi.fn(async () => notReady);
+    const res = await setProjectEvermindInference(env, db, 7, 42, false, { assessReadiness });
+    expect(res.ok).toBe(true);
+    expect(assessReadiness).not.toHaveBeenCalled();
+    expect(setCalls[0]).toMatchObject({ inferenceEnabled: false });
+  });
+});
+
+describe('recordEvermindServeOutcome (auto-quarantine)', () => {
+  it('force-disables inference after the failure streak reaches the threshold', async () => {
+    // The incoherent increment returns the NEW streak = threshold → triggers quarantine.
+    const { db, setCalls } = updatableDb(null, [[{ streak: QUARANTINE_FAILURE_STREAK }]]);
+    await recordEvermindServeOutcome(env, db, 7, 30, false);
+    // 1st set = increment; 2nd set = the quarantine disable.
+    expect(setCalls).toHaveLength(2);
+    expect(setCalls[1]).toMatchObject({ inferenceEnabled: false });
+    expect(setCalls[1]?.quarantineReason).toMatch(/quarantine/i);
+    expect(setCalls[1]?.quarantinedAt).toBeInstanceOf(Date);
+  });
+
+  it('increments but does NOT quarantine below the threshold', async () => {
+    const { db, setCalls } = updatableDb(null, [[{ streak: QUARANTINE_FAILURE_STREAK - 1 }]]);
+    await recordEvermindServeOutcome(env, db, 7, 30, false);
+    expect(setCalls).toHaveLength(1); // only the increment, no disable
+  });
+
+  it('a coherent serve resets the streak (single conditional write)', async () => {
+    const { db, setCalls } = updatableDb(null, [[{ id: 'x' }]]); // where(streak<>0) matched a row
+    await recordEvermindServeOutcome(env, db, 7, 30, true);
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]).toMatchObject({ serveFailureStreak: 0 });
+  });
+
+  it('ignores a malformed project id', async () => {
+    const { db, setCalls } = updatableDb(null, []);
+    await recordEvermindServeOutcome(env, db, 7, 0, false);
+    expect(setCalls).toHaveLength(0);
+  });
+});
+
 describe('computeProjectAffect (limbic state for the brain map)', () => {
   const entry = (over: Partial<ProjectEvermindRecentEntry>): ProjectEvermindRecentEntry => ({
     id: 1, kind: 'delta', version: 1, at: 1000, weight: 1, ...over,
@@ -193,5 +333,56 @@ describe('computeProjectAffect (limbic state for the brain map)', () => {
       expect(a.state[k]).toBeGreaterThanOrEqual(0);
       expect(a.state[k]).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('reseedProjectEvermind (the repair door for a head trained into gibberish)', () => {
+  /** A store that records what was written, so the version the bytes land under is checkable. */
+  function writeStore() {
+    const puts: string[] = [];
+    return { store: { put: async (key: string) => { puts.push(key); } }, puts };
+  }
+
+  it('writes the new base at version+1 and clears quarantine, leaving inference OFF', async () => {
+    // A quarantined v100 — the exact situation that previously had no remedy: seeding
+    // refuses to clobber a seeded head, so the bad artifact was stuck there forever.
+    const { db, setCalls } = updatableDb({
+      name: 'PM', version: 100, mode: 'connected', contributions: 12,
+      inferenceEnabled: false, quarantinedAt: new Date(), quarantineReason: 'gibberish',
+    });
+    const { store, puts } = writeStore();
+    await reseedProjectEvermind(env, db, store, {
+      tenantId: 7, projectId: 30,
+      modelBlob: new ArrayBuffer(8),
+      tokenizer: { vocab: { a: 0 }, merges: [] },
+    });
+
+    // NEW version, never an overwrite of v100 — refs are immutable and memoised per
+    // isolate, so reusing a version would keep serving the old weights from cache.
+    expect(puts).toEqual([
+      'evermind/project/7/30/v101/model.evermind',
+      'evermind/project/7/30/v101/tokenizer.json',
+    ]);
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]).toMatchObject({
+      version: 101,
+      inferenceEnabled: false,   // must re-earn the right to serve
+      serveFailureStreak: 0,
+      quarantinedAt: null,
+      quarantineReason: null,
+    });
+  });
+
+  it('falls back to an ordinary seed when the project was never seeded', async () => {
+    // version 0 → this is a first seed, not a replacement: it must land at v1 via the
+    // one seeding implementation rather than a second, divergent code path.
+    const { db } = updatableDb({ name: 'PM', version: 0, mode: 'connected', contributions: 0, inferenceEnabled: false }, [[{ id: 'x' }]]);
+    const { store, puts } = writeStore();
+    await reseedProjectEvermind(env, db, store, {
+      tenantId: 7, projectId: 31,
+      modelBlob: new ArrayBuffer(8),
+      tokenizer: { vocab: { a: 0 }, merges: [] },
+    });
+    expect(puts[0]).toBe('evermind/project/7/31/v1/model.evermind');
   });
 });

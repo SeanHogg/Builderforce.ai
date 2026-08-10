@@ -1,0 +1,52 @@
+/* Composes the shared `.tenant-chip` shell so the session bar stays one row of
+   one kind of control; only the live state is styled here. */
+
+.chip {
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  font: inherit;
+  gap: 6px;
+}
+
+.chip[data-on='1'] {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full, 50%);
+  background: var(--error);
+  flex-shrink: 0;
+  animation: liveChipPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes liveChipPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}
+
+/* Phones: the label is the first thing to go — the pulse alone reads as "live",
+   and the bottom live bar carries the controls. */
+@media (max-width: 640px) {
+  .chip[data-on='0'] {
+    display: none;
+  }
+
+  .label {
+    font-size: 0.72rem;
+  }
+}

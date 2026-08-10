@@ -26,12 +26,12 @@ import {
 } from '@/lib/devexApi';
 
 const inputStyle: React.CSSProperties = {
-  padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, width: 'auto', minWidth: 130 };
 const btnStyle: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--surface-coral-soft, var(--bg-elevated))', color: 'var(--text-primary)',
   fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
 };
@@ -134,7 +134,7 @@ function TemplateAuthor({ onCreated }: { onCreated: () => void }) {
           </button>
         </div>
 
-        {err && <span style={{ color: 'var(--danger, #dc2626)', fontSize: '0.82rem' }}>{err}</span>}
+        {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
         <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('author.create')}</button>
       </div>
     </PmCard>
@@ -234,7 +234,7 @@ function CampaignLauncher({ templates, onLaunched }: { templates: DevexTemplate[
             {t('launch.anonymous')}
           </label>
         </div>
-        {err && <span style={{ color: 'var(--danger, #dc2626)', fontSize: '0.82rem' }}>{err}</span>}
+        {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
         <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('launch.create')}</button>
       </div>
     </PmCard>
@@ -345,7 +345,7 @@ function RespondForm({
   if (done) return <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('respond.thanks')}</div>;
 
   return (
-    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <strong style={{ fontSize: '0.9rem' }}>{t('respond.title')}</strong>
       {questions.length === 0 && <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{t('respond.noQuestions')}</span>}
       {questions.map((q) => (
@@ -375,7 +375,7 @@ function RespondForm({
           )}
         </div>
       ))}
-      {err && <span style={{ color: 'var(--danger, #dc2626)', fontSize: '0.82rem' }}>{err}</span>}
+      {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('respond.submit')}</button>
         <button style={{ ...btnStyle, background: 'transparent' }} onClick={onDone}>{t('respond.cancel')}</button>

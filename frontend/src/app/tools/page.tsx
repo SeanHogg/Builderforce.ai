@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
+import { LatestBlogSection } from '@/components/marketing/LatestBlogSection';
+import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignupSection';
 import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import ToolsHubClient from './ToolsHubClient';
@@ -27,6 +30,9 @@ export default function ToolsPage() {
       />
       <ToolsHubClient />
       <RelatedArticles surface="diagnostics" heading="Plan how to innovate" />
+      <CreationCtaSection />
+      <LatestBlogSection />
+      <NewsletterSignupSection source="builderforce-tools" />
     </>
   );
 }

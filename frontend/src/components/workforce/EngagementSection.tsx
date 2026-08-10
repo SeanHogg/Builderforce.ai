@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { membersApi, type MemberEngagement, type EngagementLevel } from '@/lib/builderforceApi';
 import { ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
@@ -12,7 +13,7 @@ import { ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
  */
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const th: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 11, color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 13, whiteSpace: 'nowrap' };
@@ -27,11 +28,11 @@ function ScoreBar({ m }: { m: MemberEngagement }) {
     <span style={{ width: `${(pts / 100) * 100}%`, background: color, display: 'inline-block', height: '100%' }} title={`${pts.toFixed(0)} / ${cap}`} />
   );
   return (
-    <span style={{ display: 'inline-flex', width: 120, height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--border-subtle)' }}>
-      {seg(m.breakdown.activityPts, 40, '#39d353')}
-      {seg(m.breakdown.platformPts, 25, '#6366f1')}
-      {seg(m.breakdown.toolingPts, 20, '#8a4be0')}
-      {seg(m.breakdown.deliveryPts, 15, '#f5a623')}
+    <span style={{ display: 'inline-flex', width: 120, height: 8, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--border-subtle)' }}>
+      {seg(m.breakdown.activityPts, 40, 'var(--emerald-bright)')}
+      {seg(m.breakdown.platformPts, 25, 'var(--indigo-bright)')}
+      {seg(m.breakdown.toolingPts, 20, 'var(--purple-bright)')}
+      {seg(m.breakdown.deliveryPts, 15, 'var(--amber-bright)')}
     </span>
   );
 }
@@ -52,12 +53,12 @@ export function EngagementSection({ days }: { days: number }) {
         Engagement <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· last {Math.max(days, 30)}d · all signals combined</span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <span><span style={{ color: '#39d353' }}>■</span> dev activity</span>
-        <span><span style={{ color: '#6366f1' }}>■</span> platform usage</span>
-        <span><span style={{ color: '#8a4be0' }}>■</span> VS Code</span>
-        <span><span style={{ color: '#f5a623' }}>■</span> delivery</span>
+        <span><span style={{ color: 'var(--emerald-bright)' }}>■</span> dev activity</span>
+        <span><span style={{ color: 'var(--indigo-bright)' }}>■</span> platform usage</span>
+        <span><span style={{ color: 'var(--purple-bright)' }}>■</span> VS Code</span>
+        <span><span style={{ color: 'var(--amber-bright)' }}>■</span> delivery</span>
       </div>
-      {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -91,7 +92,7 @@ export function EngagementSection({ days }: { days: number }) {
                 <td style={{ ...td, fontWeight: 700, color: LEVEL_COLOR[m.level] }}>{Math.round(m.score)}</td>
                 <td style={td}>{m.signals.activityEvents}</td>
                 <td style={td}>{m.signals.platformActions}</td>
-                <td style={td}>{m.signals.vscodeActive ? '🟢' : '—'}</td>
+                <td style={td}>{m.signals.vscodeActive ? <Icon source="🟢" size="1em" /> : '—'}</td>
                 <td style={td}>{m.signals.completedTasks}</td>
               </tr>
             ))}

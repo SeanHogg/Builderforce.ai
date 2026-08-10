@@ -50,14 +50,14 @@ export function FinancePanelProvider({ children }: { children: ReactNode }) {
         open={panel != null}
         onClose={close}
         width="min(960px, 96vw)"
-        title={panel ? `${panel.icon} ${t(panel.titleKey)}` : ''}
+        title={panel ? t(panel.titleKey) : ''}
         tabs={tabs}
         activeTabId={active ?? undefined}
         onTabChange={(id) => setActive(id as FinancePanelId)}
       >
         {panel && (
           <div style={{ padding: 20 }}>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 18px' }}>
+            <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', margin: '0 0 18px' }}>
               {t(panel.subtitleKey)}
             </p>
             <RoleGate capability={panel.capability} variant="block">

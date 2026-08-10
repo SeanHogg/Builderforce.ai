@@ -43,13 +43,51 @@ export interface EvermindRecallResult {
 }
 
 /**
- * The single hook a host injects into the run loop. Bound to the active chat's
- * project; returns null when the chat isn't project-scoped or recall is
- * unavailable (so the loop simply skips the memory steps).
+ * A memory-first answer that lets the run loop SKIP the paid model entirely — either
+ * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
+ * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
+ */
+export interface MemoryFirstAnswer {
+  /** The answer text to adopt as the assistant turn. */
+  text: string;
+  /** Where it came from — drives the "no LLM" provenance/step. */
+  source: 'qa-cache' | 'evermind';
+  /** Evermind head version, when `source === 'evermind'`. */
+  evermindVersion?: number;
+  /**
+   * WHICH Evermind answered (project id), when `source === 'evermind'`. A project can
+   * target several heads (its own plus the IDE builds grouped under it), so without
+   * this the timeline could not say which one served — and a chat whose OWN project
+   * reports inference OFF could still be answered by a sibling head with no way to
+   * tell. Recorded on the trace step so a memory hit is triageable.
+   */
+  evermindProjectId?: number;
+}
+
+/**
+ * The hooks a host injects into the run loop. Bound to the active chat's project.
+ * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
+ * memory-first short-circuit — answer from the project's own memory (Q&A cache or
+ * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
+ * so the next exact repeat is free. All return null / no-op when the chat isn't
+ * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
  */
 export interface EvermindRunHooks {
   /** Recall the project's learned memories most relevant to `query`. */
   recall(query: string): Promise<EvermindRecallResult | null>;
+  /**
+   * Try to answer `query` from memory WITHOUT the LLM; null → run the model.
+   *
+   * `opts.toolsAvailable` tells the resolver whether THIS run can call tools. It must
+   * be honest: the Evermind SSM has no tool-calling, so when tools are available the
+   * server serves only the Q&A cache (a replay of an answer a real model produced) and
+   * never a fresh SSM generation — otherwise a request whose answer lives behind a tool
+   * call ("which tickets are in the backlog?") gets answered from stale weights while
+   * the tools that could answer it are never called.
+   */
+  answer?(query: string, opts: { toolsAvailable: boolean }): Promise<MemoryFirstAnswer | null>;
+  /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
+  cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }
 
 /**

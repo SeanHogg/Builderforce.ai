@@ -1,8 +1,12 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import { and, eq, sql } from 'drizzle-orm';
-import type { HonoEnv, Env } from '../../env';
+import { resolveAppBaseUrl, type HonoEnv, type Env } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { sendMagicLinkEmail } from '../../infrastructure/email/EmailService';
+import { sendMagicLinkEmail, sendWelcomeEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
+import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import {
   users,
   oauthAccounts,
@@ -187,6 +191,29 @@ function randomHex(bytes: number): string {
     .join('');
 }
 
+/**
+ * Same-origin redirect guard (open-redirect fix — M5). A post-login redirect
+ * target is only safe when it is a RELATIVE path that stays on this origin:
+ * rejects absolute URLs, protocol-relative `//evil.com`, scheme URLs
+ * (`javascript:`, `https://…`) and backslash tricks the browser normalises to
+ * `/`. Mirrors the frontend util in `frontend/src/lib/safeRedirect.ts` — the
+ * check must exist on BOTH sides of the package boundary.
+ */
+function isSafeRelativePath(path: string | null | undefined): path is string {
+  return (
+    typeof path === 'string' &&
+    path.startsWith('/') &&
+    !path.startsWith('//') &&
+    !path.includes('://') &&
+    !path.includes('\\')
+  );
+}
+
+/** Coerce an untrusted redirect to a safe same-origin path, else `/dashboard`. */
+function safeRedirect(path: string | null | undefined): string {
+  return isSafeRelativePath(path) ? path : '/dashboard';
+}
+
 function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
 }
@@ -295,7 +322,9 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     const cfg = getProviderCfg(name, c.env);
     if (!cfg) return c.json({ error: 'Provider not available' }, 503);
 
-    const redirect = c.req.query('redirect') || '/dashboard';
+    // Open-redirect guard (M5): only a same-origin relative path is honoured;
+    // anything else falls back to /dashboard before it is signed into state.
+    const redirect = safeRedirect(c.req.query('redirect'));
 
     // Optional: if the user is already logged in (connecting from Settings),
     // verify their JWT and embed the userId in state so the callback can link
@@ -306,7 +335,9 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       try {
         const linkPayload = await verifyWebJwt(linkToken, c.env.JWT_SECRET);
         linkUserId = linkPayload.sub;
-      } catch { /* invalid token — fall through to normal login flow */ }
+      } catch (error) { /* invalid token — fall through to normal login flow */ 
+        reportCaughtError(error, { source: "presentation/routes/oauthRoutes.ts", operation: "createOAuthRoutes" });
+      }
     }
 
     const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId);
@@ -334,9 +365,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   router.get('/oauth/:provider/callback', async (c) => {
     const name = c.req.param('provider').toLowerCase();
     const cfg = getProviderCfg(name, c.env);
-    const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai')
-      .split(',')[0]!
-      .trim();
+    const frontendBase = resolveAppBaseUrl(c.env);
 
     if (!cfg) return c.redirect(`${frontendBase}/login?error=provider_unavailable`);
 
@@ -372,6 +401,13 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       return c.redirect(`${frontendBase}/login?error=no_email`);
     }
 
+    // Resolve the account (link existing / create new) and issue the web JWT.
+    // Wrapped so any DB fault redirects to a friendly login error instead of
+    // leaking a raw Postgres error as JSON (which also exposes schema
+    // internals). The overflow that motivated this guard — avatar_url >
+    // varchar(500) — is fixed in mig 0356; the catch keeps future DB faults
+    // from surfacing raw.
+    try {
     // 1. Check if this provider account is already linked
     const [existingOAuth] = await db
       .select({ id: oauthAccounts.id, userId: oauthAccounts.userId })
@@ -440,8 +476,31 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           // OAuth vouches for the address — the account is verified on creation, so it
           // never hits the password-signup OTP gate.
           emailVerifiedAt: sql`now()`,
+          // Best-effort locale capture. This callback is a cross-site redirect FROM
+          // the provider, so the NEXT_LOCALE cookie is not sent and only
+          // Accept-Language is usually available — a weaker signal than the password
+          // signup gets, but better than pinning the account to English. The user's
+          // first authenticated app request refines it via rememberUserLocale().
+          locale: localeFromHeaders(headerHints(c.req)),
         });
         userId = newId;
+        // Brand-new account (no provider link, no same-email user) — this is the
+        // only signup branch in this handler, so the welcome email belongs here.
+        // Fire-and-forget: a mail failure must never block the sign-in redirect.
+        void sendTransactionalEmail(
+          c.env,
+          db,
+          normalizedEmail,
+          ({ locale }) => sendWelcomeEmail(
+            c.env,
+            normalizedEmail,
+            providerUser.name ?? '',
+            frontendBase,
+            undefined,
+            locale,
+          ),
+          { headers: headerHints(c.req) },
+        );
       }
 
       // 4. Link this OAuth provider account
@@ -461,22 +520,79 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     if (!user) return c.redirect(`${frontendBase}/login?error=account_not_found`);
     if (user.isSuspended) return c.redirect(`${frontendBase}/login?error=account_suspended`);
 
+    // M6: NEVER put the 24h session JWT in the URL — GTM captures page_location
+    // and would ship it to third-party analytics, plus it leaks via Referer and
+    // browser history. Instead hand the browser a short-lived (60s),
+    // single-purpose exchange code (an HMAC-signed state envelope — NOT a JWT, so
+    // it is useless as an API bearer). The callback page swaps it via
+    // POST /oauth/exchange for the real token, which the JS keeps out of the URL.
+    // The JWT is only minted + persisted at exchange time (below), so no token is
+    // orphaned if the code is never redeemed.
+    const exchangeCodeValue = await signState(c.env.JWT_SECRET, {
+      uid: user.id,
+      amr: name,
+      redirect: safeRedirect(stateData.redirect),
+    });
+
+    return c.redirect(
+      `${frontendBase}/auth/callback?code=${encodeURIComponent(exchangeCodeValue)}`,
+    );
+    } catch {
+      return c.redirect(`${frontendBase}/login?error=auth_failed`);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/auth/oauth/exchange   — swap a single-use OAuth exchange code for
+  // the real web session token (M6). The OAuth callback delivers a 60s,
+  // single-purpose code in the URL instead of the session JWT; the callback page
+  // POSTs it here and receives the token in the RESPONSE BODY, keeping it out of
+  // the URL/analytics/Referer entirely.
+  // -------------------------------------------------------------------------
+  router.post('/oauth/exchange', async (c) => {
+    const body = await c.req.json<{ code?: string }>().catch(() => ({} as { code?: string }));
+    const code = typeof body.code === 'string' ? body.code : '';
+    if (!code) return c.json({ error: 'Missing code' }, 400);
+
+    // 60-second freshness window. verifyState checks the HMAC + timestamp. This
+    // envelope is NOT a JWT, so even if it leaked it can't authenticate an API
+    // request — it only works through this endpoint, and only for 60s.
+    const parsed = await verifyState<{ uid: string; amr?: string; redirect?: string }>(
+      c.env.JWT_SECRET,
+      code,
+      60_000,
+    );
+    if (!parsed?.uid) return c.json({ error: 'Invalid or expired code' }, 400);
+
+    const [user] = await db.select().from(users).where(eq(users.id, parsed.uid)).limit(1);
+    if (!user) return c.json({ error: 'Account not found' }, 401);
+    if (user.isSuspended) return c.json({ error: 'Account suspended' }, 403);
+
     const jwt = await signWebJwt(
-      { sub: user.id, email: user.email, username: user.username ?? '', amr: [name] },
+      { sub: user.id, email: user.email, username: user.username ?? '', amr: [parsed.amr ?? 'oauth'] },
       c.env.JWT_SECRET,
       86_400,
     );
 
     await persistWebToken(db, jwt, {
       userId: user.id,
-      sessionName: `OAuth: ${name}`,
+      sessionName: `OAuth: ${parsed.amr ?? 'oauth'}`,
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });
 
-    return c.redirect(
-      `${frontendBase}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(stateData.redirect)}`,
-    );
+    return c.json({
+      token: jwt,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username ?? '',
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+      },
+      // Already validated at sign time; re-validate on the way out as defence-in-depth.
+      redirect: safeRedirect(parsed.redirect),
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -485,14 +601,21 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   router.post('/magic-link', async (c) => {
     const body = await c.req.json<{ email?: string; redirect?: string; anonId?: string }>();
     const normalizedEmail = normalizeEmail(body.email ?? '');
-    const redirect = body.redirect || '/dashboard';
+    // Open-redirect guard (M5): the magic-link redirect is echoed back to the
+    // verify page and used as a navigation target, so validate it here too.
+    const redirect = safeRedirect(body.redirect);
     // Optional landing anon-id — threaded into the link so a cross-device open adopts it.
     const anonId = typeof body.anonId === 'string' && body.anonId.trim() ? body.anonId.trim() : undefined;
 
     // Always return 200 — never reveal whether an account exists
     if (normalizedEmail) {
       const [user] = await db
-        .select({ id: users.id, displayName: users.displayName, username: users.username })
+        .select({
+          id: users.id,
+          displayName: users.displayName,
+          username: users.username,
+          locale: users.locale,
+        })
         .from(users)
         .where(eq(users.email, normalizedEmail))
         .limit(1);
@@ -515,17 +638,22 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           redirect,
         });
 
-        const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai')
-          .split(',')[0]!
-          .trim();
+        const frontendBase = resolveAppBaseUrl(c.env);
         const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
 
-        void sendMagicLinkEmail(
+        void sendTransactionalEmail(
           c.env,
+          db,
           normalizedEmail,
-          user.displayName ?? user.username ?? normalizedEmail,
-          magicUrl,
-          anonId,
+          ({ locale }) => sendMagicLinkEmail(
+            c.env,
+            normalizedEmail,
+            user.displayName ?? user.username ?? normalizedEmail,
+            magicUrl,
+            anonId,
+            locale,
+          ),
+          { storedLocale: user.locale, headers: headerHints(c.req) },
         );
       }
     }

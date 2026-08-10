@@ -3,9 +3,9 @@ import type { HonoEnv } from '../../env';
 import { UnauthorizedError } from '../../domain/shared/errors';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
-import { and, eq, isNull, gt, sql } from 'drizzle-orm';
-import { checkTermsAcceptance } from './termsEnforcement';
+import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
+import { assertActiveToken, findActiveToken, lastSeenWrites } from '../../application/auth/sessionRevocation';
+import { background } from './background';
 
 /**
  * Paths exempt from the terms-acceptance gate. These are the endpoints required
@@ -39,57 +39,16 @@ export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => 
     throw new UnauthorizedError('Invalid or expired token');
   }
 
+  // ONE connection for the whole middleware — shared by the revocation check and
+  // the terms gate below (each used to build its own).
+  const db = buildDatabase(c.env);
+
   if (payload.jti) {
-    const db = buildDatabase(c.env);
-    const [activeToken] = await db
-      .select({
-        jti: authTokens.jti,
-        sessionId: authTokens.sessionId,
-      })
-      .from(authTokens)
-      .where(
-        and(
-          eq(authTokens.jti, payload.jti),
-          eq(authTokens.userId, payload.sub),
-          isNull(authTokens.revokedAt),
-          gt(authTokens.expiresAt, new Date()),
-        ),
-      )
-      .limit(1);
-
-    if (!activeToken) {
-      throw new UnauthorizedError('Token has been revoked or expired');
-    }
-
-    if (activeToken.sessionId) {
-      const [session] = await db
-        .select({ id: authUserSessions.id })
-        .from(authUserSessions)
-        .where(
-          and(
-            eq(authUserSessions.id, activeToken.sessionId),
-            eq(authUserSessions.userId, payload.sub),
-            eq(authUserSessions.isActive, true),
-            isNull(authUserSessions.revokedAt),
-          ),
-        )
-        .limit(1);
-
-      if (!session) {
-        throw new UnauthorizedError('Session has been revoked');
-      }
-
-      await db
-        .update(authUserSessions)
-        .set({ lastSeenAt: sql`now()` })
-        .where(eq(authUserSessions.id, activeToken.sessionId));
-    }
-
-    await db
-      .update(authTokens)
-      .set({ lastSeenAt: sql`now()` })
-      .where(eq(authTokens.jti, payload.jti));
-
+    // Same revocation contract as authMiddleware, from the one shared
+    // implementation: a single LEFT JOIN read plus throttled, off-critical-path
+    // last-seen refreshes.
+    const active = assertActiveToken(await findActiveToken(db, payload.sub, payload.jti));
+    background(c, lastSeenWrites(db, active));
     c.set('tokenJti', payload.jti);
   }
 
@@ -103,8 +62,7 @@ export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => 
   // Action/tenant endpoints stay gated, so users still cannot use the app
   // until they accept.
   if (!isTermsExemptPath(c.req.path)) {
-    const db = buildDatabase(c.env);
-    const terms = await checkTermsAcceptance(db, payload.sub);
+    const terms = await checkTermsAcceptance(db, payload.sub, c.env);
     if (terms.needsAcceptance) {
       return c.json({
         error: 'Terms acceptance required',

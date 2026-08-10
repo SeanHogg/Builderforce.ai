@@ -101,4 +101,4 @@ This is invaluable when debugging complex multi-agent workflows — you can see 
 
 ## Getting Started
 
-Ready to build a mesh? Start by [training two agents](/dashboard) — a planner and a coder — publishing both, then creating an orchestrator project that references them. The [Chats](/chats) interface lets you test the orchestrated workflow interactively before committing to a production pipeline.
+Ready to build a mesh? Start by [training two agents](/dashboard) — a planner and a coder — publishing both, then creating an orchestrator project that references them. The [Workforce chats](/workforce?tab=chats) interface lets you test the orchestrated workflow interactively before committing to a production pipeline.

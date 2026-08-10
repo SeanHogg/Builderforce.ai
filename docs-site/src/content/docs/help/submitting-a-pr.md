@@ -51,7 +51,7 @@ If there's a relevant docs URL, include it. If there isn't one yet, leave it out
 ## PR Scope
 
 - **Bugs and small fixes** — open a PR directly
-- **New features / architecture** — start a [GitHub Discussion](https://github.com/seanhogg/builderforce/discussions) or ask in Discord first
+- **New features / architecture** — open a [GitHub issue](https://github.com/SeanHogg/Builderforce.ai/issues) or ask in Discord first
 - **Questions** — Discord `#setup-help`
 
 ## Control UI Decorators

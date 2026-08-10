@@ -18,39 +18,28 @@ import { useEffect, useState } from 'react';
 import { getStoredWebToken, getMe } from './auth';
 import { fetchPersonalityBlock } from './personalityApi';
 import type { PsychometricProfile } from './psychometric';
+import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 // Session cache: resolved block ('' = resolved-but-empty), the raw psychometric
 // profile behind it (null = resolved-but-absent), and the in-flight promise so
 // concurrent mounts coalesce into a single round-trip. The profile is cached
 // alongside the block so a PER-TURN consumer (augmentSystemPrompt) can appraise
 // each message against the SAME once-per-session `/me` fetch — never re-fetching.
-let sessionBlock: string | undefined;
-let sessionProfile: PsychometricProfile | null | undefined;
-let inflight: Promise<string> | undefined;
+interface PersonalitySession { block: string; profile: PsychometricProfile | null }
+const CACHE_KEY = 'personality:session';
 
 async function loadOnce(): Promise<string> {
-  if (sessionBlock !== undefined) return sessionBlock;
-  if (inflight) return inflight;
-  inflight = (async () => {
+  const session = await getOrSetClientCached<PersonalitySession>(CACHE_KEY, async () => {
     try {
       const token = getStoredWebToken();
-      if (!token) { sessionProfile = null; return ''; }
+      if (!token) return { block: '', profile: null };
       const me = await getMe(token);
-      sessionProfile = me.psychometric ?? null;
-      return await fetchPersonalityBlock(me.psychometric);
+      return { block: await fetchPersonalityBlock(me.psychometric), profile: me.psychometric ?? null };
     } catch {
-      sessionProfile = null;
-      return '';
+      return { block: '', profile: null };
     }
-  })()
-    .then((block) => {
-      sessionBlock = block;
-      return block;
-    })
-    .finally(() => {
-      inflight = undefined;
-    });
-  return inflight;
+  });
+  return session.block;
 }
 
 /**
@@ -62,7 +51,7 @@ async function loadOnce(): Promise<string> {
  */
 export async function getSessionPsychometric(): Promise<PsychometricProfile | null> {
   await loadOnce();
-  return sessionProfile ?? null;
+  return readClientCached<PersonalitySession>(CACHE_KEY)?.profile ?? null;
 }
 
 /**
@@ -71,7 +60,7 @@ export async function getSessionPsychometric(): Promise<PsychometricProfile | nu
  * has no profile — safe to concatenate unconditionally.
  */
 export function usePersonalityBlock(): string {
-  const [block, setBlock] = useState<string>(sessionBlock ?? '');
+  const [block, setBlock] = useState<string>(readClientCached<PersonalitySession>(CACHE_KEY)?.block ?? '');
   useEffect(() => {
     let live = true;
     void loadOnce().then((b) => {
@@ -87,7 +76,5 @@ export function usePersonalityBlock(): string {
 /** Invalidate the cached personality block (e.g. on sign-out or after the user
  *  edits their personality) so the next mount re-fetches it. */
 export function clearPersonalityBlockCache(): void {
-  sessionBlock = undefined;
-  sessionProfile = undefined;
-  inflight = undefined;
+  invalidateClientCache(CACHE_KEY);
 }

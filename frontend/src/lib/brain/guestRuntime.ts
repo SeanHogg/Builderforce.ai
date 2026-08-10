@@ -12,6 +12,14 @@
  *     until the visitor signs up. This is the "usage-cap wall" model: try it
  *     here, sign up free to keep going and to persist your work.
  *
+ * …UNLESS the visitor is in a shared ROOM. Then the conversation belongs to
+ * everyone in it, not to one browser, so persistence switches to the room's
+ * Durable Object (see guestRoomApi): the same hooks, the same transport, a
+ * different store. The switch is decided PER CALL from the active room code
+ * rather than by handing BrainProvider a second config — the provider memoizes
+ * its runtime off the config object, so swapping configs mid-session would
+ * remount the conversation and lose the in-flight turn.
+ *
  * Kept as a module constant so BrainProvider's memoized runtime stays stable.
  */
 
@@ -20,6 +28,10 @@ import { AUTH_API_URL } from '../auth';
 import { parseLlmError } from '../builderforceApi';
 import { getModality } from '../modality';
 import { getStoredGuestToken, clearGuestToken } from '../guestChatApi';
+import {
+  getActiveGuestRoom, getGuestDisplayName, fetchGuestRoomMessages, appendGuestRoomMessages,
+  fetchGuestRoomState, renameGuestRoom, type GuestRoomMessage,
+} from '../guestRoomApi';
 
 const CHATS_KEY = 'bf_guest_chats';
 const MSGS_KEY = (chatId: number) => `bf_guest_msgs:${chatId}`;
@@ -125,6 +137,158 @@ const guestPersistence: BrainPersistenceAdapter = {
   },
 };
 
+/**
+ * The single chat id a shared room exposes. A room IS one conversation — there is
+ * no chat list to switch between — so the id is a constant the adapter maps onto
+ * the room's transcript.
+ */
+export const GUEST_ROOM_CHAT_ID = 1;
+
+/** Author attribution rides in message metadata so bubbles can be named. */
+const AUTHOR_META_KEY = 'guestAuthor';
+
+/** Read the display name a room message was written under, if any. */
+export function guestMessageAuthor(metadata: string | null | undefined): string | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown>;
+    const name = parsed[AUTHOR_META_KEY];
+    return typeof name === 'string' && name ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stamp the sender's display name onto a message's metadata (preserving the rest). */
+function withAuthor(metadata: string | null | undefined, name: string): string | null {
+  if (!name) return metadata ?? null;
+  let base: Record<string, unknown> = {};
+  if (metadata) {
+    try { base = JSON.parse(metadata) as Record<string, unknown>; } catch { base = {}; }
+  }
+  return JSON.stringify({ ...base, [AUTHOR_META_KEY]: name });
+}
+
+function toBrainMessage(m: GuestRoomMessage): BrainMessage {
+  return {
+    id: m.id,
+    role: m.role as BrainMessage['role'],
+    content: m.content,
+    metadata: m.metadata,
+    seq: m.seq,
+    createdAt: m.createdAt,
+  };
+}
+
+function roomChat(title: string, createdAt: string): BrainChat {
+  return {
+    id: GUEST_ROOM_CHAT_ID,
+    title,
+    projectId: null,
+    origin: 'guest',
+    createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Persistence for a SHARED guest room: the transcript lives in the room's Durable
+ * Object so every participant reads and writes the same list. Only the person who
+ * sent a turn persists it (and the reply it produced); everyone else learns about
+ * it from the room's `changed` frame and refetches — which is exactly what the
+ * localStorage adapter does for a solo guest, one browser at a time.
+ */
+const guestRoomPersistence: BrainPersistenceAdapter = {
+  async listChats() {
+    const code = getActiveGuestRoom();
+    if (!code) return [];
+    const state = await fetchGuestRoomState(code);
+    return state ? [roomChat(state.title, state.createdAt)] : [];
+  },
+  async getChat() {
+    const code = getActiveGuestRoom();
+    const state = code ? await fetchGuestRoomState(code) : null;
+    if (!state) throw new Error('This shared session has ended.');
+    return roomChat(state.title, state.createdAt);
+  },
+  async createChat() {
+    // A room already IS the conversation — "new chat" resolves to it rather than
+    // forking a second transcript only the creator would see.
+    const code = getActiveGuestRoom();
+    const state = code ? await fetchGuestRoomState(code) : null;
+    return roomChat(state?.title ?? 'Guest session', state?.createdAt ?? new Date().toISOString());
+  },
+  async updateChat(_id, body) {
+    const code = getActiveGuestRoom();
+    if (code && body.title) await renameGuestRoom(code, body.title);
+    const state = code ? await fetchGuestRoomState(code) : null;
+    return roomChat(state?.title ?? body.title ?? 'Guest session', state?.createdAt ?? new Date().toISOString());
+  },
+  async deleteChat() {
+    // Nobody may delete a conversation other people are in; leaving is the exit
+    // (see guestRoomApi.leaveGuestRoom), and the room expires on its own.
+    return {};
+  },
+  async summarizeChat() {
+    const code = getActiveGuestRoom();
+    const messages = code ? await fetchGuestRoomMessages(code) : null;
+    const firstUser = messages?.find((m) => m.role === 'user');
+    return { summary: (firstUser?.content ?? 'Shared session').slice(0, 60) };
+  },
+  async getMessages() {
+    const code = getActiveGuestRoom();
+    if (!code) return [];
+    const messages = await fetchGuestRoomMessages(code);
+    return (messages ?? []).map(toBrainMessage);
+  },
+  async sendMessages(_chatId, messages) {
+    const code = getActiveGuestRoom();
+    if (!code) throw new Error('This shared session has ended.');
+    const name = getGuestDisplayName();
+    const created = await appendGuestRoomMessages(code, messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      // Only a human turn carries a name — the Brain is the same voice for everyone.
+      metadata: m.role === 'user' ? withAuthor(m.metadata, name) : (m.metadata ?? null),
+    })));
+    if (!created) throw new Error('This shared session has ended.');
+    return created.map(toBrainMessage);
+  },
+  async setMessageFeedback() {
+    return {}; // no feedback capture for guests
+  },
+  async upload() {
+    throw new Error('Sign up to attach files.');
+  },
+  uploadUrl() {
+    return '';
+  },
+};
+
+/**
+ * Dispatch every persistence call to the store that owns the visitor's CURRENT
+ * conversation: the shared room when they are in one, their own browser when they
+ * are not. Resolved per call (not per mount) so joining or leaving a room takes
+ * effect on the next read without rebuilding the runtime.
+ */
+function activeGuestPersistence(): BrainPersistenceAdapter {
+  return getActiveGuestRoom() ? guestRoomPersistence : guestPersistence;
+}
+
+const dispatchingGuestPersistence: BrainPersistenceAdapter = {
+  listChats: (...args) => activeGuestPersistence().listChats(...args),
+  getChat: (...args) => activeGuestPersistence().getChat(...args),
+  createChat: (...args) => activeGuestPersistence().createChat(...args),
+  updateChat: (...args) => activeGuestPersistence().updateChat(...args),
+  deleteChat: (...args) => activeGuestPersistence().deleteChat(...args),
+  summarizeChat: (...args) => activeGuestPersistence().summarizeChat(...args),
+  getMessages: (...args) => activeGuestPersistence().getMessages(...args),
+  sendMessages: (...args) => activeGuestPersistence().sendMessages(...args),
+  setMessageFeedback: (...args) => activeGuestPersistence().setMessageFeedback(...args),
+  upload: (...args) => activeGuestPersistence().upload(...args),
+  uploadUrl: (...args) => activeGuestPersistence().uploadUrl(...args),
+};
+
 export const guestBrainConfig: BrainConfig = {
   transport: {
     baseUrl: AUTH_API_URL,
@@ -133,6 +297,6 @@ export const guestBrainConfig: BrainConfig = {
     onUnauthorized: () => { clearGuestToken(); },
     mapError: parseLlmError,
   },
-  persistence: guestPersistence,
+  persistence: dispatchingGuestPersistence,
   resolveSystemPrompt: (modality) => getModality(modality).brainSystemPrompt,
 };

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Catalog adoption analytics — the shared compute behind /api/catalog-analytics.
  *
@@ -82,8 +83,10 @@ export async function recordCatalogAdoption(
       actorId: input.actorId ?? null,
     });
     await bumpCacheVersion(env, catalogAnalyticsVersionKey(input.tenantId));
-  } catch {
+  } catch (error) {
     // Telemetry write — swallow.
+  
+    reportCaughtError(error, { source: "application/insights/catalogAnalytics.ts", operation: "recordCatalogAdoption" });
   }
 }
 

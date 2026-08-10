@@ -1,0 +1,68 @@
+/*
+ * A rail command that is a MODE, lit while that mode is on.
+ *
+ * React Flow's control button has no on-state of its own, so a toggled view —
+ * 3D, the mini map, the outline — looked identical whether it was on or off.
+ * The lit state is driven by `aria-pressed`, so it cannot drift from what
+ * assistive tech is told.
+ */
+.railToggle[aria-pressed='true'] {
+  /* Deepened rather than the raw accent: the accent token is lighter in dark
+     mode, where a white glyph on it falls under the 3:1 contrast floor. */
+  background: color-mix(in srgb, var(--accent) 88%, black) !important;
+  color: var(--text-on-accent) !important;
+}
+
+.railToggle[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--accent) 74%, black) !important;
+}
+
+/*
+ * Board chrome steps aside for a docked side panel.
+ *
+ * The rail and the mini map are pinned to the bottom corners of the board. When
+ * a canvas lets a full-height panel claim an edge — the Brain dock on the
+ * creation canvas — anything pinned to that edge is simply painted over, and
+ * the board loses zoom, fit, arrange and the mini map with no way to get them
+ * back. The canvas publishes the claimed width as --canvas-reserved-left /
+ * --canvas-reserved-right and the chrome moves to the far side of that panel,
+ * so it always lands on the open part of the board instead of underneath it.
+ *
+ * React Flow gives every panel `margin: 15px`, so the offset is added to the
+ * margin rather than replacing it. The doubled class beats React Flow's own
+ * rule on specificity, which keeps stylesheet import order irrelevant.
+ */
+:global(.react-flow__panel).boardChrome.boardChrome {
+  margin-left: calc(15px + var(--canvas-reserved-left, 0px));
+  margin-right: calc(15px + var(--canvas-reserved-right, 0px));
+}
+
+.minimapClose {
+  position: absolute;
+  z-index: 13;
+  /* Rides with the mini map it closes. */
+  right: calc(20px + var(--canvas-reserved-right, 0px));
+  bottom: 136px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  /* Canvas tokens first — this button sits ON a board, and the host canvas owns
+     that board's palette in each theme. The application tokens are the fallback
+     for any surface that mounts the rail outside a canvas shell. */
+  color: var(--canvas-ink, var(--text-primary, currentColor));
+  background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, white)) 92%, transparent);
+  border: 1px solid var(--canvas-line, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px var(--canvas-shadow, rgba(0, 0, 0, .2));
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.minimapClose:hover { filter: brightness(.96); }
+
+@media (max-width: 760px) {
+  .minimapClose { display: none; }
+}

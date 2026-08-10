@@ -21,9 +21,17 @@ describe('byoAwareModel', () => {
   });
 
   it('explicit model ON the connected account → honored (a deliberate BYO pick)', () => {
-    expect(byoAwareModel('claude-opus-4-8', new Set(['anthropic']))).toBe('claude-opus-4-8');
-    expect(byoAwareModel('  claude-opus-4-8  ', new Set(['anthropic']))).toBe('claude-opus-4-8');
+    expect(byoAwareModel('claude-opus-5', new Set(['anthropic']))).toBe('claude-opus-5');
+    expect(byoAwareModel('  claude-opus-5  ', new Set(['anthropic']))).toBe('claude-opus-5');
     expect(byoAwareModel('direct/openai/gpt-4.1', new Set(['openai']))).toBe('direct/openai/gpt-4.1');
+  });
+
+  it('a SUPERSEDED pin is honored as its live successor, not dispatched stale', () => {
+    // Stored pins outlive the model they name. Rewriting inside byoAwareModel keeps the
+    // BYO gate and the dispatched id on ONE model — otherwise a months-old agent
+    // base_model rides a retired id into the chain and is silently filtered out of it.
+    expect(byoAwareModel('claude-opus-4-8', new Set(['anthropic']))).toBe('claude-opus-5');
+    expect(byoAwareModel('  claude-opus-4-8  ', new Set(['anthropic']))).toBe('claude-opus-5');
   });
 
   it('nothing connected → any explicit model is honored (normal plan routing)', () => {

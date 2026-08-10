@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 
 export interface PromptInputProps {
@@ -39,7 +40,7 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   color: 'var(--text-primary)',
   fontSize: '0.875rem',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   padding: '10px 12px',
   outline: 'none',
   border: '1px solid var(--border-subtle)',
@@ -60,7 +61,7 @@ const buttonStyle = (disabled: boolean): React.CSSProperties => ({
   background: disabled ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
   color: disabled ? 'var(--text-muted)' : 'var(--text-on-accent)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   cursor: disabled ? 'not-allowed' : 'pointer',
   fontSize: '0.875rem',
   fontFamily: 'var(--font-display)',
@@ -131,7 +132,7 @@ export function PromptInput({
           title={submitLabel}
           style={buttonStyle(!canSubmit)}
         >
-          {disabled ? '⏳' : '↑'}
+          {disabled ? <Icon source="⏳" size="1em" /> : '↑'}
         </button>
       </div>
       {secondaryLink && (

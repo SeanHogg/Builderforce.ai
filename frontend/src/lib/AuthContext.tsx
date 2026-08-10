@@ -42,13 +42,13 @@ interface AuthContextValue {
    *  be verified first — the caller flips to the code-entry step. Otherwise the
    *  session is set and it resolves to `{ needsVerification: false, ... }`. */
   login: (email: string, password: string) => Promise<AuthStepResult>;
-  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => Promise<AuthStepResult>;
+  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer' | 'sales', referralCode?: string, ageAttested?: boolean) => Promise<AuthStepResult>;
   /** Exchange the emailed OTP for a session (sets the session in place). `trustDevice`
    *  keeps the user signed in on this device for 30 days. */
   verifyEmail: (email: string, code: string, trustDevice: boolean) => Promise<void>;
   /** One-time account-type choice (Build vs Hired) for an OAuth/magic-link account
    *  that hasn't picked a role yet. Updates the stored user in place. */
-  selectAccountType: (accountType: 'standard' | 'freelancer') => Promise<void>;
+  selectAccountType: (accountType: 'standard' | 'freelancer' | 'sales', ageAttested: boolean) => Promise<void>;
   /** Opt IN/OUT of being hired talent (independent of account type — the builder
    *  shell is unaffected). Updates the stored user in place. */
   setAvailableForHire: (available: boolean) => Promise<void>;
@@ -91,8 +91,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer'): Promise<AuthStepResult> => {
-      const res = await apiRegister(email, password, name, agreeToTerms, accountType);
+    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer' | 'sales', referralCode?: string, ageAttested?: boolean): Promise<AuthStepResult> => {
+      const res = await apiRegister(email, password, name, agreeToTerms, accountType, referralCode, ageAttested);
       // Registration returns no session — the email must be verified first — but keep
       // the session-setting branch for forward-compat if that ever changes.
       if (!res.needsVerification) {
@@ -116,9 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const selectAccountType = useCallback(
-    async (accountType: 'standard' | 'freelancer') => {
+    async (accountType: 'standard' | 'freelancer' | 'sales', ageAttested: boolean) => {
       if (!webToken) throw new Error('Not authenticated');
-      const updated = await apiSelectAccountType(webToken, accountType);
+      const updated = await apiSelectAccountType(webToken, accountType, ageAttested);
       setUser(updated);
       persistSession(webToken, updated);
     },

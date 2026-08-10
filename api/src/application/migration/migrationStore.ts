@@ -10,7 +10,7 @@
  * Epic-decomposition hooks on a bulk import.
  */
 
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, notExists } from 'drizzle-orm';
 import {
   importRuns,
   importStagedProjects,
@@ -23,10 +23,11 @@ import {
   boardTypeMappings,
   externalTicketLinks,
   tenantMembers,
-  tenantInvitations,
   users,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { hasPendingInvite, invite } from '../kernel/InvitationService';
 import type {
   MigrationStore,
   RunRow,
@@ -55,7 +56,11 @@ function toRun(row: typeof importRuns.$inferSelect): RunRow {
   };
 }
 
-export function createMigrationStore(db: Db): MigrationStore {
+/** `env` invalidates the tenant's cached invitation roster when an import
+ *  invites a person — the store owns the write, so it owns the invalidation.
+ *  Optional because the MCP tool context threads bindings only when it has
+ *  them; see the note on `invalidateInvitations`. */
+export function createMigrationStore(db: Db, env?: Env): MigrationStore {
   return {
     async createRun(input): Promise<RunRow> {
       const [row] = await db.insert(importRuns).values({
@@ -208,6 +213,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         name: input.name,
         description: input.description,
         origin: 'imported',
+        importRunId: input.importRunId,
       }).returning({ id: projects.id });
       if (!row) throw new Error('insertProject returned no row');
       return row.id;
@@ -235,6 +241,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         source: input.source,
         storyPoints: input.storyPoints ?? undefined,
         assignedUserId: input.assignedUserId ?? undefined,
+        importRunId: input.importRunId,
         createdAt: now,
         updatedAt: now,
       }).returning({ id: tasks.id });
@@ -250,6 +257,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         credentialId: input.credentialId,
         provider: input.provider,
         externalBoardId: input.externalBoardId,
+        importRunId: input.importRunId,
       }).returning({ id: boardConnections.id });
       if (!row) throw new Error('insertConnection returned no row');
       return row.id;
@@ -280,9 +288,8 @@ export function createMigrationStore(db: Db): MigrationStore {
     },
 
     async hasMemberOrInvite(tenantId, email): Promise<boolean> {
-      const [invite] = await db.select({ id: tenantInvitations.id }).from(tenantInvitations)
-        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.email, email), eq(tenantInvitations.status, 'pending'))).limit(1);
-      if (invite) return true;
+      // One definition of "pending", in the service that owns the primitive.
+      if (await hasPendingInvite(db, tenantId, email)) return true;
       const [member] = await db.select({ id: tenantMembers.id }).from(tenantMembers)
         .innerJoin(users, eq(users.id, tenantMembers.userId))
         .where(and(eq(tenantMembers.tenantId, tenantId), eq(users.email, email))).limit(1);
@@ -290,11 +297,36 @@ export function createMigrationStore(db: Db): MigrationStore {
     },
 
     async insertInvitation(input): Promise<void> {
-      await db.insert(tenantInvitations).values({
+      await invite(db, env, {
         tenantId: input.tenantId,
+        kind: 'tenant',
         email: input.email,
-        invitedByUserId: input.invitedByUserId,
-        status: 'pending',
+        invitedBy: input.invitedByUserId,
+      });
+    },
+
+    async rollbackImport(runId, tenantId) {
+      return db.transaction(async (tx) => {
+        const removedTasks = await tx.delete(tasks)
+          .where(eq(tasks.importRunId, runId))
+          .returning({ id: tasks.id });
+        const removedConnections = await tx.delete(boardConnections)
+          .where(and(eq(boardConnections.importRunId, runId), eq(boardConnections.tenantId, tenantId)))
+          .returning({ id: boardConnections.id });
+        const removedProjects = await tx.delete(projects)
+          .where(and(
+            eq(projects.importRunId, runId),
+            eq(projects.tenantId, tenantId),
+            // An imported project can receive ordinary work immediately after
+            // commit. Preserve that project (and the later work) on rollback.
+            notExists(tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.projectId, projects.id))),
+          ))
+          .returning({ id: projects.id });
+        const removed = { tasksRemoved: removedTasks.length, connectionsRemoved: removedConnections.length, projectsRemoved: removedProjects.length };
+        const [run] = await tx.select({ summary: importRuns.summary }).from(importRuns).where(and(eq(importRuns.id, runId), eq(importRuns.tenantId, tenantId))).limit(1);
+        await tx.update(importRuns).set({ status: 'rolled_back', summary: { ...((run?.summary as Record<string, number> | null) ?? {}), ...removed }, errorMessage: null, updatedAt: new Date() })
+          .where(and(eq(importRuns.id, runId), eq(importRuns.tenantId, tenantId)));
+        return removed;
       });
     },
   };

@@ -11,8 +11,10 @@
  * loading/empty/error states; the host only mounts it.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import {
   listEvermindModels,
   exportPublishedModel,
@@ -83,14 +85,14 @@ export function ModelExportPanel() {
         {noModels ? (
           <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{t('noModels')}</div>
         ) : (
-          <select
+          <Select
             id="evermind-export-model"
             value={selectedSlug}
             onChange={(e) => setSelectedSlug(e.target.value)}
             disabled={models === null}
             style={{
               width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', fontSize: '0.8rem',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
             }}
           >
             {models === null && <option>{t('loading')}</option>}
@@ -99,7 +101,7 @@ export function ModelExportPanel() {
                 {m.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 
@@ -112,13 +114,13 @@ export function ModelExportPanel() {
           >
             {t('formatLabel')}
           </label>
-          <select
+          <Select
             id="evermind-export-format"
             value={format}
             onChange={(e) => setFormat(e.target.value as EvermindExportFormat)}
             style={{
               width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', fontSize: '0.8rem',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
             }}
           >
             {EVERMIND_EXPORT_FORMATS.map((f) => (
@@ -126,7 +128,7 @@ export function ModelExportPanel() {
                 {t(`format.${f.key}.label`)} ({f.ext})
               </option>
             ))}
-          </select>
+          </Select>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
             {t(`format.${format}.description`)}
           </div>
@@ -148,13 +150,13 @@ export function ModelExportPanel() {
           disabled={disabled}
           style={{
             fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem',
-            background: busy ? 'var(--bg-elevated)' : 'var(--coral-bright, #4d9eff)',
-            color: busy ? 'var(--text-muted)' : '#fff',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 16px',
+            background: busy ? 'var(--bg-elevated)' : 'var(--coral-bright, var(--coral-bright))',
+            color: busy ? 'var(--text-muted)' : 'var(--text-on-accent)',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
             cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
           }}
         >
-          {busy ? `⏳ ${t('exporting')}` : `⬇ ${t('export')}`}
+          {busy ? `${t('exporting')}` : `${t('export')}`}
         </button>
         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('pushNote')}</span>
       </div>
@@ -163,11 +165,12 @@ export function ModelExportPanel() {
         <div
           role="alert"
           style={{
-            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: '#fca5a5',
-            borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
+            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error)', color: 'var(--error-text)',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          ⚠ {error}
+          
+          <Icon source="⚠" size="1em" /> {error}
         </div>
       )}
 
@@ -175,11 +178,12 @@ export function ModelExportPanel() {
         <div
           role="status"
           style={{
-            background: 'rgba(34,197,94,0.12)', border: '1px solid #22c55e', color: 'var(--text-primary)',
-            borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
+            background: 'rgba(34,197,94,0.12)', border: '1px solid var(--success)', color: 'var(--text-primary)',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          ✅ {t('done', { filename: done })}
+          
+          <Icon source="✅" size="1em" /> {t('done', { filename: done })}
         </div>
       )}
     </div>

@@ -29,27 +29,13 @@ import { recallSops } from '../../application/knowledge/recallSops';
 import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
 import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
-import { ideProxy } from '../../application/llm/LlmProxyService';
+import { gatewayExtractor } from '../../application/llm/gatewayExtractor';
 import { completeForTenant } from '../../application/llm/tenantProxy';
 import { MODALITIES } from '../../application/compile';
 
-/** A gateway-backed {@link LlmComplete} for the modality adapters (free pool). */
-function gatewayExtractor(env: HonoEnv['Bindings']): LlmComplete {
-  return async (messages) => {
-    const result = await ideProxy(env).complete({
-      messages,
-      temperature: 0,
-      max_tokens: 700,
-      useCase: 'agent_compile',
-    });
-    if (result.response.status >= 400) throw new Error(`gateway ${result.response.status}`);
-    const raw = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown } }> }
-      | null;
-    const content = raw?.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
-  };
-}
+/** The modality adapters' LLM — the shared free-pool extractor. */
+const compileExtractor = (env: HonoEnv['Bindings']): LlmComplete =>
+  gatewayExtractor(env, { useCase: 'agent_compile' });
 
 /** A tenant-scoped {@link RecallKnowledge} that grounds the diagnostic adapter in
  *  the tenant's own published SOPs/processes. */
@@ -92,7 +78,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
     let spec;
     try {
       spec = await compile(needs, {
-        llm: gatewayExtractor(c.env),
+        llm: compileExtractor(c.env),
         recallKnowledge: knowledgeRecaller(db, c.get('tenantId') as number),
       });
     } catch (err) {
@@ -111,6 +97,9 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
       dispatchCloudRunForTask(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
         ...params,
         submittedBy: `user:${c.get('userId') ?? 'compile'}`,
+        // A person clicked Compile/Deploy — the same explicit override Run-now uses,
+        // so the failure breaker and re-run cooldown do not apply.
+        force: true,
       });
 
     const dispatched = await deployAndDispatch(spec, surface, {
@@ -139,7 +128,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
     let spec;
     try {
       spec = await compile(needs, {
-        llm: gatewayExtractor(c.env),
+        llm: compileExtractor(c.env),
         recallKnowledge: knowledgeRecaller(db, tenantId),
       });
     } catch (err) {

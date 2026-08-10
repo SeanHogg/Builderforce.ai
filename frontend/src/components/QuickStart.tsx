@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 type Mode = 'oneliner' | 'npm' | 'hackable' | 'macos';
 type Pm = 'npm' | 'pnpm';
@@ -8,7 +10,7 @@ type HackableMode = 'installer' | 'pnpm';
 type Os = 'unix' | 'windows';
 type WinShell = 'powershell' | 'cmd';
 
-const RELEASES_URL = 'https://github.com/seanhogg/agents/releases/latest';
+const MACOS_INSTALL_URL = '/docs/platforms/macos';
 
 const COMMENTS = {
   oneliner: {
@@ -46,11 +48,14 @@ function CopyBtn({
   text,
   copyKey,
   copied,
+  ariaLabel,
   onCopy,
 }: {
   text: string;
   copyKey: string;
   copied: string | null;
+  /** Localized, threaded in as a prop — this is module scope, so no hook here. */
+  ariaLabel: string;
   onCopy: (text: string, key: string) => void;
 }) {
   return (
@@ -58,7 +63,7 @@ function CopyBtn({
       type="button"
       className="cc-copy-btn"
       onClick={() => onCopy(text, copyKey)}
-      aria-label="Copy command"
+      aria-label={ariaLabel}
     >
       {copied === copyKey ? '✓' : '⧉'}
     </button>
@@ -66,6 +71,7 @@ function CopyBtn({
 }
 
 export default function QuickStart() {
+  const t = useTranslations('quickStart');
   const [mode, setMode] = useState<Mode>('oneliner');
   const [pm, setPm] = useState<Pm>('npm');
   const [hackable, setHackable] = useState<HackableMode>('installer');
@@ -100,14 +106,13 @@ export default function QuickStart() {
       : `pnpm add -g @seanhogg/builderforce-agents${suffix}`;
   })();
 
+  // The plain shared write, not the hook: `copied` holds WHICH command was copied, so
+  // the hook's single boolean could not represent it. A refused clipboard resolves
+  // false and is ignored, exactly as the old catch did.
   const copy = async (text: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
-    } catch {
-      // ignore
-    }
+    if (!await copyTextToClipboard(text)) return;
+    setCopied(key);
+    setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
   };
 
   const showOsControls = mode === 'oneliner';
@@ -124,7 +129,7 @@ export default function QuickStart() {
   return (
     <section className="cc-quickstart">
       <h2 className="cc-section-title">
-        <span className="cc-agentHost-accent">⟩</span> Quick Start
+        <span className="cc-agentHost-accent">⟩</span> {t('sectionTitle')}
       </h2>
       <div className="cc-code-block">
         <div className="cc-code-header">
@@ -140,7 +145,7 @@ export default function QuickStart() {
                 className={`cc-mode-btn${mode === m ? ' active' : ''}`}
                 onClick={() => selectMode(m)}
               >
-                {m === 'oneliner' ? 'One-liner' : m === 'npm' ? 'npm' : m === 'hackable' ? 'Hackable' : 'macOS'}
+                {m === 'oneliner' ? t('modeOneliner') : m === 'npm' ? 'npm' : m === 'hackable' ? t('modeHackable') : 'macOS'}
               </button>
             ))}
           </div>
@@ -179,7 +184,7 @@ export default function QuickStart() {
             <div className="cc-os-indicator">
               <span className="cc-os-detected">{osLabel}</span>
               <button type="button" className="cc-os-change-btn" onClick={() => setOsPickerExpanded(true)}>
-                change
+                {t('change')}
               </button>
             </div>
           )}
@@ -232,7 +237,7 @@ export default function QuickStart() {
                 onClick={() => setBeta((b) => !b)}
               >
                 <span className="cc-beta-label">β</span>
-                <span className="cc-beta-text">Beta</span>
+                <span className="cc-beta-text">{t('beta')}</span>
               </button>
             </div>
           )}
@@ -245,7 +250,7 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">{onelinerCommand}</span>
-                <CopyBtn text={onelinerCommand} copyKey="oneliner" copied={copied} onCopy={copy} />
+                <CopyBtn text={onelinerCommand} copyKey="oneliner" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
             </>
           )}
@@ -256,13 +261,13 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">{quickInstallCommand}</span>
-                <CopyBtn text={quickInstallCommand} copyKey="install" copied={copied} onCopy={copy} />
+                <CopyBtn text={quickInstallCommand} copyKey="install" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment">{COMMENTS.quickOnboard[betaMode]}</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">builderforce onboard</span>
-                <CopyBtn text="builderforce onboard" copyKey="onboard" copied={copied} onCopy={copy} />
+                <CopyBtn text="builderforce onboard" copyKey="onboard" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
             </>
           )}
@@ -277,6 +282,7 @@ export default function QuickStart() {
                   text="curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git"
                   copyKey="hackable-installer"
                   copied={copied}
+                  ariaLabel={t('copyCommandAria')}
                   onCopy={copy}
                 />
               </div>
@@ -288,19 +294,19 @@ export default function QuickStart() {
               <div className="cc-code-line cc-comment"># You clearly know what you&apos;re doing</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
-                <span className="cc-cmd-text">git clone https://github.com/seanhogg/agents.git</span>
-                <CopyBtn text="git clone https://github.com/seanhogg/agents.git" copyKey="clone" copied={copied} onCopy={copy} />
+                <span className="cc-cmd-text">git clone https://github.com/SeanHogg/Builderforce.ai.git builderforce-agents</span>
+                <CopyBtn text="git clone https://github.com/SeanHogg/Builderforce.ai.git builderforce-agents" copyKey="clone" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
-                <span className="cc-cmd-text">cd builderforce-agents &amp;&amp; pnpm install &amp;&amp; pnpm run build</span>
-                <CopyBtn text="cd builderforce-agents && pnpm install && pnpm run build" copyKey="build" copied={copied} onCopy={copy} />
+                <span className="cc-cmd-text">cd builderforce-agents/agent-runtime &amp;&amp; pnpm install &amp;&amp; pnpm run build</span>
+                <CopyBtn text="cd builderforce-agents/agent-runtime && pnpm install && pnpm run build" copyKey="build" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment"># You built it, now meet it</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">pnpm run builderforce onboard</span>
-                <CopyBtn text="pnpm run builderforce onboard" copyKey="hackable-onboard" copied={copied} onCopy={copy} />
+                <CopyBtn text="pnpm run builderforce onboard" copyKey="hackable-onboard" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
             </>
           )}
@@ -308,25 +314,25 @@ export default function QuickStart() {
           {mode === 'macos' && (
             <div className="cc-macos">
               <div className="cc-macos-desc">
-                <span className="cc-macos-tagline">Companion App (Beta)</span>
-                <span className="cc-macos-subtitle">Menubar access to your agent. Works great alongside the CLI.</span>
+                <span className="cc-macos-tagline">{t('macosTagline')}</span>
+                <span className="cc-macos-subtitle">{t('macosSubtitle')}</span>
               </div>
-              <a href={RELEASES_URL} className="cc-macos-btn" target="_blank" rel="noopener noreferrer">
+              <a href={MACOS_INSTALL_URL} className="cc-macos-btn" target="_blank" rel="noopener noreferrer">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                Download for macOS
+                {t('macosDownload')}
               </a>
-              <span className="cc-macos-meta">Requires macOS 14+ · Universal Binary</span>
+              <span className="cc-macos-meta">{t('macosMeta')}</span>
             </div>
           )}
         </div>
       </div>
 
       <p className="cc-quickstart-note">
-        Works on macOS, Windows &amp; Linux. The one-liner installs Node.js and everything else for you.
+        {t('note')}
       </p>
 
       <style>{`
@@ -338,7 +344,7 @@ export default function QuickStart() {
         .cc-section-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.5rem, 3vw, 2rem);
+          font-size: var(--font-size-section);
           margin-bottom: 24px;
           color: var(--text-primary);
         }
@@ -347,12 +353,12 @@ export default function QuickStart() {
           margin-right: 8px;
         }
         .cc-code-block {
-          background: #0a0f1a;
+          background: var(--bg-surface);
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           overflow: hidden;
           font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-          font-size: 0.875rem;
+          font-size: var(--font-size-small);
         }
         .cc-code-header {
           display: flex;
@@ -379,8 +385,8 @@ export default function QuickStart() {
           color: rgba(240,244,255,0.6);
           border: 1px solid transparent;
           padding: 4px 10px;
-          border-radius: 7px;
-          font-size: 0.78rem;
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-small);
           font-family: var(--font-display);
           cursor: pointer;
           transition: all 0.15s;
@@ -406,8 +412,8 @@ export default function QuickStart() {
           color: rgba(240,244,255,0.45);
           border: 1px solid transparent;
           padding: 3px 9px;
-          border-radius: 6px;
-          font-size: 0.72rem;
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-eyebrow);
           font-family: var(--font-display);
           cursor: pointer;
           transition: all 0.15s;
@@ -431,14 +437,14 @@ export default function QuickStart() {
         }
         .cc-os-detected {
           color: rgba(240,244,255,0.55);
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
         }
         .cc-os-change-btn {
           background: transparent;
           color: rgba(240,244,255,0.4);
           border: none;
           padding: 0;
-          font-size: 0.72rem;
+          font-size: var(--font-size-eyebrow);
           font-family: var(--font-display);
           cursor: pointer;
           text-decoration: underline;
@@ -460,8 +466,8 @@ export default function QuickStart() {
           color: rgba(240,244,255,0.45);
           border: 1px solid rgba(255,255,255,0.12);
           padding: 3px 10px;
-          border-radius: 999px;
-          font-size: 0.72rem;
+          border-radius: var(--radius-full);
+          font-size: var(--font-size-eyebrow);
           font-family: var(--font-display);
           cursor: pointer;
           transition: all 0.15s;
@@ -480,7 +486,7 @@ export default function QuickStart() {
         }
         .cc-code-content {
           padding: 18px 20px;
-          color: #f0f4ff;
+          color: var(--text-primary);
         }
         .cc-code-line {
           padding: 4px 0;
@@ -500,7 +506,7 @@ export default function QuickStart() {
         }
         .cc-cmd-text {
           flex: 1;
-          color: #e0e6f5;
+          color: var(--text-primary);
           word-break: break-all;
         }
         .cc-copy-btn {
@@ -509,8 +515,8 @@ export default function QuickStart() {
           border: none;
           cursor: pointer;
           padding: 4px 8px;
-          font-size: 0.95rem;
-          border-radius: 6px;
+          font-size: var(--font-size-body);
+          border-radius: var(--radius-sm);
           transition: color 0.15s, background 0.15s;
         }
         .cc-copy-btn:hover {
@@ -530,12 +536,12 @@ export default function QuickStart() {
           gap: 4px;
         }
         .cc-macos-tagline {
-          color: #f0f4ff;
+          color: var(--text-primary);
           font-weight: 600;
         }
         .cc-macos-subtitle {
           color: rgba(136,146,176,0.9);
-          font-size: 0.82rem;
+          font-size: var(--font-size-small);
         }
         .cc-macos-btn {
           display: inline-flex;
@@ -545,8 +551,8 @@ export default function QuickStart() {
           color: var(--coral-bright);
           border: 1px solid rgba(77,158,255,0.3);
           padding: 8px 16px;
-          border-radius: 9px;
-          font-size: 0.85rem;
+          border-radius: var(--radius-md);
+          font-size: var(--font-size-small);
           font-family: var(--font-display);
           text-decoration: none;
           transition: all 0.15s;
@@ -560,12 +566,12 @@ export default function QuickStart() {
         }
         .cc-macos-meta {
           color: rgba(136,146,176,0.7);
-          font-size: 0.74rem;
+          font-size: var(--font-size-eyebrow);
         }
         .cc-quickstart-note {
           margin: 14px 2px 0;
           color: var(--text-secondary);
-          font-size: 0.82rem;
+          font-size: var(--font-size-small);
         }
       `}</style>
     </section>

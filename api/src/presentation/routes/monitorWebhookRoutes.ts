@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Monitor-signal webhook — /api/monitor-webhooks/:monitorId
  *
@@ -45,7 +46,9 @@ export function createMonitorWebhookRoutes(db: Db): Hono<HonoEnv> {
     };
 
     const res = await svc.recordSignal(monitor.tenantId, monitorId, signal, c.env as Env);
-    await bumpCacheVersion(c.env as Env, monitoringVersionKey(monitor.tenantId)).catch(() => {});
+    await bumpCacheVersion(c.env as Env, monitoringVersionKey(monitor.tenantId)).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/monitorWebhookRoutes.ts", operation: "createMonitorWebhookRoutes" });
+    });
     return c.json({ ok: true, status: res.status });
   });
 

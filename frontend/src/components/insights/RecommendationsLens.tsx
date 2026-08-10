@@ -15,9 +15,9 @@ import { DaysWindowSelect } from './LensShell';
  */
 
 const SEVERITY_COLOR: Record<RecSeverity, string> = {
-  critical: '#dc2626',
-  warning: '#d97706',
-  info: '#2563eb',
+  critical: 'var(--error)',
+  warning: 'var(--warning)',
+  info: 'var(--info)',
 };
 
 export function RecommendationsLens() {
@@ -65,10 +65,10 @@ function Card({
 }) {
   const color = SEVERITY_COLOR[r.severity];
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderLeft: `4px solid ${color}`, borderRadius: 12, padding: 18 }}>
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderLeft: `4px solid ${color}`, borderRadius: 'var(--radius-lg)', padding: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: color, padding: '2px 8px', borderRadius: 999 }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-on-accent)', background: color, padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
             {t(`recs.severity.${r.severity}`)}
           </span>
           <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -82,7 +82,7 @@ function Card({
             type="button"
             onClick={onDismiss}
             disabled={dismissing}
-            style={{ fontSize: '0.8rem', padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: dismissing ? 'default' : 'pointer', opacity: dismissing ? 0.6 : 1 }}
+            style={{ fontSize: '0.8rem', padding: '5px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: dismissing ? 'default' : 'pointer', opacity: dismissing ? 0.6 : 1 }}
           >
             {dismissing ? t('recs.dismissing') : t('recs.dismiss')}
           </button>
@@ -92,6 +92,33 @@ function Card({
       <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0 }}>
         <span style={{ fontWeight: 600 }}>{t('recs.action')}: </span>{r.recommendation}
       </p>
+      {r.whyItMatters ? (
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+          {r.whyItMatters}
+        </p>
+      ) : null}
+      {(r.action?.href || (r.links?.length ?? 0) > 0) ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+          {r.action?.href ? (
+            <a
+              href={r.action.href}
+              style={{ fontSize: '0.8rem', fontWeight: 700, padding: '6px 12px', borderRadius: 'var(--radius-md)', background: 'var(--accent)', color: 'var(--text-on-accent)', textDecoration: 'none' }}
+            >
+              {r.action.label}
+            </a>
+          ) : null}
+          {r.links?.filter((link) => link.href && link.href !== r.action?.href).map((link) => (
+            <a
+              key={`${link.kind}:${link.id ?? link.label}:${link.field ?? ''}`}
+              href={link.href}
+              title={link.field ? `${link.field} (${link.label})` : link.label}
+              style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'underline' }}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

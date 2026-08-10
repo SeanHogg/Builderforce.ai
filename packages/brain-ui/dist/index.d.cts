@@ -1,6 +1,7 @@
 import * as React from 'react';
-import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import React__default, { HTMLAttributes, ReactNode } from 'react';
+import { BrainMessage, BrainTraceEvent, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+export { ChatModelOptions, ChatModelSelection, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, activeModelKey, buildModelItems, byoVendorLabel, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -53,6 +54,12 @@ interface BrainTimelineLabels {
         'not-seeded': string;
         frozen: string;
     };
+    /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{version}`. */
+    learnTargetContributed: string;
+    /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
+    learnTargetSkipped: string;
     /** Evermind reconcile step — the turn updated learned memories. Must contain
      *  `{count}` and `{version}`. */
     reconcileTitle: string;
@@ -137,6 +144,17 @@ declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateF
  */
 declare const Markdown: React__default.MemoExoticComponent<typeof MarkdownInner>;
 
+interface ThinkSegment {
+    kind: 'answer' | 'thought';
+    content: string;
+}
+/**
+ * Split vendor-emitted `<think>…</think>` text without enabling raw HTML.
+ * An unclosed block is retained as a thought while a response is streaming, so
+ * the literal control tags never break Markdown parsing or swallow the answer.
+ */
+declare function splitThinkSegments(content: string): ThinkSegment[];
+
 /**
  * The "ask the user a question" protocol — shared by the web app and the VS Code
  * webview so a clarifying question renders identically as a clickable card on both.
@@ -167,6 +185,10 @@ interface AskUserLabels {
     askSubmit: string;
     /** Shown on the card once the user has answered (buttons disabled). */
     askAnswered: string;
+    /** <PendingQuestionBanner> heading — the chat is blocked on this answer. */
+    askPending: string;
+    /** <PendingQuestionBanner> link to scroll the question's card into view. */
+    askJumpTo: string;
 }
 declare const DEFAULT_ASK_USER_LABELS: AskUserLabels;
 /** Extract the ask-user payload from an assistant message, or null if none/invalid. */
@@ -180,57 +202,308 @@ declare function stripAskUser(text: string): string;
  * never drift on the format.
  */
 declare function serializeAskUser(payload: AskUserPayload): string;
+/** The minimal message shape {@link selectPendingAskUser} needs — structural on
+ *  purpose, so this module stays free of a brain-embedded import. */
+interface AskUserMessageLike {
+    id: number;
+    role: string;
+    content: string;
+}
+/** An unanswered question and the message carrying it. */
+interface PendingAskUser {
+    payload: AskUserPayload;
+    /** The assistant message the question rides in (lets a host reveal its card). */
+    messageId: number;
+}
+/** The DOM id of a rendered question card. ONE convention, shared by the timeline
+ *  that stamps it and any host that scrolls to it — so the two can never drift. */
+declare function askUserAnchorId(messageId: number): string;
+/**
+ * The question the conversation is currently BLOCKED on, or null when there is none.
+ * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
+ * user turn after it means the question was already answered (answering posts the
+ * choice as the next user turn), so nothing is pending.
+ *
+ * Shared so a host never re-derives "is there an open question" — the same predicate
+ * drives the pinned banner and any host-side pending affordance.
+ */
+declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
 /**
  * A clarifying question rendered as clickable options. Single-select sends the
  * chosen label on click; multi-select collects checkboxes behind a submit button.
  * The chosen label(s) are handed to `onAnswer`, which the host posts as the user's
  * next turn — so the model's question and the user's answer stay in the transcript.
  */
-declare function QuestionCard({ payload, labels, onAnswer, }: {
+declare function QuestionCard({ payload, labels, onAnswer, anchorId, }: {
     payload: AskUserPayload;
     labels?: Partial<AskUserLabels>;
     onAnswer: (answer: string) => void;
+    /** DOM id for scroll-to (see {@link askUserAnchorId}); omit when not targetable. */
+    anchorId?: string;
+}): React.JSX.Element;
+/**
+ * The open question, pinned at the composer. A long transcript buries the agent's
+ * `ask_user` card, so a chat that is BLOCKED on an answer looks merely idle — this
+ * restates the live question where the user is already typing, and answers it through
+ * the very same <QuestionCard> (no second options UI to drift), so one click unblocks
+ * the run. `onReveal` scrolls the original card into view for the surrounding context.
+ *
+ * Pair with {@link selectPendingAskUser}; render nothing when it returns null.
+ */
+declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }: {
+    payload: AskUserPayload;
+    labels?: Partial<AskUserLabels>;
+    onAnswer: (answer: string) => void;
+    onReveal?: () => void;
 }): React.JSX.Element;
 
 /**
- * ConsolidateForkControl — the shared "compress this chat / branch it into a new
- * one" control, rendered identically on the web Brain composer and inside the VS
- * Code webview (which historically hand-rolled the same two buttons).
+ * The chat's error banner — the message AND the fix.
  *
- * Presentational only: it renders two buttons and calls back. The host owns the
- * actual consolidation/fork logic (summarize the chat, append the consolidation
- * marker, or create + seed a forked chat) and the busy/enabled state. Colors come
- * exclusively from theme CSS variables (with layered fallbacks) so the SAME markup
- * reads correctly in the web app's light/dark themes and the VS Code editor theme —
- * no hardcoded hex that only works in one theme.
+ * A turn that fails on an entitlement ("…require a validated card on file. Add
+ * and validate a card in Settings ▸ Billing to unlock.") is only actionable if
+ * the surface takes the user there. The verdict is decided ONCE, server-side,
+ * and carried through the run store as {@link ChatErrorAction} — so this
+ * component reads a verdict rather than pattern-matching error prose, and the
+ * button can never contradict the sentence above it.
+ *
+ * Shared because both chat surfaces hit the same wall: the VS Code webview and
+ * the web app's <BrainPanel> render the same failures from the same hook, and a
+ * user who upgrades from one and returns to the other should not find a
+ * different (or missing) remedy.
+ *
+ * Self-gating: renders nothing without an error, and decides its own actions from
+ * the verdict — the host passes handlers, never a `canX` flag.
  */
-/** Copy for the two buttons — defaulted in English, overridable per host for i18n. */
-interface ConsolidateForkLabels {
+interface ChatErrorBannerLabels {
+    /** Re-exchange an expired session token. */
+    reconnect: string;
+    /** Upgrade CTA when the server named no specific plan. */
+    upgrade: string;
+    /** Upgrade CTA naming the plan — must contain the literal `{plan}` token. */
+    upgradeToPlan: string;
+    /** Billing CTA when the plan is fine but no validated card is on file. */
+    addCard: string;
+    dismiss: string;
+}
+declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
+interface ChatErrorBannerProps {
+    /** The message to show. Falsy ⇒ the banner renders nothing. */
+    error: string;
+    /** The server-decided remedy, from `useBrainConversation().errorAction`. */
+    action: ChatErrorAction | null;
+    onDismiss: () => void;
+    /**
+     * Re-authenticate. Omit on a surface with no in-place reconnect (the web app
+     * redirects to login instead) — the button then isn't offered.
+     */
+    onReconnect?: () => void;
+    /**
+     * Send the user somewhere they can raise their plan. Omit to suppress the
+     * button (e.g. a logged-out surface that owns its own sign-up upsell).
+     */
+    onUpgrade?: () => void;
+    /** Send the user somewhere they can put a validated card on file. */
+    onValidateCard?: () => void;
+    labels?: Partial<ChatErrorBannerLabels>;
+    /** Extra styles merged into the banner container, for host-specific chrome. */
+    style?: React__default.CSSProperties;
+    /** Class on the banner container — the VS Code webview styles via its own CSS. */
+    className?: string;
+}
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, labels: labelOverrides, style, className, }: ChatErrorBannerProps): React__default.JSX.Element | null;
+
+interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
+    /** Text entry for the prompt. Always occupies the first, full-width row. */
+    input: ReactNode;
+    /** Context, mode, model, voice and send controls for the second row. */
+    actions: ReactNode;
+    /** Chips, queued turns, or other state shown above the text entry. */
+    status?: ReactNode;
+    /** Popovers such as the shared @-mention picker. */
+    overlay?: ReactNode;
+    active?: boolean;
+    dragging?: boolean;
+}
+/**
+ * The single structural shell for every BuilderForce prompt surface.
+ *
+ * Hosts own behavior and individual controls, but input/status/action placement,
+ * focus treatment, spacing, and panel shape live here so web, Canvas, marketing,
+ * and editor integrations cannot grow different composer markup again.
+ */
+declare function PromptPanel({ input, actions, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+
+/**
+ * The contract for the composer's `/` control — the ONE place a prompt panel
+ * exposes run shaping (effort, thinking), WHICH MODEL IS IN USE, and how to
+ * change it.
+ *
+ * Model choice used to live in a second control beside the `/` menu (a labelled
+ * chip on the web, a chip that punted to a VS Code QuickPick in the editor), so
+ * the composer had two different affordances for "what runs this turn" and the
+ * editor's list could not even be read without leaving the panel. One control,
+ * one contract, both hosts.
+ *
+ * The MODEL half of that contract (which models exist, their order, and who pays
+ * for each) lives in brain-embedded's `modelChoice` — the VS Code extension HOST
+ * shares it too, and it cannot import React.
+ */
+
+/**
+ * Every user-facing string in the menu. Hosts pass their own localized bundle
+ * (the web app via next-intl, the VS Code webview via the host's `vscode.l10n`
+ * bundle); the English defaults below keep the component usable unmapped.
+ */
+interface PromptOptionsLabels extends ModelChoiceLabels {
+    /** Trigger title/aria — the menu as a whole. */
+    options: string;
+    /** Section heading for the conversation-mode block (Chat | Work). */
+    mode: string;
+    /** Section heading + row label for persistent project memory. */
+    memory: string;
+    /** Auto-approve canvas/tool actions for the next turn. */
+    autoMode: string;
+    /** Explains that Auto mode executes actions without a confirmation step. */
+    autoModeHint: string;
+    /** Section heading for the actions that act on the CHAT itself (consolidate, fork). */
+    conversation: string;
     consolidate: string;
     consolidating: string;
+    /** What consolidating actually does to the rest of the conversation. */
+    consolidateHint: string;
     fork: string;
     forking: string;
+    forkHint: string;
+    /** Why neither conversation action can run yet (too short a chat, or a live run). */
+    sessionUnavailable: string;
+    effort: string;
+    effortQuick: string;
+    effortBalanced: string;
+    effortThorough: string;
+    thinking: string;
+    on: string;
+    off: string;
+    /** Section heading for the model block. */
+    model: string;
+    /** Heading of the read-only "what is running this turn" row. */
+    modelInUse: string;
+    searchModels: string;
+    filterModels: string;
+    chooseModel: string;
+    noModels: string;
+    all: string;
+    /** Shown instead of the list when the tenant may not pin a model at all. */
+    modelLocked: string;
+    accountSettings: string;
 }
-declare const DEFAULT_CONSOLIDATE_FORK_LABELS: ConsolidateForkLabels;
-interface ConsolidateForkControlProps {
-    /** Whether the chat is long enough / in a state where consolidation makes sense. */
+declare const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels;
+/** Merge a host's partial overrides over the English defaults. */
+declare function promptOptionsLabels(overrides?: Partial<PromptOptionsLabels>): PromptOptionsLabels;
+
+/** Model wiring for the `/` menu. Omit it on a surface with no model choice. */
+interface PromptOptionsModel {
+    selection: ChatModelSelection;
+    options: ChatModelOptions;
+    onChange: (selection: ChatModelSelection) => void;
+    /**
+     * What the host will actually send while the selection is `auto` — a configured
+     * default or a `project_evermind:<id>` pin. Shown as the model in use, because
+     * "Auto" alone does not answer the question the user opened the menu to ask.
+     */
+    effective?: string;
+    /** False ⇒ the gateway would reject a pin (no paid plan, no connected account):
+     *  the list is replaced by the reason, rather than offering a dead control. */
+    canChoose?: boolean;
+}
+/** One selectable conversation mode. `value` is the host's stable, non-translatable id. */
+interface PromptOptionsModeChoice {
+    value: string;
+    label: string;
+    hint?: string;
+    icon?: string;
+}
+/**
+ * Conversation mode for this turn — on BuilderForce, Chat vs Work.
+ *
+ * It lives in the `/` menu rather than beside it for the same reason the model does:
+ * a composer that grows one pill per setting is a composer nobody can use on a phone.
+ * The trigger keeps naming the ARMED mode, so "can this turn dispatch real work?" is
+ * still answerable without opening anything.
+ */
+interface PromptOptionsMode {
+    value: string;
+    onChange: (value: string) => void;
+    choices: PromptOptionsModeChoice[];
+}
+/** Persistent memory for this conversation, when the host has one to offer. */
+interface PromptOptionsMemory {
+    enabled: boolean;
+    onChange: (on: boolean) => void;
+    /** What being on/off means here — shown under the label. */
+    describe?: (on: boolean) => string;
+    /** Why it cannot be used right now. Set ⇒ the row is inert and states the reason. */
+    unavailableReason?: string;
+}
+/** Whether tool and canvas actions run without a separate approval prompt. */
+interface PromptOptionsAutoMode {
+    enabled: boolean;
+    onChange: (on: boolean) => void;
+    /** What enabling this setting means on the current host. */
+    description?: string;
+}
+/**
+ * The two actions that act on the CONVERSATION rather than on the next turn:
+ * consolidate it into a compact summary, or fork that summary into a new chat.
+ *
+ * They used to be two always-visible pills in the action row on both hosts (the
+ * web composer through a `ConsolidateForkControl`, the VS Code webview through a
+ * hand-rolled copy of the same two buttons) — four controls that were inert for
+ * most of a chat's life and, on a narrow panel, crowded out Send. Here they get
+ * room to say what they do, and the host only supplies state + handlers.
+ */
+interface PromptOptionsSession {
+    /** The chat is long enough / idle enough for a summary to mean anything. */
     canConsolidate: boolean;
-    /** A consolidation is in flight. */
-    consolidating: boolean;
-    /** A fork is in flight. */
-    forking: boolean;
-    onConsolidate(): void;
-    onFork(): void;
-    labels?: Partial<ConsolidateForkLabels>;
+    consolidating?: boolean;
+    forking?: boolean;
+    onConsolidate: () => void;
+    onFork: () => void;
+}
+interface PromptOptionsMenuProps {
+    labels?: Partial<PromptOptionsLabels>;
+    disabled?: boolean;
+    mode?: PromptOptionsMode;
+    memory?: PromptOptionsMemory;
+    autoMode?: PromptOptionsAutoMode;
+    /** Consolidate / fork this chat. Omit on a surface with no chat behind it. */
+    session?: PromptOptionsSession;
+    effort?: Effort;
+    onEffortChange?: (effort: Effort) => void;
+    /** What a level really costs at this host's current state (answer/thinking budgets). */
+    describeEffort?: (effort: Effort) => string;
+    thinking?: boolean;
+    onThinkingChange?: (on: boolean) => void;
+    describeThinking?: (on: boolean) => string;
+    model?: PromptOptionsModel;
+    onAccountSettings?: () => void;
     className?: string;
 }
 /**
- * Two buttons: Consolidate (compress the chat into a summary marker the rest of
- * the conversation builds on) and Fork (branch that summary into a new chat).
- * Both are disabled when consolidation isn't possible or either action is busy,
- * so a host can't fire a second op mid-flight.
+ * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
+ * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * and the model picker, plus account settings. One affordance, shared by every
+ * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
+ *
+ * Every one of those settings used to be its own pill in the composer's action row
+ * — a segmented Chat|Work control, a memory button, a model chip — which on a phone
+ * left a row of eight unlabelled circles and no room for the send button. They live
+ * here now, and the trigger states the two consequential ones (the armed mode, the
+ * model in use) so nothing has to be opened to read what will happen.
+ *
+ * Self-gating: renders nothing until a host wires at least one section.
  */
-declare function ConsolidateForkControl({ canConsolidate, consolidating, forking, onConsolidate, onFork, labels, className, }: ConsolidateForkControlProps): React.JSX.Element;
+declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, autoMode, session, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, onAccountSettings, className, }: PromptOptionsMenuProps): React.JSX.Element | null;
 
 /**
  * Participant avatars — the shared way a chat renders WHO a participant is.
@@ -307,6 +580,17 @@ interface TicketLinkVM {
     ref: string;
     label: string;
     status: string;
+    /**
+     * 0–100 completion percentage for the linked work item.
+     *
+     * `progressPct === 100` is the authoritative completion signal: it is emitted
+     * ONLY once the work item is fully complete (a leaf that is marked done, or a
+     * container whose every child/target is done — i.e. `done === total`). It is
+     * never reported before completion, and a value approaching 100 (e.g. 99) does
+     * NOT mean done — only an exact 100 does. Health is derived live on every read,
+     * so 100 is an idempotent terminal state (reported on every subsequent read),
+     * not a one-shot event delivered exactly once.
+     */
     progressPct: number;
     done: number;
     total: number;
@@ -352,6 +636,13 @@ interface ChatOptionVM {
     id: number;
     title: string;
 }
+/** A pending human question associated with one of this chat's linked tasks. */
+interface ChatQuestionVM {
+    id: string;
+    description: string;
+    taskId: number | null;
+    createdAt?: string;
+}
 /**
  * Host-provided data access — the only coupling to a backend. The web app wires
  * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
@@ -391,6 +682,30 @@ interface ChatTicketsAdapter {
         started: boolean;
         agentName: string;
     }>;
+    /**
+     * Whether this host currently permits DISPATCHING a run, and if not, why.
+     *
+     * Run dispatch is role-gated in the web app (`runtime.execute`) but this package
+     * is surface-agnostic and also renders in the VS Code webview, where there is no
+     * tenant-role context at all. So the capability is asked of the HOST rather than
+     * computed here — it is the one thing the panel genuinely cannot know.
+     *
+     * OPTIONAL on purpose: a host that omits it (VS Code) is treated as permitted,
+     * which preserves today's behaviour rather than silently disabling the button in
+     * a surface that has no way to answer.
+     *
+     * `reason` is a host-LOCALIZED sentence rendered as the disabled control's
+     * tooltip. Product rule: a gated control is disabled and explained, never hidden
+     * — and never a button that looks live and throws on click.
+     */
+    canRunTicket?(): {
+        allowed: boolean;
+        reason?: string;
+    };
+    /** Pending question/feedback requests for work linked to this chat. */
+    listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+    /** Deliver an answer and resume the waiting run. */
+    answerQuestion(id: string, responseText: string): Promise<void>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface ChatTicketsLabels {
@@ -410,6 +725,11 @@ interface ChatTicketsLabels {
     link: string;
     agents: string;
     merge: string;
+    questions: string;
+    noQuestions: string;
+    answerPlaceholder: string;
+    submitAnswer: string;
+    answering: string;
     linkFailed: string;
     kindLabel: string;
     pickTicket: string;
@@ -441,8 +761,16 @@ interface ChatTicketsLabels {
     lockHint: string;
     mergeHint: string;
     mergeNoOthers: string;
+    /** Title on the collapsed ticket header — click to reveal the ring grid. */
+    showTickets: string;
+    /** Title on the expanded ticket header — click to collapse the ring grid. */
+    hideTickets: string;
     kind: Record<TicketKind, string>;
     ringAria: (label: string, pct: number) => string;
+    /** N-linked-tickets count shown in the collapsible header. */
+    ticketCount: (n: number) => string;
+    /** Aria label for the collapsed header's overall-progress ring. */
+    overallAria: (pct: number) => string;
     runStarted: (agent: string) => string;
     mergeAction: (n: number) => string;
     mergedN: (n: number) => string;
@@ -624,6 +952,7 @@ type TimelineNode = {
     order: number;
     version: number;
     skipped?: BrainLearnSkipReason;
+    targets?: EvermindLearnTarget[];
 } | {
     key: string;
     kind: 'reconcile';
@@ -695,8 +1024,19 @@ interface EvermindRecentEntry {
     weight: number;
     /** The task prompt the run addressed (text-path only). */
     prompt?: string;
-    /** The run/exemplar text that was learned (text-path only). */
+    /** The run/exemplar text that was learned (text-path only). Absent when a pinned
+     *  teacher failed on a teach-a-task — see `skipReason`. */
     text?: string;
+    /** True when a frontier teacher shaped what was learned (text-path only). */
+    distilled?: boolean;
+    /** The frontier model that distilled this entry (present when `distilled`). */
+    teacherModel?: string;
+    /** Why distillation did NOT happen — {@link EvermindTeacherSkipReason}. */
+    skipReason?: string;
+    /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+    skipDetail?: string;
+    /** The pinned teacher model that failed (present on a distillation fault). */
+    attemptedTeacherModel?: string;
 }
 /** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
 interface EvermindValidateMatch extends EvermindRecentEntry {
@@ -741,6 +1081,70 @@ interface EvermindConsoleData {
     recent: EvermindRecentEntry[];
     /** Latest automatic regression check (▲/▼ vs the previous version), or null. */
     eval?: EvermindEvalPoint | null;
+    /**
+     * True when this Evermind belongs to the project's PARENT container, not to the
+     * project the console is scoped to.
+     *
+     * Only `evermind`-modality builds get their own `project_evermind` row; every other
+     * modality (video, voice, designer, finetune) inherits its container's — deliberately,
+     * so a build opens with the container's trained model instead of an empty one, and so
+     * learning stays pooled across the group rather than sharded per build.
+     *
+     * The console MUST render read-only when this is set. Reads inherit, but every write
+     * endpoint keeps exact-id semantics (a contribution must never silently land on the
+     * wrong project), so a seed/toggle/teach issued from an inheriting build targets a row
+     * that does not exist — it updates zero rows and returns OK. Offering those controls
+     * here would be an affordance that does nothing.
+     */
+    inherited?: boolean;
+    /** The container project whose Evermind is being displayed (present when `inherited`). */
+    inheritedFromProjectId?: number;
+    /**
+     * ISO timestamp this Evermind auto-quarantined after a streak of incoherent serves
+     * (null/absent = healthy). While quarantined it serves nothing and cannot be
+     * re-enabled until it passes the coherence probe again — the console renders a badge
+     * + reason so "why did it turn itself off / why can't I turn it on" is never a mystery.
+     */
+    quarantinedAt?: string | null;
+    /** The probe-failure reason behind {@link quarantinedAt} (present when quarantined). */
+    quarantineReason?: string | null;
+}
+/**
+ * One Evermind a project targets — its own head, or the head of an IDE build grouped
+ * under it. Shape mirrors the api `targetsCore` endpoint. Ordered `[self, …builds]`,
+ * so index 0 is the project itself. Learning fans out to every live target; inference
+ * stays single-pick. Read-only in the console.
+ */
+interface EvermindTarget {
+    projectId: number;
+    version: number;
+    name: string;
+    mode: EvermindMode;
+    inferenceEnabled: boolean;
+    seeded: boolean;
+}
+/**
+ * The outcome of importing a local builderforce-memory snapshot into this Evermind:
+ * how many raw facts were absorbed + merged (and the resulting version), plus how many
+ * source entries were then compacted to terse stubs and the bytes that recovered. A
+ * host returns `null` from {@link EvermindConsoleAdapter.importMemory} when the user
+ * cancels the file picker (a no-op, not an error).
+ */
+interface MemoryImportReport {
+    /** The file the user imported (basename), for the confirmation notice. */
+    fileName: string;
+    /** Raw facts accepted into the learn queue. */
+    absorbed: number;
+    /** Facts skipped (too short / rejected), with the reason count rolled up. */
+    skipped: number;
+    /** Contributions merged into the model by the closing flush. */
+    merged: number;
+    /** Model version after the merge — stamped into each compacted stub. */
+    version: number;
+    /** Source entries rewritten to `[absorbed→Evermind vN]` stubs. */
+    compacted: number;
+    /** Bytes removed from the snapshot by compaction (the context-bloat recovered). */
+    bytesSaved: number;
 }
 /** A published Studio Evermind model that can seed a project's learnable base. */
 interface EvermindSeedModel {
@@ -751,6 +1155,90 @@ interface EvermindSeedModel {
 interface EvermindTeacherOptions {
     models: string[];
     isPaid: boolean;
+}
+/**
+ * One graded generation from the TEST BENCH — what the model actually produced for a
+ * prompt, plus the verdict the SERVE PATH would reach on it. This is the difference
+ * between "which memories would be recalled" (Validate) and "what will a user see"
+ * (this): only the latter can catch a head that emits gibberish, before a user does.
+ */
+interface EvermindProbeSample {
+    prompt: string;
+    /** The raw text the model generated. Shown verbatim — no cleanup, no truncation. */
+    text: string;
+    /** Whether this output would be served to a user, or refused as unusable. */
+    coherent: boolean;
+    /** Which signal rejected it (`repetition`, `non-words`, …); null when it passed. */
+    failure: string | null;
+    /** Plain-language explanation of {@link failure} (empty when coherent). */
+    detail: string;
+}
+/** A test-bench run: one prompt, or the fixed readiness suite the enable-gate uses. */
+interface EvermindProbeResult {
+    version: number;
+    /** `readiness` = the fixed probe suite that gates enabling inference; `prompt` = the
+     *  operator's own prompt. Both are graded identically. */
+    mode: 'readiness' | 'prompt';
+    /** Whether the run clears the bar (a readiness run needs a MAJORITY of samples). */
+    ready: boolean;
+    /** Fraction of samples that were servable (0..1). */
+    passRate: number;
+    samples: EvermindProbeSample[];
+}
+/** What a knowledge audit concluded about one learned memory. */
+type EvermindKnowledgeVerdict = 'ok' | 'incoherent' | 'incorrect' | 'outdated' | 'unusable' | 'redundant';
+/** One audited memory: what is wrong with it and (when repairable) the replacement. */
+interface EvermindKnowledgeFinding {
+    id: number;
+    verdict: EvermindKnowledgeVerdict;
+    /** One sentence naming the problem. */
+    issue: string;
+    /** The task this memory answered — the key its correction is re-taught under. */
+    prompt?: string;
+    /** Excerpt of the memory as it stands today. */
+    excerpt: string;
+    /** The corrected knowledge to learn instead. Absent when the memory is simply dropped. */
+    correction?: string;
+    /** Whether the local coherence screen or the frontier reviewer produced this verdict. */
+    source: 'coherence-gate' | 'frontier';
+}
+/** The result of a read-only knowledge audit. */
+interface EvermindKnowledgeAnalysis {
+    version: number;
+    /** How many learned memories were reviewed. */
+    analyzed: number;
+    /** The frontier model that graded, or null when only the local screen ran. */
+    model: string | null;
+    findings: EvermindKnowledgeFinding[];
+    /** Present when the frontier review could not run — local findings still returned. */
+    warning?: string;
+}
+/** What applying a set of findings actually changed. */
+interface EvermindKnowledgeRepair {
+    /** Memories re-taught with corrected knowledge. */
+    corrected: number;
+    /** Memories dropped from the recall ring. */
+    forgotten: number;
+    /** Contributions merged by the closing flush. */
+    merged: number;
+    version: number;
+    skipped: Array<{
+        id: number;
+        reason: string;
+    }>;
+}
+/** What a clean-up pass removed. */
+interface EvermindCleanupResult {
+    /** Queued-but-unmerged contributions dropped. */
+    discarded: number;
+    /** Cached question→answer pairs purged. */
+    cachedAnswers: number;
+}
+/** What a recall reindex recomputed. */
+interface EvermindReindexResult {
+    reindexed: number;
+    skipped: number;
+    version: number;
 }
 /**
  * Host-provided data access + mutations — the only coupling to a backend. The web
@@ -777,6 +1265,50 @@ interface EvermindConsoleAdapter {
     }>;
     /** Validate a candidate task: which learned memories would answer it (ranked). */
     validate(prompt: string): Promise<EvermindValidateResult>;
+    /**
+     * OPTIONAL — import a local builderforce-memory snapshot into this Evermind and
+     * compact the absorbed facts to stubs. Only hosts with local filesystem access (the
+     * VS Code editor) implement it; the web app leaves it undefined, so the console hides
+     * the Import control there. Resolves to a {@link MemoryImportReport}, or `null` when
+     * the user cancels the file picker.
+     */
+    importMemory?(): Promise<MemoryImportReport | null>;
+    /**
+     * OPTIONAL — list every Evermind under this project (self + the IDE builds grouped
+     * under it). When present, the console renders the read-only "Everminds under this
+     * project" list; a host that omits it simply hides the section. Ordered `[self, …builds]`.
+     */
+    loadTargets?(): Promise<EvermindTarget[]>;
+    /**
+     * OPTIONAL — TEST BENCH: generate from the model and grade the output. Pass a prompt
+     * to see what the model produces for it; omit it to run the fixed readiness suite that
+     * gates enabling inference. When present the console renders the test bench.
+     */
+    probe?(prompt?: string): Promise<EvermindProbeResult>;
+    /**
+     * OPTIONAL — REPLACE the model's weights with a fresh base (a published model by
+     * `slug`, or a clean starter base when omitted), as a new version. The repair path for
+     * a model that has trained itself into gibberish. Inference is left OFF afterwards.
+     */
+    reseed?(slug?: string): Promise<{
+        version: number;
+    }>;
+    /** OPTIONAL — recompute every learned memory's recall embedding against the current
+     *  model, so retrieval stops drifting as the model learns. */
+    reindex?(): Promise<EvermindReindexResult>;
+    /** OPTIONAL — drop queued-but-unmerged contributions and purge cached answers.
+     *  Never touches what the model has already learned. */
+    cleanup?(): Promise<EvermindCleanupResult>;
+    /** OPTIONAL — audit what the model has learned (read-only) and report what is wrong. */
+    analyze?(): Promise<EvermindKnowledgeAnalysis>;
+    /** OPTIONAL — apply an audit's findings: forget bad knowledge, re-teach corrections. */
+    applyFindings?(findings: EvermindKnowledgeFinding[]): Promise<EvermindKnowledgeRepair>;
+    /**
+     * OPTIONAL — write to the HOST's clipboard, for the diagnostics export. Tried before
+     * `navigator.clipboard`, which a VS Code webview may not be permitted to use; a host
+     * that omits it falls back to the browser API and then to manual selection.
+     */
+    copyText?(text: string): Promise<void>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface EvermindConsoleLabels {
@@ -784,8 +1316,25 @@ interface EvermindConsoleLabels {
     description: string;
     loading: string;
     managerOnlyHint: string;
+    /** Shown instead of the training controls when this build INHERITS its container
+     *  project's Evermind (see {@link EvermindConsoleData.inherited}) — it explains that
+     *  the model is shared and that training happens on the parent project. */
+    inheritedHint: string;
     statusSeeded: (version: number) => string;
     statusUnseeded: string;
+    quarantinedBadge: string;
+    quarantinedHint: (reason: string) => string;
+    targetsTitle: string;
+    targetsHint: string;
+    targetsEmpty: string;
+    targetSelfBadge: string;
+    targetBuildBadge: string;
+    targetSeeded: (version: number) => string;
+    targetUnseeded: string;
+    targetInferenceOn: string;
+    targetConnected: string;
+    targetFrozen: string;
+    targetProjectId: (id: number) => string;
     evalDelta: (pct: string) => string;
     evalFlat: string;
     evalTooltip: (version: number, base: string, next: string, size: number) => string;
@@ -829,6 +1378,14 @@ interface EvermindConsoleLabels {
     flushing: string;
     flushedNone: string;
     flushedN: (merged: number, version: number) => string;
+    importTitle: string;
+    importHint: string;
+    importCta: string;
+    importing: string;
+    /** Success: N facts absorbed into vX, M entries compacted to stubs, K bytes recovered. */
+    importDone: (absorbed: number, version: number, compacted: number, savedKb: string) => string;
+    /** The picked file had nothing learnable (all too short / already stubbed). */
+    importNothing: string;
     validateCta: string;
     validating: string;
     validateHint: string;
@@ -850,6 +1407,72 @@ interface EvermindConsoleLabels {
     hideDetail: string;
     detailPromptLabel: string;
     detailTextLabel: string;
+    /** Badge on a row whose pinned teacher produced no exemplar. */
+    notDistilled: string;
+    /** Provenance note naming the frontier teacher that distilled the row. */
+    distilledBy: (model: string) => string;
+    /** The expanded explanation of a distillation fault (model may be empty). */
+    teacherFault: (model: string, reason: string) => string;
+    testTitle: string;
+    testHint: string;
+    testPlaceholder: string;
+    testRunCta: string;
+    testReadinessCta: string;
+    testRunning: string;
+    /** Header over the results of a readiness run vs a single prompt run. */
+    testResultReadiness: (passed: number, total: number) => string;
+    testResultPrompt: string;
+    testServable: string;
+    testRefused: string;
+    /** The plain-language reason an output was refused. */
+    testRefusedBecause: (detail: string) => string;
+    testEmptyOutput: string;
+    testVerdictReady: string;
+    testVerdictNotReady: string;
+    maintenanceTitle: string;
+    maintenanceHint: string;
+    reseedLabel: string;
+    reseedHint: string;
+    reseedCta: string;
+    reseedConfirm: string;
+    reseedStarterOption: string;
+    reseedDone: (version: number) => string;
+    reindexLabel: string;
+    reindexHint: string;
+    reindexCta: string;
+    reindexDone: (reindexed: number) => string;
+    cleanupLabel: string;
+    cleanupHint: string;
+    cleanupCta: string;
+    cleanupConfirm: string;
+    cleanupDone: (discarded: number, cached: number) => string;
+    analyzeTitle: string;
+    analyzeHint: string;
+    analyzeCta: string;
+    analyzing: string;
+    analyzeClean: (analyzed: number) => string;
+    analyzeSummary: (issues: number, analyzed: number, model: string) => string;
+    analyzeSummaryLocal: (issues: number, analyzed: number) => string;
+    analyzeVerdict: (verdict: EvermindKnowledgeVerdict) => string;
+    analyzeCorrectionLabel: string;
+    analyzeSelectAll: string;
+    analyzeSelectNone: string;
+    analyzeApplyCta: (count: number) => string;
+    analyzeApplying: string;
+    analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
+    analyzeSkipped: (count: number) => string;
+    tabsLabel: string;
+    tabTeach: string;
+    tabTest: string;
+    tabCheck: string;
+    tabMaintain: string;
+    diagnosticsTitle: string;
+    diagnosticsHint: string;
+    diagnosticsCta: string;
+    diagnosticsCopied: string;
+    diagnosticsShow: string;
+    diagnosticsHide: string;
+    diagnosticsManualHint: string;
     refresh: string;
     errorGeneric: string;
 }
@@ -899,8 +1522,91 @@ interface EvermindConsoleProps {
      *  the recall result to a companion surface (e.g. highlight the matched memories
      *  on the web Studio's Knowledge Map). The console also renders the result inline. */
     onValidate?: (result: EvermindValidateResult | null) => void;
+    /** Which surface is rendering — stamped into the diagnostics export, because the two
+     *  hosts fail differently and "which one was this?" is the first question asked of a
+     *  pasted report. Default 'web'. */
+    host?: 'web' | 'vscode';
 }
-declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate }: EvermindConsoleProps): React__default.JSX.Element;
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate, host }: EvermindConsoleProps): React__default.JSX.Element;
+
+/**
+ * Derive what a learned-memory row should SAY about its own provenance — the single
+ * source of truth shared by the web console's recent list and the frontend's
+ * <EvermindLearnings> detail panel, so the two can never disagree about whether a
+ * teach-a-task actually learned anything.
+ *
+ * The distinction that matters: a "Taught" row is only meaningful when a frontier
+ * TEACHER answered the task and the SSM learned that answer. When a pinned teacher
+ * produces nothing, the coordinator falls back to adapting on the raw input — which,
+ * for a teach-a-task, IS the question. Presenting that as "Learned" makes the model
+ * look like it echoed the question back as its own answer. This helper is what turns
+ * that silent fallback into a visible, named fault.
+ */
+/** Why distillation didn't happen (mirrors the API's `TeacherSkipReason`, plus the
+ *  `unknown` bucket for rows written before the reason was recorded). */
+type EvermindTeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'input_too_short' | 'gateway_error' | 'empty_output' | 'exception' | 'unknown';
+/** The provenance verdict for one learned memory. */
+type EvermindLearnedStatus = 
+/** A pre-diffed weight delta — no text provenance to report. */
+{
+    state: 'delta';
+}
+/** A frontier teacher answered and the model learned that answer. The good path. */
+ | {
+    state: 'distilled';
+    teacherModel?: string;
+}
+/** No teacher pinned: the model self-learned from real run output. Normal, not a fault. */
+ | {
+    state: 'self';
+}
+/** A teacher WAS pinned but produced nothing — actionable, surfaced as a warning. */
+ | {
+    state: 'fault';
+    reason: EvermindTeacherSkipReason;
+    teacherModel?: string;
+    detail?: string;
+};
+/** The subset of a recent entry this verdict reads (structural, so both hosts' entry
+ *  types satisfy it without importing each other). */
+interface LearnedStatusInput {
+    kind: 'text' | 'delta';
+    prompt?: string;
+    text?: string;
+    distilled?: boolean;
+    teacherModel?: string;
+    skipReason?: string;
+    skipDetail?: string;
+    attemptedTeacherModel?: string;
+}
+declare function evermindLearnedStatus(entry: LearnedStatusInput): EvermindLearnedStatus;
+
+type EvermindActionId = 'seed' | 'test' | 'enable' | 'teacher' | 'check' | 'learn' | 'merge' | 'none';
+interface EvermindActionGuideInput {
+    seeded: boolean;
+    inferenceEnabled: boolean;
+    mode: 'connected' | 'offline-frozen';
+    pending?: number;
+    teacherModel?: string | null;
+    quarantinedAt?: string | null;
+    recent?: LearnedStatusInput[];
+    eval?: {
+        delta: number;
+    } | null;
+    probe?: {
+        ready: boolean;
+    } | null;
+}
+interface EvermindNextAction {
+    id: EvermindActionId;
+    tone: 'good' | 'attention' | 'danger' | 'neutral';
+    title: string;
+    detail: string;
+    destination: string;
+    cta: string;
+}
+/** One state-to-action decision shared by every Evermind surface. */
+declare function evermindNextAction(input: EvermindActionGuideInput): EvermindNextAction;
 
 /**
  * Project 360 model — the shape returned by `GET /api/projects/:id/360` and
@@ -1153,4 +1859,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

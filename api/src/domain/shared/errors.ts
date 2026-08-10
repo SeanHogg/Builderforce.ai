@@ -45,3 +45,11 @@ export class UnauthorizedError extends DomainError {
     this.name = 'UnauthorizedError';
   }
 }
+
+/** Thrown when a required platform dependency cannot safely complete an operation. */
+export class ServiceUnavailableError extends DomainError {
+  constructor(message = 'Service temporarily unavailable') {
+    super(message);
+    this.name = 'ServiceUnavailableError';
+  }
+}

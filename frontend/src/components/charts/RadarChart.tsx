@@ -82,7 +82,7 @@ export function RadarChart({ axes, max = 5, color, size = 260, ariaLabel }: Rada
             y={ly}
             textAnchor={anchor}
             dominantBaseline="middle"
-            style={{ fontSize: 11, fontWeight: 600, fill: 'var(--text-secondary)' }}
+            style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, fill: 'var(--text-secondary)' }}
           >
             {ax.label.length > 22 ? `${ax.label.slice(0, 21)}…` : ax.label}
           </text>

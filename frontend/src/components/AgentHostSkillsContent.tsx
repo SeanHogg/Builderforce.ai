@@ -16,7 +16,7 @@ interface AgentHostSkillsContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -98,7 +98,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
             background: showAdd ? 'var(--bg-base)' : 'var(--surface-interactive)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
           }}
         >
@@ -120,7 +120,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
             }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
@@ -139,7 +139,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
                     alignItems: 'center',
                     gap: 10,
                     padding: '8px 10px',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-elevated)',
                     opacity: alreadyAssigned ? 0.5 : 1,
                   }}
@@ -159,10 +159,10 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
                       padding: '4px 10px',
                       fontSize: 11,
                       fontWeight: 600,
-                      background: alreadyAssigned ? 'var(--bg-elevated)' : 'var(--coral-bright, #f4726e)',
-                      color: alreadyAssigned ? 'var(--text-muted)' : '#fff',
+                      background: alreadyAssigned ? 'var(--bg-elevated)' : 'var(--coral-bright)',
+                      color: alreadyAssigned ? 'var(--text-muted)' : 'var(--text-on-accent)',
                       border: 'none',
-                      borderRadius: 6,
+                      borderRadius: 'var(--radius-sm)',
                       cursor: alreadyAssigned || adding === skill.slug ? 'not-allowed' : 'pointer',
                     }}
                   >
@@ -198,7 +198,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   padding: '3px 8px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   background: 'var(--bg-elevated)',
                   color: 'var(--text-muted)',
                 }}
@@ -233,9 +233,9 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   padding: '3px 8px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   background: 'rgba(0,229,204,0.12)',
-                  color: 'var(--cyan-bright, #00e5cc)',
+                  color: 'var(--cyan-bright, var(--cyan-bright))',
                 }}
               >
                 AgentHost
@@ -249,9 +249,9 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
                   fontSize: 11,
                   fontWeight: 600,
                   background: 'none',
-                  color: 'var(--coral-bright, #f4726e)',
+                  color: 'var(--coral-bright)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   cursor: revoking === a.id ? 'wait' : 'pointer',
                 }}
               >

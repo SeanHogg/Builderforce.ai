@@ -13,6 +13,7 @@
  * Theme-aware (CSS design tokens, styled for light + dark) and responsive. Self-hides
  * nothing — it always renders its own empty states so it can be dropped into a tab.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePsychometricCatalog } from '@/lib/usePsychometricCatalog';
@@ -117,7 +118,7 @@ export default function PersonalityUsagePanel({
 
   const cardStyle: React.CSSProperties = {
     border: '1px solid var(--border)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     padding: 14,
     background: 'var(--surface)',
   };
@@ -129,11 +130,11 @@ export default function PersonalityUsagePanel({
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        fontSize: 11,
+        fontSize: 'var(--font-size-eyebrow)',
         fontWeight: 600,
         padding: '2px 8px',
-        borderRadius: 9999,
-        background: d > 0 ? 'var(--surface-success-soft, var(--surface-2))' : 'var(--surface-coral-soft, var(--surface-2))',
+        borderRadius: 'var(--radius-full)',
+        background: d > 0 ? 'var(--success-bg, var(--surface-2))' : 'var(--surface-coral-soft, var(--surface-2))',
         color: d > 0 ? 'var(--success-text, var(--text-strong))' : 'var(--coral-bright, var(--text-strong))',
         border: '1px solid var(--border)',
       }}
@@ -144,15 +145,15 @@ export default function PersonalityUsagePanel({
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }} aria-label={t('title')}>
-      {error && <div style={{ fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
+      {error && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{error}</div>}
 
       {/* Active personality summary */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 15 }} aria-hidden>🧭</span>
-          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-strong)' }}>{t('activeTitle')}</div>
+          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden><Icon source="🧭" size="1em" /></span>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('activeTitle')}</div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 6 }}>
           {activeSummary ? activeSummary : t('activeNone')}
         </div>
       </div>
@@ -160,17 +161,17 @@ export default function PersonalityUsagePanel({
       {/* Suggested reinforcement */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          <span style={{ fontSize: 15 }} aria-hidden>🌱</span>
-          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-strong)' }}>{t('reinforceTitle')}</div>
+          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden><Icon source="🌱" size="1em" /></span>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('reinforceTitle')}</div>
           {reinf && (
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)' }}>
+            <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>
               {t('basedOn', { count: reinf.basedOnRuns, days: reinf.windowDays })}
             </span>
           )}
         </div>
 
         {!reinf ? (
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('loading')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{t('loading')}</div>
         ) : proposal ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -178,7 +179,7 @@ export default function PersonalityUsagePanel({
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {proposal.rationale.map((r, i) => (
-                <li key={i} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{r}</li>
+                <li key={i} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{r}</li>
               ))}
             </ul>
             {canApply ? (
@@ -187,7 +188,7 @@ export default function PersonalityUsagePanel({
                   type="button"
                   onClick={onDismiss}
                   disabled={busy}
-                  style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+                  style={{ padding: '6px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                 >
                   {t('dismiss')}
                 </button>
@@ -195,17 +196,17 @@ export default function PersonalityUsagePanel({
                   type="button"
                   onClick={onApply}
                   disabled={busy}
-                  style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                  style={{ padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                 >
                   {busy ? t('applying') : t('apply')}
                 </button>
               </div>
             ) : (
-              <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>{t('applyOwnerOnly')}</div>
+              <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', fontStyle: 'italic' }}>{t('applyOwnerOnly')}</div>
             )}
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>
             {reinf.rationale?.[0] ?? t('noProposal')}
           </div>
         )}
@@ -214,40 +215,40 @@ export default function PersonalityUsagePanel({
       {/* Recent applications (which personality was used, when) */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 15 }} aria-hidden>🕑</span>
-          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-strong)' }}>{t('recentTitle')}</div>
+          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden><Icon source="🕑" size="1em" /></span>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('recentTitle')}</div>
         </div>
         {events == null ? (
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('loading')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{t('loading')}</div>
         ) : events.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('recentNone')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{t('recentNone')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {events.map((ev) => (
               <div
                 key={ev.id}
-                style={{ padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-elevated)' }}
+                style={{ padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-strong)' }}>
+                  <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-strong)' }}>
                     {ev.directivesSummary || t('activeNone')}
                   </span>
                   {!ev.recorded && (
-                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 9999, background: 'var(--surface-2)', color: 'var(--muted)' }}>
+                    <span style={{ fontSize: 'var(--font-size-field-label)', padding: '1px 6px', borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', color: 'var(--muted)' }}>
                       {t('derived')}
                     </span>
                   )}
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                  <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {formatWhen(ev.at)}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
                   {ev.personaIds.length > 0 && (
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{ev.personaIds.join(', ')}</span>
+                    <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)' }}>{ev.personaIds.join(', ')}</span>
                   )}
-                  {ev.thinkLevel && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('think', { level: ev.thinkLevel })}</span>}
-                  {ev.reasoningLevel === 'on' && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('reasoning')}</span>}
-                  {typeof ev.temperature === 'number' && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('temp', { value: ev.temperature })}</span>}
+                  {ev.thinkLevel && <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>{t('think', { level: ev.thinkLevel })}</span>}
+                  {ev.reasoningLevel === 'on' && <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>{t('reasoning')}</span>}
+                  {typeof ev.temperature === 'number' && <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>{t('temp', { value: ev.temperature })}</span>}
                 </div>
               </div>
             ))}
@@ -258,10 +259,10 @@ export default function PersonalityUsagePanel({
       {/* Reinforcement history */}
       {reinf && reinf.history.length > 0 && (
         <div style={cardStyle}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-strong)', marginBottom: 10 }}>{t('historyTitle')}</div>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)', marginBottom: 10 }}>{t('historyTitle')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {reinf.history.map((h) => (
-              <div key={h.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
+              <div key={h.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontSize: 'var(--font-size-eyebrow)' }}>
                 <span
                   style={{
                     fontWeight: 700,

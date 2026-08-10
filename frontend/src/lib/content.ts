@@ -10,7 +10,7 @@
 export const BRAND = {
   name: 'Builderforce.ai',
   legalName: 'Builderforce',
-  tagline: 'The innovation platform for the agentic era',
+  tagline: 'The creative canvas for humans and AI agents',
   url: 'https://builderforce.ai',
   founder: { name: 'Sean Hogg', url: 'https://hired.video/resumes/seanhogg' },
   year: 2026,
@@ -18,40 +18,41 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-07-05T00:00:00Z',
+  dateModified: '2026-08-04T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
 
 export const STATS = {
-  /** Consumer-facing stats shown on landing/marketing pages */
+  /** Consumer-facing proof points shown on landing/marketing pages. */
   marketing: [
-    { value: '2B+', label: 'Parameters\nin-browser' },
-    { value: '<30s', label: 'Dataset\ngeneration' },
-    { value: 'WebGPU', label: 'Hardware\naccelerated' },
-    { value: '100%', label: 'Private — runs\nin your browser' },
+    { value: 'One', label: 'Connected\ncreative canvas' },
+    { value: 'Live', label: 'Editable\nartifacts' },
+    { value: 'Human + AI', label: 'Shared\ncreation loop' },
+    { value: 'Reviewable', label: 'Changes before\ndelivery' },
   ],
   /** Quotable one-liners for AI citability */
   quotable: {
-    evermind: 'Evermind is Builderforce.ai\'s self-updating model and the brain of the platform, governed by Write-Through Cognition: new knowledge is written straight through so an update replaces what came before — reads are always current, there is never a reconciliation step, and it runs in the browser, on-device, or inside every agent.',
-    systemOfRecord: 'Builderforce.ai is the system of record for the agentic enterprise: every unit of work — human or agent — is instrumented, costed, and attributed from idea to ship to learn, on one board governed by roles, approvals, and a full audit trail.',
-    defineANeed: 'Builderforce.ai lets any human define a need in any modality — plain language, a dataset, a process chart, or a persona — and compiles it into an agent that runs in the IDE, on the desktop, or in the cloud: one AgentSpec spine, compiled from many inputs and deployed to many surfaces.',
-    enterpriseInnovation: 'Builderforce.ai is an end-to-end innovation platform for the agentic era — plan, build, ship, and measure with a workforce of humans and AI agents on a single instrumented system, priced as a platform rather than per-seat enterprise software.',
-    roleBasedInsight: 'Because every action is instrumented and costed, every role gets its own operating picture from the same data: delivery and DORA for engineering, cost and FinOps for finance, portfolio and innovation funnel for the PMO and CEO, and an immutable audit trail for security.',
-    humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud: train your own AI agents and put them to work inside your own agent, running a whole workforce from a Kanban board — all without ever leaving VS Code.',
+    creativeCanvas: 'Turn any idea into something real on Builderforce.ai. It’s one creative canvas where your team and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products—without the tool sprawl.',
+    evermind: 'Evermind is Builderforce.ai\'s project model and memory system. Keyed write-through updates are designed to replace superseded project facts for supported browser and agent workflows.',
+    systemOfRecord: 'Builderforce.ai keeps the creative journey connected from the first idea through review and delivery, giving teams one shared record of what humans and AI agents created, changed, approved, and shipped.',
+    defineANeed: 'Builderforce.ai lets any human define a need in any modality — plain language, a dataset, a process chart, or a persona — and compiles it into an agent that runs on Canvas, on the desktop, or in the cloud: one AgentSpec spine, compiled from many inputs and deployed to many surfaces.',
+    enterpriseInnovation: 'Builderforce.ai connects creative work to delivery: teams can shape an idea with AI, organize it into projects and workflows, and add governance and measurement as the work grows.',
+    roleBasedInsight: 'Builderforce.ai brings creative context, delivery activity, model usage, approvals, and available cost data into role-specific operating views for teams and leaders.',
+    humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop creative canvas where your team and AI agents turn ideas into connected, reviewable, deliverable work.',
     trainAndUseLoop: 'Train a custom agent, publish it to the Workforce Registry, then hire it and call it from inside your own agent — your trained specialists become tools your main agent delegates to.',
-    neverLeaveVsCode: 'The BuilderForce VS Code extension runs the whole platform in your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.',
-    aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
-    freeForever: 'Free plan is $0/month forever, no credit card required.',
+    neverLeaveVsCode: 'Engineering teams can open Builderforce.ai in VS Code to bring repository context, diagnostics, agent work, reviews, and approvals into the editor.',
+    aiExecutiveTeam: 'Builderforce.ai gives leaders connected views of creation, delivery, systems, cost, and governed agent activity without pretending AI replaces accountable executives.',
+    freeForever: 'A Free plan is available; verify current pricing and entitlements on the pricing page.',
     agenticTester: 'The Agentic Tester is an autonomous QA agent: point it at your app, give it logins, and it drives a real browser through your highest-traffic flows on a schedule — filing the bugs it finds straight onto your board.',
     collaboration: 'Builderforce.ai is a real-time collaboration platform for a mixed workforce of humans and AI agents: they share one Kanban board, chat in multi-party threads addressable to a person or an @agent, meet over live WebRTC video, and coordinate on shared calendars — from the web or inside VS Code.',
     teamChat: 'Builderforce.ai team chat is multi-party: threads are shared across a project, you invite humans by email and AI agents into the room, and you address each message to a specific participant — a message to a human just talks to them, while an @agent mention makes that agent reply and act on the board within your own permissions.',
     meetings: 'Builderforce.ai runs live video meetings over mesh WebRTC directly on your project board — cameras in standups and retros, a bookable team calendar with per-user availability and "Find a time", and Google/Microsoft calendar sync — joinable from the web or natively inside VS Code, with media flowing peer-to-peer and never through the server.',
     vsCodeCommandCenter: 'The BuilderForce VS Code extension is a command center for a workforce of humans and AI agents: multi-party team chat, live session status showing which runs are executing or need your answer, native video meetings, an Evermind training console, and human-in-the-loop approvals — all without leaving the editor.',
-    zeroGpuBills: 'All training runs on your local WebGPU device — zero cloud GPU bills.',
+    zeroGpuBills: 'Supported WebGPU training steps run on a compatible local device; hosted and connected steps are disclosed separately.',
     browserNative: 'Fine-tune models up to 2 billion parameters directly in Chrome with WebGPU.',
     datasetSpeed: 'Generate an instruction-tuning dataset in under 30 seconds from a single capability prompt.',
-    privacy: '100% private — your data and models never leave your browser during training.',
+    privacy: 'Supported training work runs locally through WebGPU; publishing, collaboration, and connected cloud services may transmit the data needed for those features.',
   },
 } as const;
 
@@ -72,25 +73,25 @@ export interface EvermindPillar {
 export const EVERMIND = {
   name: 'Evermind',
   eyebrow: 'Meet Evermind',
-  tagline: 'A model that learns as it works — and never goes stale',
+  tagline: 'A project model designed to learn as the work changes',
   /** Per-page SEO/GEO copy for the dedicated /evermind landing page. */
   seo: {
     title: 'Evermind — The Builderforce.ai LLM, a Self-Updating Model',
     description:
-      'Evermind is the Builderforce.ai LLM: a self-updating model governed by Write-Through Cognition. Unlike frozen frontier models, new knowledge is written straight through so an update replaces what came before — no retrain, no reconciliation step. Runs on WebGPU in the browser, on-device, or inside every agent.',
+      'Evermind is Builderforce.ai\'s project model and memory system. Its keyed write-through updates are designed to replace superseded project facts and make current context available to supported browser and agent workflows.',
     ogTitle: 'Evermind — The Self-Updating Builderforce.ai LLM',
   },
   blurb:
-    'Evermind is the brain of Builderforce: a self-updating model governed by Write-Through Cognition. Frozen frontier models go out of date the moment they ship — every update needs a bolt-on retrain, fine-tune, or RAG patch. Evermind writes new knowledge straight through into the model, so an update simply replaces what was there. Reads always reflect the latest truth, there is never a reconciliation step, and it runs anywhere — in the browser, on-device, or inside every agent.',
+    'Evermind is Builderforce\'s project model and memory system. Its Write-Through Cognition design stores project knowledge under stable keys so a newer fact can supersede an older one. Supported WebGPU and agent workflows can use that maintained context while external frontier models remain available when needed.',
   /** Quotable one-liner for AI citability / meta descriptions. */
   quotable:
-    'Evermind is Builderforce.ai\'s self-updating model, governed by Write-Through Cognition: new knowledge is written straight through so an update replaces what came before — reads are always current, there is never a reconciliation step, and it runs in the browser, on-device, or inside every agent.',
+    'Evermind is Builderforce.ai\'s project model and memory system, designed to keep maintained project facts current through keyed updates that replace superseded context.',
   /** The key aspects the homepage brain animation represents. */
   pillars: [
     {
       icon: '🧠',
       title: 'Write-Through Cognition',
-      desc: 'Knowledge is write-through: an update means replace, not append. Reads always reflect the latest truth and there is never a stale-then-reconcile step — the same invalidate-on-write rule the platform uses for caching, applied to the model\'s memory.',
+      desc: 'Project facts use stable keys so an accepted update can replace prior context instead of simply appending another copy. Provenance and evaluation remain essential when the source itself is incomplete or wrong.',
     },
     {
       icon: '⚡',
@@ -100,7 +101,7 @@ export const EVERMIND = {
     {
       icon: '🔁',
       title: 'Write-through memory',
-      desc: 'Every fact upserts by a stable key and invalidates its old recall, so the model never accumulates contradictory copies of the same truth. The knowledge loop corrects in place instead of drifting.',
+      desc: 'Maintained facts upsert by stable key and invalidate prior recall for that key, reducing stale duplicate context and making corrections explicit.',
     },
     {
       icon: '❤️',
@@ -110,7 +111,7 @@ export const EVERMIND = {
   ] as EvermindPillar[],
   /** Why Evermind beats a frozen frontier model — not on scale, on these axes. */
   edges: [
-    { label: 'Currency', desc: 'Never stale — knowledge updates land in the model the moment they happen, with no retrain cycle.' },
+    { label: 'Currency', desc: 'Keyed project-memory updates can replace superseded facts without waiting for a full model retraining cycle.' },
     { label: 'Footprint', desc: 'Runs in any runtime — in the browser, on-device, or embedded in every agent via WebGPU.' },
     { label: 'Ownership', desc: 'Yours end to end — open packages, your data, no third-party model dependency.' },
   ],
@@ -127,9 +128,15 @@ export interface Feature {
 
 export const FEATURES: Feature[] = [
   {
+    icon: '✦',
+    title: 'Creation Canvas — From Idea to Deliverable',
+    shortDesc: 'Chat, workflows, websites, data, models, people, and delivery on one multiplayer canvas.',
+    longDesc: 'Start with a prompt—without choosing a project or creating an account—and build in a durable spatial session. Drag in workflows, live websites, datasets, dashboards, Evermind models, voice, humans, and agents; ask Brain to reason across them; review proposed changes; then deliver approved mockups into projects, tasks, and agent execution. Sessions support local-to-account claiming, live cursors and comments, presentation/follow mode, version checkpoints, reusable Marketplace packs, freehand drawing, and reviewed branch merges on the web. VS Code opens the same graph in a native full-editor surface and can add files, selections, diagnostics, repositories, terminal output, services, and previews.',
+  },
+  {
     icon: '🧠',
     title: 'Evermind — The Self-Updating Model',
-    shortDesc: 'A model that learns as it works and never goes stale.',
+    shortDesc: 'A project model designed to learn as the work changes.',
     longDesc: 'Evermind is the brain of the platform — a self-updating model governed by Write-Through Cognition: new knowledge is written straight through, so an update replaces what came before with no reconciliation step. A shared-expert hybrid generator (dense backbone + routed SSM experts) learns online and runs on WebGPU, so it wins on currency, footprint, and ownership rather than raw scale — in the browser, on-device, or inside every agent.',
   },
   {
@@ -143,6 +150,24 @@ export const FEATURES: Feature[] = [
     title: 'A Learning Brain for Every Project',
     shortDesc: 'Every project gets its own self-updating model that learns from your team\'s work.',
     longDesc: 'Each project is provisioned with its own Evermind on day one — a self-updating model that learns from every run across all four studios: design, voice, LLM, and video. Corrections stick across sessions through a shared write-through fact store, so the brain that helped yesterday is smarter today. Inference stays off until you opt in, and the model is editable right in the LLM Studio.',
+  },
+  {
+    icon: '🎬',
+    title: 'Evermind Generative Media',
+    shortDesc: 'Generate images and video from your own on-device model — not just text.',
+    longDesc: 'Evermind is more than a text model. The same self-updating engine generates images and video end-to-end — a trainable codec and acoustic stack running on WebGPU, with the API serving the rendered media. Build a generation pipeline visually in the Workflow Builder, keep the weights and outputs yours, and produce media without a per-frame cloud bill or a third-party model dependency.',
+  },
+  {
+    icon: '🐙',
+    title: 'Native GitHub App — Checks, Actions & CI Gates',
+    shortDesc: 'Agents work through a real GitHub App: Checks write-back, Actions runs, and CI-gated merges.',
+    longDesc: 'Connect a first-class GitHub App and agents operate through the same controls your engineers do. Work is offloaded to GitHub with App-authenticated access, agent verdicts write back as native Checks, security alerts ingest onto the board, and a build-and-deploy pipeline runs real Actions — so a merge is gated on green CI, and a red PR-branch build auto-opens a fix. Observability that ends in a pull request, not a dashboard.',
+  },
+  {
+    icon: '📨',
+    title: 'Embeddable Product Feedback',
+    shortDesc: 'Drop a snippet on any app to collect feedback — filed as human-gated work no agent can touch.',
+    longDesc: 'The human-input twin of error observability. Embed a dependency-free, shadow-DOM feedback widget on any product surface and every submission lands on your board as a human-gated request — deduplicated by fingerprint, rate-limited per collector, and inert until a person approves it, so no agent acts on raw user input without a sign-off. Approve in triage and it becomes ordinary executable work a cloud agent can pick up.',
   },
   {
     icon: '🧑‍🏭',
@@ -182,9 +207,9 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: '🧩',
-    title: 'Never Leave VS Code',
-    shortDesc: 'Run your whole workforce from the VS Code extension.',
-    longDesc: 'The BuilderForce VS Code extension brings the entire platform into your editor: chat with agents, assign and run tasks, review and validate their work, and manage your whole agent workforce — all without leaving VS Code. Human-in-the-loop approvals happen right where you code.',
+    title: 'A VS Code Surface for Engineering Teams',
+    shortDesc: 'Bring canvas context, agents, review, and delivery into the editor.',
+    longDesc: 'The BuilderForce VS Code extension gives engineering teams an editor-native view of relevant platform work: chat with agents, add repository and diagnostic context, assign tasks, review changes, and handle approvals close to the code.',
   },
   {
     icon: '🎥',
@@ -212,21 +237,21 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: '🧠',
-    title: 'AI CTO',
-    shortDesc: 'Builds, trains & deploys your AI workforce.',
-    longDesc: 'Your AI CTO builds, trains and deploys your AI agent workforce — in-browser WebGPU LoRA fine-tuning, AI evaluation, and one-click publish to the Workforce Registry.',
+    title: 'Model Studio & Agent Training',
+    shortDesc: 'Train, evaluate, and publish specialist models and agents.',
+    longDesc: 'Use in-browser WebGPU LoRA fine-tuning, evaluation, and publishing tools to create specialist models and make them available to supported agent workflows.',
   },
   {
     icon: '🔗',
-    title: 'AI CIO',
-    shortDesc: 'Connects & orchestrates your systems.',
-    longDesc: 'Your AI CIO connects to your systems — GitHub, Jira, Confluence and more via encrypted credentials — and orchestrates work through the Brain assistant’s tool registry.',
+    title: 'Connected Systems & Orchestration',
+    shortDesc: 'Connect supported tools and coordinate work across them.',
+    longDesc: 'Connect supported systems such as GitHub, Jira, and Confluence with encrypted credentials, then make approved operations available through workflows and the Brain tool registry.',
   },
   {
     icon: '🛡️',
-    title: 'AI Security Officer',
-    shortDesc: 'Governs every action with approvals & audit.',
-    longDesc: 'Your AI Security Officer governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted credentials.',
+    title: 'Agent Governance & Security',
+    shortDesc: 'Apply permissions, approvals, isolation, and execution records.',
+    longDesc: 'Keep accountable people in control with role-based access, human approval gates for configured actions, tenant isolation, encrypted integration credentials, and retained execution records.',
   },
   {
     icon: '🗺️',
@@ -253,6 +278,42 @@ export const FEATURES: Feature[] = [
     longDesc: 'Connect the trackers and incident tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — and sync work two-ways. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. One pane to orchestrate across everything, with no migration and no lock-in.',
   },
   {
+    icon: '🚨',
+    title: 'Incident Management & On-Call',
+    shortDesc: 'A help-desk agent, on-call rotations, escalation, paging, and a war-room — that learn.',
+    longDesc: 'Run incidents where the work already lives. A Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, and Teams, Slack, or email paging reaches the responder — with a per-incident war-room feed for humans and agents together. When it resolves, the root-cause analysis is published to your Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    icon: '📡',
+    title: 'Active Monitoring Canvas',
+    shortDesc: 'Pin live monitors onto your architecture diagram — a breach starts the investigation.',
+    longDesc: 'Upload your architecture diagram and pin heartbeat, HTTP, webhook, or metric monitors directly onto the systems they watch. A sweep evaluates them every five minutes, and a breach doesn\'t just light up red — it auto-starts the on-call investigation: monitor → signal → incident → paging, on one surface. Monitoring that opens the ticket and calls the responder instead of just drawing a chart.',
+  },
+  {
+    icon: '⚖️',
+    title: 'Role-Gated Accountability',
+    shortDesc: 'Proof that the right role did each part of the work — an immutable sign-off record.',
+    longDesc: 'Every ticket carries a participation manifest: the roles it requires, resolved to the humans and agents capable of each — so a Product Manager is never dispatched to write code and a producer stage runs a producer. An append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that flags a missing role as a blocking gap. Quality is proven at the board, not hoped for after the fact.',
+  },
+  {
+    icon: '📄',
+    title: 'Automated RFP & Proposal Response',
+    shortDesc: 'Turn an analyzed codebase into a branded, costed proposal.',
+    longDesc: 'Answer a request for proposal from what you\'ve already built. CTO and Product-Owner agents read a project\'s analyzed capabilities and generate a co-branded proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — blending the requester\'s brand palette and logo with yours. Freshness-gated grounding re-scans a stale project before it answers, so the proposal reflects the real system.',
+  },
+  {
+    icon: '🧑‍💼',
+    title: 'AI Managers & Coaching',
+    shortDesc: 'Typed managers you can coach — Dev, QA, Service-Desk, DevOps.',
+    longDesc: 'Managers aren\'t generic. A manager type — Dev, QA, Service-Desk, DevOps, or a custom role from your catalog — shapes how a manager agent runs its reports. When one gets it wrong, a human runs a Coaching Session: a directive or a task, with an expiry and a done state, that steers the manager\'s behavior going forward. Feedback becomes durable guidance, not a one-off correction lost to the next run.',
+  },
+  {
+    icon: '⚡',
+    title: 'Memory-First Answering',
+    shortDesc: 'Answer from the project\'s own memory before spending a paid model call.',
+    longDesc: 'The cheapest token is the one you never spend. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under the project (its own and its Canvas builds), so a lesson taught once answers everywhere. Your token bill falls as the project\'s memory grows.',
+  },
+  {
     icon: '🗂️',
     title: 'AI Dataset Generation',
     shortDesc: 'Generate datasets from a single prompt.',
@@ -262,7 +323,7 @@ export const FEATURES: Feature[] = [
     icon: '🧠',
     title: 'In-Browser LoRA Training',
     shortDesc: 'Fine-tune up to 2B params with WebGPU.',
-    longDesc: 'Fine-tune models up to 2B parameters directly in Chrome with WebGPU. No cloud GPU bills, zero round-trips, total privacy.',
+    longDesc: 'Fine-tune supported models on compatible devices through WebGPU. Local training, remote evaluation, collaboration, and publishing have separate stated boundaries.',
   },
   {
     icon: '🎯',
@@ -296,8 +357,8 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: '⚡',
-    title: 'Full IDE Workspace',
-    shortDesc: 'Monaco editor, terminal, AI chat — all-in-one.',
+    title: 'Canvas Builder Workspace',
+    shortDesc: 'Monaco editor, terminal, preview, and AI chat in one engineering workspace.',
     longDesc: 'Monaco editor, terminal, AI chat, file explorer — everything you need in one collaborative project workspace.',
   },
   {
@@ -309,8 +370,8 @@ export const FEATURES: Feature[] = [
   {
     icon: '🌐',
     title: 'Cloudflare Edge',
-    shortDesc: 'Zero cold-start global distribution.',
-    longDesc: 'Zero cold-start Worker API with global distribution. COOP/COEP headers enable SharedArrayBuffer for Transformers.js.',
+    shortDesc: 'A globally distributed Worker API for responsive platform services.',
+    longDesc: 'Cloudflare Workers provide globally distributed API execution. COOP/COEP headers enable SharedArrayBuffer where browser-based model tooling requires it.',
   },
 ];
 
@@ -337,112 +398,54 @@ export interface AgentCapability {
 }
 
 export const AGENT_CAPABILITIES: AgentCapability[] = [
-  { href: '/docs/getting-started', iconKey: 'cpu', title: 'Agent & Sub-agent Manager', description: 'BuilderForce Agents runs and coordinates independent coding agents and sub-agents. Delegate work autonomously across your entire workflow.' },
+  { href: '/docs/start/getting-started', iconKey: 'cpu', title: 'Agent & Sub-agent Manager', description: 'BuilderForce Agents runs and coordinates independent coding agents and sub-agents. Delegate work autonomously across your entire workflow.' },
   { href: '/', iconKey: 'mesh', title: 'Mesh Orchestration', description: 'Builderforce.ai is the project management and mesh orchestrator — coordinating agents, tasks, and outcomes across your entire team.' },
-  { href: '/docs/getting-started', iconKey: 'trending', title: 'Business Outcome Focus', description: 'Transition from writing code to managing business outcomes. Let the agents handle execution while you focus on strategy.' },
+  { href: '/docs/start/getting-started', iconKey: 'trending', title: 'Business Outcome Focus', description: 'Transition from writing code to managing business outcomes. Let the agents handle execution while you focus on strategy.' },
   { href: '/docs/agents-overview', iconKey: 'pulse', title: 'Self-Healing Runtime', description: 'Agents detect failures, fix themselves, and adapt over time. Persistent memory means context survives restarts — no re-explaining your codebase.' },
   { href: '/workforce?tab=approvals', iconKey: 'users', title: 'Human-in-the-Loop Control', description: 'Approval gates block agent execution until a manager approves in the Builderforce.ai portal. Workflow visibility, auditability, and human sign-off — enforced, not optional.' },
   { href: '/docs/agents-link', iconKey: 'bolt', title: 'AgentHost-to-AgentHost Mesh', description: 'Distribute work across a fleet of AgentHosts. Use `remote:auto[caps]` to route tasks to the best-matched peer. All dispatch is HMAC-signed and Bearer-authenticated.' },
-  { href: '/docs/browser', iconKey: 'globe', title: 'Full Automation', description: 'Agents can browse the web, control your browser, run shell commands, and interact with any tool or service on your behalf.' },
-  { href: '/docs/bash', iconKey: 'terminal', title: 'Full System Access', description: 'Read and write files, run shell commands, execute scripts. Full access or sandboxed — your choice.' },
+  { href: '/docs/tools/browser', iconKey: 'globe', title: 'Full Automation', description: 'Agents can browse the web, control your browser, run shell commands, and interact with any tool or service on your behalf.' },
+  { href: '/docs/tools/exec', iconKey: 'terminal', title: 'Full System Access', description: 'Read and write files, run shell commands, execute scripts. Full access or sandboxed — your choice.' },
   { href: '/agents/skills', iconKey: 'gear', title: 'Skills & Plugins', description: 'Extend with community skills or build your own. Skills assigned in the Builderforce.ai portal are loaded automatically at startup.' },
   { href: '/docs/deep-understanding', iconKey: 'layers', title: 'Deep Codebase Understanding', description: 'AST parsing, semantic maps, dependency graphs and git history give agents real comprehension of your project.' },
   { href: '/agents/workflow-builder', iconKey: 'flow', title: 'Agentic Workflow Builder', description: 'Drag-and-drop, IPAAS-style canvas for composing your own LLM logic — memory, knowledge-base and training nodes — wired to your agents and run on your agentHosts.' },
   { href: '/docs/agents-workflows', iconKey: 'activity', title: 'Multi-Agent Workflows', description: 'Built-in patterns for planning, feature dev, bug fixes, refactors and adversarial reviews keep work moving.' },
   { href: '/security', iconKey: 'shield', title: 'Security & RBAC', description: 'Role-based access control, device trust, and complete audit trails. HMAC-signed inter-AgentHost dispatch with Bearer authentication.' },
-  { href: '/workforce?tab=logs', iconKey: 'bars', title: 'Workflow Telemetry', description: 'Every task and workflow emits structured JSONL spans locally and forwards to the Builderforce.ai portal timeline in real time.' },
+  { href: '/settings?sub=logs', iconKey: 'bars', title: 'Workflow Telemetry', description: 'Every task and workflow emits structured JSONL spans locally and forwards to the Builderforce.ai portal timeline in real time.' },
   { href: '/docs/agents-workflows', iconKey: 'swimlane', title: 'Autonomous Swimlane Execution', description: 'Assign any agent — Cloud or On-Premise — to a kanban swimlane. Tickets are dispatched automatically and the board advances on its own as agents finish, stopping only at the approval gates you choose.' },
-  { href: '/docs/getting-started', iconKey: 'git', title: 'Agents That Ship Code', description: 'A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine.' },
-  { href: 'https://github.com/seanhogg/agents', iconKey: 'globe', title: 'Self-Hosted & Open Source', description: 'Run on your infrastructure under the MIT license — no vendor lock-in or subscription ceilings.' },
+  { href: '/docs/start/getting-started', iconKey: 'git', title: 'Agents That Ship Code', description: 'A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine.' },
+  { href: 'https://github.com/SeanHogg/Builderforce.ai', iconKey: 'globe', title: 'Self-Hosted & Open Source', description: 'Run on your infrastructure under the MIT license — no vendor lock-in or subscription ceilings.' },
 ];
 
 /* ════════════════════ PRICING ════════════════════ */
 
-export interface PricingPlan {
-  name: string;
-  price: string;
-  priceNumeric: number;
-  period: string;
-  description: string;
-  features: string[];
-  excluded: string[];
-  cta: string;
-  ctaHref: string;
-  highlighted: boolean;
+/* ════════════════════ MEDIA KIT ════════════════════ */
+
+export interface MediaAsset {
+  /** Stable key — localized name/description live at `media.assets.<key>.*`. */
+  key: 'pdf' | 'pptx' | 'slides';
+  href: string;
+  /** Non-translatable format token shown on the download card. */
+  format: string;
+  /** Approximate download size, shown verbatim. */
+  size: string;
 }
 
-export const PRICING_PLANS: PricingPlan[] = [
-  {
-    name: 'Free',
-    price: '$0',
-    priceNumeric: 0,
-    period: '/month',
-    description: 'Everything you need to start building AI agents — free forever, no credit card required.',
-    features: [
-      'Evermind self-updating model (on-device)',
-      'WebGPU LoRA training',
-      'Dataset generation wizard',
-      'AI evaluation engine',
-      'Public Workforce browsing',
-      '1 AgentHost (BuilderForce Agents instance)',
-      '5 projects',
-      '10K tokens/day',
-      'Community support',
-    ],
-    excluded: [
-      'Approval workflows',
-      'Fleet mesh + remote dispatch',
-      'Full telemetry + audit trail',
-      'Custom agent roles',
-    ],
-    cta: 'Get Started Free',
-    ctaHref: '/register',
-    highlighted: false,
-  },
-  {
-    name: 'Pro',
-    price: '$29',
-    priceNumeric: 29,
-    period: '/seat/month',
-    description: 'Unlimited agents, private models, and priority support for professional teams.',
-    features: [
-      'Everything in Free',
-      'Up to 3 AgentHosts',
-      'Unlimited projects',
-      '1M tokens/day',
-      'Approval workflows',
-      'Fleet mesh + remote dispatch',
-      'Full telemetry + audit trail',
-      'Custom agent roles',
-      'Priority support',
-    ],
-    excluded: [
-      'Shared team approval inbox',
-      'Per-seat cost controls',
-    ],
-    cta: 'Upgrade to Pro',
-    ctaHref: '/pricing?upgrade=pro',
-    highlighted: true,
-  },
-  {
-    name: 'Teams',
-    price: '$20',
-    priceNumeric: 20,
-    period: '/seat/month',
-    description: 'Enterprise-grade controls with shared approval inbox and per-seat billing.',
-    features: [
-      'Everything in Pro',
-      'Unlimited AgentHosts',
-      '5M tokens/day',
-      'Shared team approval inbox',
-      'Per-seat cost controls',
-    ],
-    excluded: [],
-    cta: 'Upgrade to Teams',
-    ctaHref: '/pricing?upgrade=teams',
-    highlighted: false,
-  },
-];
+/**
+ * Downloadable marketing media (the sales deck + per-slide PNGs), served from
+ * `public/media/`. Regenerated by `Builderforce.ai/marketing/pitch-deck/`
+ * (see its README) — copy new builds into `public/media/` to update the site.
+ */
+export const MEDIA_KIT: { cover: string; coverWidth: number; coverHeight: number; assets: MediaAsset[] } = {
+  cover: '/media/deck-cover.png',
+  coverWidth: 1280,
+  coverHeight: 720,
+  assets: [
+    { key: 'pdf', href: '/media/Builderforce-Pitch-Deck.pdf', format: 'PDF', size: '5 MB' },
+    { key: 'pptx', href: '/media/Builderforce-Pitch-Deck.pptx', format: 'PPTX', size: '11 MB' },
+    { key: 'slides', href: '/media/Builderforce-Deck-Slides.zip', format: 'ZIP · 26 PNG', size: '11 MB' },
+  ],
+};
 
 /* ════════════════════ COMPARISON ════════════════════ */
 
@@ -497,16 +500,17 @@ export interface CompetitiveCategory {
 }
 
 /**
- * The full "Builderforce.ai vs the field" matrix, grouped into decision-driving
- * themes. Single source of truth for the /compare page and homepage teaser.
+ * Legacy internal snapshot retained only for migration compatibility. Public
+ * comparison pages and structured data use criteria-first copy from COMPARE;
+ * these undated cells must never be rendered or cited as current evidence.
  */
-export const COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
+const LEGACY_COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
   {
     id: 'ownership',
     title: 'Ownership & Deployment',
     blurb: 'Where the platform runs and who controls it determines cost, data residency, and lock-in.',
     rows: [
-      { feature: 'Price', values: { builderforce: 'Free (MIT)', copilot: '$19/user/mo', cursor: '$20/user/mo', claudeCode: 'Usage-based', devin: '$500/mo', openhands: 'Free (MIT)', aider: 'Free (MIT)', continueDev: 'Free (MIT)' } },
+      { feature: 'Price', note: 'Self-hosted runtime is MIT (free); the hosted Cloud platform is a Free/Pro/Teams SaaS.', values: { builderforce: 'Free (MIT) self-hosted · Cloud from $0', copilot: '$19/user/mo', cursor: '$20/user/mo', claudeCode: 'Usage-based', devin: '$500/mo', openhands: 'Free (MIT)', aider: 'Free (MIT)', continueDev: 'Free (MIT)' } },
       { feature: 'Self-hosted / open source', note: 'MIT, fully self-hosted', values: { builderforce: '✅', copilot: '❌ MS cloud', cursor: '❌ Vendor cloud', claudeCode: '❌ Anthropic cloud', devin: '❌ Cloud only', openhands: '✅', aider: '✅', continueDev: '✅' } },
       { feature: 'Air-gapped / private deployment', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '✅', aider: '✅', continueDev: '✅' } },
       { feature: 'RBAC + audit trails', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic', openhands: '❌', aider: '❌', continueDev: '❌' } },
@@ -619,55 +623,55 @@ export interface CompareTeaser {
 /** Narrative copy for the /compare page (and the homepage teaser). */
 export const COMPARE = {
   seo: {
-    title: 'Builderforce.ai vs the Field: Multi-Agent Delivery Compared | Builderforce.ai',
+    title: 'Builderforce.ai Compared: From Creative Canvas to Governed Delivery',
     description:
-      'See how Builderforce.ai compares to GitHub Copilot, Cursor, Windsurf, Claude Code, Devin, OpenHands, Aider and Continue.dev. Self-hosted, MIT-licensed, model-agnostic multi-agent orchestration with governance, audit and persistent memory.',
-    ogTitle: 'Builderforce.ai vs GitHub Copilot, Cursor, Claude Code, Devin & more',
+      'See where Builderforce.ai overlaps with AI coding tools—and where its connected creative canvas, human collaboration, workflows, agents, and governance extend beyond the editor.',
+    ogTitle: 'Builderforce.ai — Creative Canvas and Agent Delivery Compared',
   },
   hero: {
-    eyebrow: 'Builderforce.ai vs the field',
-    title: 'Purpose-built for multi-agent delivery, not file-level autocomplete',
+    eyebrow: 'Understand the difference',
+    title: 'Start with the idea—not the editor',
     subtitle:
-      'GitHub Copilot finishes your line. Cursor rewrites your function. Builderforce.ai plans the feature, coordinates a team of specialist agents to build, review and test it, governs every action with approvals and an audit trail, and remembers what your project decided last sprint. Self-hosted, MIT-licensed, and model-agnostic.',
+      'AI coding tools help engineers produce code. Builderforce.ai gives creative and delivery teams a shared canvas for shaping the idea, connecting the work, collaborating with agents, reviewing changes, and moving approved outcomes into execution. Its open agent runtime remains available when engineering work begins.',
   },
   intro:
-    'Most AI coding tools are powerful autocomplete engines that stop at the file boundary. Builderforce.ai operates one level up: it is the system of record for agentic work — building, training and deploying an AI agent workforce, connecting to your systems, instrumenting and costing every action, and governing it with roles, approvals and an audit trail. The tables below compare Builderforce.ai against the tools teams evaluate most often, focused on the capabilities that separate running an innovation organization from finishing a line.',
+    'These products overlap in parts of the engineering workflow, but they are not interchangeable. Use this matrix as a scope guide: Builderforce.ai spans visual creation, connected artifacts, human-and-agent collaboration, work orchestration, and governed delivery. Product capabilities and competitor offerings change, so verify requirements that are critical to your decision.',
   pillars: [
     {
       icon: '🛡️',
-      title: 'Self-hosted, MIT-licensed, air-gapped',
-      desc: 'Your code and your agents run on your own machines. MIT-licensed with no subscription ceiling and a full air-gapped deployment path, so security and compliance teams keep control. Most rivals are closed SaaS that send your code to their cloud.',
+      title: 'An open runtime when you need it',
+      desc: 'BuilderForce Agents is an MIT-licensed, self-hosted engineering runtime. Teams can choose local models and private infrastructure for agent work that requires tighter control.',
     },
     {
       icon: '🔀',
-      title: 'True multi-agent orchestration',
-      desc: 'Seven specialist roles coordinated through a dependency DAG run planning, bug-fix, refactor and adversarial-review workflows end to end. Copilot, Cursor, Claude Code, Devin and the rest drive a single agent making one suggestion at a time.',
+      title: 'Connected multi-agent workflows',
+      desc: 'Coordinate specialist agents, tools, review steps, and dependencies in reusable workflows while keeping the originating idea and related artifacts visible.',
     },
     {
       icon: '🎛️',
-      title: 'Model freedom, no vendor lock-in',
-      desc: 'Route any task to any of 30+ providers, including fully local models via Ollama and self-managed Bedrock. Copilot is tied to GPT and Claude; Devin is proprietary. Builderforce.ai is IDE-independent and never tethered to one vendor.',
+      title: 'Model and surface choice',
+      desc: 'Choose among supported cloud and local models, work on the web, and bring engineering context into VS Code when the outcome includes software.',
     },
     {
       icon: '✅',
-      title: 'Governance, memory and fleet reach',
-      desc: 'Human-in-the-loop approval gates and a full audit trail wrap every action, persistent project memory lives in .builderforce/, and agent-to-agent distributed delegation spans machines and 15+ chat channels with voice and mobile companion apps.',
+      title: 'People stay in the loop',
+      desc: 'Use role-based access, approval gates, execution records, and shared project context to review consequential agent work before it moves forward.',
     },
   ] as ComparePillar[],
   quotable:
-    'Builderforce.ai is the only one of these tools purpose-built for multi-agent delivery: self-hosted, MIT-licensed, model-agnostic across 30+ providers, and governed by approvals and an audit trail, where the others optimize a single agent inside a single editor.',
+    'Builderforce.ai begins before the code: it connects ideas, artifacts, people, and AI agents on a creative canvas, then carries approved work into workflows, projects, and engineering delivery.',
   teaser: {
-    title: 'Built for delivery, not just completion',
+    title: 'The work begins before the code',
     blurb:
-      'GitHub Copilot, Cursor, Claude Code and Devin drive a single agent. Builderforce.ai orchestrates a self-hosted, model-agnostic agent workforce with governance, audit and persistent memory. See the full comparison.',
-    ctaLabel: 'Compare Builderforce.ai vs the field',
+      'See how a connected creative canvas differs from editor-first AI tools—and how Builderforce carries approved ideas into agent-assisted delivery.',
+    ctaLabel: 'See how Builderforce is different',
     highlightFeatures: [
-      'Train your own agents — then call them inside your agent',
-      'Kanban board + project management for your workforce',
-      'Manage your whole workforce without leaving VS Code',
-      'Multi-agent orchestration (7 roles + DAG)',
-      'Human-in-the-loop approval gates + audit trail',
-      '30+ model providers incl. local Ollama',
+      'Start from an idea on a visual canvas',
+      'Create live, connected artifacts',
+      'Collaborate with people and specialist agents',
+      'Review changes before delivery',
+      'Move approved work into workflows and projects',
+      'Use VS Code when engineering context matters',
     ],
   } as CompareTeaser,
 } as const;
@@ -675,9 +679,9 @@ export const COMPARE = {
 /* ════════════════════ GETTING STARTED ════════════════════ */
 
 export const GETTING_STARTED_STEPS = [
-  { num: '01', title: 'Create an account', desc: 'Sign up with your email and start a free workspace. 14-day Pro trial, no credit card required.' },
-  { num: '02', title: 'Generate a dataset', desc: 'Use the wizard to author an instruction-tuning dataset from a single capability prompt.' },
-  { num: '03', title: 'Train & publish', desc: 'Run LoRA training in your browser, evaluate results, and publish your agent to the Workforce Registry.' },
+  { num: '01', title: 'Bring the idea', desc: 'Start with what you want to make, without translating it into a tool-specific format first.' },
+  { num: '02', title: 'Shape it in one place', desc: 'Keep people, agents, decisions, and context together as the work moves forward.' },
+  { num: '03', title: 'Make it real', desc: 'Review, approve, and put the result into production—live, working, and ready to use.' },
 ];
 
 /* ════════════════════ FAQ ════════════════════ */
@@ -695,11 +699,11 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   },
   {
     question: 'What is Builderforce.ai?',
-    answer: 'Builderforce.ai is the innovation platform for the agentic era — a single system of record where every unit of work, done by a human or an AI agent, is instrumented, costed, and attributed from idea to ship to learn. You plan, build, ship, and measure with one workforce of humans and agents on a Kanban board, train your own agents in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connect to your systems and data, and govern every action with roles, approval gates, and a full audit trail — all without leaving VS Code.',
+    answer: 'Builderforce.ai is a creative canvas where teams and AI agents turn ideas into working outcomes. You can create websites, workflows, prototypes, data stories, models, documents, and delivery plans in one visual workspace, preserve the relationships between them, and move approved work into governed execution.',
   },
   {
     question: 'Is Builderforce.ai an enterprise platform?',
-    answer: 'Yes — it is built to operate like an enterprise system of record, without enterprise pricing. Because every action (human or agent) is instrumented and costed, the whole organization works from one source of truth instead of stitching together a board, a code host, an observability tool, a FinOps tool, and spreadsheets. Each role gets its own operating picture from the same data: delivery and DORA for engineering, cost and budgets for finance, portfolio rollup and the innovation funnel for the PMO and CEO, and an immutable audit trail for security. Access is governed by workspace roles (owner, manager, developer, viewer), so people see what their role allows.',
+    answer: 'Yes. Teams can begin with a private canvas, then add shared workspaces, role-based access, approval workflows, delivery tracking, cost visibility, and audit evidence as the work grows. Creative and operational teams keep one connected record instead of reconstructing decisions across separate whiteboards, documents, project tools, and agent chats.',
   },
   {
     question: 'Can I train my own agents and use them inside my own agent?',
@@ -707,7 +711,7 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   },
   {
     question: 'Do I have to leave VS Code to manage my agents?',
-    answer: 'No. The BuilderForce VS Code extension brings the whole platform into your editor: chat with agents, assign and run tasks on the Kanban board, review and validate their work, and approve human-in-the-loop actions — all without leaving VS Code.',
+    answer: 'No. Builderforce.ai is a web-first creative canvas. Engineering teams can also use the BuilderForce VS Code extension to bring repository context, diagnostics, agent work, reviews, and approvals closer to the code.',
   },
   {
     question: 'Does Builderforce have a Kanban board and project management?',
@@ -743,11 +747,11 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   },
   {
     question: 'Is Builderforce free?',
-    answer: 'Yes — the Free tier is $0/month forever with no credit card required. It includes WebGPU training, dataset generation, AI evaluation, and public Workforce browsing. The Pro plan ($29/seat/month) unlocks private agents, unlimited training, and priority support.',
+    answer: 'A Free tier is available. Current prices, enforced quotas, and plan feature availability are generated from the platform entitlement configuration on the pricing page.',
   },
   {
     question: 'How do I train a model in my browser?',
-    answer: 'Start a project, generate or upload a dataset, then launch the in-browser LoRA training wizard. Training runs entirely on your local WebGPU device — no cloud GPUs are required, and your data never leaves your browser.',
+    answer: 'Start a project, generate or upload a dataset, then launch the in-browser LoRA training wizard on a compatible WebGPU device. The local training step stays in the browser; remote evaluation, collaboration, and publishing are separate operations with their own boundaries.',
   },
   {
     question: 'What is the Workforce Registry?',
@@ -755,7 +759,7 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   },
   {
     question: 'What is WebGPU LoRA fine-tuning?',
-    answer: 'LoRA (Low-Rank Adaptation) is a parameter-efficient fine-tuning technique that trains a small set of adapter weights instead of the full model. Builderforce runs LoRA training directly in your browser using the WebGPU API, supporting models up to 2 billion parameters with zero cloud GPU costs.',
+    answer: 'LoRA (Low-Rank Adaptation) trains a smaller set of adapter weights instead of the full model. Builderforce supports browser-based WebGPU training for compatible models and devices; hardware limits and any remote steps are shown separately.',
   },
   {
     question: 'How does the AI evaluation engine work?',
@@ -766,8 +770,24 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'Builderforce supports LoRA fine-tuning of transformer and SSM (State Space Model) architectures up to 2 billion parameters. Training runs on your local GPU via the WebGPU API in Chrome, Edge, or any WebGPU-capable browser.',
   },
   {
+    question: 'Can Builderforce manage incidents and on-call?',
+    answer: 'Yes. Builderforce runs incidents end-to-end: a Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, and Teams, Slack, or email paging reaches the responder — with a per-incident war-room feed for humans and agents. Monitors pinned onto your architecture diagram sweep every five minutes and a breach auto-starts the investigation. When an incident resolves, its root-cause analysis is published to your Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    question: 'How does Builderforce prove the right role did each part of the work?',
+    answer: 'Every ticket carries a participation manifest — the roles it requires, resolved to the humans and agents capable of each, so a Product Manager is never dispatched to write code. An append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that flags a missing role as a blocking gap. Quality is proven at the board with an immutable record, not hoped for after the fact.',
+  },
+  {
+    question: 'Can Builderforce answer without spending tokens on a model?',
+    answer: 'Yes. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under a project, so a lesson taught once answers everywhere. Combined with the semantic response cache, the token bill falls as the project\'s memory grows.',
+  },
+  {
+    question: 'Can Builderforce respond to an RFP or RFQ?',
+    answer: 'Yes. CTO and Product-Owner agents turn an analyzed project into a branded, costed proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — co-branded with the requester\'s palette and logo. Freshness-gated grounding re-scans a stale project before it answers, so the proposal reflects the real system. RFP responses live as a tab on the project itself.',
+  },
+  {
     question: 'Is my data private during training?',
-    answer: 'Yes — 100% private. All training computation happens locally on your device using WebGPU. Your datasets, model weights, and training artifacts are never sent to external servers during training. Finished LoRA adapters are persisted to encrypted Cloudflare R2 storage.',
+    answer: 'Training computation runs locally on supported WebGPU devices. Data is transmitted only when you use an explicitly connected service such as dataset generation, collaboration, evaluation with a remote model, or artifact publishing; review those steps before enabling them.',
   },
   {
     question: 'How does Builderforce compare to cloud training platforms?',
@@ -843,11 +863,11 @@ export const EVERMIND_FAQ: FaqItem[] = [
 export const PRICING_FAQ: FaqItem[] = [
   {
     question: 'Is Builderforce really free?',
-    answer: 'Yes — the Free plan costs $0/month forever with no credit card required. You get WebGPU training, dataset generation, AI evaluation, and public Workforce browsing.',
+    answer: 'A Free plan is available. Use the pricing page for the current API-derived price, quotas, and feature availability.',
   },
   {
     question: 'What is included in the Pro plan?',
-    answer: 'Pro ($29/seat/month) includes everything in Free plus up to 3 AgentHosts, unlimited projects, 1M tokens/day, approval workflows, fleet mesh, full telemetry, custom agent roles, and priority support.',
+    answer: 'The pricing page retrieves current Pro pricing and derives plan availability from the same enforced entitlement configuration used by the API.',
   },
   {
     question: 'Can I change plans at any time?',
@@ -855,7 +875,7 @@ export const PRICING_FAQ: FaqItem[] = [
   },
   {
     question: 'What is a Managed AgentHost?',
-    answer: 'A Managed AgentHost ($49/month) is a hosted BuilderForce Agents instance that Builderforce runs for you — no Docker, no DevOps. It connects to your workspace and runs your deployed agents.',
+    answer: 'A Managed AgentHost is a hosted BuilderForce Agents instance operated by Builderforce. Its current price is supplied by the public pricing contract on the pricing page.',
   },
   {
     question: 'Do you offer yearly billing?',
@@ -868,32 +888,32 @@ export const COMPARE_FAQ: FaqItem[] = [
   {
     question: 'Is Builderforce.ai an alternative to GitHub Copilot?',
     answer:
-      'Yes, but they solve different scopes. GitHub Copilot is single-agent autocomplete inside VS Code, tied to GPT and Claude models. Builderforce.ai is a self-hosted, MIT-licensed multi-agent platform that orchestrates seven specialist roles through full planning, bug-fix, refactor and adversarial-review workflows, runs on 30+ model providers including local Ollama, and adds approvals, audit and persistent memory. Teams that have outgrown line completion adopt Builderforce.ai for end-to-end delivery.',
+      'They overlap in engineering assistance but address different scopes. Evaluate Copilot for editor assistance and Builderforce.ai for connected creative work, supported multi-agent workflows, and configured governance. Verify current model, editor, and deployment requirements with each vendor.',
   },
   {
     question: 'How does Builderforce.ai compare to Cursor and Windsurf?',
     answer:
-      'Cursor and Windsurf are excellent AI-native editors, but they are still single-agent and IDE-bound. Builderforce.ai is IDE-independent and works from any channel or CLI, coordinates multiple agents on one task through a dependency DAG, and is fully self-hosted with model freedom across 30+ providers. You can even connect Cursor or Windsurf to Builderforce.ai over MCP and use it as your orchestration and memory layer.',
+      'Cursor and Windsurf focus on AI-assisted editing. Builderforce.ai starts with a shared creative canvas and can hand supported engineering work into agent workflows and VS Code. Compare the current collaboration, model, deployment, and governance support that matters to your team.',
   },
   {
     question: 'Builderforce.ai vs Claude Code and Aider, what is the difference?',
     answer:
-      'Claude Code is locked to Anthropic models and Aider runs a single CLI agent. Builderforce.ai runs a team of specialist agents with a built-in adversarial review pass, human approval gates, an audit trail, and persistent project memory in .builderforce/. It is model-agnostic across 30+ providers and adds fleet mesh, remote:<id> dispatch and 15+ chat channels, so it scales from one developer to an orchestrated fleet.',
+      'Claude Code and Aider are terminal-centered engineering tools. Builderforce.ai adds a visual creation layer, supported multi-agent workflow patterns, project memory, and configurable approvals. Model and channel availability changes, so validate the live catalogs rather than relying on a fixed provider count.',
   },
   {
     question: 'Builderforce.ai vs Devin and OpenHands, which should I pick for autonomous engineering?',
     answer:
-      'Devin is a proprietary hosted autonomous agent and OpenHands is an open single-agent runtime. Builderforce.ai differs by being self-hosted and MIT-licensed with true multi-agent orchestration and governance built in: approval gates, audit trails and self-healing recovery that auto-detects failures and reruns affected steps. You keep your code on your own infrastructure and choose any model, including local ones.',
+      'These products offer different combinations of hosted execution, open runtimes, and engineering automation. Builderforce.ai combines its hosted workspace with the separately deployable MIT-licensed BuilderForce Agents runtime. Compare the exact workflow, approval, observability, and infrastructure boundaries you require.',
   },
   {
     question: 'Can Builderforce.ai run fully offline or air-gapped?',
     answer:
-      'Yes. Builderforce.ai is self-hosted and supports air-gapped deployment. With local models via Ollama you can run the entire agent workforce without any code or prompt leaving your network, which most closed competitors cannot offer. Project memory persists locally in .builderforce/ so context survives across sessions without a cloud dependency.',
+      'The MIT-licensed BuilderForce Agents runtime can run on private infrastructure and use supported local models. A fully air-gapped configuration excludes hosted collaboration, publishing, remote evaluation, and connected services; validate the complete target workflow before making a compliance commitment.',
   },
   {
     question: 'Does Builderforce.ai lock me into one model or IDE?',
     answer:
-      'No. Builderforce.ai is model-agnostic across 30+ providers, including Anthropic, OpenAI, Bedrock and local Ollama, and it is IDE-independent, reachable from any CLI or chat channel. There is no editor fork to adopt and no single-vendor model requirement, which is a core difference from Copilot, Cursor, Windsurf and Claude Code.',
+      'Builderforce.ai supports multiple cloud and local model options, and engineering context can be used on the web or in VS Code. Availability depends on the current catalog, plan, credentials, region, and runtime; verify those requirements before choosing a deployment.',
   },
 ];
 
@@ -929,7 +949,7 @@ export const REGISTER_FAQ: FaqItem[] = [
   },
   {
     question: 'Does Builderforce charge any commission?',
-    answer: 'No — Builderforce charges zero commission on agents you publish to the Workforce Registry. You keep 100% of any revenue from your published agents.',
+    answer: 'Marketplace fees are governed by the current seller terms shown at publication and checkout. Review those terms before listing a paid agent.',
   },
 ];
 
@@ -953,28 +973,28 @@ export interface RegisterMarketingVariant {
   faq: FaqItem[];
 }
 
-export const REGISTER_MARKETING: Record<'standard' | 'freelancer', RegisterMarketingVariant> = {
+export const REGISTER_MARKETING: Record<'standard' | 'freelancer' | 'sales', RegisterMarketingVariant> = {
   standard: {
-    eyebrow: 'Build with AI',
-    heading: 'Your AI Agent Workspace Awaits',
+    eyebrow: 'Create with AI',
+    heading: 'Turn Your Next Idea Into Something Real',
     intro:
-      'Train custom AI agents in your browser, put them to work on a live Kanban board alongside your team, and orchestrate the whole workforce without ever leaving VS Code.',
+      'Open a creative canvas, build connected artifacts with your team and AI agents, review the work, and carry approved outcomes into delivery.',
     stats: [
-      { value: '$0', label: 'Free forever' },
+      { value: 'Free', label: 'Plan available' },
       { value: '14 days', label: 'Pro trial included' },
-      { value: '2B+', label: 'Params in-browser' },
-      { value: '0%', label: 'Agent commission' },
+      { value: 'One canvas', label: 'Ideas through delivery' },
+      { value: 'Human + AI', label: 'Create together' },
     ],
     bullets: [
-      { icon: '🧠', title: 'Evermind', desc: 'A self-updating model that learns as it works and never goes stale.' },
-      { icon: '🔁', title: 'Train & reuse agents', desc: 'WebGPU LoRA fine-tuning, then call your specialists from inside your agent.' },
-      { icon: '▦', title: 'Live Kanban workforce', desc: 'Humans and AI agents ship on the same board, backlog to done.' },
-      { icon: '🧩', title: 'Never leave VS Code', desc: 'Chat, assign, review, and approve — all inside your editor.' },
-      { icon: '🧪', title: 'Agentic Tester', desc: 'An autonomous QA agent that browser-tests your app and files bugs.' },
-      { icon: '🗺️', title: 'Planning Spine', desc: 'Portfolio → task on one dated, cost-bearing Gantt with CAPEX/OPEX rollup.' },
+      { icon: '✦', title: 'Start on the canvas', desc: 'Give an idea room to grow before choosing a rigid tool or structure.' },
+      { icon: '◫', title: 'Create live artifacts', desc: 'Build websites, workflows, data stories, models, and plans as editable objects.' },
+      { icon: '🤝', title: 'Create with people and agents', desc: 'Keep collaborators, context, and specialist AI beside the work.' },
+      { icon: '✅', title: 'Review before delivery', desc: 'Inspect proposed changes and move only approved work into execution.' },
+      { icon: '🔀', title: 'Connect the journey', desc: 'Preserve the path from the first idea through projects, workflows, and outcomes.' },
+      { icon: '🧩', title: 'Engineering when needed', desc: 'Bring repository and diagnostic context into VS Code when the work becomes code.' },
     ],
     quote:
-      'Unlike cloud training platforms that charge per GPU-hour, Builderforce runs training on your local WebGPU device at zero cost.',
+      'Start with the outcome you want—not the software you think you need to use.',
     faq: REGISTER_FAQ,
   },
   freelancer: {
@@ -997,11 +1017,11 @@ export const REGISTER_MARKETING: Record<'standard' | 'freelancer', RegisterMarke
       { icon: '✅', title: 'Approve-then-pay', desc: 'Every timecard is reviewed before payment, so billing stays clean.' },
     ],
     quote:
-      'Keep 100% of your rate — Builderforce takes zero commission, and every billable hour is captured automatically from the work you actually do.',
+      'Set your rate, review the current engagement terms, and use supported time records for approved billable work.',
     faq: [
       {
         question: 'Does Builderforce take a commission on my rate?',
-        answer: 'No. Builderforce charges zero commission on freelance engagements — you keep 100% of your hourly rate. Clients pay for tracked, approved hours only.',
+        answer: 'Fees and payout terms are stated in the current engagement agreement. Review them before accepting work; approved time records support billing where configured.',
       },
       {
         question: 'How are my hours tracked?',
@@ -1016,6 +1036,27 @@ export const REGISTER_MARKETING: Record<'standard' | 'freelancer', RegisterMarke
         answer: 'No. Once your profile is live you can browse Find Work and get matched to gigs from any tenant on Builderforce, then interview and get hired across projects — all without leaving the platform.',
       },
     ],
+  },
+  sales: {
+    eyebrow: 'Earn with Builderforce',
+    heading: 'Build a Pipeline. Grow with Us.',
+    intro: 'Join the Builderforce referral and sales associate program with a focused workspace for prospecting, campaigns, contacts, meetings, and weekly coaching.',
+    stats: [
+      { value: '1 hub', label: 'Contacts to close' },
+      { value: 'Weekly', label: 'Goals & coaching' },
+      { value: 'Built in', label: 'Campaign tools' },
+      { value: 'Direct', label: 'Admin access' },
+    ],
+    bullets: [
+      { icon: '🎯', title: 'Target markets', desc: 'Define ideal customer segments and focus every campaign.' },
+      { icon: '📬', title: 'Email campaigns', desc: 'Build outreach from approved messaging and sales assets.' },
+      { icon: '🤝', title: 'Lead management', desc: 'Import contacts and move opportunities through a clear pipeline.' },
+      { icon: '📅', title: 'Meetings built in', desc: 'Connect your calendar and book prospects or Builderforce leadership.' },
+      { icon: '📈', title: 'Weekly momentum', desc: 'Set activity goals and get the next best action for your pipeline.' },
+      { icon: '🧠', title: 'Marketing toolkit', desc: 'Use current decks, one-pagers, templates, and campaign guidance.' },
+    ],
+    quote: 'A practical sales operating system for turning consistent outreach into qualified Builderforce opportunities.',
+    faq: REGISTER_FAQ,
   },
 };
 
@@ -1032,13 +1073,13 @@ export const LOGIN_MARKETING: RegisterMarketingVariant = {
   intro:
     'Sign in to your AI agent workspace — your trained models, live Kanban board, and the whole agent workforce are exactly where you left them.',
   stats: [
-    { value: '$0', label: 'Free forever' },
+    { value: 'Free', label: 'Plan available' },
     { value: '<60s', label: 'To sign in' },
     { value: '2B+', label: 'Params in-browser' },
     { value: '0%', label: 'Agent commission' },
   ],
   bullets: [
-    { icon: '🧠', title: 'Evermind', desc: 'A self-updating model that learns as it works and never goes stale.' },
+    { icon: '🧠', title: 'Evermind', desc: 'A project model and memory system with keyed updates for supported workflows.' },
     { icon: '🔁', title: 'Your trained agents', desc: 'Call the specialists you fine-tuned with WebGPU LoRA, right where you left them.' },
     { icon: '▦', title: 'Live Kanban workforce', desc: 'Humans and AI agents ship on the same board, backlog to done.' },
     { icon: '🧩', title: 'Never leave VS Code', desc: 'Chat, assign, review, and approve — all inside your editor.' },
@@ -1074,11 +1115,11 @@ export const AGENTS_FAQ: FaqItem[] = [
   },
   {
     question: 'Is BuilderForce Agents open source and self-hosted?',
-    answer: 'Yes. It is MIT-licensed and runs on your own infrastructure — no vendor lock-in or subscription ceiling. You can run it fully air-gapped, and with local models via Ollama no code or prompt has to leave your network.',
+    answer: 'BuilderForce Agents is MIT-licensed and can run on private infrastructure with supported local models. Hosted collaboration, publishing, remote evaluation, and connected services remain separate; validate a complete air-gapped workflow before making a compliance commitment.',
   },
   {
     question: 'How do agents coordinate across machines?',
-    answer: 'Agents form an AgentHost-to-AgentHost mesh. Work is distributed across a fleet of hosts and routed to the best-matched peer with remote:auto[caps] dispatch; every dispatch is HMAC-signed and Bearer-authenticated, and the portal shows a live telemetry timeline of every action.',
+    answer: 'Agents can form an AgentHost-to-AgentHost mesh and route supported work by capability. Configured dispatch uses the documented authentication path, and the portal shows telemetry for instrumented execution paths.',
   },
   {
     question: 'Can agents ship code on their own?',
@@ -1090,7 +1131,7 @@ export const AGENTS_FAQ: FaqItem[] = [
 export const PROJECTS_TASKS_FAQ: FaqItem[] = [
   {
     question: 'What is the Projects / Tasks workspace in Builderforce.ai?',
-    answer: 'Projects / Tasks is the single work-management surface where you organize everything your AI workforce builds. A project is a collaborative workspace with its own IDE, files, assigned agents, and workflows; the Tasks tab is a task board where work is planned, assigned to agents, and tracked through every status. Projects and Tasks live on one page with two tabs so you can move between organizing the work and tracking it without leaving the surface.',
+    answer: 'Projects / Tasks is the single work-management surface where you organize everything your AI workforce builds. A project is a collaborative workspace with Canvas builds, files, assigned agents, and workflows; the Tasks tab is a task board where work is planned, assigned to agents, and tracked through every status. Projects and Tasks live on one page with two tabs so you can move between organizing the work and tracking it without leaving the surface.',
   },
   {
     question: 'How do AI agents pick up and run tasks?',
@@ -1152,7 +1193,7 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
   },
   {
     name: 'Human-in-the-loop governance',
-    description: 'An operating model in which AI agents pause at approval gates for a person to approve or reject high-impact actions, with every action recorded in an audit trail. Builderforce.ai applies this across its agent workforce so teams keep control and meet compliance requirements.',
+    description: 'An operating model in which configured AI execution paths can pause at approval gates for a person to approve or reject consequential actions. Retained evidence and coverage depend on the instrumented entry point.',
   },
   {
     name: 'Agent-in-agent delegation',
@@ -1222,6 +1263,22 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
     name: 'Learned model routing',
     description: 'A cost-and-quality optimization on Builderforce.ai that scores every run on its outcome and reorders which model handles each action type accordingly — cheaper models take the work they do well while premium models are reserved for tasks that need them. Combined with the cross-surface semantic cache, the token bill bends down as the platform learns a team\'s workload, with a single kill-switch flag for manual control.',
   },
+  {
+    name: 'Memory-first inference',
+    description: 'A token-saving pattern on Builderforce.ai where, before any paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the frontier LLM entirely on a confident hit. The decision is single-sourced so every surface (web and VS Code) behaves identically, and learning fans out to every Evermind under a project (its own head and its Canvas builds), so a lesson taught once answers everywhere and the token bill falls as memory grows.',
+  },
+  {
+    name: 'Role-gated accountability',
+    description: 'Builderforce.ai\'s model for proving the right role did each part of a ticket. A per-ticket participation manifest resolves the required roles to the humans and agents capable of each — so a role-incapable owner (for example a Product Manager) is never dispatched to a producer stage — and an append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that surfaces a missing role as a blocking gap. Quality is proven on the board with an immutable record rather than assumed after the fact.',
+  },
+  {
+    name: 'Incident management with learned RCA',
+    description: 'Builderforce.ai\'s end-to-end incident response: a Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, Teams/Slack/email paging reaches the responder, and a per-incident war-room feed coordinates humans and agents. Active monitors pinned onto an uploaded architecture diagram sweep every five minutes and a breach auto-starts the investigation. On resolution the root-cause analysis is published to the Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    name: 'Automated RFP response',
+    description: 'A pre-sales capability on Builderforce.ai where CTO and Product-Owner agents turn a project\'s analyzed capabilities into a branded, costed proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — co-branded with the requester\'s palette and logo. Freshness-gated grounding re-runs the deterministic system audits before answering, so the proposal reflects the system as it is today. RFP responses live as a tab on the project itself.',
+  },
 ];
 
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
@@ -1243,6 +1300,32 @@ export interface ProductSection {
   surfaces: ProductSurface[];
 }
 
+export type CapabilityStatus = 'available' | 'beta' | 'planned';
+export type CapabilityDataBoundary = 'browser' | 'workspace-cloud' | 'connected-service' | 'hybrid';
+
+export interface CapabilityProof {
+  status: CapabilityStatus;
+  dataBoundary: CapabilityDataBoundary;
+  prerequisites: readonly string[];
+  /** Repository-relative automated or implementation evidence. */
+  evidence: readonly string[];
+  /** ISO date on which the evidence was last reviewed. */
+  lastVerified: string;
+}
+
+export interface MarketingClaim {
+  id: string;
+  approvedCopy: string;
+  status: CapabilityStatus;
+  scope: string;
+  dataBoundaries: readonly CapabilityDataBoundary[];
+  evidence: readonly string[];
+  owner: string;
+  lastReviewed: string;
+  reviewBy: string;
+  complianceReview: 'required' | 'not-required';
+}
+
 /**
  * The actual in-app surfaces, described for logged-out visitors. Mirrors the
  * authenticated Sidebar groupings (MAIN / MESH / EXTENSIONS / SYSTEM) so the
@@ -1254,15 +1337,15 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
   {
     id: 'build',
     icon: '🛠',
-    title: 'Build & Train',
-    blurb: 'Go from an idea to a trained, evaluated AI agent — all in the browser.',
+    title: 'Create',
+    blurb: 'Move from a prompt to working artifacts and delivery without changing surfaces or organizing a project first.',
     surfaces: [
-      { icon: '🧠', title: 'Evermind', desc: 'The brain of the platform — a self-updating model governed by Write-Through Cognition. New knowledge replaces what came before with no reconciliation step, and it runs on WebGPU in the browser, on-device, or inside every agent.', href: '/evermind' },
-      { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
-      { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
-      { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
-      { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills. Train a custom agent, then call it from inside your own agent.', href: '/training' },
-      { icon: '🧩', title: 'VS Code Extension', desc: 'Run the whole platform from your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
+      { icon: '✦', title: 'Creation Canvas', desc: 'One infinite multiplayer canvas for conversation, workflows, websites, data, prototypes, models, voice, people, agents, and optional project context.', href: '/creation-canvas' },
+      { icon: '🏠', title: 'Session Library', desc: 'Visual session cards are the first Dashboard view. Search, pin, duplicate, archive, branch, merge, or return to any creative context.', href: '/dashboard' },
+      { icon: '🔀', title: 'Workflows & Evaluation', desc: 'Design and run workflows in place, connect them to websites or data, and ask Brain for a cited cross-object evaluation before applying changes.', href: '/create' },
+      { icon: '▣', title: 'Websites, Data & Prototypes', desc: 'Import datasets, build live charts and dashboards, create WYSIWYG interactive prototypes, and bind evidence to the experience on one canvas.', href: '/create' },
+      { icon: '🧠', title: 'Evermind, LLM & Voice', desc: 'Create, teach, tune, evaluate, package, and operate models and voice experiences as connected canvas objects.', href: '/create' },
+      { icon: '🧩', title: 'Creation Canvas for VS Code', desc: 'Open the same tenant Session in a native full editor tab and add files, selections, diagnostics, repository context, terminal output, local services, and browser previews.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
     ],
   },
   {
@@ -1271,12 +1354,12 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     title: 'Orchestrate',
     blurb: 'Coordinate work across agents, workflows, and a mesh of remote AgentHosts.',
     surfaces: [
-      { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
-      { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
+      { icon: '🔀', title: 'Workflow Execution', desc: 'Compose and run repeatable, approval-gated workflows as live objects inside Creation Sessions.', href: '/create' },
+      { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a Canvas Builder, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
       { icon: '🗺️', title: 'Planning Spine & Portfolio', desc: 'One dated hierarchy — portfolio → initiative → epic → task with OKRs at any level — where every leaf\'s cost rolls up to each ancestor and is split CAPEX vs OPEX on a single Gantt. Plan, deliver, and account for work in one place.', href: '/projects?tab=portfolio' },
       { icon: '🔗', title: 'Board Connectors', desc: 'Two-way sync with Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — orchestrate across the trackers you already run, with no migration.', href: '/projects?tab=connections' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
-      { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/workforce?tab=chats' },
+      { icon: '💬', title: 'Session Conversations', desc: 'Use the persistent bottom composer or place movable Chat objects beside the work they discuss.', href: '/create' },
       { icon: '🧑‍🏭', title: 'Workforce Kanban & Templates', desc: 'Staff a project from a role roster of humans and AI agents on a sign-off-gated board, then buy, sell, or install ready-made board templates — lanes, required roles, review gates, and a recommended roster — from the marketplace.', href: '/projects?tab=templates' },
     ],
   },
@@ -1297,11 +1380,11 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     id: 'govern',
     icon: '🛡',
     title: 'Govern & Operate',
-    blurb: 'Approvals, security, and full observability — your AI Security Officer.',
+    blurb: 'Keep accountable people in control with permissions, approvals, security, and operational visibility.',
     surfaces: [
-      { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/workforce?tab=approvals' },
-      { icon: '🔒', title: 'Security', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials for every integration.', href: '/security' },
-      { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/workforce?tab=logs' },
+      { icon: '✅', title: 'Approvals', desc: 'Human approval gates on configured agent execution paths, with dispatch blocked if policy resolution fails.', href: '/workforce?tab=approvals' },
+      { icon: '🔒', title: 'Security', desc: 'Tenant-scoped access controls and AES-256-GCM encryption for credentials stored by supported integrations.', href: '/security' },
+      { icon: '📊', title: 'Observability', desc: 'Execution, token, and tool-call telemetry for instrumented platform workflows, with coverage identified by surface.', href: '/settings?sub=logs' },
       { icon: '🐞', title: 'Quality & Error Tracking', desc: 'Ingest errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket; group them by fingerprint; then turn any group into a fix task an agent ships as a pull request — crash to PR on one surface.', href: '/quality' },
       { icon: '📈', title: 'Maturity Diagnostic', desc: 'Rate every practice (Dev, QA, DevOps, PMO, governance) on a CMMI/COBIT-style 1–5 scale — free to self-assess, or scored objectively from your real delivery data with a prioritized plan to mature and innovate.', href: '/diagnostics' },
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
@@ -1309,51 +1392,184 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
   },
 ];
 
-/* ════════════════════ NAV LINKS ════════════════════ */
-
-export interface NavLink {
-  href: string;
-  label: string;
-}
-
-export interface FooterColumn {
-  title: string;
-  links: NavLink[];
-}
+void LEGACY_COMPETITIVE_COMPARISON;
 
 /**
- * Grouped footer navigation, rendered as columns on desktop and collapsed to
- * stacked sections on mobile. `Home` is reached via the footer brand mark, so it
- * is intentionally omitted from the columns.
+ * Public capability-claim contract. A product surface cannot appear in the
+ * marketing catalog without an explicit maturity state, execution/data
+ * boundary, prerequisites, and code evidence. Tests keep this registry aligned
+ * with PRODUCT_SECTIONS and prevent planned work from being marketed as live.
  */
-export const FOOTER_COLUMNS: FooterColumn[] = [
+export const PRODUCT_CAPABILITY_PROOF: Record<string, CapabilityProof> = {
+  'Creation Canvas': { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/CreationCanvas.test.tsx'], lastVerified: '2026-08-04' },
+  'Session Library': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/lib/creationSessions.ts'], lastVerified: '2026-08-04' },
+  'Workflows & Evaluation': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['account'], evidence: ['frontend/src/lib/creationCanvasAi.test.ts'], lastVerified: '2026-08-04' },
+  'Websites, Data & Prototypes': { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/creationObjectRegistry.ts'], lastVerified: '2026-08-04' },
+  'Evermind, LLM & Voice': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['supported WebGPU device for local training'], evidence: ['frontend/src/components/workflow-builder/EvermindBuildPanel.tsx'], lastVerified: '2026-08-04' },
+  'Creation Canvas for VS Code': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['VS Code extension', 'account for shared sessions'], evidence: ['packages/creation-canvas-contract/src/index.ts'], lastVerified: '2026-08-04' },
+  'Workflow Execution': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/WorkflowDagView.tsx'], lastVerified: '2026-08-04' },
+  'Projects / Tasks': { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/TaskMgmtContent.tsx'], lastVerified: '2026-08-04' },
+  'Planning Spine & Portfolio': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/pm/PlanningSpineGantt.tsx'], lastVerified: '2026-08-04' },
+  'Board Connectors': { status: 'beta', dataBoundary: 'connected-service', prerequisites: ['supported provider credentials'], evidence: ['api/src/application/boardsync/providerCatalog.ts'], lastVerified: '2026-08-04' },
+  'Workforce Mesh': { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['registered AgentHost'], evidence: ['frontend/src/components/workforce/WorkforceAgents.tsx'], lastVerified: '2026-08-04' },
+  'Session Conversations': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/creation-canvas/CreationCanvas.tsx'], lastVerified: '2026-08-04' },
+  'Workforce Kanban & Templates': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/TaskMgmtContent.tsx'], lastVerified: '2026-08-04' },
+  'Knowledge & SOPs': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/app/knowledge/page.tsx'], lastVerified: '2026-08-04' },
+  Skills: { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account to install or publish'], evidence: ['frontend/src/app/skills/page.tsx'], lastVerified: '2026-08-04' },
+  Personas: { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/app/personas/page.tsx'], lastVerified: '2026-08-04' },
+  'Prompt Library': { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account to publish'], evidence: ['frontend/src/app/prompts/page.tsx'], lastVerified: '2026-08-04' },
+  'Content Manager': { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/app/content-manager/page.tsx'], lastVerified: '2026-08-04' },
+  Approvals: { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['configured policy gate'], evidence: ['api/src/application/runtime/RuntimeService.policyGates.test.ts'], lastVerified: '2026-08-04' },
+  Security: { status: 'available', dataBoundary: 'hybrid', prerequisites: ['configuration appropriate to deployment'], evidence: ['api/src/application/governance/policyPackService.test.ts'], lastVerified: '2026-08-04' },
+  Observability: { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['instrumented platform execution'], evidence: ['frontend/src/components/ObservabilityContent.tsx'], lastVerified: '2026-08-04' },
+  'Quality & Error Tracking': { status: 'beta', dataBoundary: 'connected-service', prerequisites: ['configured error source'], evidence: ['frontend/src/app/quality/page.tsx'], lastVerified: '2026-08-04' },
+  'Maturity Diagnostic': { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/app/diagnostics/page.tsx'], lastVerified: '2026-08-04' },
+  'Tenants & Workspaces': { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/app/tenants/page.tsx'], lastVerified: '2026-08-04' },
+};
+
+export interface CapabilityOperations {
+  owner: string;
+  limitation: string;
+  exports: readonly string[];
+  exampleHref: string;
+}
+
+/** Operational disclosure paired one-to-one with the public capability catalog. */
+export const PRODUCT_CAPABILITY_OPERATIONS: Record<string, CapabilityOperations> = {
+  'Creation Canvas': { owner: 'Creation', limitation: 'Beta coverage is limited to named object and handoff types.', exports: ['Canvas export', 'Supported delivery handoff'], exampleHref: '/creation-canvas' },
+  'Session Library': { owner: 'Creation', limitation: 'Shared persistence requires an account and workspace.', exports: ['Session export'], exampleHref: '/dashboard' },
+  'Workflows & Evaluation': { owner: 'Creation AI', limitation: 'Evaluation quality depends on available source context and citations.', exports: ['Evaluation result'], exampleHref: '/creation-canvas' },
+  'Websites, Data & Prototypes': { owner: 'Creation', limitation: 'Artifact runtimes and export formats vary by object type.', exports: ['Object-specific export'], exampleHref: '/creation-canvas' },
+  'Evermind, LLM & Voice': { owner: 'AI Studio', limitation: 'Local paths require compatible WebGPU hardware; publishing uses hosted services.', exports: ['Supported model package', 'Generated media'], exampleHref: '/evermind' },
+  'Creation Canvas for VS Code': { owner: 'Developer Experience', limitation: 'Parity is limited to the objects and actions supported by the extension contract.', exports: ['Workspace context'], exampleHref: '/agents' },
+  'Workflow Execution': { owner: 'Workflows', limitation: 'Node behavior and governance coverage vary by configured step type.', exports: ['Execution result'], exampleHref: '/agents/workflow-builder' },
+  'Projects / Tasks': { owner: 'Delivery', limitation: 'External board behavior depends on connector configuration.', exports: ['CSV', 'Connected board sync'], exampleHref: '/projects' },
+  'Planning Spine & Portfolio': { owner: 'PMO', limitation: 'Cost and outcome rollups reflect instrumented and attributed records only.', exports: ['CSV'], exampleHref: '/projects' },
+  'Board Connectors': { owner: 'Integrations', limitation: 'Mappings, permissions, sync direction, and conflict handling vary by provider.', exports: ['Provider-specific sync'], exampleHref: '/integrations' },
+  'Workforce Mesh': { owner: 'Agent Runtime', limitation: 'Requires registered hosts and configured network/runtime access.', exports: ['Execution records'], exampleHref: '/workforce' },
+  'Session Conversations': { owner: 'Collaboration', limitation: 'Conversation retention and tools depend on workspace configuration.', exports: ['Session export'], exampleHref: '/creation-canvas' },
+  'Workforce Kanban & Templates': { owner: 'Delivery', limitation: 'Installed templates remain subject to workspace roles and entitlements.', exports: ['Template package'], exampleHref: '/tasks' },
+  'Knowledge & SOPs': { owner: 'Knowledge', limitation: 'Compliance suitability depends on configured controls and organizational review.', exports: ['Published snapshot'], exampleHref: '/knowledge' },
+  Skills: { owner: 'Marketplace', limitation: 'Installed skills execute with the permissions of their configured runtime.', exports: ['Skill package'], exampleHref: '/skills' },
+  Personas: { owner: 'Marketplace', limitation: 'Persona behavior varies with the selected model and workflow.', exports: ['Persona definition'], exampleHref: '/personas' },
+  'Prompt Library': { owner: 'Marketplace', limitation: 'Prompt output varies by model, context, and connected tools.', exports: ['Prompt template'], exampleHref: '/prompts' },
+  'Content Manager': { owner: 'Content', limitation: 'Reuse depends on the target surface and access permissions.', exports: ['Content block'], exampleHref: '/content-manager' },
+  Approvals: { owner: 'Runtime & Governance', limitation: 'Applies to execution paths wired to the effective policy resolver.', exports: ['Decision record'], exampleHref: '/workforce?tab=approvals' },
+  Security: { owner: 'Security', limitation: 'Control coverage depends on deployment and integration configuration.', exports: ['Available audit evidence'], exampleHref: '/security' },
+  Observability: { owner: 'Observability', limitation: 'Coverage varies by instrumented surface and entry point.', exports: ['Available logs and traces'], exampleHref: '/settings?sub=logs' },
+  'Quality & Error Tracking': { owner: 'Quality', limitation: 'Requires a configured source; supported event fields vary by provider.', exports: ['Issue or fix task'], exampleHref: '/quality' },
+  'Maturity Diagnostic': { owner: 'Diagnostics', limitation: 'Self-assessment is directional and not a certification.', exports: ['Assessment result'], exampleHref: '/diagnostics' },
+  'Tenants & Workspaces': { owner: 'Platform', limitation: 'Roles and entitlements govern available workspace operations.', exports: ['Available workspace records'], exampleHref: '/tenants' },
+};
+
+/** Canonical wording for high-risk public claims. Marketing surfaces should
+ * reference these records instead of inventing broader privacy/security copy. */
+export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
   {
-    title: 'Product',
-    links: [
-      { href: '/product', label: 'Product' },
-      { href: '/compare', label: 'Compare' },
-      { href: '/pricing', label: 'Pricing' },
-    ],
+    id: 'creative-canvas-delivery',
+    approvedCopy: 'Builderforce connects supported creative artifacts to review and delivery surfaces in one Creation Session.',
+    status: 'beta',
+    scope: 'Supported Creation Canvas objects and named delivery paths',
+    dataBoundaries: ['browser', 'workspace-cloud', 'hybrid'],
+    evidence: ['frontend/src/components/creation-canvas/CreationCanvas.test.tsx'],
+    owner: 'Creation', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'not-required',
   },
   {
-    title: 'Platform',
-    links: [
-      { href: '/evermind', label: 'Evermind LLM' },
-      { href: '/marketplace', label: 'Workforce Registry' },
-      { href: '/agents', label: 'BuilderForce Agents' },
-      { href: '/tools', label: 'Diagnostics & Tools' },
-      { href: '/soc2', label: 'SOC 2 & System Audits' },
-      { href: '/blog', label: 'Blog' },
-    ],
+    id: 'human-approval-control',
+    approvedCopy: 'Configured agent execution paths can require human approval, and dispatch is blocked when policy resolution fails.',
+    status: 'available',
+    scope: 'Runtime paths wired to the effective policy resolver',
+    dataBoundaries: ['workspace-cloud', 'hybrid'],
+    evidence: ['api/src/application/runtime/RuntimeService.policyGates.test.ts'],
+    owner: 'Runtime & Governance', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
   },
   {
-    title: 'Get started',
-    links: [
-      { href: '/login', label: 'Sign In' },
-      { href: '/register', label: 'Get Started' },
-    ],
+    id: 'credential-encryption',
+    approvedCopy: 'Credentials stored for supported integrations are encrypted with AES-256-GCM and scoped to a tenant.',
+    status: 'available',
+    scope: 'Credential stores covered by the integration encryption implementation',
+    dataBoundaries: ['workspace-cloud', 'connected-service'],
+    evidence: ['api/src/application/integrations/credentialCrypto.test.ts'],
+    owner: 'Security', lastReviewed: '2026-08-04', reviewBy: '2026-10-03', complianceReview: 'required',
   },
-];
+  {
+    id: 'browser-local-compute',
+    approvedCopy: 'Supported WebGPU training and generation steps run in the browser; remote evaluation, collaboration, publishing, and connected services use their stated external boundaries.',
+    status: 'beta',
+    scope: 'Named WebGPU operations on compatible devices',
+    dataBoundaries: ['browser', 'hybrid'],
+    evidence: ['frontend/src/components/workflow-builder/EvermindBuildPanel.tsx'],
+    owner: 'AI Studio', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
+  },
+  {
+    id: 'private-runtime-deployment',
+    approvedCopy: 'The MIT-licensed BuilderForce Agents runtime can run on private infrastructure and use supported local models; hosted platform features remain separate services.',
+    status: 'beta',
+    scope: 'BuilderForce Agents runtime, excluding hosted collaboration and publishing services',
+    dataBoundaries: ['hybrid'],
+    evidence: ['agent-runtime/package.json', 'agent-runtime/docs/CLOUD_DEPLOY.md'],
+    owner: 'Agent Runtime', lastReviewed: '2026-08-04', reviewBy: '2026-10-03', complianceReview: 'required',
+  },
+  {
+    id: 'execution-observability',
+    approvedCopy: 'Instrumented platform workflows emit available execution, usage, and tool-call records; coverage varies by surface.',
+    status: 'beta',
+    scope: 'Instrumented runtime and workflow paths',
+    dataBoundaries: ['workspace-cloud', 'hybrid'],
+    evidence: ['frontend/src/components/ObservabilityContent.tsx'],
+    owner: 'Observability', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
+  },
+] as const;
+
+export interface IntegrationProof {
+  name: string;
+  status: CapabilityStatus;
+  direction: 'import' | 'export' | 'two-way' | 'event-ingest';
+  auth: string;
+  dataBoundary: 'connected-service';
+  limitation: string;
+  evidence: string;
+  lastVerified: string;
+}
+
+/** Public integration matrix: named connectors only, with no implied universal coverage. */
+export const INTEGRATION_CAPABILITY_PROOF: readonly IntegrationProof[] = [
+  { name: 'GitHub', status: 'beta', direction: 'two-way', auth: 'GitHub credential or app configuration', dataBoundary: 'connected-service', limitation: 'Repository, pull-request, and webhook behavior depends on installed permissions.', evidence: 'api/src/presentation/routes/githubWebhookRoutes.ts', lastVerified: '2026-08-04' },
+  { name: 'Jira', status: 'beta', direction: 'two-way', auth: 'Provider credentials', dataBoundary: 'connected-service', limitation: 'Board and field mappings must be configured per workspace.', evidence: 'api/src/application/boardsync/providerCatalog.ts', lastVerified: '2026-08-04' },
+  { name: 'Confluence', status: 'beta', direction: 'import', auth: 'Provider credentials', dataBoundary: 'connected-service', limitation: 'Imported content remains subject to source permissions and refresh behavior.', evidence: 'api/src/application/boardsync/providerCatalog.ts', lastVerified: '2026-08-04' },
+  { name: 'Sentry', status: 'beta', direction: 'event-ingest', auth: 'Webhook or provider credentials', dataBoundary: 'connected-service', limitation: 'Only configured projects and supported event fields are ingested.', evidence: 'api/src/application/quality/errorEventsLedger.ts', lastVerified: '2026-08-04' },
+  { name: 'PostHog', status: 'beta', direction: 'event-ingest', auth: 'Webhook configuration', dataBoundary: 'connected-service', limitation: 'Coverage is limited to configured event sources and mappings.', evidence: 'api/src/application/quality/errorEventsLedger.ts', lastVerified: '2026-08-04' },
+] as const;
+
+export interface WorkflowProofDemo {
+  id: string;
+  status: 'beta';
+  dataBoundary: CapabilityDataBoundary;
+  evidence: readonly string[];
+  limitation: string;
+}
+
+/** Three conversion workflows backed by repository-owned journey evidence. */
+export const WORKFLOW_PROOF_DEMOS: readonly WorkflowProofDemo[] = [
+  { id: 'idea-to-experience', status: 'beta', dataBoundary: 'hybrid', evidence: ['frontend/src/components/creation-canvas/CreationCanvas.test.tsx'], limitation: 'Delivery targets are limited to the artifact and handoff types named in the Creation Canvas.' },
+  { id: 'governed-agent-delivery', status: 'beta', dataBoundary: 'hybrid', evidence: ['api/src/application/runtime/RuntimeService.policyGates.test.ts'], limitation: 'Approval behavior applies to execution paths wired to the effective policy resolver.' },
+  { id: 'signal-to-decision', status: 'beta', dataBoundary: 'connected-service', evidence: ['frontend/src/lib/creationCanvasAi.test.ts'], limitation: 'Source freshness and citation coverage depend on the configured connected systems.' },
+] as const;
+
+/* ════════════════════ NAV LINKS ════════════════════ */
+
+/** A footer link: a stable route + the i18n key (under the `footer` namespace)
+ *  that AppFooter resolves to the visible label. Brand names (e.g. "Evermind
+ *  LLM", "BuilderForce Agents") still map to a key so the catalog stays the
+ *  single source, even where the translation is the brand token itself. */
+/*
+ * The footer's columns and the Learn menu's rows used to live here as
+ * `FOOTER_COLUMNS` / `RESOURCE_NAV_LINKS` — the eighth and ninth arrays in the
+ * repo declaring a navigable destination. They are `PUBLIC_DESTINATIONS` in
+ * `lib/navGroups.ts` now, with the footer as a projection of it, because two
+ * lists is how the storefront came to be called "Workforce Registry" in the
+ * footer and "Marketplace" everywhere else.
+ */
 
 /* ════════════════════ PROGRAMMATIC SEO — COMPETITOR LEAF PAGES ════════════════════ */
 
@@ -1381,65 +1597,65 @@ export const COMPETITOR_SEO: Record<string, CompetitorSeo> = {
   copilot: {
     slug: 'github-copilot',
     name: 'GitHub Copilot',
-    tagline: 'A self-hosted, multi-agent alternative to single-agent autocomplete',
+    tagline: 'Compare editor assistance with connected, governed delivery',
     summary:
-      'GitHub Copilot is single-agent autocomplete inside VS Code, tied to GPT and Claude. Builderforce.ai is a self-hosted, MIT-licensed multi-agent platform that plans, builds, reviews and tests features across 30+ model providers with approvals, audit and persistent memory.',
+      'Compare current support for editor assistance, shared creative work, multi-agent workflows, deployment boundaries, approvals, and retained execution evidence.',
     verdict:
-      'Choose Builderforce.ai over GitHub Copilot when you have outgrown line completion and need orchestrated, governed, model-agnostic delivery you can self-host.',
+      'Choose against your required workflow and verify current vendor capabilities, pricing, and data handling before deciding.',
   },
   cursor: {
     slug: 'cursor',
     name: 'Cursor & Windsurf',
-    tagline: 'Orchestrate a self-hosted agent workforce, not one IDE-bound agent',
+    tagline: 'Compare AI-native editing with a connected creative canvas',
     summary:
-      'Cursor and Windsurf are AI-native editors, but still single-agent and IDE-bound. Builderforce.ai is IDE-independent, coordinates multiple agents on one task through a dependency DAG, is fully self-hosted, and can even sit behind Cursor over MCP as your orchestration and memory layer.',
+      'Compare current support for editing, visual creation, collaboration, workflow orchestration, model choice, and private-runtime requirements.',
     verdict:
-      'Choose Builderforce.ai over Cursor or Windsurf when you want IDE-independent multi-agent orchestration, model freedom, and self-hosting rather than a single editor fork.',
+      'Choose the product that covers your primary workflow and confirm any critical integration or deployment requirement directly.',
   },
   claudeCode: {
     slug: 'claude-code',
     name: 'Claude Code',
-    tagline: 'Model-agnostic, multi-agent delivery beyond a single-vendor CLI',
+    tagline: 'Compare terminal engineering with multi-surface delivery',
     summary:
-      'Claude Code is locked to Anthropic models and drives a single terminal agent. Builderforce.ai runs a team of specialist agents with a built-in adversarial review pass, approval gates, an audit trail, and persistent project memory - model-agnostic across 30+ providers including local Ollama.',
+      'Compare current terminal workflows, model requirements, collaboration, agent orchestration, approvals, and observable delivery paths.',
     verdict:
-      'Choose Builderforce.ai over Claude Code when you need multi-agent workflows, governance, and freedom from a single model vendor.',
+      'Validate the current model catalog and governance coverage for the exact work you intend to run.',
   },
   devin: {
     slug: 'devin',
     name: 'Devin',
-    tagline: 'Self-hosted, MIT-licensed autonomous engineering with governance',
+    tagline: 'Compare hosted autonomy with configurable delivery workflows',
     summary:
-      'Devin is a proprietary hosted autonomous agent at $500/mo. Builderforce.ai delivers true multi-agent orchestration that you self-host and own, MIT-licensed, with approval gates, audit trails and self-healing recovery - keeping your code on your own infrastructure with any model.',
+      'Compare hosted execution, private-runtime options, collaboration, approvals, recovery behavior, and current pricing using dated vendor evidence.',
     verdict:
-      'Choose Builderforce.ai over Devin when you want self-hosted, auditable, model-agnostic autonomous engineering without a proprietary cloud or a $500/mo floor.',
+      'Select the operating model that matches your infrastructure, oversight, and delivery requirements.',
   },
   openhands: {
     slug: 'openhands',
     name: 'OpenHands',
-    tagline: 'Multi-agent orchestration and governance on top of open runtimes',
+    tagline: 'Compare open engineering runtimes and workflow coordination',
     summary:
-      'OpenHands is an open single-agent runtime. Builderforce.ai adds true multi-agent orchestration (seven roles + dependency DAG), human approval gates, an audit trail, persistent memory and fleet mesh - all self-hosted and MIT-licensed.',
+      'Compare runtime ownership, supported orchestration patterns, approval coverage, project memory, and operational evidence.',
     verdict:
-      'Choose Builderforce.ai over OpenHands when you need coordinated multi-agent workflows and governance, not a single-agent loop.',
+      'Verify the workflow and governance features you need in the current releases of both products.',
   },
   aider: {
     slug: 'aider',
     name: 'Aider',
-    tagline: 'From a single CLI agent to an orchestrated, governed agent workforce',
+    tagline: 'Compare git-aware CLI work with coordinated delivery',
     summary:
-      'Aider runs one git-aware CLI agent. Builderforce.ai coordinates a team of specialist agents with adversarial review, approval gates, persistent project memory, fleet mesh and 15+ chat channels - model-agnostic across 30+ providers and self-hosted.',
+      'Compare git-aware editing, multi-agent workflow support, approvals, memory, model options, and deployment boundaries.',
     verdict:
-      'Choose Builderforce.ai over Aider when one CLI agent is no longer enough and you need orchestration, governance and memory at team scale.',
+      'Choose based on whether your primary need is focused CLI editing or a broader shared delivery system.',
   },
   continueDev: {
     slug: 'continue-dev',
     name: 'Continue.dev',
-    tagline: 'Beyond an IDE extension - orchestration, governance and memory',
+    tagline: 'Compare open editor assistance with connected delivery',
     summary:
-      'Continue.dev is an open IDE extension for single-agent assistance. Builderforce.ai is IDE-independent and orchestrates multiple specialist agents through full planning, bug-fix, refactor and review workflows with approvals, audit and persistent memory.',
+      'Compare current editor support, model choices, shared workflows, approval controls, memory, and delivery surfaces.',
     verdict:
-      'Choose Builderforce.ai over Continue.dev when you want IDE-independent multi-agent delivery and governance rather than an in-editor assistant.',
+      'Validate the capabilities important to your team against current documentation and a representative workflow.',
   },
 };
 
@@ -1474,7 +1690,7 @@ export const SEO_INTEGRATIONS: IntegrationSeo[] = [
     category: 'Source control',
     tagline: 'Let your agent workforce open PRs, review code and run CI on GitHub',
     summary:
-      'Connect Builderforce.ai to GitHub so agents read repositories, branch, commit, open pull requests and react to CI checks - with every action gated by approvals and recorded in the audit trail.',
+      'Connect Builderforce.ai to GitHub for supported repository, branch, pull-request, and webhook workflows. Permissions, approval coverage, and retained evidence depend on the configured path.',
     useCases: ['Autonomous PR creation from a task', 'Review-and-merge with human approval gates', 'CI-aware build/fix loops', 'Repo-wide semantic search and refactors'],
     docsHref: '/agents/integrations',
   },
@@ -1522,9 +1738,9 @@ export const SEO_INTEGRATIONS: IntegrationSeo[] = [
     slug: 'ollama',
     name: 'Ollama',
     category: 'Model providers',
-    tagline: 'Run the entire agent workforce on local, offline models',
+    tagline: 'Use supported local models from a private agent runtime',
     summary:
-      'With Ollama, Builderforce.ai routes any task to local models so the full multi-agent workforce runs air-gapped - no code or prompt leaves your network and there are zero cloud GPU bills.',
+      'BuilderForce Agents can use supported Ollama models on private infrastructure. Hosted collaboration, publishing, remote evaluation, and connected services remain outside that local runtime boundary.',
     useCases: ['Air-gapped / offline delivery', 'Zero-cost local inference', 'Data-residency compliance'],
     docsHref: '/agents/integrations',
   },
@@ -1588,7 +1804,19 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  * in sync with src/content/blog/*.md (a missing slug is silently skipped).
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
+  'creation-canvas': [
+    'creation-canvas-beyond-chat',
+    'compare-projects-and-build-an-executive-roadmap',
+    'customer-feedback-to-ten-mockups',
+    'build-and-train-evermind-on-the-creation-canvas',
+    'multiplayer-creation-canvas-web-vscode',
+  ],
   product: [
+    'creation-canvas-beyond-chat',
+    'customer-feedback-to-ten-mockups',
+    'multiplayer-creation-canvas-web-vscode',
+    'compare-projects-and-build-an-executive-roadmap',
+    'build-and-train-evermind-on-the-creation-canvas',
     'transitioning-to-an-agentic-workforce',
     'real-time-collaboration-humans-and-agents',
     'define-a-need-the-agentic-system-solves-it',
@@ -1597,11 +1825,18 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'system-of-record-for-agentic-work',
     'planning-spine-cost-bearing-delivery',
     'quality-error-observability-one-click-fix',
+    'incident-management-on-call-and-war-rooms',
+    'role-gated-accountability-proof-of-participation',
+    'automated-rfp-response-from-your-codebase',
+    'memory-first-inference-skip-the-llm',
   ],
   // Evermind technology page / feature teaser.
   evermind: [
+    'build-and-train-evermind-on-the-creation-canvas',
     'evermind-self-updating-model',
     'inside-evermind-architecture',
+    'memory-first-inference-skip-the-llm',
+    'local-first-ai-webgpu-in-the-browser',
     'transitioning-to-an-agentic-workforce',
     'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
@@ -1613,6 +1848,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ],
   pricing: [
     'evermind-self-updating-model',
+    'memory-first-inference-skip-the-llm',
     'system-of-record-for-agentic-work',
     'semantic-response-cache',
   ],
@@ -1627,15 +1863,15 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
   ide: ['vs-code-command-center-for-your-agentic-workforce', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
-  training: ['webgpu-lora-explained', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
+  training: ['webgpu-lora-explained', 'local-first-ai-webgpu-in-the-browser', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
-  projects: ['planning-spine-cost-bearing-delivery', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
+  projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
   workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'fleet-management-and-agent-routing'],
   meetings: ['video-meetings-standups-and-shared-calendars', 'real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
   personas: ['ai-agent-personality-psychometric-personas', 'builderforce-agents-and-agent-integration', 'multi-agent-orchestration'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
-  security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'cobit-governance-readiness-for-agentic-it'],
+  security: ['every-role-operating-picture', 'role-gated-accountability-proof-of-participation', 'security-and-multi-tenant-architecture', 'cobit-governance-readiness-for-agentic-it'],
   soc2: ['cobit-governance-readiness-for-agentic-it', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
   dashboard: ['system-of-record-for-agentic-work', 'real-time-collaboration-humans-and-agents', 'every-role-operating-picture'],
@@ -1644,5 +1880,5 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   diagnostics: ['ai-development-maturity-diagnostic', 'cobit-governance-readiness-for-agentic-it', 'system-of-record-for-agentic-work'],
   // Newer enterprise surfaces.
   knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
-  quality: ['quality-error-observability-one-click-fix', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
+  quality: ['quality-error-observability-one-click-fix', 'incident-management-on-call-and-war-rooms', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
 };

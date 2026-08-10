@@ -16,7 +16,10 @@ import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
-import { onModelChange, setSelectedModel } from "./modelState";
+import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
+import { modelChoiceLabels } from "./modelChoiceLabels";
+// The model list itself: one builder for the composer `/` menu AND this picker.
+import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type ModelCategory } from "@seanhogg/builderforce-brain-embedded";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -25,6 +28,7 @@ import { InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention } from "./attention";
 import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
+import { CreationCanvasPanel } from "./creationCanvasPanel";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -70,8 +74,34 @@ async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise
   }
 }
 
+/**
+ * Mirror the signed-in state into the `builderforce.signedIn` context key so the
+ * sidebar can hide every feature view behind a single login panel when logged out
+ * (the views' `when` clauses read this key). Signed-in truth is "has an editor key
+ * in SecretStorage" — the same check every surface already makes ad hoc.
+ */
+async function syncSignedInContext(context: vscode.ExtensionContext): Promise<void> {
+  const signedIn = !!(await context.secrets.get(SECRET_KEY));
+  await vscode.commands.executeCommand("setContext", "builderforce.signedIn", signedIn);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
+  // Gate the sidebar on auth before anything else registers: until this resolves the
+  // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.
+  void syncSignedInContext(context);
+  // Empty provider so the Welcome view can render its viewsWelcome sign-in panel.
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("builderforce.welcome", {
+      getChildren: () => [],
+      getTreeItem: () => new vscode.TreeItem(""),
+    } satisfies vscode.TreeDataProvider<never>),
+    // Keep the key fresh when auth changes out-of-band (e.g. the device-code flow
+    // completing, or a sign-out in another window).
+    vscode.authentication.onDidChangeSessions((e) => {
+      if (e.provider.id === BuilderForceAuthProvider.id) void syncSignedInContext(context);
+    }),
+  );
   const tree = new SessionsTreeProvider(context.secrets);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
@@ -110,10 +140,46 @@ export function activate(context: vscode.ExtensionContext): void {
     managerStatus,
     vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
       vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
-    attention.onDidChange(() => { tree.refresh(); projects.refresh(); updateManagerStatus(); }),
+    vscode.commands.registerCommand("builderforce.openCreateCanvas", async () => {
+      const prompt = await vscode.window.showInputBox({
+        title: vscode.l10n.t("Create on Canvas"),
+        prompt: vscode.l10n.t("What do you want to build, compare, visualize, or automate?"),
+        ignoreFocusOut: true,
+      });
+      if (prompt === undefined) return;
+      try {
+        const session = await bfApi.createCreationSession(context.secrets, prompt);
+        trackVsix("navigation", { ref: `creation-session:${session.id}` });
+        CreationCanvasPanel.open(context, session.id, session.title);
+      } catch (error) {
+        void vscode.window.showErrorMessage(vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
+      }
+    }),
+    vscode.commands.registerCommand("builderforce.openCreationSession", async () => {
+      try {
+        const sessions = await bfApi.listCreationSessions(context.secrets);
+        const picked = await vscode.window.showQuickPick(sessions.map((session) => ({
+          label: session.title,
+          description: new Date(session.lastActivityAt).toLocaleString(),
+          session,
+        })), { title: vscode.l10n.t("Open Creation Session"), placeHolder: vscode.l10n.t("Choose a shared canvas") });
+        if (picked) CreationCanvasPanel.open(context, picked.session.id, picked.session.title);
+      } catch (error) {
+        void vscode.window.showErrorMessage(vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
+      }
+    }),
+    vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) => {
+      CreationCanvasPanel.open(context, session.id, session.title);
+    }),
+    attention.onDidChange(() => {
+      tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
+      // Per-session chat tabs show the same live status as the Sessions rows, off the
+      // same map — repaint them on the same signal (no second poller).
+      BrainWebview.refreshTabStatus();
+    }),
     // The in-webview Brain loop reports its own running / awaiting chats (the server
     // can't see them) — repaint the Sessions tree so they light up in lockstep.
-    onLocalRunsChange(() => tree.refresh()),
+    onLocalRunsChange(() => { tree.refresh(); BrainWebview.refreshTabStatus(); }),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
   );
@@ -134,8 +200,9 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     // Merge the webview's in-flight chat runs into the live-status map so a chat
     // that keeps executing after the user opens a new one still shows a spinner
-    // (or ❓ when paused on a confirm) in the Sessions tree.
-    onLocalRunsChanged: (runs) => setLocalChatRuns(runs),
+    // (or ❓ when paused on a confirm) in the Sessions tree. Keyed by the reporting
+    // panel — with per-session tabs several panels report at once.
+    onLocalRunsChanged: (sourceId, runs) => setLocalChatRuns(sourceId, runs),
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);
@@ -308,8 +375,8 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(`Logged a ${mins}-minute meeting as paid time.`);
     }),
     // Review the tenant's pending human-in-the-loop approvals and resolve them.
-    vscode.commands.registerCommand("builderforce.humanRequests", () =>
-      reviewHumanRequests(context, projects),
+    vscode.commands.registerCommand("builderforce.humanRequests", (approvalId?: string) =>
+      reviewHumanRequests(context, projects, approvalId),
     ),
     // The Board renders NATIVELY in a webview from bfApi data (not the embedded web
     // page) — reliable inside a VS Code webview where the /embed iframe is not.
@@ -811,6 +878,7 @@ async function runTask(
 async function reviewHumanRequests(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
+  requestedApprovalId?: string,
 ): Promise<void> {
   if (!(await ensureSignedIn(context))) return;
 
@@ -827,7 +895,10 @@ async function reviewHumanRequests(
   }
 
   const isAnswerable = (a: bfApi.BfApproval): boolean => a.kind === "question" || a.kind === "feedback";
-  const pick = await vscode.window.showQuickPick(
+  const requested = requestedApprovalId
+    ? pending.find((a) => String(a.id) === String(requestedApprovalId))
+    : undefined;
+  const pick = requested ? { approval: requested } : await vscode.window.showQuickPick(
     pending.map((a) => ({
       label: `$(${isAnswerable(a) ? "comment" : "shield"}) ${a.description?.slice(0, 70) || a.actionType || a.kind || "Approval"}`,
       description: a.kind ?? "",
@@ -908,6 +979,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
   vscode.window.showInformationMessage("BuilderForce: signed in.");
+  void syncSignedInContext(context); // reveal the feature views
   bfApi.clearJwt();
   clearPlatformToolsCache();
   BrainWebview.refresh();
@@ -916,10 +988,32 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
+  // Land the user on a ready board instead of "Select or create a project…":
+  // zero-setup onboarding provisions a Default project, so auto-select it.
+  void autoSelectDefaultProject(context);
   void maybeScan(context, false);
   void insights?.start();
   void diagnostics?.refresh();
   meetings?.refresh();
+}
+
+/** After sign-in, if no project is selected yet, select the workspace's sole/first
+ *  project so the user lands on a ready board instead of the "Select or create a
+ *  project…" placeholder. Zero-setup onboarding provisions a Default project on the
+ *  web, so a fresh builder has exactly one to land on. Best-effort and silent on any
+ *  failure — the manual "Select or create a project…" affordance always remains. */
+async function autoSelectDefaultProject(context: vscode.ExtensionContext): Promise<void> {
+  if (getSelectedProject()) return; // a returning user keeps their persisted selection
+  try {
+    const list = await bfApi.listProjects(context.secrets);
+    const first = list[0];
+    if (!first) return; // no projects yet — leave the create affordance
+    setSelectedProject({ id: first.id, name: first.name });
+    bfApi.invalidateTasks(first.id);
+    void vscode.commands.executeCommand("builderforce.refreshProjects");
+  } catch {
+    /* best-effort — leave the manual picker affordance in place */
+  }
 }
 
 async function signOut(
@@ -927,6 +1021,7 @@ async function signOut(
   auth: BuilderForceAuthProvider,
 ): Promise<void> {
   await auth.removeSession();
+  void syncSignedInContext(context); // collapse back to the login-only Welcome panel
   bfApi.clearJwt();
   clearPlatformToolsCache();
   clearPersonalityBlockCache();
@@ -945,20 +1040,121 @@ async function signOut(
   meetings?.refresh();
 }
 
+/**
+ * `Change model` — the SAME rows the composer's `/` menu offers, in the same order,
+ * with the same funding line, rendered as a QuickPick.
+ *
+ * This picker and the Brain panel's menu used to build their lists independently:
+ * different grouping order, their own vendor names, their own "who pays" wording,
+ * both reading the same endpoints. The rows now come from the shared
+ * `buildModelItems` (brain-embedded — deliberately React-free so this Node host can
+ * import it) and the copy from the shared `modelChoiceLabels`, so the two surfaces
+ * can only differ in chrome. It stays because a user who never opens the Brain panel
+ * (Sessions view overflow, command palette, the native `@builderforce` participant)
+ * still needs a way to change models.
+ */
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const models = await getModels(context.secrets, true);
-    const auto = "(auto — let the gateway choose)";
-    const pick = await vscode.window.showQuickPick([auto, ...models], {
-      title: "Select BuilderForce model",
-      placeHolder: "Pick a model for new turns",
+    const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+      await getModels(context.secrets, true);
+
+    // When premium is locked, the gateway tells us WHY and which step opens it.
+    // Same unlock vocabulary the chat error banner uses, so the picker and a failed
+    // turn name the same remedy.
+    const premiumUnlock = canUsePremiumModels
+      ? null
+      : premiumInfo?.unlock === "validate_card"
+        ? {
+            label: vscode.l10n.t("$(credit-card) Add a card to unlock premium models"),
+            detail: vscode.l10n.t("Your plan allows premium; it needs a validated card on file"),
+          }
+        : premiumInfo?.unlock === "upgrade"
+          ? {
+              label: vscode.l10n.t("$(rocket) Upgrade to unlock premium models"),
+              detail: vscode.l10n.t("Any paid OpenRouter model, at cost + 1¢/request"),
+            }
+          : null;
+
+    // Model choice is a gated entitlement (frontier access: paid plan, superadmin,
+    // premium override, or a connected BYO account). Without it the gateway rejects a
+    // pinned model, so offering one would be a dead control — clear the pin instead.
+    if (!canChooseModel) {
+      setSelectedModel(undefined);
+      const action = await vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.",
+        ),
+        vscode.l10n.t("Open settings"),
+      );
+      if (action) void vscode.commands.executeCommand("builderforce.openSettings");
+      return;
+    }
+
+    const labels = modelChoiceLabels();
+    const items = buildModelItems(
+      {
+        configured: configuredModels.map((model) => ({ id: model.ref, label: model.name })),
+        byo: byo.models.map((model) => ({ id: model.id, vendor: model.vendor })),
+        free: freeModels,
+        plan: models,
+        paid: canUsePremiumModels ? premiumModels : [],
+      },
+      labels,
+    );
+
+    // One separator per funding tier, in the builder's cost order. `auto` and the BYO
+    // pool are routes rather than models, so they carry a glyph instead of a heading.
+    const GLYPH: Partial<Record<string, string>> = { auto: "$(sparkle) ", byo_pool: "$(layers) " };
+    const rows: Array<vscode.QuickPickItem & { selection?: ChatModelSelection; unlock?: boolean }> = [];
+    let tier: ModelCategory | undefined;
+    for (const item of items) {
+      if (item.category !== tier) {
+        tier = item.category;
+        if (tier !== "auto") rows.push({ label: modelCategoryLabel(tier, labels), kind: vscode.QuickPickItemKind.Separator });
+      }
+      rows.push({
+        label: `${GLYPH[item.key] ?? ""}${item.label}`,
+        description: modelCategoryLabel(item.category, labels),
+        detail: item.detail,
+        selection: item.selection,
+      });
+    }
+
+    // Premium is off — SAY SO, and name the step that turns it on. Silently omitting
+    // the group made the picker look like it was missing models the web app plainly
+    // offers. Picking this row opens the page that unlocks it rather than pinning
+    // anything.
+    if (premiumUnlock) {
+      rows.push(
+        { label: labels.categoryPaid, kind: vscode.QuickPickItemKind.Separator },
+        { label: premiumUnlock.label, detail: premiumUnlock.detail, unlock: true },
+      );
+    }
+
+    const pick = await vscode.window.showQuickPick(rows, {
+      title: vscode.l10n.t("Select BuilderForce model"),
+      placeHolder: byo.providers.length > 0
+        ? vscode.l10n.t("Your own connected accounts are billed to your key — no plan credit used")
+        : vscode.l10n.t("Pick a model for new turns"),
+      matchOnDescription: true,
+      matchOnDetail: true,
     });
     if (pick === undefined) return;
-    setSelectedModel(pick === auto ? undefined : pick);
+    if (pick.unlock) {
+      void vscode.env.openExternal(
+        vscode.Uri.parse(
+          `${getWebBaseUrl()}${premiumInfo?.unlock === "upgrade" ? "/pricing?upgrade=pro" : "/pricing"}`,
+        ),
+      );
+      return;
+    }
+    if (!pick.selection) return;
+    if (pick.selection.mode === "byo_pool") setSelectedModelPool();
+    else setSelectedModel(pick.selection.mode === "model" ? pick.selection.model : undefined);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {
-      const action = await vscode.window.showWarningMessage("Sign in to BuilderForce first.", "Sign In");
+      const action = await vscode.window.showWarningMessage(vscode.l10n.t("Sign in to BuilderForce first."), vscode.l10n.t("Sign In"));
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
     } else {
       vscode.window.showErrorMessage(`BuilderForce: ${message}`);

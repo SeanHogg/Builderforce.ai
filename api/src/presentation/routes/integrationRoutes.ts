@@ -22,233 +22,33 @@ import { integrationCredentials, integrationSyncLogs, projects } from '../../inf
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
+import {
+  CONNECTABLE_PROVIDERS,
+  connectableCatalog,
+  isConnectableProvider,
+  testProviderCredential,
+  validateProviderCredentials,
+} from '../../application/integrations/providerTests';
+import { getMissingIntegrationRecommendations } from '../../application/integrations/integrationGapRecommendations';
 
 /**
- * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
- * in schema.ts (sans google_calendar/rally/freshworks, which are managed by their
- * own flows). Board-sync providers are a subset of this list.
+ * Credential providers accepted by this endpoint come from ONE registry
+ * (`application/integrations/providerTests`), which unions the hand-written
+ * SCM/PM/ITSM probes with the Data + Marketing catalog. Adding a provider to the
+ * catalog therefore makes it connectable here with no edit to this file — the
+ * previous hard-coded list is exactly how the builder ended up advertising 24
+ * integrations the backend would not accept.
+ *
+ * `google_calendar`, `rally` and `freshworks` remain absent: they are managed by
+ * their own OAuth / board-sync flows.
  */
-const CREDENTIAL_PROVIDERS = [
-  'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
-  'freshservice', 'freshdesk', 'servicenow', 'linear', 'sentry', 'pagerduty',
-  'monday', 'asana', 'clickup',
-] as const;
-type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
+type CredentialProvider = string;
 
 /** Mask a credential value for display (show last 4 chars). */
 function maskToken(token: string): string {
   if (token.length <= 4) return '****';
   return '****' + token.slice(-4);
-}
-
-// ---------------------------------------------------------------------------
-// Connectivity test helpers (per provider)
-// ---------------------------------------------------------------------------
-
-async function testGitHub(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const token = creds.accessToken as string;
-  if (!token) return { ok: false, message: 'accessToken is required' };
-  try {
-    const res = await fetch('https://api.github.com/user', {
-      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'Builderforce/1.0', Accept: 'application/vnd.github+json' },
-    });
-    return res.ok
-      ? { ok: true, message: 'Connected' }
-      : { ok: false, message: githubStatusMessage(res.status, 'token') };
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : 'Network error contacting GitHub' };
-  }
-}
-
-async function testJira(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const token = creds.apiToken as string;
-  const email = creds.email as string;
-  if (!token || !email || !baseUrl) return { ok: false, message: 'email, apiToken, and baseUrl are required' };
-  const url = `${baseUrl.replace(/\/$/, '')}/rest/api/3/myself`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Basic ${btoa(`${email}:${token}`)}`, Accept: 'application/json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Jira API returned ${res.status}` };
-}
-
-async function testBitbucket(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const token = creds.accessToken as string;
-  if (!token) return { ok: false, message: 'accessToken is required' };
-  const res = await fetch('https://api.bitbucket.org/2.0/user', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Bitbucket API returned ${res.status}` };
-}
-
-async function testGitLab(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const token = creds.accessToken as string;
-  if (!token) return { ok: false, message: 'accessToken is required' };
-  // Self-hosted GitLab supported via baseUrl; default to gitlab.com.
-  const root = (baseUrl?.replace(/\/$/, '') || 'https://gitlab.com');
-  const res = await fetch(`${root}/api/v4/user`, {
-    headers: { Authorization: `Bearer ${token}`, 'PRIVATE-TOKEN': token },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `GitLab API returned ${res.status}` };
-}
-
-async function testConfluence(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const token = creds.apiToken as string;
-  const email = creds.email as string;
-  if (!token || !email || !baseUrl) return { ok: false, message: 'email, apiToken, and baseUrl are required' };
-  // Confluence Cloud REST API — list spaces (limit 1 is a lightweight auth probe)
-  const url = `${baseUrl.replace(/\/$/, '')}/wiki/rest/api/space?limit=1`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Basic ${btoa(`${email}:${token}`)}`,
-      Accept: 'application/json',
-    },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Confluence API returned ${res.status}` };
-}
-
-async function testFreshservice(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const apiKey = creds.apiKey as string;
-  if (!apiKey || !baseUrl) return { ok: false, message: 'apiKey and baseUrl are required' };
-  // Freshservice REST API — fetch the authenticated agent profile
-  const url = `${baseUrl.replace(/\/$/, '')}/api/v2/agents/me`;
-  const res = await fetch(url, {
-    headers: {
-      // Freshservice uses HTTP Basic with apiKey as username and "X" as password
-      Authorization: `Basic ${btoa(`${apiKey}:X`)}`,
-      Accept: 'application/json',
-    },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Freshservice API returned ${res.status}` };
-}
-
-async function testFreshdesk(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const apiKey = creds.apiKey as string;
-  if (!apiKey || !baseUrl) return { ok: false, message: 'apiKey and baseUrl are required' };
-  // Freshdesk REST API — a lightweight agent-list probe; Basic auth with apiKey:X.
-  const url = `${baseUrl.replace(/\/$/, '')}/api/v2/agents?per_page=1`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Basic ${btoa(`${apiKey}:X`)}`, Accept: 'application/json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Freshdesk API returned ${res.status}` };
-}
-
-async function testLinear(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const apiKey = creds.apiKey as string;
-  if (!apiKey) return { ok: false, message: 'apiKey is required' };
-  const res = await fetch('https://api.linear.app/graphql', {
-    method: 'POST',
-    headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: '{ viewer { id } }' }),
-  });
-  if (!res.ok) return { ok: false, message: `Linear API returned ${res.status}` };
-  const json = (await res.json()) as { errors?: unknown[] };
-  return json.errors?.length ? { ok: false, message: 'Linear rejected the API key' } : { ok: true, message: 'Connected' };
-}
-
-async function testSentry(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const token = creds.token as string;
-  if (!token) return { ok: false, message: 'token is required' };
-  const root = (baseUrl?.replace(/\/$/, '') || 'https://sentry.io');
-  const res = await fetch(`${root}/api/0/organizations/`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Sentry API returned ${res.status}` };
-}
-
-async function testPagerDuty(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const apiToken = creds.apiToken as string;
-  if (!apiToken) return { ok: false, message: 'apiToken is required' };
-  const res = await fetch('https://api.pagerduty.com/users?limit=1', {
-    headers: { Authorization: `Token token=${apiToken}`, Accept: 'application/vnd.pagerduty+json;version=2' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `PagerDuty API returned ${res.status}` };
-}
-
-async function testServiceNow(
-  creds: Record<string, unknown>,
-  baseUrl: string | null,
-): Promise<{ ok: boolean; message: string }> {
-  const username = creds.username as string;
-  const password = creds.password as string;
-  if (!username || !password || !baseUrl) return { ok: false, message: 'username, password, and baseUrl are required' };
-  const url = `${baseUrl.replace(/\/$/, '')}/api/now/table/sys_user?sysparm_limit=1`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Basic ${btoa(`${username}:${password}`)}`, Accept: 'application/json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `ServiceNow API returned ${res.status}` };
-}
-
-async function testMonday(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const token = creds.token as string;
-  if (!token) return { ok: false, message: 'token is required' };
-  const res = await fetch('https://api.monday.com/v2', {
-    method: 'POST',
-    headers: { Authorization: token, 'Content-Type': 'application/json', 'API-Version': '2024-01' },
-    body: JSON.stringify({ query: '{ me { id } }' }),
-  });
-  if (!res.ok) return { ok: false, message: `monday API returned ${res.status}` };
-  const json = (await res.json()) as { errors?: unknown[] };
-  return json.errors?.length ? { ok: false, message: 'monday rejected the token' } : { ok: true, message: 'Connected' };
-}
-
-async function testAsana(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const token = creds.accessToken as string;
-  if (!token) return { ok: false, message: 'accessToken is required' };
-  const res = await fetch('https://app.asana.com/api/1.0/users/me', {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `Asana API returned ${res.status}` };
-}
-
-async function testClickUp(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
-  const token = creds.token as string;
-  if (!token) return { ok: false, message: 'token is required' };
-  const res = await fetch('https://api.clickup.com/api/v2/user', {
-    headers: { Authorization: token, Accept: 'application/json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `ClickUp API returned ${res.status}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,9 +79,15 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       return c.json({ error: 'provider, name, and credentials are required' }, 400);
     }
 
-    if (!CREDENTIAL_PROVIDERS.includes(body.provider as CredentialProvider)) {
-      return c.json({ error: `provider must be one of: ${CREDENTIAL_PROVIDERS.join(', ')}` }, 400);
+    if (!isConnectableProvider(body.provider)) {
+      return c.json({ error: `provider must be one of: ${CONNECTABLE_PROVIDERS.join(', ')}` }, 400);
     }
+
+    // Catalog providers declare their credential fields, so an unusable
+    // credential (a missing key, a malformed DSN) is rejected at the form rather
+    // than discovered later by a failing workflow run.
+    const shape = validateProviderCredentials(body.provider, body.credentials);
+    if (!shape.ok) return c.json({ error: shape.error }, 400);
 
     // Optional project scope — NULL means workspace-global. When set, the
     // project must belong to this tenant (prevents cross-tenant scoping).
@@ -302,7 +108,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .values({
         tenantId,
         projectId,
-        provider:       body.provider as CredentialProvider,
+        provider:       body.provider as never,
         name:           body.name.trim(),
         baseUrl:        body.baseUrl ?? null,
         credentialsEnc: enc,
@@ -355,6 +161,36 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .orderBy(desc(integrationCredentials.createdAt));
 
     return c.json({ integrations: rows });
+  });
+
+  // GET /api/integrations/catalog — what CAN be connected, and how.
+  // Registered before `/:id` so the literal path is not swallowed by the param
+  // route. Static data (no tenant state, no I/O), so it is served directly and
+  // cached by the client rather than through the read-through cache.
+  router.get('/catalog', (c) => {
+    c.header('Cache-Control', 'public, max-age=300');
+    return c.json({ providers: connectableCatalog() });
+  });
+
+  // GET /api/integrations/recommendations?projectId=<n>
+  // Live comparison of the connectable catalog with enabled tenant/project
+  // credentials. Registered before /:id so "recommendations" is never parsed as
+  // a credential UUID.
+  router.get('/recommendations', manager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rawProjectId = c.req.query('projectId');
+    const projectId = rawProjectId == null ? undefined : Number(rawProjectId);
+    if (projectId != null && (!Number.isInteger(projectId) || projectId <= 0)) {
+      return c.json({ error: 'projectId must be a positive integer' }, 400);
+    }
+    if (projectId != null) {
+      const [project] = await db.select({ id: projects.id }).from(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+      if (!project) return c.json({ error: 'projectId not found in this workspace' }, 404);
+    }
+
+    const recommendations = await getMissingIntegrationRecommendations(db, tenantId, projectId);
+    return c.json({ recommendations, total: recommendations.length });
   });
 
   // GET /api/integrations/:id  (returns masked secrets → MANAGER only)
@@ -464,53 +300,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret, tenantId);
     if (!creds) return c.json({ error: 'Failed to decrypt credentials' }, 500);
 
-    let result: { ok: boolean; message: string };
-    switch (row.provider) {
-      case 'github':
-        result = await testGitHub(creds);
-        break;
-      case 'gitlab':
-        result = await testGitLab(creds, row.baseUrl);
-        break;
-      case 'jira':
-        result = await testJira(creds, row.baseUrl);
-        break;
-      case 'bitbucket':
-        result = await testBitbucket(creds);
-        break;
-      case 'confluence':
-        result = await testConfluence(creds, row.baseUrl);
-        break;
-      case 'freshservice':
-        result = await testFreshservice(creds, row.baseUrl);
-        break;
-      case 'freshdesk':
-        result = await testFreshdesk(creds, row.baseUrl);
-        break;
-      case 'linear':
-        result = await testLinear(creds);
-        break;
-      case 'sentry':
-        result = await testSentry(creds, row.baseUrl);
-        break;
-      case 'pagerduty':
-        result = await testPagerDuty(creds);
-        break;
-      case 'servicenow':
-        result = await testServiceNow(creds, row.baseUrl);
-        break;
-      case 'monday':
-        result = await testMonday(creds);
-        break;
-      case 'asana':
-        result = await testAsana(creds);
-        break;
-      case 'clickup':
-        result = await testClickUp(creds);
-        break;
-      default:
-        result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };
-    }
+    const result = await testProviderCredential(row.provider, creds, row.baseUrl);
 
     // Persist test result
     await db

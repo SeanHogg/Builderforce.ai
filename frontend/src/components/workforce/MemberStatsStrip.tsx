@@ -16,7 +16,7 @@ import { fmtScore, scoreColor, ENGAGEMENT_LEVEL_COLOR } from './workforceFormat'
 
 const chipStyle: CSSProperties = {
   display: 'inline-flex', flexDirection: 'column', gap: 1, padding: '4px 8px',
-  borderRadius: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
+  borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   minWidth: 52,
 };
 const chipLabel: CSSProperties = { fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.3, fontWeight: 600 };

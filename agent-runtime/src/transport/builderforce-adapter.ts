@@ -55,14 +55,18 @@ type BuilderforceExecutionResponse = {
   updatedAt: string;
 };
 
-type BuilderforceAgentResponse = {
-  agent_type: string;
+type BuilderforceAgentRegistrationResponse = {
+  id: string;
   name: string;
-  description?: string | null;
-  available: boolean;
-  capabilities?: string[] | null;
+  framework: string;
+  protocol: string;
+  status: string;
+  healthStatus: string;
+  capabilities: string[];
   metadata?: Record<string, unknown> | null;
 };
+
+type BuilderforceAgentRegistrationsEnvelope = { agents: BuilderforceAgentRegistrationResponse[] };
 
 type BuilderforceSkillResponse = {
   skill_id: string;
@@ -129,6 +133,7 @@ export class BuilderforceTransportAdapter implements TransportAdapter {
     const body = {
       taskId,
       agentId: this.parseAgentId(request.agentId),
+      agentRegistrationId: this.parseAgentRegistrationId(request.agentId),
       agentNodeId: this.agentNodeId,
       sessionId: request.sessionId,
       payload: request.input,
@@ -235,16 +240,16 @@ export class BuilderforceTransportAdapter implements TransportAdapter {
     if (this.deviceId) {
       params.set("device_id", this.deviceId);
     }
-    const agents = await this.post<BuilderforceAgentResponse[]>(
-      `${this.baseUrl}/api/agents${params.size > 0 ? `?${params}` : ""}`,
+    const response = await this.post<BuilderforceAgentRegistrationsEnvelope>(
+      `${this.baseUrl}/api/agent-registrations${params.size > 0 ? `?${params}` : ""}`,
       null,
       "GET",
     );
-    return agents.map((a) => ({
-      id: a.agent_type,
+    return response.agents.filter((a) => a.status === "active").map((a) => ({
+      id: a.id,
       name: a.name,
-      description: a.description ?? a.agent_type,
-      capabilities: a.capabilities ?? [],
+      description: `${a.framework} via ${a.protocol}`,
+      capabilities: a.capabilities,
       model: undefined,
       thinking: undefined,
     }));
@@ -353,6 +358,13 @@ export class BuilderforceTransportAdapter implements TransportAdapter {
     }
     const numeric = Number(agentId);
     return Number.isFinite(numeric) ? numeric : undefined;
+  }
+
+  private parseAgentRegistrationId(agentId: string | undefined): string | undefined {
+    if (!agentId || /^\d+$/.test(agentId)) return undefined;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(agentId)
+      ? agentId
+      : undefined;
   }
 
   /** Map a Builderforce execution response to BuilderForceAgents's TaskState. */

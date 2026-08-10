@@ -61,14 +61,14 @@ export function WizardTicketingStep({ projectId }: { projectId: number }) {
                 disabled={connected || busy === p.id}
                 style={{
                   display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
-                  padding: '12px 14px', borderRadius: 10, textAlign: 'left',
+                  padding: '12px 14px', borderRadius: 'var(--radius-lg)', textAlign: 'left',
                   background: connected ? 'rgba(34,197,94,0.12)' : 'var(--bg-elevated)',
                   border: `1px solid ${connected ? 'rgba(34,197,94,0.4)' : 'var(--border-subtle)'}`,
                   color: 'var(--text-primary)', cursor: connected ? 'default' : 'pointer',
                 }}
               >
                 <span style={{ fontWeight: 600, fontSize: 14 }}>{p.label}</span>
-                <span style={{ fontSize: 11, color: connected ? '#22c55e' : 'var(--text-muted)' }}>
+                <span style={{ fontSize: 11, color: connected ? 'var(--success)' : 'var(--text-muted)' }}>
                   {connected ? t('connected') : busy === p.id ? t('connecting') : t('connect')}
                 </span>
               </button>
@@ -76,7 +76,7 @@ export function WizardTicketingStep({ projectId }: { projectId: number }) {
           })}
         </div>
       )}
-      {error && <p style={{ color: 'var(--error-text, #e74c3c)', fontSize: 13, marginTop: 10 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--error-text)', fontSize: 13, marginTop: 10 }}>{error}</p>}
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 14 }}>{t('finishLater')}</p>
     </div>
   );

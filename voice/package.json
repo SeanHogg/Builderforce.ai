@@ -45,7 +45,7 @@
   },
   "scripts": {
     "build": "tsup --config tsup.config.ts",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsgo --noEmit && tsc --noEmit",
     "test": "vitest run",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build",
@@ -68,5 +68,10 @@
     "typescript": "^6.0.3",
     "vitest": "^4.0.3",
     "@typescript/native-preview": "7.0.0-dev.20260627.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "0.35.3"
+    }
   }
 }

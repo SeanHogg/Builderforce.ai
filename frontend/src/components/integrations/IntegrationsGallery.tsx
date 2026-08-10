@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ClickableCard } from '@/components/ClickableCard';
+import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
+import { ConsumptionMeterCard } from '@/components/UsageMeter';
 import { IntegrationCredentialsManager, PROVIDER_META } from '@/components/integrations/IntegrationCredentialsManager';
 import { MigrationWizard } from '@/components/integrations/MigrationWizard';
 import {
@@ -15,6 +18,7 @@ import {
   type IntegrationProvider,
 } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
+import { useConsumption } from '@/lib/useConsumption';
 
 /**
  * Integrations gallery — the workspace-level home for every external system.
@@ -37,7 +41,7 @@ const cardGrid: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
   display: 'flex',
   flexDirection: 'column',
@@ -47,19 +51,22 @@ const cardStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 type PanelTab = 'credentials' | 'connections' | 'activity';
 
-export function IntegrationsGallery() {
+export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search?: string; viewMode?: 'card' | 'table' }) {
   const t = useTranslations('integrations');
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
+  const confirm = useConfirm();
+  const consumption = useConsumption();
+  const ingestionMeter = consumption?.meters.find((meter) => meter.key === 'ingestion');
 
   const [providersMeta, setProvidersMeta] = useState<BoardProviderMeta[]>([]);
   const [credentials, setCredentials] = useState<IntegrationCredential[]>([]);
@@ -101,18 +108,43 @@ export function IntegrationsGallery() {
 
   const grouped = useMemo(() => {
     const g = new Map<BoardProviderMeta['category'], BoardProviderMeta[]>();
-    for (const c of cards) {
+    const query = search.trim().toLowerCase();
+    for (const c of cards.filter((item) => !query || `${item.label} ${item.id} ${item.category}`.toLowerCase().includes(query))) {
       const list = g.get(c.category) ?? [];
       list.push(c);
       g.set(c.category, list);
     }
     return g;
-  }, [cards]);
+  }, [cards, search]);
 
   const activeMeta = cards.find((c) => c.id === activeProvider) ?? null;
   const activeCreds = activeProvider ? (credsByProvider.get(activeProvider) ?? []) : [];
 
   const openProvider = (id: string) => { setActiveProvider(id); setPanelTab('credentials'); };
+
+  /**
+   * Disconnect one provider from the workspace.
+   *
+   * The card states ONE fact — connected or not — so its Disconnect has to make that fact
+   * false, which means both halves of "connected": the stored credentials AND the board
+   * connections polling with them. Dropping only the credentials leaves connections that
+   * keep listing and keep failing with nothing left to authenticate against.
+   *
+   * Imported work is untouched; the confirm says so, because "disconnect Jira" is otherwise
+   * easy to read as "delete everything that came from Jira".
+   */
+  const disconnectProvider = async (p: BoardProviderMeta) => {
+    const creds = credsByProvider.get(p.id) ?? [];
+    const ok = await confirm({
+      message: t('gallery.confirmDisconnect', { label: p.label, count: creds.length }),
+      destructive: true,
+    });
+    if (!ok) return;
+    const connections = await boardConnectionsApi.list().catch(() => [] as BoardConnection[]);
+    await Promise.all(connections.filter((c) => c.provider === p.id).map((c) => boardConnectionsApi.remove(c.id)));
+    await Promise.all(creds.map((c) => integrationsApi.remove(c.id)));
+    loadCreds();
+  };
 
   if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('gallery.loading')}</div>;
 
@@ -123,26 +155,55 @@ export function IntegrationsGallery() {
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
             {t(`gallery.category.${cat}`)}
           </div>
-          <div style={cardGrid}>
+          <div style={viewMode === 'card' ? cardGrid : { display: 'flex', flexDirection: 'column', gap: 8 }}>
             {grouped.get(cat)!.map((p) => {
               const count = credsByProvider.get(p.id)?.length ?? 0;
               return (
-                <button key={p.id} type="button" style={cardStyle} onClick={() => openProvider(p.id)}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.label}</span>
-                    <span style={{ fontSize: 11, color: count > 0 ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>
-                      {count > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {p.supportsDiscovery && (
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '1px 6px' }}>
-                        {t('gallery.migratable')}
-                      </span>
+                <ClickableCard key={p.id} ariaLabel={p.label} style={{ ...cardStyle, ...(viewMode === 'table' ? { flexDirection: 'row', alignItems: 'center' } : {}) }} onClick={() => openProvider(p.id)}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.label}</span>
+                        <span style={{ fontSize: 11, color: count > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
+                          {count > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {p.supportsDiscovery && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>
+                            {t('gallery.migratable')}
+                          </span>
+                        )}
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{count > 0 ? t('gallery.keyCount', { count }) : t('gallery.tapToConnect')}</span>
+                      </div>
+                    </div>
+                    {ingestionMeter && (
+                      <ConsumptionMeterCard
+                        meter={{
+                          key: 'ingestion', unit: 'bytes',
+                          used: ingestionMeter.breakdown?.find((item) => item.key === p.id)?.used ?? 0,
+                          limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
+                        }}
+                        isFree={false}
+                        title={t('gallery.dataConsumed')}
+                        usageOnly
+                        periodLabel={t('gallery.thisMonth')}
+                      />
                     )}
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{count > 0 ? t('gallery.keyCount', { count }) : t('gallery.tapToConnect')}</span>
                   </div>
-                </button>
+                  {/* Acting on the card's own state, without hunting for the right tab inside
+                      it. Read-only members still see the state; only a manager can change it. */}
+                  {canManage && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <ConnectToggleButton
+                        connected={count > 0}
+                        name={p.label}
+                        onConnect={() => openProvider(p.id)}
+                        onDisconnect={() => disconnectProvider(p)}
+                      />
+                    </div>
+                  )}
+                </ClickableCard>
               );
             })}
           </div>
@@ -228,14 +289,14 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: Retur
           <span style={{ flex: 1, minWidth: 120, fontSize: 13, color: 'var(--text-primary)' }}>
             {c.externalBoardId || t('connections.allBoards')}
           </span>
-          <span style={{ fontSize: 11, color: c.status === 'active' ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>● {c.status}</span>
+          <span style={{ fontSize: 11, color: c.status === 'active' ? 'var(--success)' : 'var(--text-muted)' }}>● {c.status}</span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {c.lastPolledAt ? t('connections.lastPolled', { time: new Date(c.lastPolledAt).toLocaleString() }) : t('connections.neverPolled')}
           </span>
           <button type="button" style={btnSubtle} disabled={syncing === c.id} onClick={() => syncNow(c.id)}>
             {syncing === c.id ? t('connections.syncing') : t('connections.syncNow')}
           </button>
-          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(c.id)}>{t('connections.remove')}</button>
+          <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(c.id)}>{t('connections.remove')}</button>
         </div>
       ))}
     </div>
@@ -274,12 +335,12 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
           <div key={c.id}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>{c.name}</span>
-              {ok != null && <span style={{ fontSize: 11, color: ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>{ok ? t('activity.healthy') : t('activity.failing')}</span>}
+              {ok != null && <span style={{ fontSize: 11, color: ok ? 'var(--success)' : 'var(--danger)' }}>{ok ? t('activity.healthy') : t('activity.failing')}</span>}
               <button type="button" style={btnSubtle} disabled={testing === c.id} onClick={() => test(c.id)}>
                 {testing === c.id ? t('activity.testing') : t('activity.runDiagnostic')}
               </button>
             </div>
-            {r && !r.ok && <div style={{ fontSize: 11, color: 'var(--danger, #dc2626)', marginBottom: 6 }}>{r.message}</div>}
+            {r && !r.ok && <div style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>{r.message}</div>}
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{t('activity.history')}</div>
             {(logs[c.id] ?? []).length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('activity.noRuns')}</div>
@@ -287,10 +348,10 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {(logs[c.id] ?? []).map((l) => (
                   <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                    <span style={{ color: l.status === 'success' ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>● {l.status}</span>
+                    <span style={{ color: l.status === 'success' ? 'var(--success)' : 'var(--danger)' }}>● {l.status}</span>
                     <span>{new Date(l.startedAt).toLocaleString()}</span>
                     <span>{t('activity.processed', { count: l.itemsProcessed })}</span>
-                    {l.itemsErrored > 0 && <span style={{ color: 'var(--danger, #dc2626)' }}>{t('activity.errored', { count: l.itemsErrored })}</span>}
+                    {l.itemsErrored > 0 && <span style={{ color: 'var(--danger)' }}>{t('activity.errored', { count: l.itemsErrored })}</span>}
                   </div>
                 ))}
               </div>

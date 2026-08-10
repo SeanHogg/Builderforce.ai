@@ -1,0 +1,47 @@
+.page { display: grid; gap: 24px; }
+.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 24px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--bg-base)), var(--bg-base) 55%); }
+.eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.hero h1 { margin: 0; color: var(--text-primary); font-size: clamp(24px, 3vw, 36px); letter-spacing: -.035em; }
+.hero p { max-width: 680px; margin: 10px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.canvasLink { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; color: var(--accent); font-size: 13px; font-weight: 750; text-decoration: none; }
+.canvasLink:hover { text-decoration: underline; }
+.heroMetric { min-width: 150px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-subtle)); border-radius: var(--radius-lg); background: var(--bg-elevated); }
+.heroMetric strong { display: block; color: var(--text-primary); font-size: 26px; }
+.heroMetric span { color: var(--text-muted); font-size: 12px; }
+.tabs { display: flex; gap: 6px; padding-bottom: 1px; overflow-x: auto; border-bottom: 1px solid var(--border-subtle); }
+.tab { padding: 10px 13px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.tabActive { border-bottom-color: var(--accent); color: var(--text-primary); }
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.search { flex: 1 1 240px; max-width: 380px; padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-elevated); color: var(--text-primary); }
+.filter { padding: 8px 11px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-base); color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.filterActive { border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle)); background: color-mix(in srgb, var(--accent) 10%, var(--bg-base)); color: var(--text-primary); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; }
+.card { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: start; padding: 17px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); transition: border-color .15s, transform .15s; }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle)); transform: translateY(-1px); }
+.cardIcon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated)); color: var(--accent); }
+.card h3 { margin: 1px 0 5px; color: var(--text-primary); font-size: 14px; }
+.card p { min-height: 50px; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.meta { display: flex; align-items: center; gap: 7px; margin-top: 11px; color: var(--text-muted); font-size: 11px; }
+.badge { padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--bg-elevated); }
+.switch { position: relative; width: 42px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: var(--border-strong); cursor: pointer; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text-on-accent); box-shadow: var(--shadow-xs); transition: transform .16s; }
+.switchOn { background: var(--accent); }
+.switchOn::after { transform: translateX(18px); }
+.switch:disabled { cursor: wait; opacity: .6; }
+.panel { padding: 20px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); }
+.panel h2 { margin: 0 0 6px; color: var(--text-primary); font-size: 17px; }
+.panelIntro { margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; }
+.code { margin: 0; padding: 16px; overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-deep); color: var(--text-primary); font: 12px/1.55 var(--font-mono); white-space: pre-wrap; }
+.copy { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-interactive); color: var(--text-primary); font-size: 12px; font-weight: 650; cursor: pointer; }
+.consentList { display: grid; gap: 8px; }
+.consentRow { display: grid; grid-template-columns: minmax(140px, 1fr) 100px minmax(150px, auto) minmax(120px, auto); gap: 12px; align-items: center; padding: 11px 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 12px; }
+.consentRow strong { color: var(--text-primary); }
+.empty { padding: 32px; color: var(--text-muted); text-align: center; }
+.error { padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--error) 40%, var(--border-subtle)); border-radius: var(--radius-md); color: var(--error-text); font-size: 12px; }
+.notice { padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-subtle)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 7%, var(--bg-base)); color: var(--text-secondary); font-size: 12px; }
+.consentBody { padding: 20px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.consentActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.primary, .secondary { padding: 8px 13px; border-radius: var(--radius-md); font-size: 12px; font-weight: 650; cursor: pointer; }
+.primary { border: 0; background: var(--accent); color: var(--text-on-accent); }
+.secondary { border: 1px solid var(--border-subtle); background: transparent; color: var(--text-secondary); }
+@media (max-width: 720px) { .hero { flex-direction: column; } .heroMetric { width: 100%; } .consentRow { grid-template-columns: 1fr auto; } .consentRow > :nth-child(n+3) { display: none; } }
