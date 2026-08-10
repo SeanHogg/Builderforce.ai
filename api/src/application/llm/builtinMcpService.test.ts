@@ -101,6 +101,16 @@ describe('cloud-agent curated platform tool subset', () => {
     expect(resolveCloudAgentPlatformTool('not_a_tool')).toBeUndefined();
   });
 
+  it('exposes the Brain write-back tool only when the runtime has an originating chat', () => {
+    expect(cloudAgentPlatformToolSchemas().some((s) => s.function.name === 'builtin_chats_post_to_brain')).toBe(false);
+    expect(resolveCloudAgentPlatformTool('builtin_chats_post_to_brain')).toBeUndefined();
+
+    const schema = cloudAgentPlatformToolSchemas(42).find((s) => s.function.name === 'builtin_chats_post_to_brain');
+    expect(schema?.function.parameters.required).toEqual(['content']);
+    expect(schema?.function.parameters.properties).not.toHaveProperty('chatId');
+    expect(resolveCloudAgentPlatformTool('builtin_chats_post_to_brain', 42)).toBe('chats.post_to_brain');
+  });
+
   it('lets a manager agent remove a specific bad manifest slot without granting broad task deletion', () => {
     expect(CLOUD_AGENT_PLATFORM_TOOLS).toContain('kanban.remove_participant');
     const schema = cloudAgentPlatformToolSchemas().find((entry) =>

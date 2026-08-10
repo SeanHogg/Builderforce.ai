@@ -5,6 +5,7 @@ import {
   parseModel, parseCloudAgentRef, parseRepoId, parseRemediation,
   markReaperRequeued, wasReaperRequeued, withDefaultModel,
   parseExecutor, withExecutor,
+  parseOriginatingChatId,
 } from './cloudDispatch';
 
 describe('chooseCloudExecutor', () => {
@@ -56,6 +57,21 @@ describe('isTerminalExecutionStatus', () => {
     expect(isTerminalExecutionStatus('running')).toBe(false);
     expect(isTerminalExecutionStatus(null)).toBe(false);
     expect(isTerminalExecutionStatus(undefined)).toBe(false);
+  });
+});
+
+describe('parseOriginatingChatId', () => {
+  it('accepts only a positive safe integer from the execution payload', () => {
+    expect(parseOriginatingChatId(JSON.stringify({ chatId: 42 }))).toBe(42);
+    for (const value of [0, -1, 2.5, '42', null]) {
+      expect(parseOriginatingChatId(JSON.stringify({ chatId: value }))).toBeUndefined();
+    }
+  });
+
+  it('is absent for headless and malformed runs', () => {
+    expect(parseOriginatingChatId(JSON.stringify({ cloudAgentRef: 'ada' }))).toBeUndefined();
+    expect(parseOriginatingChatId('not-json')).toBeUndefined();
+    expect(parseOriginatingChatId(undefined)).toBeUndefined();
   });
 });
 

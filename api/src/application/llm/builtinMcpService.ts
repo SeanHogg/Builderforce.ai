@@ -1922,6 +1922,23 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
   { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
+  {
+    tool: 'chats.post_to_brain', mutates: true,
+    description: 'Post a concise progress update, blocker, or final result back into the Brain chat that launched this cloud run. The originating chat is supplied by the runtime and cannot be changed by the agent.',
+    // chatId is deliberately absent from the advertised schema: the runtime injects
+    // the verified origin after the model call, so the agent cannot redirect a post.
+    parameters: obj({ content: S }, ['content']),
+    run: async (ctx, a) => {
+      if (!ctx.agentRef) throw new Error('Only an attributed cloud agent may post an execution update.');
+      const svc = new BrainService(ctx.db);
+      const result = await svc.postExecutionUpdate(num(a.chatId), ctx.tenantId, {
+        agentRef: ctx.agentRef,
+        content: str(a.content),
+      });
+      if ('error' in result) throw new Error(result.error);
+      return result;
+    },
+  },
   { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
   {
     tool: 'chats.dispatch_agent', mutates: true,
@@ -1936,7 +1953,7 @@ const CATALOG: BuiltinTool[] = [
       // Assign the agent to the ticket, then start a run — reuses the real routes'
       // authz + the single cloud-run dispatcher (no duplicated dispatch logic).
       await replayRoute(ctx, 'PATCH', `/api/tasks/${num(a.taskId)}`, { assignedAgentRef: str(a.agentRef) });
-      return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, {});
+      return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, { chatId: num(a.chatId) });
     },
   },
 
@@ -3753,12 +3770,13 @@ export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
 ];
 
 const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
+const ORIGINATING_CHAT_TOOL = 'chats.post_to_brain';
 
 let _cloudAgentPlatformSchemas: ToolSchema[] | undefined;
 /** OpenAI-shape tool schemas for the curated cloud-agent platform subset, named with
  *  the gateway-safe `builtin_*` prefix (dots are invalid in tool-call names). Concats
  *  directly onto CLOUD_AGENT_TOOLS in the cloud loop. Memoized (static metadata). */
-export function cloudAgentPlatformToolSchemas(): ToolSchema[] {
+export function cloudAgentPlatformToolSchemas(originatingChatId?: number): ToolSchema[] {
   if (!_cloudAgentPlatformSchemas) {
     _cloudAgentPlatformSchemas = CATALOG
       .filter((t) => CLOUD_AGENT_PLATFORM_SET.has(t.tool))
@@ -3767,14 +3785,21 @@ export function cloudAgentPlatformToolSchemas(): ToolSchema[] {
         function: { name: advertisedName(t.tool), description: t.description, parameters: t.parameters as ToolSchema['function']['parameters'] },
       }));
   }
-  return _cloudAgentPlatformSchemas;
+  if (originatingChatId == null) return _cloudAgentPlatformSchemas;
+  const entry = CATALOG.find((tool) => tool.tool === ORIGINATING_CHAT_TOOL);
+  if (!entry) return _cloudAgentPlatformSchemas;
+  return [..._cloudAgentPlatformSchemas, {
+    type: 'function',
+    function: { name: advertisedName(entry.tool), description: entry.description, parameters: entry.parameters as ToolSchema['function']['parameters'] },
+  }];
 }
 
 let _cloudAgentPlatformNameMap: Map<string, string> | undefined;
 /** Reverse an advertised `builtin_*` name to its dotted CATALOG id — but ONLY for the
  *  curated subset (undefined otherwise), so the cloud agent can never reach an off-list
  *  platform tool even if the model hallucinates one. Memoized. */
-export function resolveCloudAgentPlatformTool(advertised: string): string | undefined {
+export function resolveCloudAgentPlatformTool(advertised: string, originatingChatId?: number): string | undefined {
+  if (originatingChatId != null && advertised === advertisedName(ORIGINATING_CHAT_TOOL)) return ORIGINATING_CHAT_TOOL;
   if (!_cloudAgentPlatformNameMap) {
     _cloudAgentPlatformNameMap = new Map(CLOUD_AGENT_PLATFORM_TOOLS.map((t) => [advertisedName(t), t]));
   }
