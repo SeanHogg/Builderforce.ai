@@ -1,3 +1,46 @@
+## RESOLVED 2026-08-10 - the phone canvas: the bar stops covering the team, and the prompt stops covering the rail
+
+Reported from a phone: the fixed bottom nav sat on top of the canvas's bottom panel, and the
+execution chip ("Thought for 2s") sat on top of the board's command rail.
+
+**1 - `--composer-space` is MEASURED, not guessed.** Every bottom-anchored thing on the board - the
+phone command rail, the outline, the Files panel, the Brain sheet and its launcher, the palette, the
+inspector, the merge and change-set panels - sits at `bottom: calc(var(--composer-space) + 8px)`.
+That variable was the literal `112px`, and the prompt dock is not a fixed height: it grows by the
+utilities row the moment a run starts, by a wrapped scope chip, and by a multi-line prompt. On a
+phone the rail is pinned to the same corner, so a guess ~40px short put the execution chip on top of
+its last two commands. `useComposerSpace` publishes the distance from the board's bottom edge to the
+dock's top edge - which needs no knowledge of the dock's own offset, different per breakpoint, and
+so cannot be the same guess in a second place. `--mobile-composer-space`, the phone's private second
+copy of the number, is deleted; its twelve references read the measured variable now.
+
+**2 - The rail can no longer run off the board.** `max-height` + scroll, capped against the same
+measured band. A rail with every command on it is ~9 buttons tall and had nothing stopping it.
+
+**3 - One token for the mobile bar's height, and the FRAME reserves it.** The height was written out
+four times (`56px` here, `64px` there, `56px` again in the marketing shell) and the copies had
+already drifted. `--mobile-nav-height` is the one declaration, zero above the breakpoint so callers
+subtract it unconditionally; the bar itself reads it, so the bar and the clearance cannot disagree.
+`.app-frame` and `.marketing-frame` reserve it ONCE, which is what finally covered `TeamBar` - the
+always-on roster footer (section 3.3) reserved nothing at all, so on every phone-width board the bar
+sat on top of the team. The two per-page clearances that used to compensate are deleted rather than
+kept alongside it; keeping both was pushing every mobile page up by an extra bar's height.
+
+**Found and fixed in passing** (both pre-existing on HEAD, neither caused by this change):
+
+- **`check:design-scale` was red** - the folders feature added two literal font sizes
+  (`DashboardCreationSessions.tsx`, `PendingDraftsNotice.tsx`). Both are folder headings; they take
+  the `ui-text-card-title` / `ui-text-small` roles.
+- **`DashboardCreationSessions.tsx` shipped ~20 hardcoded English strings** and inlined its own
+  card/list button pair. Fully localized in five catalogs, and the toggle is the canonical
+  `components/ViewToggle` - whose own five labels were themselves hardcoded English *inside the
+  shared control*, so all **31** surfaces that render it said "Card / List" in every locale. They
+  live in `common.viewMode.*` now; one fix, thirty-one surfaces.
+
+**Verification:** `tsgo --noEmit` clean; eslint clean on every touched file; six frontend guards
+green (client-file baseline 766 -> 767 for `useComposerSpace.ts`); new
+`useComposerSpace.test.tsx` pins the measurement with a ResizeObserver stub that actually fires.
+
 ## ✅ RESOLVED 2026-08-09 — the panel is 70% of the screen, the header follows the visitor, and the integration list belongs to the product
 
 Follow-up pass on §11.4.5, all five items reported from the running app.

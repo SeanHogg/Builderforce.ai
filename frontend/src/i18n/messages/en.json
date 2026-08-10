@@ -1243,6 +1243,13 @@
       "sheet": "Narrow — 25%",
       "wide": "Wide — 50%",
       "full": "Full — 94%"
+    },
+    "viewMode": {
+      "board": "Board",
+      "card": "Card",
+      "table": "List",
+      "calendar": "Calendar",
+      "gantt": "Gantt"
     }
   },
   "prdCreate": {
@@ -15088,9 +15095,7 @@
     "unreadBadge": "New",
     "projectBadge": "Project {id}",
     "sessionObjectsPeople": "{objects} objects · {people} people",
-    "sessionRunning": "{count} running",
-    "viewCard": "Card",
-    "viewList": "List"
+    "sessionRunning": "{count} running"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

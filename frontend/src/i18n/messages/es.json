@@ -1243,6 +1243,13 @@
       "sheet": "Estrecho — 25%",
       "wide": "Ancho — 50%",
       "full": "Completo — 94%"
+    },
+    "viewMode": {
+      "board": "Tablero",
+      "card": "Tarjetas",
+      "table": "Lista",
+      "calendar": "Calendario",
+      "gantt": "Gantt"
     }
   },
   "prdCreate": {
@@ -15087,9 +15094,7 @@
     "unreadBadge": "Nuevo",
     "projectBadge": "Proyecto {id}",
     "sessionObjectsPeople": "{objects} objetos · {people} personas",
-    "sessionRunning": "{count} en ejecución",
-    "viewCard": "Tarjetas",
-    "viewList": "Lista"
+    "sessionRunning": "{count} en ejecución"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

@@ -1243,6 +1243,13 @@
       "sheet": "窄 — 25%",
       "wide": "宽 — 50%",
       "full": "全宽 — 94%"
+    },
+    "viewMode": {
+      "board": "看板",
+      "card": "卡片",
+      "table": "列表",
+      "calendar": "日历",
+      "gantt": "甘特图"
     }
   },
   "prdCreate": {
@@ -15087,9 +15094,7 @@
     "unreadBadge": "新",
     "projectBadge": "项目 {id}",
     "sessionObjectsPeople": "{objects} 个对象 · {people} 位成员",
-    "sessionRunning": "{count} 个运行中",
-    "viewCard": "卡片",
-    "viewList": "列表"
+    "sessionRunning": "{count} 个运行中"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

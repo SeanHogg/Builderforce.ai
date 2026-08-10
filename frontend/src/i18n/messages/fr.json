@@ -1243,6 +1243,13 @@
       "sheet": "Étroit — 25%",
       "wide": "Large — 50%",
       "full": "Pleine largeur — 94%"
+    },
+    "viewMode": {
+      "board": "Tableau",
+      "card": "Cartes",
+      "table": "Liste",
+      "calendar": "Calendrier",
+      "gantt": "Gantt"
     }
   },
   "prdCreate": {
@@ -15087,9 +15094,7 @@
     "unreadBadge": "Nouveau",
     "projectBadge": "Projet {id}",
     "sessionObjectsPeople": "{objects} objets · {people} personnes",
-    "sessionRunning": "{count} en cours",
-    "viewCard": "Cartes",
-    "viewList": "Liste"
+    "sessionRunning": "{count} en cours"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

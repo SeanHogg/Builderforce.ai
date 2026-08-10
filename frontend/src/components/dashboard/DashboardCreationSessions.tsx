@@ -262,7 +262,7 @@ export function DashboardCreationSessions() {
         {/* The canonical control (`components/ViewToggle`), not a fourth inline
             copy of the same button pair — it owns the glyphs, the order and the
             pressed state, so this library reads exactly like Projects and Tasks. */}
-        <ViewToggle<CreationLibraryView> value={libraryView} onChange={selectLibraryView} cardLabel={t('viewCard')} tableLabel={t('viewList')} />
+        <ViewToggle<CreationLibraryView> value={libraryView} onChange={selectLibraryView} />
         <select aria-label={t('creationStatusLabel')} value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select>
         <input aria-label={t('searchCreationsLabel')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '9px 11px', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }} />
         <button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? t('sessionLimitHint') : undefined} className="btn btn-primary">{creating ? t('creatingSession') : sessionLimitReached ? t('sessionLimitShort') : `+ ${t('newSession')}`}</button>
