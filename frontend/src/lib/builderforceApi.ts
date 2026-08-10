@@ -4919,16 +4919,16 @@ export const embedApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Host BI bridge (/api/bi/*) — burn-rate pull + self-serve host-BI config +
-// validation-engagements overlay (spec 05 §4.1/§4.2).
+// Consolidated tenant-local BI reads (/api/bi/*).
 // ---------------------------------------------------------------------------
 
 export interface BurnRateResult {
   available: boolean;
   monthlyBurn?: number;
   runwayMonths?: number;
-  source?: 'host';
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+  source?: 'builderforce';
+  asOf?: string;
+  reason?: 'no_data';
 }
 
 export interface ValidationEngagement {
@@ -4941,23 +4941,15 @@ export interface ValidationEngagement {
 
 export interface ValidationEngagementsResult {
   available: boolean;
-  engagements?: ValidationEngagement[];
-  source?: 'host';
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+  engagements: ValidationEngagement[];
+  source: 'builderforce';
 }
 
 export const biApi = {
-  /** Pull the segment's burn/runway from the host BI endpoint. */
+  /** Read the segment's locally-computed burn/runway metrics. */
   getBurnRate: () => request<BurnRateResult>('/api/bi/burn-rate'),
-  /** List the host's validation engagements (feedback widgets/cohorts) for this segment. */
+  /** List local validation results, dashboards and feedback collectors. */
   getValidationEngagements: () => request<ValidationEngagementsResult>('/api/bi/validation-engagements'),
-  /** Read the stored host-BI config (token never returned — only `hasToken`). */
-  getConfig: () => request<{ baseUrl: string | null; hasToken: boolean }>('/api/bi/config'),
-  /** Set/rotate the host BI base URL + token (manager+). Omit token to keep the existing one. */
-  setConfig: (body: { baseUrl: string; token?: string }) =>
-    request<{ baseUrl: string; hasToken: boolean }>('/api/bi/config', { method: 'PUT', body: JSON.stringify(body) }),
-  /** Clear the host BI config (disconnect, manager+). */
-  clearConfig: () => request<{ ok: boolean }>('/api/bi/config', { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

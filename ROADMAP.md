@@ -126,7 +126,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 0 | [PRD 20 · Consolidated data model](#prd-20--consolidated-data-model--what-the-2026-08-08-pass-did-not-close) | 11 |
 | 1 | [Cloud Agent Runtime & PR Loop](#1--cloud-agent-runtime--pr-loop) | 23 |
 | 2 | [On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | 6 |
-| 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | 33 |
+| 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | 32 |
 | 4 | [Evermind / SSM](#4--evermind--ssm) | 14 (all blocked) |
 | 5 | [Brain & Chat](#5--brain--chat) | 18 |
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
@@ -147,7 +147,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 0 | 11 |
 | 1 | 23 |
 | 2 | 6 |
-| 3 | 33 |
+| 3 | 32 |
 | 4 | 14 |
 | 5 | 18 |
 | 6 | 31 |
@@ -383,9 +383,9 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 - **A tenant with NO connected runtime still cannot use Kimi Code from hosted cloud agents. ⚠️ BLOCKER: an approval decision from Kimi.** Kimi's edge refuses the Cloudflare Workers egress with an HTML 403 before the API reads the key (reproduced 2026-08-02: the byte-identical request returns a clean JSON `401 invalid_authentication` from an ordinary IP). Local egress solves this for anyone running a runtime; a tenant who wants purely hosted agents has no route, because the only remaining options are a static-egress relay — still a hosted reverse proxy serving a subscription key, with real ToS risk — or Kimi granting an approved delegated-auth path. Spoofing a first-party client identity stays ruled out (`openaiCompatibleVendors.ts:98`). Unblocks: Kimi Code on hosted cloud agents with no machine online.
 ### 💳 Stripe card processing — Stripe-only, awaiting secrets
 
-- **Stripe test-mode products/prices not created.** Needs the 4 recurring price IDs the provider reads (`STRIPE_PRICE_PRO_MONTHLY` $29/mo, `STRIPE_PRICE_PRO_YEARLY` $290/yr, `STRIPE_PRICE_TEAMS_MONTHLY` $20/seat/mo, `STRIPE_PRICE_TEAMS_YEARLY` $192/seat/yr). Blocked on the `stripe@claude-plugins-official` MCP, which needs a Claude Code restart to load. Unblocks: a real checkout session.
+- ~~**Stripe test-mode products/prices not created.**~~ **Resolved 2026-08-10.** Reusable Stripe Price IDs remain optional; when absent, hosted checkout builds recurring `price_data` from the server-validated published pricing contract. A real checkout no longer depends on pre-created products/prices.
 - **Webhook endpoint not registered in Stripe.** Needs `https://api.builderforce.ai/api/webhooks/payment` subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `setup_intent.setup_failed` → yields `STRIPE_WEBHOOK_SECRET`. Unblocks: activation-on-payment.
-- **Worker secrets not set.** The 6 `STRIPE_*` values need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. **Until then no tenant can upgrade at all** — the previous free-activation path is intentionally gone. Unblocks: the end-to-end test-card run.
+- **Worker secrets not set.** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. The four Price IDs are optional. **Until the two required secrets exist no tenant can upgrade** — the previous free-activation path is intentionally gone. Unblocks: the end-to-end test-card run.
 - **No end-to-end card verification yet.** The webhook parsing/mapping is unit-tested, but no test card has been driven through `POST /api/tenants/:id/subscription/checkout` → webhook → tenant activation. Unblocks: confidence before live mode.
 
 ### 💳 Actionable entitlement errors — live verification

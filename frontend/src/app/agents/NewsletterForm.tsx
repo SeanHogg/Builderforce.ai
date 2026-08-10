@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-
-const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+import { subscribeToNewsletter } from '@/lib/newsletterApi';
 
 type Status = 'idle' | 'sending' | 'ok' | 'error';
 
@@ -17,12 +16,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
     if (!email.trim()) return;
     setStatus('sending');
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/auth/newsletter/subscribers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), action: 'subscribe', source }),
-      });
-      if (!res.ok) throw new Error('failed');
+      await subscribeToNewsletter(email, source);
       setStatus('ok');
     } catch {
       setStatus('error');

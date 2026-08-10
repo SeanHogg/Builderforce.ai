@@ -6896,6 +6896,21 @@
     "error": "暂时无法订阅，请重试。",
     "success": "感谢 — 您已成功加入列表。"
   },
+  "exitIntent": {
+    "badge": "保持联系",
+    "title": "离开之前…",
+    "description": "获取使用 AI 智能体进行构建的实用思路，以及 Builderforce.ai 新功能动态。",
+    "emailAria": "电子邮箱地址",
+    "emailPlaceholder": "your@email.com",
+    "submit": "订阅最新动态",
+    "submitting": "订阅中…",
+    "privacy": "无垃圾邮件，可随时退订。",
+    "successTitle": "您已加入名单！",
+    "successDescription": "我们会通过邮件发送实用的产品动态。",
+    "error": "暂时无法订阅，请重试。",
+    "close": "关闭",
+    "closeAria": "关闭离站提示"
+  },
   "blog": {
     "seo": {
       "title": "博客 — AI 智能体指南、教程与工具对比",
@@ -14708,7 +14723,12 @@
     "creativeGenerating": "生成中…",
     "creativeGenerated": "{file} 已生成并通过校验",
     "creativeGeneratedOffline": "{file} 由离线基础生成器生成 —— 生成服务当前不可用",
-    "creativeGeneratedStatus": "已生成",
+      "creativeGeneratedStatus": "已生成",
+      "imageFoundStatus": "已找到",
+      "imageFoundValidation": "已从 {provider} 选择",
+      "imageGeneratedValidation": "图像生成已返回可渲染图像",
+      "imageFoundProposal": "添加找到的图像“{title}”",
+      "imageGeneratedProposal": "添加生成的图像“{title}”",
     "creativeApplied": "已应用",
     "creativeNoMediaModel": "请先发布一个 Evermind 媒体模型来渲染此对象",
     "creativeNoFrames": "模型未返回可读取的帧",

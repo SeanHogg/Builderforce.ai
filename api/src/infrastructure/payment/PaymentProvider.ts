@@ -41,6 +41,10 @@ export interface CheckoutSessionOpts {
   billingEmail: string;
   /** Number of seats — only meaningful for Teams plan */
   seats?: number;
+  /** Server-resolved published price used when no pre-created provider Price ID exists. */
+  currency?: string;
+  unitAmountCents?: number;
+  productName?: string;
   /** Absolute URL provider redirects to on success */
   successUrl: string;
   /** Absolute URL provider redirects to on cancel */

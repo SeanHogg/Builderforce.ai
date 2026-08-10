@@ -111,6 +111,7 @@ import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesig
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
+import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
@@ -2680,6 +2681,37 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   const canvasActions = useMemo<BrainAction[]>(() => [{
+    name: 'canvas_read_domain',
+    description: 'Read real, tenant-scoped Builderforce domain data for an executive Canvas request. Use this before authoring a C-suite dashboard, report, chart, table, KPI, forecast, register, company view, or risk rollup. Returns the domain summary, registered entity catalog with row counts, recent objects, metric series, and—when entity is supplied—the selected entity rows. Never invent a value when this result has no supporting row or metric.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        domain: { type: 'string', enum: [...DOMAINS], description: 'Builderforce owner domain. Marketing maps to growth; agile maps to delivery; CRM maps to revenue; operations maps to people; product/company maps to investor or delivery according to the requested record.' },
+        entity: { type: 'string', description: 'Optional entity name returned by the domain catalog, for example expenses, validation_dashboards, or people_employees.' },
+        days: { type: 'number', minimum: 1, maximum: 365, description: 'Metric lookback window. Defaults to 30.' },
+        limit: { type: 'number', minimum: 1, maximum: 200, description: 'Maximum recent objects or entity rows. Defaults to 50.' },
+      },
+      required: ['domain'],
+    },
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') return { error: 'Executive domain data requires a saved, authenticated Creation Canvas session.' };
+      const args = raw as { domain?: unknown; entity?: unknown; days?: unknown; limit?: unknown };
+      const domain = typeof args.domain === 'string' && isDomain(args.domain) ? args.domain : null;
+      if (!domain) return { error: `Choose a supported domain: ${DOMAINS.join(', ')}` };
+      const days = Math.max(1, Math.min(365, Math.floor(Number(args.days) || 30)));
+      const limit = Math.max(1, Math.min(200, Math.floor(Number(args.limit) || 50)));
+      const [summary, entities, items, metrics] = await Promise.all([
+        getDomainSummary(domain), getScopeEntities(domain), getDomainItems(domain, { limit }), getDomainMetrics(domain, days),
+      ]);
+      const entity = typeof args.entity === 'string' ? args.entity.trim() : '';
+      if (!entity) return { domain, summary, entities, items, metrics };
+      const descriptor = entities.find((candidate) => candidate.name === entity);
+      if (!descriptor) return { error: `Entity '${entity}' is not owned by ${domain}.`, domain, summary, entities, items, metrics };
+      if (!descriptor.readable) return { error: `Entity '${entity}' is intentionally not available through the generic tenant reader.`, domain, summary, entity: descriptor, items, metrics };
+      const page = await getEntityRows(domain, entity, { limit });
+      return { domain, summary, entity: descriptor, rows: page.rows, total: page.total, items, metrics };
+    },
+  }, {
     name: 'canvas_read_snapshot',
     // This tool PROMISED "every object" and delivered the scoped subset, which is
     // how the one escape hatch from a partial view became a second confirmation
@@ -3283,14 +3315,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           id: crypto.randomUUID(), action: asset.source === 'stock' ? 'find' : 'generate', artifactKind: 'image',
           status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
           url: asset.url, mimeType, fileName: `${safeDownloadName(imageTitle)}.${extension}`, provider: asset.provider,
-          validation: { status: 'passed', detail: asset.source === 'stock' ? `Selected from ${asset.licence ?? asset.provider}` : 'Image generation returned renderable pixels' },
+          validation: { status: 'passed', detail: asset.source === 'stock' ? t('imageFoundValidation', { provider: asset.licence ?? asset.provider }) : t('imageGeneratedValidation') },
           metadata: { source: asset.source, ...(asset.model ? { model: asset.model } : {}) },
         };
         node.data = {
           ...node.data,
           title: imageTitle,
           subtitle: asset.source === 'stock' ? `${asset.licence ?? asset.provider}${asset.author ? ` · ${asset.author}` : ''}` : query,
-          status: asset.source === 'stock' ? 'Found · Ready' : 'Generated · Ready',
+          status: asset.source === 'stock' ? t('imageFoundStatus') : t('creativeGeneratedStatus'),
           prompt: query,
           outputUrl: asset.url,
           thumbnailUrl: asset.thumbnailUrl,
@@ -3308,7 +3340,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           deliverables: withCreationDeliverable(node.data, delivered),
         };
         node.style = { width: 520, height: 430 };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `${asset.source === 'stock' ? 'Add found' : 'Add generated'} image “${node.data.title}”`, node });
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t(asset.source === 'stock' ? 'imageFoundProposal' : 'imageGeneratedProposal', { title: node.data.title }), node });
         return { ok: true, proposed: true, object: { id: node.id, kind: 'image', title: node.data.title }, source: asset.source, provider: asset.provider, imageUrl: asset.url };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'The image could not be resolved' };
@@ -3719,6 +3751,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // timings and the user's actions in one ordered record.
             journal.current.record({
               kind: 'tool', label: event.label, at: event.ts,
+              durationMs: event.durationMs ?? 0,
               ...(event.isError === true ? { ok: false } : {}),
               ...(event.category ? { detail: event.category } : {}),
             });

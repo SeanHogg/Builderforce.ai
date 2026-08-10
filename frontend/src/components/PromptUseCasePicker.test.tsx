@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PromptUseCasePicker } from './PromptUseCasePicker';
+import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker } from './PromptUseCasePicker';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => Object.assign(
@@ -13,6 +13,20 @@ vi.mock('next-intl', () => ({
 }));
 
 describe('PromptUseCasePicker', () => {
+  it('maps every legacy C-suite contract into the Creation Canvas menu exactly once', () => {
+    const ids = C_SUITE_CANVAS_USE_CASES.map((item) => item.id);
+
+    expect(ids).toHaveLength(48);
+    expect(new Set(ids).size).toBe(48);
+    expect(ids).toContain('agile.sprint.current');
+    expect(ids).toContain('finance.runway.snapshot');
+    expect(ids).toContain('governance.snapshot');
+    expect(ids).toContain('investor.market.delete_peer');
+    expect(ids).toContain('research.web_search');
+    expect(ids).toContain('scratchpad.create_deck');
+    expect(C_SUITE_CANVAS_USE_CASES.every((item) => item.categoryLabel && item.prompt.length > 80)).toBe(true);
+  });
+
   it('renders the tab above a constrained prompt and returns the selected prescription', () => {
     const onSelect = vi.fn();
     const { container } = render(<PromptUseCasePicker placement="top" onSelect={onSelect} />);
@@ -47,5 +61,18 @@ describe('PromptUseCasePicker', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'animation' } });
     expect(screen.getByRole('button', { name: 'Animation' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Wireframe' })).not.toBeInTheDocument();
+  });
+
+  it('finds a migrated feature by its legacy dotted contract and returns its Canvas prescription', () => {
+    const onSelect = vi.fn();
+    render(<PromptUseCasePicker placement="bottom" onSelect={onSelect} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a starting point' }));
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'finance.runway.snapshot' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Runway snapshot' }));
+
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.stringContaining('runway KPI'),
+      expect.objectContaining({ id: 'finance.runway.snapshot', categoryLabel: 'Finance' }),
+    );
   });
 });

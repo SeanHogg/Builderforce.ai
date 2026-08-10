@@ -13,6 +13,15 @@ describe('createCanvasJournal', () => {
     journal.record({ kind: 'user', label: 'object.add', detail: 'workflow' });
     expect(journal.entries().map((entry) => entry.label)).toEqual(['file.import', 'object.add']);
     expect(journal.entries().map((entry) => entry.seq)).toEqual([1, 2]);
+    expect(journal.entries().map((entry) => entry.durationMs)).toEqual([0, 0]);
+  });
+
+  it('marks an already-completed tool trace as instantaneous rather than pending', () => {
+    const journal = createCanvasJournal(clock().now);
+    journal.record({ kind: 'tool', label: 'builtin_web_fetch', ok: true });
+
+    expect(summarizeTimings(journal.entries())[0]).toMatchObject({ pending: 0, p50Ms: 0, maxMs: 0 });
+    expect(journalGaps(journal.entries(), { objectCount: 1, scope: 'canvas', scopedObjectCount: 1 })).toEqual([]);
   });
 
   it('stamps a duration when a timed action finishes', () => {

@@ -88,7 +88,13 @@ export function createCanvasJournal(now: () => number = () => Date.now()): Canva
 
   const record: CanvasJournal['record'] = (entry) => {
     seq += 1;
-    push({ ...entry, seq, at: entry.at ?? new Date(now()).toISOString() });
+    // `record` is for an event that has already happened. Leaving its duration
+    // undefined makes diagnostics indistinguishable from an action opened with
+    // `begin` that genuinely never settled. In particular, completed Brain tool
+    // trace events arrive here only after their result exists, yet reports called
+    // every one of them "never completed". Timed work must use `begin`; an
+    // instantaneous completed event is explicitly zero milliseconds.
+    push({ durationMs: 0, ...entry, seq, at: entry.at ?? new Date(now()).toISOString() });
   };
 
   const begin: CanvasJournal['begin'] = (kind, label, detail) => {

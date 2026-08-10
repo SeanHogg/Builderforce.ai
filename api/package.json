@@ -29,7 +29,8 @@
     "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
     "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
     "check:prompt-tools": "node scripts/check-prompt-tool-names.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:signature-duplication && npm run check:shape-lint && npm run check:tenant-column && npm run check:polymorphic-fk && npm run check:domain-boundary && npm run check:model-coverage && npm run check:table-adoption && npm run check:layering && npm run check:roadmap && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
+    "check:no-burnrate-runtime": "node scripts/check-no-burnrate-runtime.mjs",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:signature-duplication && npm run check:shape-lint && npm run check:tenant-column && npm run check:polymorphic-fk && npm run check:domain-boundary && npm run check:model-coverage && npm run check:table-adoption && npm run check:layering && npm run check:roadmap && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && npm run check:no-burnrate-runtime && vitest run",
     "typecheck:native": "tsgo --noEmit",
     "check:table-adoption": "node scripts/check-table-adoption.mjs"
   },

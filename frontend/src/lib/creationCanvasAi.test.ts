@@ -103,6 +103,57 @@ describe('runCreationCanvasAi', () => {
     expect(mocks.streamChatCompletion.mock.calls[1][0].messages.some((message: { content: string }) => message.content.includes('prior response described or discussed'))).toBe(true);
   });
 
+  it('finishes the exact website-redesign request instead of exhausting the turn on encyclopedic search', async () => {
+    const prompt = 'i have an existing website (https://burnrateos.com/) I want to improve it with a new website design. Research other websites that provide business tools and design a better UI/UX. Show me a comparisoin between the two designs. Provide step by step guidance to the new website.';
+    const fetch = vi.fn(() => ({ ok: true, url: 'https://burnrateos.com/', title: 'BurnRateOS', text: 'AI C-Suite for founders' }));
+    const search = vi.fn()
+      .mockReturnValueOnce({ ok: true, results: [], coverage: 'encyclopedic', attribution: 'Wikipedia' })
+      .mockReturnValueOnce({ ok: true, results: [{ title: 'Unrelated article', url: 'https://en.wikipedia.org/wiki/Example' }], coverage: 'encyclopedic', attribution: 'Wikipedia' });
+    const addObject = vi.fn()
+      .mockReturnValueOnce({ ok: true, proposed: true, object: { id: 'site-1', kind: 'website' } })
+      .mockReturnValueOnce({ ok: true, proposed: true, object: { id: 'guide-1', kind: 'document' } });
+    const searchCall = (id: number) => ({
+      text: '', toolCalls: [{ id: `search-${id}`, name: 'builtin_web_search', args: JSON.stringify({ query: `SaaS design attempt ${id}` }) }],
+    });
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'fetch-current', name: 'builtin_web_fetch', args: JSON.stringify({ url: 'https://burnrateos.com/' }) }] })
+      .mockResolvedValueOnce(searchCall(1))
+      .mockResolvedValueOnce(searchCall(2))
+      .mockResolvedValueOnce(searchCall(3))
+      .mockResolvedValueOnce(searchCall(4))
+      .mockResolvedValueOnce(searchCall(5))
+      .mockResolvedValueOnce({ text: 'Here is a general summary of SaaS design principles.', toolCalls: [] })
+      .mockResolvedValueOnce({
+        text: '',
+        toolCalls: [
+          { id: 'add-site', name: 'canvas_add_object', args: JSON.stringify({ kind: 'website', title: 'BurnRateOS redesign', fields: { pages: [{ id: 'home', name: 'Home', path: '/', sections: [{ id: 'hero', kind: 'hero', heading: 'Know your runway. Decide what comes next.', body: 'One operating view for founders.', cta: 'Start free' }, { id: 'proof', kind: 'features', heading: 'Operate with confidence', items: [{ title: 'Runway', body: 'See risk before it becomes urgent.' }] }] }], websiteTheme: { style: 'technical' } } }) },
+          { id: 'add-guide', name: 'canvas_add_object', args: JSON.stringify({ kind: 'document', title: 'Current vs proposed design and implementation guide', fields: { content: 'Evidence, side-by-side comparison, priorities, and step-by-step implementation guidance.', sources: ['https://burnrateos.com/'] } }) },
+        ],
+      });
+
+    const answer = await runCreationCanvasAi({
+      prompt,
+      canvasSnapshot: '{"objects":[{"kind":"chat","title":"Brain"}]}',
+      persistence: 'server',
+      canvasActions: [
+        { name: 'builtin_web_fetch', description: 'Fetch', parameters: { type: 'object' }, run: fetch },
+        { name: 'builtin_web_search', description: 'Search', parameters: { type: 'object' }, run: search },
+        { name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: addObject },
+      ],
+    });
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(addObject).toHaveBeenCalledTimes(2);
+    expect(addObject.mock.calls.map(([args]) => args.kind)).toEqual(['website', 'document']);
+    expect(answer).toBe('I added the requested content to the canvas.');
+    expect(mocks.streamChatCompletion.mock.calls[0][0].maxTokens).toBe(3_200);
+    expect(mocks.streamChatCompletion.mock.calls[0][0].messages.some((message: { content: string }) => message.content.includes('A generic SaaS-principles summary is not completion'))).toBe(true);
+    const authoringRequest = mocks.streamChatCompletion.mock.calls[6][0];
+    expect(authoringRequest.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(['canvas_add_object']);
+    expect(authoringRequest.messages.some((message: { content: string }) => message.content.includes('research phase is over'))).toBe(true);
+  });
+
   it('recovers an actionless C-suite teammate response and executes the canvas request', async () => {
     const addObject = vi.fn()
       .mockReturnValueOnce({ ok: true, proposed: true, object: { id: 'cto-1', kind: 'agent', title: 'CTO' } })

@@ -9,6 +9,7 @@
  * Required Worker secrets (`wrangler secret put`):
  *   STRIPE_SECRET_KEY           — sk_live_… / sk_test_…
  *   STRIPE_WEBHOOK_SECRET       — whsec_… (from the Stripe dashboard webhook config)
+ * Optional reusable Price IDs (published inline pricing is the fallback):
  *   STRIPE_PRICE_PRO_MONTHLY    — price_…  ($29/mo)
  *   STRIPE_PRICE_PRO_YEARLY     — price_…  ($290/yr)
  *   STRIPE_PRICE_TEAMS_MONTHLY  — price_…  ($20/seat/mo)

@@ -282,6 +282,10 @@ export class TenantService {
       billingEmail: string;
       /** Required for Teams plan */
       seats?: number;
+      /** Published server-side pricing; never sourced from the browser cart. */
+      currency: string;
+      unitAmountCents: number;
+      productName: string;
       successUrl: string;
       cancelUrl: string;
       discount?: {
@@ -296,6 +300,10 @@ export class TenantService {
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     const targetPlan = input.targetPlan ?? TenantPlan.PRO;
     const minimumSeats = TenantService.PRICING.teams.minimumSeats;
+
+    if (!/^[A-Z]{3}$/.test(input.currency) || !Number.isInteger(input.unitAmountCents) || input.unitAmountCents <= 0) {
+      throw new ValidationError('Published subscription pricing is invalid');
+    }
 
     if (targetPlan === TenantPlan.TEAMS) {
       const requestedSeats = input.seats ?? minimumSeats;
@@ -316,6 +324,9 @@ export class TenantService {
       billingCycle: input.billingCycle,
       billingEmail: input.billingEmail,
       seats: targetPlan === TenantPlan.TEAMS ? seats : 1,
+      currency: input.currency,
+      unitAmountCents: input.unitAmountCents,
+      productName: input.productName,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       discount: input.discount,

@@ -16,6 +16,17 @@ function makeProvider(): StripeProvider {
   });
 }
 
+function makeProviderWithoutPrices(): StripeProvider {
+  return new StripeProvider({
+    secretKey: 'sk_test_key',
+    webhookSecret: WEBHOOK_SECRET,
+    priceProMonthly: '',
+    priceProYearly: '   ',
+    priceTeamsMonthly: '',
+    priceTeamsYearly: '',
+  });
+}
+
 /** Build a genuine `t=<ts>,v1=<hmac>` header the way Stripe signs webhooks. */
 async function sign(
   body: string,
@@ -87,6 +98,63 @@ describe('buildPaymentProvider — unconfigured', () => {
   it('refuses to parse a webhook without a signing secret', async () => {
     const provider = buildPaymentProvider({ STRIPE_SECRET_KEY: 'sk_test' } as Env);
     await expect(provider.parseWebhook('{}', 't=1,v1=abc')).rejects.toBeInstanceOf(PaymentNotConfiguredError);
+  });
+});
+
+describe('createCheckoutSession — published-price fallback', () => {
+  it.each([
+    ['pro', 'monthly', 2900, 1, 'month'],
+    ['pro', 'yearly', 29000, 1, 'year'],
+    ['teams', 'monthly', 2000, 5, 'month'],
+    ['teams', 'yearly', 19200, 8, 'year'],
+  ] as const)('creates inline recurring pricing for %s %s when no Stripe Price ID exists', async (targetPlan, billingCycle, unitAmountCents, seats, interval) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'cs_inline', url: 'https://checkout.stripe.test/inline', customer: null,
+    }), { status: 200 })));
+
+    await makeProviderWithoutPrices().createCheckoutSession({
+      tenantId: 7,
+      targetPlan: targetPlan as never,
+      billingCycle: billingCycle as never,
+      billingEmail: 'billing@example.com',
+      currency: 'USD',
+      unitAmountCents,
+      productName: `Builderforce.ai ${targetPlan}`,
+      seats,
+      successUrl: 'https://builderforce.ai/pricing?success=1',
+      cancelUrl: 'https://builderforce.ai/pricing?cancelled=1',
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.has('line_items[0][price]')).toBe(false);
+    expect(body.get('line_items[0][price_data][currency]')).toBe('usd');
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe(String(unitAmountCents));
+    expect(body.get('line_items[0][price_data][recurring][interval]')).toBe(interval);
+    expect(body.get('line_items[0][quantity]')).toBe(String(seats));
+  });
+
+  it('still prefers a configured reusable Stripe Price ID', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'cs_price', url: 'https://checkout.stripe.test/price', customer: null,
+    }), { status: 200 })));
+
+    await makeProvider().createCheckoutSession({
+      tenantId: 7,
+      targetPlan: 'pro' as never,
+      billingCycle: 'monthly' as never,
+      billingEmail: 'billing@example.com',
+      currency: 'USD',
+      unitAmountCents: 2900,
+      productName: 'Builderforce.ai Pro',
+      successUrl: 'https://builderforce.ai/pricing?success=1',
+      cancelUrl: 'https://builderforce.ai/pricing?cancelled=1',
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('line_items[0][price]')).toBe('price_pro_monthly');
+    expect(body.has('line_items[0][price_data][unit_amount]')).toBe(false);
   });
 });
 

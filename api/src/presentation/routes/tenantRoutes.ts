@@ -488,8 +488,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (!body.billingCycle || !body.billingEmail) {
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
+    if (body.billingCycle !== TenantBillingCycle.MONTHLY && body.billingCycle !== TenantBillingCycle.YEARLY) {
+      return c.json({ error: 'billingCycle must be monthly or yearly' }, 400);
+    }
 
     const targetPlan = body.targetPlan === 'teams' ? TenantPlan.TEAMS : TenantPlan.PRO;
+    const publishedPricing = await getPublishedPricing(db, c.env as Env);
+    const publishedPlan = publishedPricing.plans.find((plan) => plan.id === targetPlan);
+    if (!publishedPlan) return c.json({ error: 'Published plan pricing is unavailable' }, 503);
+    const unitAmount = body.billingCycle === TenantBillingCycle.YEARLY
+      ? publishedPlan.yearly
+      : publishedPlan.monthly;
 
     if (targetPlan === TenantPlan.TEAMS && (!body.seats || body.seats < 1)) {
       return c.json({ error: 'seats (≥1) is required for the Teams plan' }, 400);
@@ -516,6 +525,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         seats: body.seats,
         billingCycle: body.billingCycle,
         billingEmail: body.billingEmail,
+        currency: publishedPricing.currency,
+        unitAmountCents: Math.round(unitAmount * 100),
+        productName: `Builderforce.ai ${publishedPlan.name}`,
         successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
         cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
         discount: discount ? {

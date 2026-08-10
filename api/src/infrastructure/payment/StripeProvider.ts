@@ -12,13 +12,15 @@
  *              customer.subscription.deleted, invoice.payment_failed,
  *              setup_intent.setup_failed
  *
- * PRICE IDs — create recurring prices in Stripe dashboard, then set:
+ * OPTIONAL PRICE IDs — reusable Stripe Prices are preferred when set:
  *   Pro plan (flat rate):
  *        STRIPE_PRICE_PRO_MONTHLY    — price_...  ($29/mo)
  *        STRIPE_PRICE_PRO_YEARLY     — price_...  ($290/yr)
  *   Teams plan (per-seat):
  *        STRIPE_PRICE_TEAMS_MONTHLY  — price_...  ($20/seat/mo)
  *        STRIPE_PRICE_TEAMS_YEARLY   — price_...  ($192/seat/yr)
+ * When an ID is absent, checkout uses inline recurring `price_data` resolved from
+ * Builderforce's server-side published pricing contract.
  *
  * NOTE: Uses fetch-based Stripe client — compatible with Cloudflare Workers.
  */
@@ -67,13 +69,12 @@ export class StripeProvider implements PaymentProvider {
     const isTeams = opts.targetPlan === TenantPlan.TEAMS;
     const seats = isTeams ? (opts.seats ?? 1) : 1;
 
-    const priceId = isTeams
+    const priceId = (isTeams
       ? (opts.billingCycle === 'yearly' ? this.config.priceTeamsYearly : this.config.priceTeamsMonthly)
-      : (opts.billingCycle === 'yearly' ? this.config.priceProYearly : this.config.priceProMonthly);
+      : (opts.billingCycle === 'yearly' ? this.config.priceProYearly : this.config.priceProMonthly)).trim();
 
     const params = new URLSearchParams({
       mode: 'subscription',
-      'line_items[0][price]': priceId,
       'line_items[0][quantity]': String(seats),
       customer_email: opts.billingEmail,
       success_url: opts.successUrl,
@@ -86,6 +87,23 @@ export class StripeProvider implements PaymentProvider {
       'subscription_data[metadata][targetPlan]': opts.targetPlan ?? TenantPlan.PRO,
       'subscription_data[metadata][seats]': String(seats),
     });
+
+    if (priceId) {
+      params.set('line_items[0][price]', priceId);
+    } else {
+      const currency = opts.currency?.trim().toLowerCase();
+      if (!currency || !Number.isInteger(opts.unitAmountCents) || (opts.unitAmountCents ?? 0) <= 0 || !opts.productName?.trim()) {
+        throw new PaymentNotConfiguredError(
+          isTeams
+            ? (opts.billingCycle === 'yearly' ? 'STRIPE_PRICE_TEAMS_YEARLY or published Teams yearly pricing' : 'STRIPE_PRICE_TEAMS_MONTHLY or published Teams monthly pricing')
+            : (opts.billingCycle === 'yearly' ? 'STRIPE_PRICE_PRO_YEARLY or published Pro yearly pricing' : 'STRIPE_PRICE_PRO_MONTHLY or published Pro monthly pricing'),
+        );
+      }
+      params.set('line_items[0][price_data][currency]', currency);
+      params.set('line_items[0][price_data][unit_amount]', String(opts.unitAmountCents));
+      params.set('line_items[0][price_data][recurring][interval]', opts.billingCycle === 'yearly' ? 'year' : 'month');
+      params.set('line_items[0][price_data][product_data][name]', opts.productName.trim());
+    }
 
     if (opts.discount) {
       const couponId = await this.ensureDiscountCoupon(opts.discount);

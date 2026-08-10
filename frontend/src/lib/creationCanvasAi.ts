@@ -117,6 +117,32 @@ const WORDS_PER_DRAFT_PAGE = 300;
  */
 export const MAX_CANVAS_TOOL_TURNS = 8;
 
+/** Keep enough of a bounded turn to author the requested Canvas artifacts after
+ * research. Without this reservation, a model can spend all eight continuations
+ * retrying a narrow search backend and never reach canvas_add_object. */
+const RESERVED_AUTHORING_TURNS = 2;
+
+/** Two encyclopedic results are enough evidence that repeating differently worded
+ * searches will not produce the open-web design sources the user requested. */
+const MAX_NARROW_SEARCHES = 2;
+
+/** Comparison documents and implementation guidance routinely need more than the
+ * former 1,600-token ceiling. The durable result still belongs in Canvas objects;
+ * this prevents the user-facing handoff from ending in the middle of a sentence. */
+const CANVAS_RESPONSE_TOKENS = 3_200;
+
+const RESEARCH_TOOL_NAMES = new Set(['builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode']);
+
+function isNarrowSearchResult(value: unknown): boolean {
+  return !!value && typeof value === 'object'
+    && (value as { coverage?: unknown }).coverage === 'encyclopedic';
+}
+
+function isWebsiteRedesignRequest(prompt: string): boolean {
+  return /\b(?:website|web\s*site|homepage|landing page)\b/i.test(prompt)
+    && /\b(?:design|redesign|improve|ui\s*\/\s*ux|comparison|compare)\b/i.test(prompt);
+}
+
 /**
  * The landing canvas exposes C-suite agents as clickable teammates. A model can
  * otherwise read "bring the CTO in" as a request to invite a real person, then
@@ -224,7 +250,13 @@ function snapshotHasTabularRows(snapshot: string): boolean {
 
 /** Imperative canvas turns must not degrade into a prose-only answer. */
 function requestsCanvasMutation(prompt: string): boolean {
-  return /^(?:please\s+)?(?:create|build|design|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate)\b/i.test(prompt.trim())
+  const verb = '(?:create|build|design|redesign|improve|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate|research|compare|show|provide)';
+  return new RegExp(`^(?:please\\s+)?${verb}\\b`, 'i').test(prompt.trim())
+    // Real requests commonly begin with context ("I have an existing website …")
+    // and put the imperative in the next sentence or bullet. The old start-only
+    // classifier missed exactly that shape and allowed a prose summary to count as
+    // completion. Keep the boundary narrow so "How do I design…?" remains a question.
+    || new RegExp(`(?:^|[.!?;:]\\s+|\\n\\s*|[-*]\\s+)(?:please\\s+)?${verb}\\b`, 'i').test(prompt)
     || /\b(?:change|update|edit|revise|replace|apply)\s+(?:this|the|selected|its)\b/i.test(prompt);
 }
 
@@ -289,6 +321,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       role: 'system',
       content: `${participantDirective}\n\nYou are operating BuilderForce's unified creation canvas. Use the provided canvas_* function tools to make requested visual changes instead of writing code or merely describing them. Treat imperative requests as instructions to act now: do not ask for optional names or descriptions, and use sensible authored defaults when details are omitted. "Bring in", "add", or "invite" a named specialist or executive role means to call canvas_add_object to add an Agent with that role's perspective, then author the requested plan, review, forecast, or other useful deliverable as a separate object and connect it to the Agent with canvas_connect_objects. Use relevant existing canvas objects as context. On a new canvas, make a useful first pass with clearly stated assumptions and open questions inside the deliverable; never ask the user what "this" means and never merely repeat the request. A correction, complaint, question about a displayed value, or request to change labels on an existing/selected object is an UPDATE: call canvas_update_object on that object. Never create a replacement or duplicate unless the user explicitly asks for a new, additional, copied, or duplicated object. Never edit the Brain chat object merely to echo the conversation. For requests to organize, tidy, align, evenly space, or stop objects overlapping, call canvas_arrange_objects without objectIds unless the user explicitly identified a subset. Omitting objectIds arranges the entire visible canvas even if the composer scope says selection; the tool uses measured object bounds and is safer than manually estimating x/y positions with canvas_set_object_layout. Requests to create or add an artifact on this Canvas must use canvas_add_object, even when an MCP tool has a similar resource name. When asked to build, evaluate, test, or deliver an agent, create an operable package rather than an empty Agent card: include at least one authored knowledge, document, dataset, file, or URL object connected to the agent, and an Evaluation object with concrete test criteria. Put a representative test prompt and comma-separated expected response signals in the Agent's testPrompt and testExpected fields so the inspector can run and score it. Sales is the canonical exception: on a sales canvas, use builtin_sales_workspace_get to read the shared CRM and use the builtin_sales_* MCP tools for contacts, campaigns, goals, and coaching, because those records must be visible to the associate and superadmin. After a successful sales mutation, mirror the returned canonical id and current values into the matching salesContact, salesCampaign, salesGoal, or salesPipeline canvas object using canvas_add_object or canvas_update_object. Carry ownerUserId from the sales canvas object when a superadmin is collaborating. Use builtin_meetings_schedule for actual calendar meeting creation and mirror the result into a salesMeeting object. Exception: a PRD belonging to a canonical project is durable project knowledge, not merely a visual artifact. For any request to create, consolidate, synthesize, or explain project PRDs or requirements, first call canvas_read_project_prds to read every ticket-linked PRD and its versions regardless of the current canvas selection. Then call canvas_create_project_prd with the complete synthesis; never use truncated task-card PRD summaries as the source and never use canvas_add_object for a project PRD. For example, "create a workflow" means call canvas_add_object with kind "workflow" and authored workflow fields; do not call builtin_workflows_create or ask a follow-up question. A workflow's steps are EXECUTABLE, not labels: fields.steps must be an array of objects where every step carries the call it makes, not just a name. For an integration step set connector and action to real catalog keys plus an input object — for example {"title":"Send the SMS","connector":"twilio","action":"send_sms","input":{"To":"{{input.To}}","From":"+15550001111","Body":"..."}}. For a model step set prompt (and optionally provider and model); for an agent step set role and task. Never author a step that has only a title: a title-only step is rejected at build time as underspecified, and inventing plausible stage names such as "Audience" or "Approve" for a request that did not ask for them is a failure. Call builtin_connectors_actions to read the real connector and action keys before authoring an integration step rather than guessing them. After authoring the steps, invoke the object's "build" action with canvas_invoke_object_action to compile them into a real, runnable workflow definition; "run" builds first when needed. Build returns per-step issues when a step is not runnable — fix the named steps and build again. Never tell the user a workflow is complete, configured, or ready to run before a build has succeeded. Use MCP tools for a mutation only when the user explicitly asks to create or change a canonical tenant resource outside the Canvas, or when operating canonical sales data as described above. A Website or WYSIWYG request must create or update kind "website" or "prototype" with fields.pages containing real page objects and authored sections. Every page has {id,name,path,sections}; sections use hero, features, content, stats, testimonial, or cta. Author a hero with heading, body, and cta plus at least one additional section, and choose fields.websiteTheme.style from editorial, bold, minimal, soft, or technical based on the user's subject. Never rely on default ecommerce copy or create a titled shell. Follow-up content, page, navigation, style, or CTA requests must update the selected website's pages with canvas_update_object. When the user asks to actually BUILD a website, web app, or mobile app — real code they can run, preview, and publish — also create kind "build" and set fields.modality to the project type ("designer" for a website or web app, "mobile" for a phone app, "webmobile" for both from one codebase). A "build" object owns a real Canvas Builder workspace seeded with a runnable starter project; the user opens it directly on Canvas to edit files, run a dev server, and publish. Kind "website" and kind "prototype" are rendered through the same structured non-code WYSIWYG surface. For model requests, kind "llm" is a conventional language-model blueprint; kind "evermind" is BuilderForce's self-learning Evermind model with teach, train, evaluate, and publish capabilities. If the user says LLM, create kind "llm" unless they explicitly ask for Evermind or a continuously learning/self-updating model. Read each object's mutableFields before updating it. When creating an authored artifact, put the complete result in fields.content or fields.markdown and populate its other type-specific fields; do not create an empty shell. An explanatory visual must contain real renderable data: prefer a chart with chartLabels and chartValues, or for kind "drawing" supply fields.points with at least two {x,y} points plus drawingWidth and drawingHeight. Never create a blank drawing or visual placeholder. Data on this canvas is real and computable: when a dataset, table, or spreadsheet object is present, every count, total, percentage, ranking, comparison, chart value, and table row must come from canvas_query_dataset, which runs over all imported rows rather than the small sample shown in the snapshot. It is a failure to invent, estimate, illustrate, or use placeholder or example figures, and a failure to ask the user to connect or populate data that is already on the canvas. To build the artifact, call canvas_query_dataset with materializeAs "table", "chart", "dashboard", or "kpi" instead of retyping rows into canvas_add_object; use derive to compute a classification column such as success versus failure, groupBy to split it, and highlight to colour table rows. If the requested columns do not exist, read the dataset’s profile and columns from the snapshot and say which columns are actually available. A request to visualize, compare, map, or analyse a real-world subject the canvas does not already hold is a RESEARCH request, and research is a pipeline, not a single answer: search the web with builtin_web_search, read the promising sources with builtin_web_fetch, and create a Dataset object holding one row per entity with the columns you actually found, citing the source URLs in sources. Do not answer from memory, do not invent rows, and do not skip the Dataset — the dataset is the evidence the visual is built from, and a chart with no dataset behind it cannot be checked. Then build the visual from that dataset with canvas_query_dataset, never by retyping values into canvas_add_object. When the subject is geographic — places, regions, districts, cities, states, countries, sites, stores, offices — the visual is a Map: resolve the place names with builtin_geo_geocode, write the returned lat and lng back onto the dataset rows with canvas_update_object so every row carries coordinates, then call canvas_query_dataset with materializeAs "map". Pass builtin_geo_geocode's boundingBox for the enclosing region as mapRegion and its outline as mapOutline so the plot is framed by the real region, set mapValueColumn to whatever the user is comparing, and carry the returned attribution into mapAttribution. builtin_web_search always works — no key or account is required — so a research request is never a reason to answer from memory. Its result carries a "coverage" field: when that is "encyclopedic" the index behind it is narrower than a general web engine, so cite exactly what you found, say plainly which entities you could not find sources for rather than filling them in yourself, and mention that connecting a Tavily, Exa, or Linkup key under Settings → Integrations — or pointing the deployment at a self-hosted SearXNG instance — widens the search to the open web. If a search or fetch does fail, say what failed and build from what the user supplies or from a URL they paste rather than inventing the data. Non-destructive canvas authoring applies automatically; destructive, executable, and canonical actions remain proposals for user review. Never claim an object was updated unless canvas_update_object succeeded for that object's id; canvas_add_object means a new object was created. Never claim a mutation succeeded unless its tool result confirms it. Never emit tool_code, Python, or a simulated tool result in assistant text. NEVER STATE THAT SOMETHING IS NOT ON THE CANVAS WITHOUT CHECKING FIRST. The detailed objects below may be a SCOPED SUBSET of the board — read scopeNote. boardInventory always lists every object on the board with its title and file name; before you say a file or object is missing, absent, not present, or "the only object present is X", look it up with canvas_read_object (which tolerates a wrong extension and a partial name) or read the whole board with canvas_read_snapshot. Telling someone to upload a file that is already on their board is a failure, not a clarifying question. When an object exists but its detail was outside this turn's scope, read it and answer — do not ask the user to re-select it. Current canvas:\n${options.canvasSnapshot}${memoryBlock ? `\n\n${memoryBlock}` : ''}`,
     },
+    ...(isWebsiteRedesignRequest(options.prompt) ? [{
+      role: 'system',
+      content: 'Website redesign research has a concrete completion contract. Fetch the supplied website first. For comparison brands whose official homepage URL is known, fetch that URL directly instead of searching for commentary about its design. If two searches return encyclopedic coverage, stop searching; do not retry with synonyms. Before answering, create or update the proposed website/prototype and create a document containing the sourced current-versus-proposed comparison plus prioritized step-by-step implementation guidance. A generic SaaS-principles summary is not completion.',
+    } satisfies ChatCompletionMessage] : []),
     {
       role: 'system',
       content: 'For a Twilio AI journey request, inspect the whole board before authoring and update/reuse matching Twilio objects instead of duplicating them. Produce one coherent, reusable customer journey: a specific persona and before/after outcome; an executable workflow where a visible LLM/agent decision directly leads to a real action on the existing twilio connector; approval, failure, and production-readiness details; a lightweight architecture diagram; an evidence-based quality evaluation covering creativity, long-term end-user impact, market potential, and technical feasibility; a concise live-demo script; measurable success evidence; an Idea-to-Real website handoff that uses the existing BuilderForce Embedded install path at /embedded and documents the host script, chosen customer-site capability, identity/events, and acceptance test; and one guidedTour object whose targetObjectId values point at the actual objects created or reused, including the embed handoff. Never create a connector object: Canvas exposes the canonical Twilio connection settings when the workflow needs them. Never invent a second embed SDK or iframe contract: use the existing BuilderForce Embedded capability and its generated workspace key/snippets. Prefer one strong workflow over separate generic SMS and Voice workflows unless the user explicitly asks for multiple channels. Do not name the experience after a contest or create competition-application artifacts unless the user explicitly asks for them.',
@@ -321,19 +357,34 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let proposedCanvasMutation = false;
   let executiveRequestRecoveryUsed = false;
   let imperativeMutationRecoveryUsed = false;
+  let authoringDirectiveIssued = false;
+  let narrowSearches = 0;
   let lastToolError = '';
+  const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
   const hasTabularData = snapshotHasTabularRows(options.canvasSnapshot);
   const verified = (answer: string): string => unverifiedCreationClaim(answer, proposedCanvasMutation, hasTabularData) ?? answer;
   const requestedPages = requestedPagesForTurn(options);
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;
   for (let turn = 0; turn < MAX_CANVAS_TOOL_TURNS; turn += 1) {
+    const authoringOnly = mutationRequested && !proposedCanvasMutation
+      && MAX_CANVAS_TOOL_TURNS - turn <= RESERVED_AUTHORING_TURNS;
+    if (authoringOnly && !authoringDirectiveIssued) {
+      authoringDirectiveIssued = true;
+      messages.push({
+        role: 'system',
+        content: 'The research phase is over. Use the remaining turns only to create or update the requested Canvas artifacts with canvas_* tools. Build from the evidence already gathered, state any evidence gap inside the artifact, and do not make another search or fetch call.',
+      });
+    }
+    const availableActions = authoringOnly
+      ? actions.filter((action) => !RESEARCH_TOOL_NAMES.has(action.name))
+      : actions;
     const result = await streamChatCompletion({
       transport,
       messages,
-      tools: specsFor(actions),
+      tools: specsFor(availableActions),
       tool_choice: 'auto',
-      maxTokens: 1600,
+      maxTokens: CANVAS_RESPONSE_TOKENS,
       reasoning: { level: 'low' },
       model: options.model,
       modelStrict: options.modelStrict,
@@ -342,7 +393,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
     if (!result.toolCalls.length) {
       if (!options.participant && !proposedCanvasMutation && !imperativeMutationRecoveryUsed
-        && requestsCanvasMutation(options.prompt)
+        && mutationRequested
         && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
         imperativeMutationRecoveryUsed = true;
         messages.push({ role: 'assistant', content: result.text || finalText });
@@ -352,6 +403,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         });
         finalText = '';
         continue;
+      }
+      if (mutationRequested && !proposedCanvasMutation && imperativeMutationRecoveryUsed) {
+        finalText = '';
+        break;
       }
       if (!options.participant && !proposedCanvasMutation && !executiveRequestRecoveryUsed
         && isExecutiveTeammateRequest(options.prompt) && byName.has('canvas_add_object')) {
@@ -374,6 +429,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       tool_calls: result.toolCalls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.args } })),
     });
     for (const call of result.toolCalls) {
+      const toolStartedAt = Date.now();
       const action = byName.get(call.name);
       let args: unknown = {};
       try { args = JSON.parse(call.args || '{}'); } catch { args = {}; }
@@ -383,7 +439,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         documentWordCountExact = true;
       }
       let outcome: unknown;
-      if (!action) {
+      if (authoringOnly && RESEARCH_TOOL_NAMES.has(call.name)) {
+        outcome = { error: 'The bounded research phase has ended. Create the requested Canvas artifacts from the evidence already gathered.' };
+      } else if (call.name === 'builtin_web_search' && narrowSearches >= MAX_NARROW_SEARCHES) {
+        outcome = { error: 'Search stopped after two encyclopedic results. Fetch a known official URL directly or create the requested Canvas artifacts with the evidence already gathered.' };
+      } else if (!action) {
         outcome = { error: `Unknown tool: ${call.name}` };
       } else if (!call.name.startsWith('canvas_') && mutates(action, args) && !options.autoApprove) {
         const approved = options.confirmAction ? await options.confirmAction({ name: call.name, args }) : false;
@@ -394,12 +454,16 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       } else {
         try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
       }
+      if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
       if (outcome && typeof outcome === 'object') {
         const result = outcome as { proposed?: unknown; error?: unknown };
         if (result.proposed === true) proposedCanvasMutation = true;
-        if (typeof result.error === 'string' && result.error.trim()) lastToolError = result.error.trim();
+        if (typeof result.error === 'string' && result.error.trim()
+          && !(RESEARCH_TOOL_NAMES.has(call.name) && (authoringOnly || narrowSearches >= MAX_NARROW_SEARCHES))) {
+          lastToolError = result.error.trim();
+        }
       }
-      options.onTrace?.({ ts: new Date().toISOString(), category: outcome && typeof outcome === 'object' && 'error' in outcome ? 'error' : 'tool', label: call.name, args, result: outcome, isError: !!(outcome && typeof outcome === 'object' && 'error' in outcome) });
+      options.onTrace?.({ ts: new Date().toISOString(), category: outcome && typeof outcome === 'object' && 'error' in outcome ? 'error' : 'tool', label: call.name, durationMs: Math.max(0, Date.now() - toolStartedAt), args, result: outcome, isError: !!(outcome && typeof outcome === 'object' && 'error' in outcome) });
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) });
     }
     finalText = '';

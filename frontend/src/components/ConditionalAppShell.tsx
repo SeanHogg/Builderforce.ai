@@ -49,6 +49,7 @@ import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
 import { ActiveCanvasProvider, shellHostsCanvasStage, useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { LiveBar } from './live/LiveBar';
 import { NavigationFeaturesProvider } from '@/lib/NavigationFeaturesContext';
+import { ExitIntentPrompt } from './marketing/ExitIntentPrompt';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {
@@ -387,6 +388,10 @@ function AppBrainShell({ children, qualityEndpoint }: {
             <BrainContextProvider>
               <ReportErrorProvider endpoint={qualityEndpoint}>
               <ShellContent>{children}</ShellContent>
+              {/* BurnRateOS consolidation: one anonymous-only exit-intent capture
+                  across every non-embed surface, backed by the canonical
+                  Builderforce newsletter store. */}
+              <ExitIntentPrompt />
               {/* The room, rendered once at shell level so the call is visible —
                   and controllable — from wherever the person has navigated to.
                   Self-gating: no room, no bar. */}

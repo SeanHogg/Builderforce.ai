@@ -6896,6 +6896,21 @@
     "error": "No se pudo completar la suscripción. Inténtalo de nuevo.",
     "success": "Gracias: ya estás en la lista."
   },
+  "exitIntent": {
+    "badge": "Sigamos en contacto",
+    "title": "Antes de irte…",
+    "description": "Recibe ideas prácticas para crear con agentes de IA y novedades sobre las funciones de Builderforce.ai.",
+    "emailAria": "Dirección de correo electrónico",
+    "emailPlaceholder": "tu@email.com",
+    "submit": "Quiero estar al día",
+    "submitting": "Suscribiendo…",
+    "privacy": "Sin spam. Cancela cuando quieras.",
+    "successTitle": "¡Ya estás en la lista!",
+    "successDescription": "Te enviaremos novedades útiles del producto por correo.",
+    "error": "No se pudo completar la suscripción. Inténtalo de nuevo.",
+    "close": "Cerrar",
+    "closeAria": "Cerrar aviso antes de salir"
+  },
   "blog": {
     "seo": {
       "title": "Blog — Guías, tutoriales y comparativas de herramientas de agentes de AI",
@@ -14708,7 +14723,12 @@
     "creativeGenerating": "Generando…",
     "creativeGenerated": "{file} generado y validado",
     "creativeGeneratedOffline": "{file} generado con la base sin conexión: el generador no estaba disponible",
-    "creativeGeneratedStatus": "Generado",
+      "creativeGeneratedStatus": "Generado",
+      "imageFoundStatus": "Encontrada",
+      "imageFoundValidation": "Seleccionada de {provider}",
+      "imageGeneratedValidation": "La generación devolvió una imagen renderizable",
+      "imageFoundProposal": "Añadir imagen encontrada «{title}»",
+      "imageGeneratedProposal": "Añadir imagen generada «{title}»",
     "creativeApplied": "Aplicado",
     "creativeNoMediaModel": "Publica un modelo multimedia de Evermind para renderizar este objeto",
     "creativeNoFrames": "El modelo no devolvió fotogramas legibles",

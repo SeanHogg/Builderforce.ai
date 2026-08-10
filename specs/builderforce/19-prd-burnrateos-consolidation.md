@@ -1,10 +1,251 @@
 # PRD 19 — burnrateos.com → Builderforce.ai consolidation
 
-**Status:** Proposed · **Owner:** platform · **Created:** 2026-08-07
+**Status:** In progress — **NO-GO for BurnRateOS shutdown** · **Owner:** platform · **Created:** 2026-08-07 · **Audited:** 2026-08-10
 **Companion to:** [PRD 18 — hired.video port](./18-prd-hired-video-port.md)
 **Goal:** absorb all of `C:\code\burnrateos.com` into Builderforce.ai, completing the AI
 C-suite: hired.video contributes the **Recruiter** and **HR** agents; BurnRateOS contributes
 **CEO, CFO, CRO, CMO, CPO, CISO** and the eight product domains they own.
+
+## Implementation audit — 2026-08-10
+
+This section reports the repository state, not the intended destination described by the rest of
+the PRD. A table in a migration, a row in the source-to-target map, a generic CRUD endpoint, a
+marketing page, and a working migrated feature are five different states. Only the last one is
+sufficient evidence for shutting down BurnRateOS.
+
+**Audit baseline:** Builderforce `6b9b31b89a4fc85ea351c16dbea5b02d4b7601b5` and BurnRateOS
+`708f0d8b1b0f9d59b091e23634257159d6777766`.
+
+### Executive verdict
+
+**Do not redirect or terminate `burnrateos.com` yet.** Builderforce has completed most of the
+*destination-model* work, but not the source-data move or most feature behavior:
+
+- [`check-model-coverage.mjs`](../../api/scripts/check-model-coverage.mjs) passes: all **1,130**
+  distinct source tables are assigned a disposition and all **362/362** keep targets have a
+  Drizzle declaration. This proves design coverage, not migrated rows or behavior.
+- [`check-table-adoption.mjs`](../../api/scripts/check-table-adoption.mjs) reports **258** tables
+  created by migrations 0418+, **258** registered with the generic entity layer, **36**
+  reached by a feature path, and **222 registry-only**. Registration by
+  [`entityCatalog.ts`](../../api/src/application/domains/entityCatalog.ts) is deliberately excluded
+  from feature adoption by the checker.
+- Migrations 0418–0433 contain **245 `CREATE TABLE` statements and zero `INSERT ... SELECT` or
+  `UPDATE` data transforms**. There is no BurnRateOS database extractor/loader, ID map, replay,
+  reconciliation report, or rollback manifest in this repository.
+- **Resolved 2026-08-10:** Builderforce makes no runtime HTTP pull to BurnRateOS.
+  [`burnRateService.ts`](../../api/src/application/seams/burnRateService.ts) reads tenant-scoped
+  `metric_facts`; [`validationEngagementsService.ts`](../../api/src/application/seams/validationEngagementsService.ts)
+  reads local validation results, validation dashboards and feedback collectors. The host URL/token
+  configuration routes and frontend client were removed. CI runs
+  [`check-no-burnrate-runtime.mjs`](../../api/scripts/check-no-burnrate-runtime.mjs) to reject a
+  restored `hostBi` setting, `/api/bi/config`, or BurnRateOS API URL in runtime source.
+- The six new C-suite teammates are provisioned by
+  [`provisionBuiltinAgents.ts`](../../api/src/application/agent/provisionBuiltinAgents.ts). The
+  **48/48** BurnRateOS executive intents are now mapped into Creation Canvas' searchable “Choose a
+  starting point” menu by
+  [`PromptUseCasePicker.tsx`](../../frontend/src/components/PromptUseCasePicker.tsx), retaining each
+  dotted source contract as its audit/search id. This is intentionally a Canvas mapping onto
+  existing objects and actions—not 48 new MCP endpoints and not new tables. It closes menu and
+  intent discoverability; it does **not** by itself close the domain-service and source-data gaps in
+  B1–B8 below.
+- The UI has a useful shared seat surface and generated record browser
+  ([`DomainSurface`](../../frontend/src/components/kernel/DomainSurface.tsx),
+  [`EntityBrowser`](../../frontend/src/components/kernel/EntityBrowser.tsx)), but it does not
+  preserve the workflows, calculations, provider actions, public viewers, or guided states of the
+  262 BurnRateOS pages. The `/<burnrateDomain>` and `/features/<burnrateFeature>` catch-alls are
+  translated **marketing explainers**, not migrated application surfaces.
+
+The fastest safe end-of-week outcome is therefore either (a) finish the P0 gates below and then
+redirect, or (b) close new sign-ups and put BurnRateOS in read-only legacy mode while its API,
+database and object storage remain available. A hard shutdown without either path loses features
+and customer data access.
+
+### Evidence by track
+
+“Feature-reached” below uses the strict definition in
+[`tableAdoption.test.ts`](../../api/src/application/kernel/tableAdoption.test.ts): a non-test,
+non-registry reader or writer imports the table or queries it directly. Existing Builderforce owner
+implementations can still satisfy the *merge* half of a track, but do not prove that BurnRateOS data
+or behavior was moved onto them.
+
+| Track | Destination evidence in Builderforce | Actual status and unported behavior |
+|---|---|---|
+| **B0 · Foundation** | Source map is complete; 0418–0433 create the consolidated targets; generic entity API and shared seat UI exist; password hashes use the same PBKDF2/SHA-256, 100k-iteration, `salt:hash` format in both products. | **Partial / cutover blocker.** No source-row ETL or reconciliation. The company invariant in §3.2 is not implemented as written: `companies.tenant_id` is mandatory, there is no `account_company_relationships` or project↔company junction, and the map flattens that source table to generic `relation`; generic relations cannot point from a tenant to a company because both ends require `objects` rows. No port of BurnRateOS account locks, login-attempt history, bot-block events, refresh sessions, or MFA-secret transformation. Existing sessions cannot survive the domain/JWT change. |
+| **B1 · CFO / BI** | Migration 0424 creates 20 finance targets; kernel ledger/settings/metrics can absorb balances and series. | **Not ported: 0/20 target tables feature-reached.** Runway/burn, break-even engine, forecast assumptions/sensitivity/Monte Carlo, ARR projections, cohort retention, CAC/LTV/payback, expense classifier, company P&L, Plaid sync, TCO, custom KPI formulas, scenario dashboards and sprint financial impact have no migrated service. The remaining burn-rate seam still calls BurnRateOS. Builderforce FinOps is cloud/AI spend, not a replacement for company finance. |
+| **B2 · CEO / Investor** | Migration 0422 creates 12 investor/portfolio targets; kernel artifacts/revisions/shares can represent deck content and versions. | **Not ported: 0/12 target tables feature-reached.** No pitch-deck generator/version/share-view analytics flow, investor updates and approvals, investor reports/digests, board packages, data-room ACL/download flow, due-diligence workflow, portfolio health scoring, funding-history/valuation/exit models, or investor portal migration. Generic artifact and entity forms do not enforce these workflows. |
+| **B3 · CRO / CRM + VoIP** | Migration 0421 creates 20 revenue targets; existing Builderforce sales routes cover a simpler contact/pipeline; business-phone checkout and entitlement recording exist. | **Mostly not ported: 1/20 targets feature-reached (`business_phone_numbers`).** Contact provenance/edit logs, identity/source history, enrichment credits/providers, dedup/import, ICPs, sequences, conversion/quota analytics, communications ops and deal-risk logic are missing. Phone currently sells and records an entitlement; it does not implement SignalWire number search/provisioning, balance, call/SMS operations, voice agent, or port requests. Builderforce has no `SIGNALWIRE_*` configuration. |
+| **B4 · CMO / Growth** | Migration 0432 creates 47 targets; the pre-existing campaign/site/mailbox engines are valid merge owners. | **Mostly not ported: 2/47 targets feature-reached (`announcement_banners`, `email_otp_challenges`), neither proves the CMO workflows.** BurnRateOS heatmap capture/screenshots/analysis, nurture step execution/enrollment, lead-form lifecycle, landing/website block editor behavior, A/B allocation, NPS, referrals/affiliate settlement, email event parity, SEO manager/rank tracking, brand kit/content calendar, waitlist/community/podcast/video flows and public widgets are missing or registry-only. Web Push is wholly absent: no VAPID code/config, marketing subscriber/campaign/delivery service, `push-fanout` queue/DLQ, or `packages/push-pwa`. |
+| **B5 · CPO / Product** | Builderforce PMO, product, feedback and validation owners exist; consolidated work/items/artifacts can represent several source models. Validation engagement reads are now local. | **Partial merge only.** Feature voting/adoption, scoring, product ideas/company workflows, release plans, public roadmap/deck, validation AI insights/scenarios, MVP scaffolding, entity version/sign-off/model-lock workflows still need domain-backed behavior and migrated source rows. |
+| **B6 · CTO / Agile** | Builderforce boards/tasks/sprints, poker/retro and ceremonies remain the correct owners. | **Core merge owner exists; BurnRateOS additions are not ported.** Missing cost-per-sprint/runway coupling, capacity and velocity parity, bottleneck/technical-debt/deployment rollups, cost calculation, source session/data migration, and the BurnRateOS `SessionRoom` collaboration behavior. Do not migrate duplicate Kanban/poker tables; write explicit transforms into the Builderforce owners. |
+| **B7 · HR / Operational cadence** | Migration 0420 creates 22 people/HR targets; one `builtin_kind='hr'` teammate is provisioned; existing meetings/pulse owners remain. | **Not ported: 0/22 targets feature-reached.** Employee/employment/emergency contacts, headcount and hiring forecasts, goals/reviews/1:1/check-ins, weekly syncs, scorecards, ScratchPad pages/collaborators/transcripts/templates/attachments, bookings/calendar links and Slack workflows lack feature services. Booking targets in 0425 are registry-only. Recall.ai notetaker config and attachment-row/object migration are absent. |
+| **B8 · CISO / Governance** | Builderforce SOC/security/uptime owners exist; migration 0428 adds two identity/governance targets. | **Partial merge only: 0/2 new targets feature-reached.** BurnRateOS vendors, DPAs, PII inventory, compliance events, security training, DSR/suppression, terms agreement history, embed consent, public DSR, and uptime-monitor source data/alert behavior are not ported. The BurnRateOS 5-minute uptime sweep and support-chat behavior are not wired into Builderforce jobs. |
+| **B9 · Platform** | Migration 0425 creates 20 commerce targets; cart/order checkout integration is real; Builderforce has marketplace, billing, support, content and admin owners. | **Partial: 3/20 targets feature-reached (`carts`, `orders`, `order_line_items`).** Missing consultant onboarding/knowledge/earnings/settlement, affiliate/referral payout methods, booking settlement/webhooks, AI/enrichment-credit ledger transforms, templates/licenses, white-label agency/client data, support live-chat DO, coach marks/segments, guest claim continuity, waitlist/media/free-tools data, and system-admin parity. Cart/order support does not migrate existing BurnRateOS purchases or subscriptions. |
+
+### C-suite Creation Canvas menu mapping — implemented 2026-08-10
+
+The migration decision is to expose these as executive creation intents in the existing Canvas
+menu. Selecting an item gives Brain a bounded prescription to create or update existing Canvas
+objects from available evidence. It does not create a parallel C-suite service layer.
+
+| Source tool family | Count | Existing Canvas destinations |
+|---|---:|---|
+| Agile / delivery | 5 | dashboard, chart, report, table, roadmap |
+| CRM / revenue | 4 | sales pipeline, dashboard, table, chart, KPI |
+| Cross-domain risk | 1 | dashboard, report |
+| Finance | 5 | KPI, dashboard, table, chart, scenario comparison report |
+| Governance | 5 | table, report, dashboard, roadmap |
+| Investor market | 5 | target market, report, sourced comparison dataset |
+| Marketing | 5 | table, dashboard, report, chart, evaluation |
+| Operations / people | 5 | dashboard, roadmap, chart, spreadsheet, report |
+| Product / company | 5 | product-ideas table, feature summary, report, target market, dashboard |
+| Research + ScratchPad | 8 | sourced dataset, report, document pages, slides |
+| **Total** | **48** | **Only existing Creation Canvas object kinds and actions** |
+
+Implementation evidence:
+
+- `C_SUITE_CANVAS_USE_CASES` contains **48 unique legacy ids** and is merged into the localized
+  Creation Canvas starting-point catalog for every locale.
+- Menu search includes the legacy dotted id, label, category and prescription, so operators can
+  locate either “Runway snapshot” or `finance.runway.snapshot`.
+- Prescriptions name the existing destination object and require source evidence/no invented
+  values. Canonical sales requests use the existing sales workspace. Market-peer deletion requires
+  an identified target rather than a broad destructive action.
+- Creation Canvas exposes one read-only `canvas_read_domain` action over the existing 15-domain
+  summary, entity, item and metric APIs. It lets all 48 prescriptions inspect real tenant data
+  without a C-suite service catalog; writes continue through existing reviewed Canvas/canonical
+  actions.
+- [`PromptUseCasePicker.test.tsx`](../../frontend/src/components/PromptUseCasePicker.test.tsx)
+  asserts the 48-entry/48-unique invariant and exercises dotted-id search and selection.
+- Verification on 2026-08-10: focused Vitest **5/5 passed**; frontend `tsgo --noEmit` passed; no
+  schema or migration file was added.
+
+### Source code still unique to BurnRateOS
+
+These are concrete source-only implementation families, not just missing schema names. Some should
+be rewritten onto a Builderforce owner rather than copied, but none can be deleted until its
+behavior is either ported or explicitly retired:
+
+- `product/api/src/worker/routes`: all **103 top-level + 6 nested** feature route modules remain the
+  reference implementation for the workflows listed above. Builderforce's generic five-handler
+  entity router is reachability, not a replacement for their validation, calculations, public
+  grants, provider calls, approvals and side effects.
+- `product/api/src/worker/ai/personaPrompts.ts` and `ai/tools/{agile,crm,cross,finance,governance,
+  investor,marketing,ops,product,research,scratchpad}.ts`: all 48 user-facing intents are mapped to
+  the Creation Canvas menu, but the source selectors, per-company query semantics and underlying
+  domain calculations/providers remain reference behavior until B1–B8 feature services and data
+  migration are complete. The approved target is the Canvas menu and existing platform actions,
+  not a duplicate `builtinMcpService.ts` C-suite catalog.
+- `product/api/src/worker/services/{plaid,signalwire,recall,uptime}.ts`, `services/push/*` and
+  `services/payment/{stripeProvider,helcimProvider}.ts`: provider implementations and their
+  idempotent workflows are absent or only partially replaced in Builderforce.
+- `product/api/src/worker/durable/{NotificationRoom,SessionRoom,SupportChatRoom}.ts`: no state or
+  behavior migration exists. An equivalently named real-time primitive is not proof that message,
+  participant or support-session semantics match.
+- `product/frontend/src/domains/*`: the Mantine pages and components still contain the only product
+  UX for most B1–B9 workflows. The shared Builderforce record browser exposes rows, but does not
+  port the workflow-specific presentation/application logic beneath those pages.
+- `product/packages/push-pwa`: the service-worker registration/subscription package has no target
+  package or Builderforce integration.
+
+### Runtime and integration gaps
+
+The source Worker config at `C:\code\burnrateos.com\product\api\wrangler.toml` declares three
+Durable Objects, two crons, a push queue with DLQ, cache KV, and the
+`burnrateos-attachments` R2 bucket. Builderforce has not adopted the BurnRateOS bindings or their
+state:
+
+| Source capability | Builderforce evidence | Status |
+|---|---|---|
+| `NotificationRoom`, `SessionRoom`, `SupportChatRoom` | Builderforce has its own relay/session DOs, but no state/data migration or support-chat adapter. | **Not migrated** |
+| `0 3 * * *` daily churn/digest/coach batch | [`cronSweeps.ts`](../../api/src/cronSweeps.ts) has Builderforce sweeps, not the BurnRateOS batch. | **Not ported** |
+| `*/5 * * * *` uptime sweep | A Builderforce 5-minute trigger exists, but it does not read the BurnRateOS monitor store or port its alert service. | **Partial owner only** |
+| `push-fanout` + DLQ and `packages/push-pwa` | No VAPID/push implementation or queue binding exists in Builderforce. | **Not ported** |
+| `burnrateos-attachments` R2 | Builderforce has other artifact storage, but no copy manifest, key rewrite, checksum, ACL, or legacy URL plan. | **Not migrated** |
+| Plaid, SignalWire, Recall.ai, Tavily | No corresponding Builderforce env contracts or provider implementations were found. | **Not ported** |
+| Stripe/Helcim commerce | Builderforce supports Stripe; BurnRateOS also supports Stripe/Helcim. No customer/subscription/order mapping or provider-webhook handoff exists. | **Cutover blocker** |
+| OAuth/connectors | Both products have provider integrations, but no encrypted-credential transform or callback/refresh-token handoff exists. | **Cutover blocker; expect re-consent where secrets cannot be moved safely** |
+
+### User and customer-data migration status
+
+There is currently **no executable user migration**. The generic Builderforce migration wizard is
+for board providers (`DISCOVERY_PROVIDER_IDS`); it is not a BurnRateOS account/database importer.
+Before any redirect, implement and retain a reproducible manifest covering:
+
+1. BurnRateOS `User` → Builderforce `users`, preserving UUID, normalized email, name, locale,
+   verification time, suspension state, created time and compatible password hash. Resolve email
+   collisions deterministically; never create two Builderforce identities for one email.
+2. `Account`/memberships/roles/invitations → `tenants`/`tenant_members`/kernel invitations, with a
+   durable source-ID↔target-ID table. Provision default project/segment exactly once per imported
+   tenant and do not accidentally start trials, agents or paid usage during replay.
+3. Company graph and active-company/default-company state, after the §3.2 mismatch above is
+   resolved. A tenant/segment approximation is not enough for agencies, investors or shared
+   companies unless the product explicitly drops those semantics.
+4. Every surviving domain row using the source-to-target map, with child ordering, public tokens,
+   slugs, timestamps, audit actors, money denominations and external provider references preserved.
+5. Password continuity (hashes are compatible), forced new sessions, and either an MFA-secret
+   decrypt/re-encrypt transform or a deliberate MFA re-enrollment campaign. Do not copy refresh or
+   access tokens.
+6. Billing customers/subscriptions, active plan/interval/seats, phone add-ons, credit/ledger
+   balances, invoices/orders/refunds and webhook idempotency keys. Prove no user is double-billed
+   and no paid user lands on Free.
+7. R2 attachments/decks/screenshots, public-share URLs, embed keys, OAuth connections, email
+   preferences, unsubscribe/suppression state and legal acceptances.
+
+### End-of-week shutdown gates
+
+All gates are mandatory for a **hard shutdown**. “Mapped in TSV,” “table exists,” and “opens in
+EntityBrowser” do not satisfy them.
+
+- [ ] **Decision gate:** settle §2 rows 4, 6 and 12 plus §5 pricing/push/provider decisions; record
+  the selected owners in this PRD.
+- [ ] **Tenancy gate:** implement and test the company graph/project-company contract or explicitly
+  revise §3.2 and migrate every affected workflow to the replacement semantics.
+- [ ] **Identity gate:** dry-run all users, collisions, memberships, roles and verified emails;
+  login with an imported password; require fresh sessions; test OAuth-only and MFA users.
+- [ ] **Data gate:** run idempotent ETL against a production snapshot; publish per-table source,
+  transformed, inserted, merged, rejected and orphan counts plus financial totals and attachment
+  checksums; rerun to prove zero duplicates.
+- [ ] **Feature gate:** every feature used by an active BurnRateOS tenant has either a tested
+  Builderforce workflow or an explicit, customer-approved retirement/export. Reduce the
+  **222 registry-only** adoption count for active capabilities; generic CRUD is not parity.
+- [x] **C-suite menu gate:** map all 48 CxO intents to existing Creation Canvas objects/actions,
+  retain searchable legacy ids, test uniqueness and selection, and add no tables.
+- [ ] **Agent execution gate:** the generic tenant-scoped domain read is implemented; prove each
+  mapped intent against migrated production data, apply Builderforce confirmation policy to its
+  canonical writes, and pass persona-specific read/write integration tests. Menu presence and a
+  generic read alone do not satisfy this gate.
+- [ ] **Provider gate:** transfer or reauthorize Plaid, SignalWire, payments, Recall, email, Slack,
+  Google/Microsoft/GitHub/LinkedIn and enrichment connections; switch webhook/callback URLs only
+  after replay/idempotency tests.
+- [ ] **Runtime gate:** migrate or replace R2 objects, public shares, embeds, crons, DO sessions and
+  queues; preserve unsubscribe/suppression and legal evidence.
+- [ ] **Billing gate:** reconcile active subscribers and balances to provider reports; test renewal,
+  cancellation, refund, failed payment, annual interval, seat count and phone add-on independently.
+- [ ] **Cutover gate:** freeze BurnRateOS writes, take a final incremental snapshot, replay deltas,
+  compare counts/checksums, smoke-test representative tenants, then redirect web/API/public links.
+- [ ] **Rollback gate:** retain the source database, R2 bucket and Worker in non-public/read-only
+  form through an agreed rollback window; monitor login, 4xx/5xx, billing webhooks, missing-object
+  and support rates with a named abort threshold.
+
+### Reproducible audit commands
+
+Run from the Builderforce repository:
+
+```powershell
+cd api
+node scripts/check-model-coverage.mjs
+node scripts/check-table-adoption.mjs
+```
+
+Expected at the audited baseline:
+
+```text
+1130 source tables mapped, 0 unaccounted; target schema 362/362
+258 consolidation tables created; 36 feature-reached; 222 registry-only; 0 unreachable
+```
+
+The first line is the architecture milestone. The second line is the migration-status meter and
+must not be collapsed into the first when reporting readiness.
 
 > **The experience half of every track is decided by
 > [PRD 21 — The Unified Experience](./21-prd-unified-experience.md), not here.** A track may land
@@ -430,7 +671,7 @@ the duplication §2 exists to prevent.
 | Cron `0 3 * * *` (churn recalc, digests, coach) | `cronSweeps.ts` behind the KV work-gate | B9 |
 | Cron `*/5 * * * *` (uptime sweep) | merge into monitoring sweeps | B8 |
 | `frontend/src/workers/sourcingExtractor.worker.ts` | browser worker, ports as-is | B3 |
-| `ai/personaPrompts.ts` (8 CxO) + `ai/tools/*` (48 tools, 11 modules) | `provisionBuiltinAgents.ts` seeds + `builtinMcpService.ts` CATALOG | B0 → per-domain |
+| `ai/personaPrompts.ts` (8 CxO) + `ai/tools/*` (48 intents, 11 modules) | `provisionBuiltinAgents.ts` seeds + Creation Canvas `PromptUseCasePicker` mapped onto existing object/actions | B0 → per-domain |
 | `services/builderforceClient.ts` | **delete** — in-process once consolidated | B0 |
 | Prisma `schema.mysql.prisma` / `schema.neon.prisma` | **§5 exception 7** | B0 |
 
@@ -441,11 +682,13 @@ the duplication §2 exists to prevent.
 
 ---
 
-## 8 · Confirmation
+## 8 · Planned coverage confirmation
 
-**Yes — with §2 settled, all BurnRateOS functionality lands inside Builderforce.ai.** All 109
-route modules, all 20 frontend domains / 262 pages, all 404 models, all 3 Durable Objects, both
-crons, the queue and the workspace package have a named destination above.
+**The strategy assigns every BurnRateOS capability a destination; it does not confirm that the
+migration has happened.** All 109 route modules, all 20 frontend domains / 262 pages, all 404
+models, all 3 Durable Objects, both crons, the queue and the workspace package have a named
+destination above. The dated implementation audit at the top of this PRD is the authority for
+actual shutdown readiness.
 
 Two honest qualifications, both decisions rather than gaps:
 
@@ -454,5 +697,6 @@ Two honest qualifications, both decisions rather than gaps:
    surviving table. "All functionality" is preserved; roughly 120–160 of the 404 models are
    not.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
-   credits-vs-caps pricing model, and the Neon tier. Each changes what gets built; none blocks
-   B0 from starting once §5.1 is answered.
+   credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. The 2026-08-10
+   audit found that the implemented company/relationship model does not yet satisfy the tenancy
+   decision in §3.2, so that decision must be reconciled before production data is transformed.

@@ -32,13 +32,11 @@ boosts
 bottleneck_analysis
 brand_kits
 break_even_scenarios
-business_phone_numbers
 business_pricing_models
 candidate_interactions
 candidate_resumes
 capacity_heatmaps
 card_decks
-carts
 churn_predictions
 cities
 cohort_retention
@@ -145,8 +143,6 @@ onboarding_checklists
 onboarding_flows
 onboarding_progress
 onboarding_tasks
-order_line_items
-orders
 outplacement_packages
 page_embed_videos
 partner_program_opt_ins
@@ -200,7 +196,6 @@ scratch_pad_attachments
 screening_template_items
 session_discussions
 sessions
-settings
 sign_offs
 snapshots
 sprint_financial_impact
@@ -221,7 +216,6 @@ uptime_monitors
 user_badges
 user_stock_media_usage
 user_terms_agreements
-validation_dashboards
 validation_data_imports
 videos
 waitlist_entries

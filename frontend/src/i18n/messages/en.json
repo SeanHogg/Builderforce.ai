@@ -6897,6 +6897,21 @@
     "error": "Unable to subscribe right now. Please try again.",
     "success": "Thanks — you're on the list."
   },
+  "exitIntent": {
+    "badge": "Stay connected",
+    "title": "Before you go…",
+    "description": "Get practical ideas for building with AI agents, plus updates on new Builderforce.ai capabilities.",
+    "emailAria": "Email address",
+    "emailPlaceholder": "your@email.com",
+    "submit": "Keep me in the loop",
+    "submitting": "Subscribing…",
+    "privacy": "No spam. Unsubscribe anytime.",
+    "successTitle": "You're on the list!",
+    "successDescription": "We'll send useful product updates to your inbox.",
+    "error": "Unable to subscribe right now. Please try again.",
+    "close": "Close",
+    "closeAria": "Close exit prompt"
+  },
   "blog": {
     "seo": {
       "title": "Blog — AI Agent Guides, Tutorials & Tool Comparisons",
@@ -14709,7 +14724,12 @@
     "creativeGenerating": "Generating…",
     "creativeGenerated": "{file} generated and validated",
     "creativeGeneratedOffline": "{file} generated with the offline baseline — the generator was unavailable",
-    "creativeGeneratedStatus": "Generated",
+      "creativeGeneratedStatus": "Generated",
+      "imageFoundStatus": "Found",
+      "imageFoundValidation": "Selected from {provider}",
+      "imageGeneratedValidation": "Image generation returned renderable pixels",
+      "imageFoundProposal": "Add found image “{title}”",
+      "imageGeneratedProposal": "Add generated image “{title}”",
     "creativeApplied": "Applied",
     "creativeNoMediaModel": "Publish an Evermind media model to render this object",
     "creativeNoFrames": "The model returned no readable frames",

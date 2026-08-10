@@ -6896,6 +6896,21 @@
     "error": "Abonnement derzeit nicht möglich. Bitte versuche es erneut.",
     "success": "Danke — du bist dabei."
   },
+  "exitIntent": {
+    "badge": "In Verbindung bleiben",
+    "title": "Bevor du gehst…",
+    "description": "Erhalte praktische Ideen zum Entwickeln mit KI-Agenten sowie Neuigkeiten zu Builderforce.ai-Funktionen.",
+    "emailAria": "E-Mail-Adresse",
+    "emailPlaceholder": "du@email.de",
+    "submit": "Auf dem Laufenden halten",
+    "submitting": "Wird abonniert…",
+    "privacy": "Kein Spam. Jederzeit abbestellbar.",
+    "successTitle": "Du bist auf der Liste!",
+    "successDescription": "Wir senden dir hilfreiche Produktneuigkeiten per E-Mail.",
+    "error": "Das Abonnement ist derzeit nicht möglich. Bitte versuche es erneut.",
+    "close": "Schließen",
+    "closeAria": "Hinweis vor dem Verlassen schließen"
+  },
   "blog": {
     "seo": {
       "title": "Blog — Anleitungen, Tutorials & Tool-Vergleiche zu AI-Agenten",
@@ -14708,7 +14723,12 @@
     "creativeGenerating": "Wird erzeugt…",
     "creativeGenerated": "{file} erzeugt und geprüft",
     "creativeGeneratedOffline": "{file} mit der Offline-Basis erzeugt — der Generator war nicht verfügbar",
-    "creativeGeneratedStatus": "Erzeugt",
+      "creativeGeneratedStatus": "Erzeugt",
+      "imageFoundStatus": "Gefunden",
+      "imageFoundValidation": "Aus {provider} ausgewählt",
+      "imageGeneratedValidation": "Die Bilderzeugung hat darstellbare Pixel zurückgegeben",
+      "imageFoundProposal": "Gefundenes Bild „{title}“ hinzufügen",
+      "imageGeneratedProposal": "Erzeugtes Bild „{title}“ hinzufügen",
     "creativeApplied": "Angewendet",
     "creativeNoMediaModel": "Veröffentlichen Sie ein Evermind-Medienmodell, um dieses Objekt zu erzeugen",
     "creativeNoFrames": "Das Modell lieferte keine lesbaren Einzelbilder",
