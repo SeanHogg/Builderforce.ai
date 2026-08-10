@@ -1,6 +1,14 @@
 /**
  * Device router — the canonical place to ask "can this browser run the studio?"
  *
+ * Also published on its own as `@seanhogg/builderforce-studio/capabilities`.
+ * This module holds nothing but capability probes and types, whereas the package
+ * barrel statically imports `onnxruntime-web` and `@huggingface/transformers` —
+ * so a consumer that only wants `hasWebGPUSupport()` (a two-line check for
+ * `navigator.gpu`) must import it from the subpath. Reaching it through the
+ * barrel pulls ~3 MB of runtime JS and ~47 MB of `.wasm` into the eager bundle
+ * for a feature detect.
+ *
  * Probes WebNN → WebGPU → CPU and returns the first path that initialises with
  * an actual usable device. The studio's React panel and engine both call this;
  * consumers never compute `hasWebGPU` themselves (DRY: shared decision lives

@@ -69,6 +69,13 @@ async function kvKey(key: string): Promise<string> {
   return `${KV_KEY_PREFIX}sha256:${hex}`;
 }
 
+/** KV is JSON storage, so a freshly loaded value must have the same observable shape
+ * as a later KV hit. In particular, Dates become ISO strings on both paths. */
+function toJsonShape<T>(value: T): T {
+  const encoded = JSON.stringify(value);
+  return encoded === undefined ? value : JSON.parse(encoded) as T;
+}
+
 /**
  * Return the cached value for `key`, or compute it via `loader`, cache it in
  * both layers, and return it. KV/L1 errors degrade to a direct loader call.
@@ -109,7 +116,7 @@ export async function getOrSetCached<T>(
     }
   }
 
-  const fresh = await loader();
+  const fresh = toJsonShape(await loader());
   l1.set(key, { value: fresh, expiresAt: now + l1Ttl });
   if (kv) {
     const storageKey = await kvKey(key);

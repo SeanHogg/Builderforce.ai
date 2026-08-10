@@ -19,8 +19,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Consolidated Gap Register.
  */
 
-import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
+import { and, eq, desc, getTableColumns, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
+import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
 import { advertisedName } from './toolNaming';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import {
@@ -32,9 +33,11 @@ import {
   type ErrorLogFilters,
 } from '../observability/errorLogQuery';
 import { ProjectService } from '../project/ProjectService';
+import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
+import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { DEP_TYPES } from '../task/taskDependencies';
@@ -43,12 +46,15 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
 import { integrationCredentials } from '../../infrastructure/database/schema';
-import { fetchWebDocument } from '../web/webFetch';
+import { fetchWebDocumentCached } from '../web/webFetch';
+import { geocodeBatch, MAX_BATCH } from '../web/geocode';
+import { resolveWebSearchBacking } from '../runtime/webSearchCredential';
+import { normalizeSearchQuery, searchWeb } from '../runtime/cloudWeb';
 import { encryptCredentials } from '../integrations/credentialCrypto';
 import { MigrationService, type ImportMode } from '../migration/MigrationService';
 import { createMigrationStore } from '../migration/migrationStore';
@@ -436,7 +442,98 @@ function summarizeModelStatuses(arr: Array<Record<string, unknown>>): Record<str
 // Catalog
 // ---------------------------------------------------------------------------
 
+const SALES_STAGES = new Set(['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost']);
+const SALES_CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
+async function salesOwner(ctx: BuiltinCtx, requested: unknown): Promise<string> {
+  if (!ctx.userId) throw new Error('Sales tools require a signed-in user.');
+  const ownerId = str(requested).trim() || ctx.userId;
+  const [viewer] = await ctx.db.select({ accountType: users.accountType, isSuperadmin: users.isSuperadmin }).from(users).where(eq(users.id, ctx.userId)).limit(1);
+  if (!viewer) throw new Error('User not found.');
+  if (ownerId !== ctx.userId && !viewer.isSuperadmin) throw new Error('Only a superadmin can operate another associate’s pipeline.');
+  if (ownerId === ctx.userId && viewer.accountType !== 'sales') throw new Error('Pass associateUserId to operate a sales associate pipeline.');
+  if (ownerId !== ctx.userId) {
+    const [target] = await ctx.db.select({ accountType: users.accountType }).from(users).where(eq(users.id, ownerId)).limit(1);
+    if (target?.accountType !== 'sales') throw new Error('Sales associate not found.');
+  }
+  return ownerId;
+}
+
+function salesText(value: unknown, max: number): string { return str(value).trim().slice(0, max); }
+async function salesSettings(ctx: BuiltinCtx, ownerUserId: string) {
+  const referralCode = `BF${crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+  const salesCode = `BS${crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+  const [created] = await ctx.db.insert(salesAssociateSettings).values({ ownerUserId, referralCode, salesCode }).onConflictDoNothing({ target: salesAssociateSettings.ownerUserId }).returning();
+  if (created) return created;
+  const [existing] = await ctx.db.select().from(salesAssociateSettings).where(eq(salesAssociateSettings.ownerUserId, ownerUserId)).limit(1);
+  return existing;
+}
 const CATALOG: BuiltinTool[] = [
+  // ---- Native creative platform -----------------------------------------
+  {
+    tool: 'creative.capabilities',
+    mutates: false,
+    description: 'List Builderforce-owned creative artifact capabilities, media kinds, and supported output formats. Provider-neutral: no external service is required or implied.',
+    parameters: obj({}),
+    run: async () => ({
+      capabilities: CREATIVE_CAPABILITIES,
+      contract: 'builderforce.creation-canvas.v1',
+      providerNeutral: true,
+    }),
+  },
+  {
+    tool: 'creative.compose',
+    mutates: false,
+    description: 'Compile a provider-neutral creative brief into a canonical Builderforce Canvas artifact manifest for images, animation, podcasts, comics, games, CAD, 3D models, resumes, templates, video, voice, documents, presentations, or files.',
+    parameters: obj({ kind: S, title: S, brief: S, templateId: S, outputFormat: S }, ['kind', 'title']),
+    run: async (_ctx, a) => {
+      const kind = str(a.kind).trim();
+      const capability = CREATIVE_CAPABILITIES.find((entry) => entry.kind === kind);
+      if (!capability) throw new Error(`Unsupported creative kind '${kind}'.`);
+      const requestedOutput = str(a.outputFormat).trim();
+      if (requestedOutput && !capability.outputs.some((output) => output.toLowerCase() === requestedOutput.toLowerCase())) {
+        throw new Error(`Unsupported ${kind} output '${requestedOutput}'. Supported outputs: ${capability.outputs.join(', ')}.`);
+      }
+      return {
+        manifestVersion: 1,
+        artifactId: crypto.randomUUID(),
+        kind: capability.kind,
+        capabilityId: capability.capabilityId,
+        mediaKind: capability.mediaKind,
+        provider: 'native',
+        title: str(a.title).trim().slice(0, 200),
+        brief: str(a.brief).trim().slice(0, 40_000),
+        templateId: str(a.templateId).trim() || null,
+        outputFormat: requestedOutput || capability.outputs[0],
+        status: 'Draft',
+      };
+    },
+  },
+  // ---- Compliance Audit Agent ---------------------------------------------
+  {
+    tool: 'compliance.requirements',
+    mutates: false,
+    description: 'List the jurisdiction matrix used by the Compliance Audit Agent: US federal and state privacy/AI/marketing/minor/accessibility rules plus EU/EEA, UK, Canada/Quebec, Brazil, and Australia. Use this to explain scope or determine applicability before an audit. This is an audit aid, not legal advice.',
+    parameters: obj({}),
+    run: async () => {
+      const { listComplianceJurisdictions } = await import('../tools/complianceJurisdictions');
+      return {
+        jurisdictions: listComplianceJurisdictions(),
+        disclaimer: 'Applicability depends on nexus, thresholds, data, audience, and controller/processor role; counsel must confirm.',
+      };
+    },
+  },
+  {
+    tool: 'compliance.run_audit',
+    mutates: true,
+    description: 'Invoke the Compliance Audit Agent against a project\'s connected GitHub repositories. It records a scored report and files one independently remediable ticket per detected gap for the deep source review. Requires projectId and manager permission. Call this when a user asks to audit a website, application, privacy, AI, or jurisdictional compliance.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: async (ctx, a) => replayRoute(
+      ctx,
+      'POST',
+      '/api/tools/audits/privacy-compliance-audit/run',
+      { projectId: num(a.projectId) },
+    ),
+  },
   // ---- Session ----
   {
     tool: 'session.current_model', mutates: false,
@@ -488,6 +585,114 @@ const CATALOG: BuiltinTool[] = [
         ...(premiumSelection ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
         premiumAccess: { entitled: premiumAccess.entitled, reason: premiumAccess.reason, ...(premiumAccess.unlock ? { unlock: premiumAccess.unlock } : {}) },
       };
+    },
+  },
+  // ---- Sales associate CRM + marketing execution ----
+  {
+    tool: 'sales.workspace_get', mutates: false,
+    description: 'Load the signed-in sales associate’s complete CRM workspace (contacts, campaigns, weekly goals, and shared coaching notes). A superadmin may pass associateUserId to review that associate inside their shared sales canvas.',
+    parameters: obj({ associateUserId: S }),
+    run: async (ctx, a) => {
+      const ownerId = await salesOwner(ctx, a.associateUserId);
+      const [contacts, campaigns, goals, notes, referrals, settings, commissionRules] = await Promise.all([
+        ctx.db.select().from(salesContacts).where(eq(salesContacts.ownerUserId, ownerId)).orderBy(desc(salesContacts.updatedAt)),
+        ctx.db.select().from(salesCampaigns).where(eq(salesCampaigns.ownerUserId, ownerId)).orderBy(desc(salesCampaigns.updatedAt)),
+        ctx.db.select().from(salesWeeklyGoals).where(eq(salesWeeklyGoals.ownerUserId, ownerId)).limit(1),
+        ctx.db.select().from(salesCoachingNotes).where(eq(salesCoachingNotes.associateUserId, ownerId)).orderBy(desc(salesCoachingNotes.createdAt)),
+        ctx.db.select({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(eq(salesReferrals.associateUserId, ownerId), isNotNull(salesReferrals.signupNotifiedAt))).orderBy(desc(salesReferrals.signedUpAt)),
+        salesSettings(ctx, ownerId),
+        ctx.db.select().from(salesCommissionRules).orderBy(salesCommissionRules.plan, salesCommissionRules.billingCycle),
+      ]);
+      return { ownerUserId: ownerId, contacts, campaigns, goals: goals[0] ?? { outreachTarget: 50, contactsTarget: 20, meetingsTarget: 3 }, coachingNotes: notes, referrals, settings, commissionRules, revenueForecast: salesRevenueForecast(settings?.revenueGoalCents ?? 0, commissionRules), referralLinks: settings ? { referral: `https://builderforce.ai/register?ref=${settings.referralCode}`, sales: `https://builderforce.ai/register?ref=${settings.salesCode}` } : null };
+    },
+  },
+  {
+    tool: 'sales.contacts_create', mutates: true,
+    description: 'Create a durable CRM contact from the sales canvas. Use market to identify the target segment and stage to place it in the pipeline.',
+    parameters: obj({ associateUserId: S, name: S, email: S, company: S, market: S, stage: { type: 'string', enum: [...SALES_STAGES] } }, ['name']),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const [row] = await ctx.db.insert(salesContacts).values({ ownerUserId, name: salesText(a.name, 255), email: salesText(a.email, 255), company: salesText(a.company, 255), market: salesText(a.market, 255), stage: SALES_STAGES.has(str(a.stage)) ? str(a.stage) : 'new' }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'sales.contacts_update', mutates: true,
+    description: 'Update a CRM contact or move it to another pipeline stage. Stage changes record the contact touch time.',
+    parameters: obj({ associateUserId: S, contactId: S, name: S, email: S, company: S, market: S, stage: { type: 'string', enum: [...SALES_STAGES] } }, ['contactId']),
+    run: async (ctx, a) => {
+      const ownerId = await salesOwner(ctx, a.associateUserId);
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      for (const key of ['name', 'email', 'company', 'market'] as const) if (a[key] != null) patch[key] = salesText(a[key], 255);
+      if (a.stage != null && SALES_STAGES.has(str(a.stage))) { patch.stage = str(a.stage); patch.lastTouchAt = new Date(); }
+      const [row] = await ctx.db.update(salesContacts).set(patch).where(and(eq(salesContacts.id, str(a.contactId)), eq(salesContacts.ownerUserId, ownerId))).returning();
+      if (!row) throw new Error('Contact not found.');
+      return row;
+    },
+  },
+  {
+    tool: 'sales.campaigns_create', mutates: true,
+    description: 'Create a durable sales or marketing campaign from the canvas. This authors and tracks the campaign; use connected marketing/email MCP tools for provider delivery when configured.',
+    parameters: obj({ associateUserId: S, name: S, market: S, subject: S }, ['name']),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const [row] = await ctx.db.insert(salesCampaigns).values({ ownerUserId, name: salesText(a.name, 255), market: salesText(a.market, 255), subject: salesText(a.subject, 500) }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'sales.campaigns_update', mutates: true,
+    description: 'Update campaign execution state or recorded delivery metrics from the sales canvas.',
+    parameters: obj({ associateUserId: S, campaignId: S, status: { type: 'string', enum: [...SALES_CAMPAIGN_STATUSES] }, sent: N, replies: N }, ['campaignId']),
+    run: async (ctx, a) => {
+      const ownerId = await salesOwner(ctx, a.associateUserId);
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      if (a.status != null && SALES_CAMPAIGN_STATUSES.has(str(a.status))) patch.status = str(a.status);
+      if (a.sent != null) patch.sent = Math.min(2_147_483_647, Math.max(0, Math.round(num(a.sent))));
+      if (a.replies != null) patch.replies = Math.min(2_147_483_647, Math.max(0, Math.round(num(a.replies))));
+      const [row] = await ctx.db.update(salesCampaigns).set(patch).where(and(eq(salesCampaigns.id, str(a.campaignId)), eq(salesCampaigns.ownerUserId, ownerId))).returning();
+      if (!row) throw new Error('Campaign not found.');
+      return row;
+    },
+  },
+  {
+    tool: 'sales.goals_set', mutates: true,
+    description: 'Set weekly outreach, new-contact, and meeting targets for a sales associate.',
+    parameters: obj({ associateUserId: S, outreachTarget: N, contactsTarget: N, meetingsTarget: N }),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const boundedTarget = (value: unknown, fallback: number) => Math.min(1_000_000, Math.max(1, Math.round(num(value) || fallback)));
+      const values = { ownerUserId, outreachTarget: boundedTarget(a.outreachTarget, 50), contactsTarget: boundedTarget(a.contactsTarget, 20), meetingsTarget: boundedTarget(a.meetingsTarget, 3), updatedAt: new Date() };
+      const [row] = await ctx.db.insert(salesWeeklyGoals).values(values).onConflictDoUpdate({ target: salesWeeklyGoals.ownerUserId, set: values }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'sales.revenue_plan_set', mutates: true,
+    description: 'Set the associate revenue goal and signup/conversion notification preferences. Returns current commission rules so Brain can calculate the required conversions by plan and billing cycle.',
+    parameters: obj({ associateUserId: S, revenueGoalDollars: N, notifyOnSignup: B, notifyOnConversion: B }, ['revenueGoalDollars']),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const current = await salesSettings(ctx, ownerUserId); if (!current) throw new Error('Sales settings unavailable.');
+      const goalDollars = num(a.revenueGoalDollars);
+      if (!Number.isFinite(goalDollars) || goalDollars < 0 || goalDollars > 100_000_000) throw new Error('revenueGoalDollars must be between 0 and 100,000,000.');
+      const [settings] = await ctx.db.update(salesAssociateSettings).set({ revenueGoalCents: Math.round(goalDollars * 100), notifyOnSignup: a.notifyOnSignup == null ? current.notifyOnSignup : Boolean(a.notifyOnSignup), notifyOnConversion: a.notifyOnConversion == null ? current.notifyOnConversion : Boolean(a.notifyOnConversion), updatedAt: new Date() }).where(eq(salesAssociateSettings.ownerUserId, ownerUserId)).returning();
+      if (!settings) throw new Error('Sales settings could not be updated.');
+      const commissionRules = await ctx.db.select().from(salesCommissionRules).orderBy(salesCommissionRules.plan, salesCommissionRules.billingCycle);
+      return { settings, commissionRules, revenueForecast: salesRevenueForecast(settings.revenueGoalCents, commissionRules) };
+    },
+  },
+  {
+    tool: 'sales.coaching_note_add', mutates: true,
+    description: 'Superadmin-only: add a shared coaching note to an associate’s sales canvas and pipeline.',
+    parameters: obj({ associateUserId: S, body: S }, ['associateUserId', 'body']),
+    run: async (ctx, a) => {
+      if (!ctx.userId) throw new Error('Signed-in user required.');
+      const associateUserId = await salesOwner(ctx, a.associateUserId);
+      const [viewer] = await ctx.db.select({ isSuperadmin: users.isSuperadmin }).from(users).where(eq(users.id, ctx.userId)).limit(1);
+      if (!viewer?.isSuperadmin) throw new Error('Superadmin required.');
+      const [row] = await ctx.db.insert(salesCoachingNotes).values({ associateUserId, authorUserId: ctx.userId, body: salesText(a.body, 5000) }).returning();
+      return row;
     },
   },
   // ---- Projects ----
@@ -1471,7 +1676,7 @@ const CATALOG: BuiltinTool[] = [
   // ---- Prompt library (write) — promptLibraryEntries is segment-scoped; versions hang off an
   //       entry (FK entryId), so every version op first asserts the parent entry's tenant+segment. ----
   { tool: 'prompts.get', mutates: false, description: 'Get a prompt-library entry by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(promptLibraryEntries).where(and(eq(promptLibraryEntries.id, str(a.id)), eq(promptLibraryEntries.tenantId, ctx.tenantId), eq(promptLibraryEntries.segmentId, seg))).limit(1))[0] ?? null; } },
-  { tool: 'prompts.browse_public', mutates: false, description: 'Browse the public prompt gallery (published prompts across all workspaces).', parameters: obj({ q: S, category: S, limit: N }), run: (ctx, a) => ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.visibility, 'public')).orderBy(desc(promptLibraryEntries.starCount)).limit(a.limit != null ? num(a.limit) : 100) },
+  { tool: 'prompts.browse_public', mutates: false, description: 'Browse the public prompt gallery (published prompts across all workspaces).', parameters: obj({ q: S, category: S, limit: N }), run: (ctx, a) => ctx.db.select({ ...getTableColumns(promptLibraryEntries), tenantId: promptLibraryEntries.tenantId }).from(promptLibraryEntries).where(eq(promptLibraryEntries.visibility, 'public')).orderBy(desc(promptLibraryEntries.starCount)).limit(a.limit != null ? num(a.limit) : 100) },
   {
     tool: 'prompts.create', mutates: true,
     description: 'Create a prompt template (title + body). visibility: private|tenant|public.',
@@ -1636,7 +1841,7 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'project_agents.remove', mutates: true, description: 'Detach an agent from a project.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(projectAgents).where(and(eq(projectAgents.id, num(a.id)), eq(projectAgents.tenantId, ctx.tenantId))).returning({ id: projectAgents.id }); return { deleted: rows.length > 0 ? num(a.id) : null }; } },
   // agent_assignments is segment-scoped.
-  { tool: 'agent_assignments.list', mutates: false, description: 'List agents assigned to a scope (project/workflow/security/swimlane/brain/global).', parameters: obj({ scope: S, scopeId: S }, ['scope']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const where = a.scopeId != null ? and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope)), eq(agentAssignments.scopeId, str(a.scopeId))) : and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope))); return ctx.db.select().from(agentAssignments).where(where).limit(200); } },
+  { tool: 'agent_assignments.list', mutates: false, description: 'List agents assigned to a scope (project/workflow/security/swimlane/brain/global).', parameters: obj({ scope: S, scopeId: S }, ['scope']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const tenantIdWhere = a.scopeId != null ? and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope)), eq(agentAssignments.scopeId, str(a.scopeId))) : and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope))); return ctx.db.select().from(agentAssignments).where(tenantIdWhere).limit(200); } },
   {
     tool: 'agent_assignments.assign', mutates: true,
     description: 'Assign a registered agent to a scope (project/workflow/security/swimlane/brain/global).',
@@ -1752,7 +1957,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'alerts.delete', mutates: true, description: 'Delete an alert rule.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(alerts).where(and(eq(alerts.id, str(a.id)), eq(alerts.tenantId, ctx.tenantId), eq(alerts.segmentId, seg))).returning({ id: alerts.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
-  { tool: 'alerts.events', mutates: false, description: 'List recent alert firings (events), optionally filtered by status (triggered|acknowledged|resolved).', parameters: obj({ limit: N, status: { type: 'string', enum: ['triggered', 'acknowledged', 'resolved'] } }), run: (ctx, a) => { const where = a.status != null ? and(eq(alertEvents.tenantId, ctx.tenantId), eq(alertEvents.status, str(a.status))) : eq(alertEvents.tenantId, ctx.tenantId); return ctx.db.select().from(alertEvents).where(where).orderBy(desc(alertEvents.createdAt)).limit(a.limit != null ? num(a.limit) : 100); } },
+  { tool: 'alerts.events', mutates: false, description: 'List recent alert firings (events), optionally filtered by status (triggered|acknowledged|resolved).', parameters: obj({ limit: N, status: { type: 'string', enum: ['triggered', 'acknowledged', 'resolved'] } }), run: (ctx, a) => { const tenantIdWhere = a.status != null ? and(eq(alertEvents.tenantId, ctx.tenantId), eq(alertEvents.status, str(a.status))) : eq(alertEvents.tenantId, ctx.tenantId); return ctx.db.select().from(alertEvents).where(tenantIdWhere).orderBy(desc(alertEvents.createdAt)).limit(a.limit != null ? num(a.limit) : 100); } },
   { tool: 'alerts.acknowledge', mutates: true, description: 'Acknowledge an alert firing (event).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const [row] = await ctx.db.update(alertEvents).set({ status: 'acknowledged', acknowledgedAt: new Date() }).where(and(eq(alertEvents.id, str(a.id)), eq(alertEvents.tenantId, ctx.tenantId))).returning(); if (!row) throw new Error('alert event not found'); return row; } },
 
   // ---- Audit / activity (read from the unified activity_log stream) ----
@@ -1877,8 +2082,8 @@ const CATALOG: BuiltinTool[] = [
   // agents_published is the cross-tenant marketplace view of ide_agents (published+active).
   // It is intentionally NOT tenant-scoped — it is the same public registry for everyone
   // (mirrors GET /api/workforce/agents). hire SKIPPED (purchase/billing flow).
-  { tool: 'agents_published.list', mutates: false, description: 'List published workforce agents (the public marketplace registry).', parameters: obj({}), run: (ctx) => ctx.db.select().from(ideAgents).where(and(eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).orderBy(desc(ideAgents.hireCount)).limit(200) },
-  { tool: 'agents_published.get', mutates: false, description: 'Get a published marketplace agent by id.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => (await ctx.db.select().from(ideAgents).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).limit(1))[0] ?? null },
+  { tool: 'agents_published.list', mutates: false, description: 'List published workforce agents (the public marketplace registry).', parameters: obj({}), run: (ctx) => ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(and(eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).orderBy(desc(ideAgents.hireCount)).limit(200) },
+  { tool: 'agents_published.get', mutates: false, description: 'Get a published marketplace agent by id.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => (await ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).limit(1))[0] ?? null },
   // skills_marketplace is the public published-skills catalog (no tenant column).
   { tool: 'skills_marketplace.list', mutates: false, description: 'Browse published marketplace skills (public).', parameters: obj({ category: S, q: S, limit: N }), run: (ctx, a) => ctx.db.select().from(marketplaceSkills).where(a.category != null ? and(eq(marketplaceSkills.published, true), eq(marketplaceSkills.category, str(a.category))) : eq(marketplaceSkills.published, true)).orderBy(desc(marketplaceSkills.downloads)).limit(a.limit != null ? num(a.limit) : 100) },
 
@@ -2176,6 +2381,200 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'swimlane_agents.remove', mutates: true, description: 'Unassign an agent from a swimlane.', parameters: obj({ boardId: S, laneId: S, id: S }, ['boardId', 'laneId', 'id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1); if (!lane) return { deleted: null }; const rows = await ctx.db.delete(swimlaneAgentAssignments).where(and(eq(swimlaneAgentAssignments.id, str(a.id)), eq(swimlaneAgentAssignments.swimlaneId, lane.id), eq(swimlaneAgentAssignments.tenantId, ctx.tenantId), eq(swimlaneAgentAssignments.segmentId, seg))).returning({ id: swimlaneAgentAssignments.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
+  // ---- CONNECTED MAILBOXES + EMAIL MARKETING -------------------------------
+  //
+  // What "show me my inbox and email that list" needs the model to be able to do.
+  // Five reads and three writes, split along the line that matters: reading a
+  // mailbox and drafting a campaign are safe to do speculatively, whereas
+  // `campaign.send` reaches thousands of real strangers and is the one call here
+  // that cannot be taken back.
+  //
+  // Two design notes that are load-bearing rather than stylistic:
+  //
+  //  • `mailbox.list_messages` returns the TRIAGE projection, not full messages.
+  //    The Brain re-sends its whole transcript every turn, so 25 full marketing
+  //    emails is tens of thousands of tokens that evict the actual conversation.
+  //    A model that needs one message in full asks for it by id.
+  //  • Every mailbox tool takes `accountEmail` as an alternative to a numeric id.
+  //    A user says "send it from hello@acme.com"; an agent has no id to hand, and
+  //    forcing one would cost a disambiguation round-trip on every single call.
+  {
+    tool: 'mailbox.list_connections', mutates: false,
+    description: 'List the Microsoft 365 and Gmail mailboxes connected to this workspace, with the account address, whether the grant is still live (`status`), and whether campaigns are allowed to send from it (`allowSending`). Call this FIRST when asked to read an inbox or send from "my email" — it is what tells you which mailbox the user means and whether you need to ask.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      const { listMailboxConnections } = await import('../mailbox/mailboxService');
+      return { connections: await listMailboxConnections(ctx.db, ctx.tenantId) };
+    },
+  },
+  {
+    tool: 'mailbox.list_messages', mutates: false,
+    description: 'READ AND FILTER a connected mailbox. Returns a COMPACT projection of each message (sender, subject, received time, unread flag, and a ~600-character excerpt) — enough to triage, rank, summarise or answer "which of these need a reply?" without pulling whole emails into context. Filters combine: `q` free-text search, `from` sender substring, `subject` substring, `unread`, `hasAttachments`, and `after`/`before` ISO instants. Identify the mailbox by `accountEmail` or `connectionId`; with exactly one mailbox connected you may omit both. When a message needs reading in full, call mailbox.get_message with its id.',
+    parameters: obj({
+      connectionId: N, accountEmail: S, q: S, from: S, subject: S,
+      unread: B, hasAttachments: B, after: S, before: S, limit: N,
+    }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
+      const { resolveMailbox, readMailbox, toTriageMessages } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const result = await readMailbox(ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, {
+        search: a.q != null ? str(a.q) : undefined,
+        from: a.from != null ? str(a.from) : undefined,
+        subject: a.subject != null ? str(a.subject) : undefined,
+        unreadOnly: a.unread === true,
+        hasAttachments: a.hasAttachments === true,
+        afterISO: a.after != null ? str(a.after) : undefined,
+        beforeISO: a.before != null ? str(a.before) : undefined,
+        limit: a.limit != null ? num(a.limit) : undefined,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return {
+        accountEmail: result.accountEmail,
+        provider: result.provider,
+        total: result.messages.length,
+        messages: toTriageMessages(result.messages),
+      };
+    },
+  },
+  {
+    tool: 'mailbox.get_message', mutates: false,
+    description: 'Read ONE message from a connected mailbox in full — the complete plain-text body, every recipient, and a link into the provider\'s web client. Use after mailbox.list_messages has narrowed things down; reading many messages this way will exhaust your context.',
+    parameters: obj({ messageId: S, connectionId: N, accountEmail: S }, ['messageId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
+      const { resolveMailbox, readMailboxMessage } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const result = await readMailboxMessage(
+        ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, str(a.messageId),
+      );
+      if (!result.ok) throw new Error(result.error);
+      return result.message;
+    },
+  },
+  {
+    tool: 'mailbox.send', mutates: true,
+    description: 'Send ONE email from a connected mailbox — a reply, an introduction, a single follow-up. This is for individual correspondence; to email a LIST, build a campaign (campaign.create then campaign.send) so that suppression, one-click unsubscribe and the per-recipient delivery ledger all apply. The From address is always the connected mailbox and cannot be forged.',
+    parameters: obj({ to: S, subject: S, html: S, connectionId: N, accountEmail: S, replyTo: S }, ['to', 'subject', 'html']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('sending from a mailbox needs the platform environment');
+      const { resolveMailbox, sendFromMailbox } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      }, { forSending: true });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const result = await sendFromMailbox(ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, {
+        to: str(a.to),
+        subject: str(a.subject),
+        html: str(a.html),
+        replyTo: a.replyTo != null ? str(a.replyTo) : undefined,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return { sent: true, from: result.accountEmail, id: result.id };
+    },
+  },
+  {
+    tool: 'marketing.list_templates', mutates: false,
+    description: 'List this workspace\'s reusable email templates — name, subject, and `mergeFields` (the placeholders each body references beyond the always-available name/email/logo). Use `mergeFields` to check the audience actually carries those attributes BEFORE building a campaign from a template; a missing one renders as an empty gap in a real person\'s inbox.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      const { listTemplates } = await import('../marketing/templateLibrary');
+      const templates = await listTemplates(ctx.db, ctx.tenantId);
+      // Bodies are omitted: a template is several KB of table markup and the
+      // model needs the CONTRACT (subject + merge fields), not the HTML.
+      return {
+        templates: templates.map(({ bodyHtml: _body, ...rest }) => ({ ...rest, bytes: _body.length })),
+      };
+    },
+  },
+  {
+    tool: 'marketing.create_template', mutates: true,
+    description: 'Save an email template for reuse. `bodyHtml` is sanitized on write (script/iframe/event handlers stripped). Use `{{name}}`, `{{email}}`, `{{logo}}` and `{{unsubscribe}}` for the always-available fields, and any other `{{field}}` to pull from an audience member\'s attributes. Write table-based HTML with inline styles and state both text and background colours explicitly — mail clients strip stylesheets, and a body that inherits its colours renders black-on-black in a dark-mode inbox.',
+    parameters: obj({ name: S, subject: S, bodyHtml: S, description: S }, ['name', 'bodyHtml']),
+    run: async (ctx, a) => {
+      const { createTemplate } = await import('../marketing/templateLibrary');
+      const result = await createTemplate(ctx.db, ctx.tenantId, {
+        name: str(a.name),
+        subject: a.subject != null ? str(a.subject) : '',
+        bodyHtml: str(a.bodyHtml),
+        description: a.description != null ? str(a.description) : '',
+        source: 'generated',
+        createdBy: ctx.userId ?? null,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result.template;
+    },
+  },
+  {
+    tool: 'marketing.list_assets', mutates: false,
+    description: 'List the workspace\'s campaign logos and images with their public URLs — the URLs a template\'s <img src> must point at, because a recipient\'s mail client has no session and cannot load an authenticated one. A template using `{{logo}}` resolves the most recent asset of kind "logo" automatically.',
+    parameters: obj({ kind: S }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('listing assets needs the platform environment');
+      const { listAssets, resolveAssetOrigin } = await import('../marketing/templateLibrary');
+      const kind = str(a.kind);
+      return {
+        assets: await listAssets(
+          ctx.db, ctx.tenantId, resolveAssetOrigin(ctx.env),
+          kind === 'logo' || kind === 'image' ? kind : undefined,
+        ),
+      };
+    },
+  },
+  {
+    tool: 'marketing.generate_logo', mutates: true,
+    description: 'Generate a logo from a description of the brand and store it as a reusable campaign asset, returning its public URL. Describe the BUSINESS, not the picture ("a boutique coffee roaster in Melbourne") — the prompt is shaped for you into a flat, text-free mark that stays legible at 40 pixels tall in an email header. Counts against the workspace\'s image-generation credits.',
+    parameters: obj({ description: S, style: S, name: S }, ['description']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/growth/assets/generate', {
+      description: str(a.description),
+      ...(a.style != null ? { style: str(a.style) } : {}),
+      ...(a.name != null ? { name: str(a.name) } : {}),
+    }),
+  },
+  {
+    tool: 'campaign.create', mutates: true,
+    description: 'Draft a marketing campaign against an audience. Creating it does NOT send it — the draft is reviewable and editable until campaign.send. Choose `transport`: "platform" (default) sends from a DNS-verified sender identity through Builderforce; "mailbox" sends from a connected Microsoft 365 / Gmail account (pass `mailboxConnectionId`); "sendgrid" sends through the workspace\'s Twilio SendGrid connection (pass `connectorConnectionId` AND a verified `senderIdentityId`, because SendGrid enforces its own sender verification). Pass `templateId` to inherit that template\'s subject and body, which are COPIED in — editing the template afterwards will not change this campaign.',
+    parameters: obj({
+      name: S, audienceId: N, subject: S, bodyHtml: S, templateId: N,
+      transport: S, senderIdentityId: N, mailboxConnectionId: N, connectorConnectionId: S,
+      fromName: S, projectId: N,
+    }, ['name', 'audienceId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/growth/campaigns', {
+      name: str(a.name),
+      audienceId: num(a.audienceId),
+      ...(a.subject != null ? { subject: str(a.subject) } : {}),
+      ...(a.bodyHtml != null ? { bodyHtml: str(a.bodyHtml) } : {}),
+      ...(a.templateId != null ? { templateId: num(a.templateId) } : {}),
+      ...(a.transport != null ? { transport: str(a.transport) } : {}),
+      ...(a.senderIdentityId != null ? { senderIdentityId: num(a.senderIdentityId) } : {}),
+      ...(a.mailboxConnectionId != null ? { mailboxConnectionId: num(a.mailboxConnectionId) } : {}),
+      ...(a.connectorConnectionId != null ? { connectorConnectionId: str(a.connectorConnectionId) } : {}),
+      ...(a.fromName != null ? { fromName: str(a.fromName) } : {}),
+      ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+    }),
+  },
+  {
+    tool: 'campaign.send', mutates: true,
+    description: 'SEND a draft campaign to its whole audience. THIS REACHES REAL PEOPLE AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it speculatively or to "test" a campaign. Suppressed addresses are excluded and every message carries a working one-click unsubscribe. Returns what was queued, what was suppressed, and the first batch\'s result; a large audience finishes on the background sweep.',
+    parameters: obj({ campaignId: N }, ['campaignId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/growth/campaigns/${num(a.campaignId)}/send`),
+  },
+  {
+    tool: 'campaign.list', mutates: false,
+    description: 'List this workspace\'s marketing campaigns with their status and delivery counters (recipients, sent, failed, suppressed, opened, clicked). The counters are maintained by the send engine, so they are what actually happened rather than what was intended.',
+    parameters: obj({}),
+    run: (ctx) => replayRoute(ctx, 'GET', '/api/growth/campaigns'),
+  },
+
   // ---- Integrations + Platform migration (Jira/Monday/Rally/GitLab/Bitbucket/GitHub → BuilderForce) ----
   // The Brain can drive the whole "connect → test → migrate" flow: create a
   // credential, validate it, then discover→map→stage→commit a migration run.
@@ -2226,18 +2625,18 @@ const CATALOG: BuiltinTool[] = [
       const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, str(a.provider), str(a.credentialId));
       if (!factory) throw new Error('Could not load integration credentials');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const svc = new MigrationService(createMigrationStore(ctx.db, ctx.env));
       const mode = (['migrate', 'sync', 'both'] as ImportMode[]).includes(a.mode as ImportMode) ? (a.mode as ImportMode) : 'both';
       return svc.startRun({ tenantId: ctx.tenantId, segmentId: seg, provider: str(a.provider), credentialId: str(a.credentialId), mode, createdBy: ctx.userId ?? null }, factory(null));
     },
   },
-  { tool: 'migrations.list', mutates: false, description: 'List migration runs (history) for the workspace.', parameters: obj({}), run: (ctx) => new MigrationService(createMigrationStore(ctx.db)).listRuns(ctx.tenantId) },
-  { tool: 'migrations.get', mutates: false, description: 'Get the full staging snapshot of a migration run (projects, item types, users, staged items).', parameters: obj({ id: S }, ['id']), run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).getDetail(str(a.id), ctx.tenantId) },
+  { tool: 'migrations.list', mutates: false, description: 'List migration runs (history) for the workspace.', parameters: obj({}), run: (ctx) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).listRuns(ctx.tenantId) },
+  { tool: 'migrations.get', mutates: false, description: 'Get the full staging snapshot of a migration run (projects, item types, users, staged items).', parameters: obj({ id: S }, ['id']), run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).getDetail(str(a.id), ctx.tenantId) },
   {
     tool: 'migrations.set_mappings', mutates: true,
     description: 'Set project (create/map/skip — map several external projects to the same BF project to COMBINE), item-type, user (invite/map/skip) and item-include mappings for a run.',
     parameters: obj({ id: S, projects: { type: 'array' }, types: { type: 'array' }, users: { type: 'array' }, items: { type: 'array' } }, ['id']),
-    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).setMappings(str(a.id), ctx.tenantId, { projects: a.projects as never, types: a.types as never, users: a.users as never, items: a.items as never }),
+    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).setMappings(str(a.id), ctx.tenantId, { projects: a.projects as never, types: a.types as never, users: a.users as never, items: a.items as never }),
   },
   {
     tool: 'migrations.stage', mutates: true,
@@ -2245,7 +2644,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: S }, ['id']),
     run: async (ctx, a) => {
       const env = requireEnv(ctx);
-      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const svc = new MigrationService(createMigrationStore(ctx.db, ctx.env));
       const detail = await svc.getDetail(str(a.id), ctx.tenantId);
       if (!detail) throw new Error('Migration run not found');
       const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, detail.run.provider, detail.run.credentialId);
@@ -2255,11 +2654,11 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'migrations.commit', mutates: true,
-    description: 'Promote the staged data into real projects/tasks/members (and create ongoing sync connections when mode includes sync). This is the irreversible import step.',
+    description: 'Promote staged data into real projects/tasks/members and optional sync connections. Created artifacts retain run lineage and can be rolled back.',
     parameters: obj({ id: S }, ['id']),
     run: async (ctx, a) => {
       const env = requireEnv(ctx);
-      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const svc = new MigrationService(createMigrationStore(ctx.db, ctx.env));
       const detail = await svc.getDetail(str(a.id), ctx.tenantId);
       if (!detail) throw new Error('Migration run not found');
       const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, detail.run.provider, detail.run.credentialId);
@@ -2267,11 +2666,68 @@ const CATALOG: BuiltinTool[] = [
       return svc.commit(str(a.id), ctx.tenantId, factory);
     },
   },
+  {
+    tool: 'migrations.rollback', mutates: true,
+    description: 'Atomically remove projects, tasks, and sync connections created by a completed migration. Pre-existing mapped projects and unrelated work are preserved.',
+    parameters: obj({ id: S }, ['id']),
+    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).rollback(str(a.id), ctx.tenantId),
+  },
 
   // ---- Web (server-side fetch) — read an external URL behind the SSRF guard and return its
-  //       readable text. No DB; delegates to fetchWebDocument (assertSafeUrl + HTML→text + size cap).
-  //       The browser Brain can't fetch cross-origin URLs (CORS), so the gateway does it here. ----
-  { tool: 'web.fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (_ctx, a) => fetchWebDocument(str(a.url)) },
+  //       readable text. No DB; delegates to fetchWebDocumentCached (assertSafeUrl + HTML→text
+  //       + size cap, behind the read-through cache — a research turn re-reads the same
+  //       source across steps). The browser Brain can't fetch cross-origin URLs (CORS), so
+  //       the gateway does it here. ----
+  { tool: 'web.fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (ctx, a) => fetchWebDocumentCached(ctx.env, str(a.url)) },
+
+  // ---- Web search — the ENTRY POINT to research. `web.fetch` can only read a URL the
+  //       model was already given; without search, "research X and collect the data"
+  //       has no first step and the turn degrades to recalling X from weights.
+  //       The backing is resolved by precedence (tenant BYO key → operator key → keyless
+  //       encyclopedic vendor), so this ALWAYS runs — including on a workspace with
+  //       nothing configured, which is the case that used to refuse. `coverage` in the
+  //       result tells the model which kind of index answered, so it can be honest about
+  //       its evidence and mention that connecting a key widens it. Execution (cache,
+  //       per-query metering, failed-query invalidation) is the shared `searchWeb`. ----
+  {
+    tool: 'web.search', mutates: false,
+    description: 'Search the public web and return ranked results ({ title, url, snippet }) plus `coverage` and `attribution`. Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory. When `coverage` is "encyclopedic" the index is narrower than a full web engine: still cite what you found, and note that connecting a Tavily, Exa, or Linkup key under Settings → Integrations (or pointing the deployment at a self-hosted SearXNG instance) widens it to the open web.',
+    parameters: obj({ query: { ...S, description: 'What to search for, phrased as a search engine query.' } }, ['query']),
+    run: async (ctx, a) => {
+      const query = normalizeSearchQuery(str(a.query));
+      if (!query) return { ok: false, error: 'A search query is required.' };
+      if (!ctx.env) return { ok: false, error: 'Web search is unavailable on this surface.' };
+      const backing = await resolveWebSearchBacking(ctx.env, ctx.db, ctx.tenantId);
+      return searchWeb(ctx.env, { ...backing, meter: { db: ctx.db, tenantId: ctx.tenantId } }, query);
+    },
+  },
+
+  // ---- Geocoding — names to coordinates. The join between a researched dataset (which
+  //       holds place NAMES) and a map (which needs NUMBERS); without it those two can
+  //       both exist on a canvas and never connect. Keyless, cached hard, and resolved
+  //       bulk-first so a whole dataset lands in one call — see application/web/geocode.ts.
+  //       The description below states the RESUME contract explicitly, because the caller
+  //       is a model deciding whether to try again, and a partial result it reads as
+  //       terminal is exactly how a 200-row dataset ends up half-plotted. ----
+  {
+    tool: 'geo.geocode', mutates: false,
+    description: `Convert place names (cities, counties, districts, schools, addresses, regions) into latitude/longitude coordinates plus a bounding box. Use this to turn a dataset of place names into something a Map object can plot: pass the name column values, then write the returned lat/lng back onto the dataset rows. Pass the WHOLE list (up to ${MAX_BATCH}) in one call — do not pre-chunk it. Set outline:true for ONE enclosing region (e.g. "Michigan") to also get a simplified boundary polygon for the map background. Returns { results: [{ query, ok, lat, lng, displayName, boundingBox, kind }], resolved, unresolved, pending, truncated, attribution }. If "pending" is greater than 0, some names ran out of time budget rather than failing: call this tool AGAIN with the same list — everything already resolved is cached and returns instantly, so each call gets further. "unresolved" rows are different: those are names the geocoder does not recognise, and re-calling will not change them — re-spell them or add context instead.`,
+    parameters: obj({
+      queries: { type: 'array', items: S, description: `Place names to resolve, at most ${MAX_BATCH} per call. Pass them all at once.` },
+      context: { ...S, description: 'Region appended to every term to disambiguate, e.g. "Michigan, USA".' },
+      countryCodes: { ...S, description: 'ISO-3166 alpha-2 filter, e.g. "us".' },
+      outline: { ...B, description: 'Also return a simplified boundary polygon. Use for a single enclosing region, not for every point.' },
+    }, ['queries']),
+    run: async (ctx, a) => {
+      const queries = Array.isArray(a.queries) ? a.queries.map((value) => str(value)).filter(Boolean) : [];
+      if (!queries.length) return { ok: false, error: 'At least one place name is required.' };
+      return geocodeBatch(ctx.env, queries, {
+        ...(str(a.context).trim() ? { context: str(a.context).trim() } : {}),
+        ...(str(a.countryCodes).trim() ? { countryCodes: str(a.countryCodes).trim().toLowerCase() } : {}),
+        ...(a.outline === true ? { outline: true } : {}),
+      });
+    },
+  },
 
   // ---- Executions (agent-runtime runs) — READS only. The `executions` table is tenant- AND
   //       segment-scoped. submit/cancel/post_message are SKIPPED (side-effects: they dispatch /
@@ -2296,14 +2752,14 @@ const CATALOG: BuiltinTool[] = [
       // Cloud runs are keyed by execution_id; host runs by (agent_host_id, session_key). All
       // telemetry tables are tenant+segment-scoped, so guard tenant+segment in every filter.
       const isCloudRun = execution.agentHostId == null || !execution.sessionId;
-      const usageFilter = isCloudRun
+      const tenantIdUsageFilter = isCloudRun
         ? and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.executionId, id))
         : and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
-      const toolFilter = isCloudRun
+      const tenantIdToolFilter = isCloudRun
         ? and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.executionId, id))
         : and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.agentHostId, execution.agentHostId!), eq(toolAuditEvents.sessionKey, execution.sessionId!));
-      const usage = await ctx.db.select().from(usageSnapshots).where(usageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
-      const toolEvents = await ctx.db.select().from(toolAuditEvents).where(toolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
+      const usage = await ctx.db.select().from(usageSnapshots).where(tenantIdUsageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
+      const toolEvents = await ctx.db.select().from(toolAuditEvents).where(tenantIdToolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
       const messages = await ctx.db.select().from(executionMessages).where(and(eq(executionMessages.executionId, id), eq(executionMessages.tenantId, ctx.tenantId))).orderBy(executionMessages.createdAt).limit(500);
       return { execution, trace: { source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback', usageSnapshots: usage, toolEvents, messages } };
     },
@@ -2493,6 +2949,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'kanban.participants', mutates: false, description: 'Get a ticket\'s Participation Manifest — every required role, its resolved assignee, and its state (pending/assigned/in_progress/completed/changes_requested/waived/unstaffed). An `unstaffed` row is a RESOURCE GAP (no capable resource available).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/participants`) },
   { tool: 'kanban.accountability', mutates: false, description: 'Get a ticket\'s Accountability Report — per required role: Who signed, When, Verdict, Comments, and the linked Contribution — plus gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and %-complete.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/accountability`) },
   { tool: 'kanban.assess_resource', mutates: true, description: 'RESOURCE ASSESSMENT — add a role the ticket needs beyond the template (e.g. designer, security). It becomes a required manifest participant that must execute + sign off; if no capable resource is available it is flagged as a resource gap. responsibility defaults to "owner".', parameters: obj({ taskId: N, roleKey: S, responsibility: { type: 'string', enum: ['owner', 'reviewer', 'contributor'] }, stageKey: S, note: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants`, { roleKey: str(a.roleKey), responsibility: a.responsibility != null ? str(a.responsibility) : undefined, stageKey: a.stageKey != null ? str(a.stageKey) : undefined, note: a.note != null ? str(a.note) : undefined }) },
+  { tool: 'kanban.assign_participant', mutates: true, description: 'Assign or reassign an agent/user to an EXISTING ticket Participation Manifest role. Replaces the current assignee rather than creating a duplicate participant, and resets the role to assigned so the new assignee must provide fresh evidence.', parameters: obj({ taskId: N, roleKey: S, assigneeRef: S, assigneeKind: { type: 'string', enum: ['agent', 'user'] } }, ['taskId', 'roleKey', 'assigneeRef', 'assigneeKind']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/kanban/tasks/${num(a.taskId)}/participants/assign`, { roleKey: str(a.roleKey), assigneeRef: str(a.assigneeRef), assigneeKind: str(a.assigneeKind) }) },
   { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/coordinate`, {}) },
   { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants/materialize`, {}) },
 
@@ -2658,6 +3115,12 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ taskId: N }, ['taskId']),
     run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/${num(a.taskId)}/lifecycle`),
   },
+
+  // ---- Connector catalog: what an integration step can actually CALL ----
+  // A workflow step names a connector and an action by key. Without a way to
+  // read the real keys, an author guesses them and the build fails on a typo,
+  // so this is the lookup that makes a first-attempt integration step correct.
+  { tool: 'connectors.actions', mutates: false, description: 'Every connected integration this tenant can call, with each action key and its parameters — the connector/action keys a workflow integration step must use (e.g. connector "twilio", action "send_sms").', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/connectors/actions') },
 
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
   { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
@@ -2984,7 +3447,7 @@ function buildCtx(
   return {
     db,
     tenantId,
-    projects: new ProjectService(projectRepo),
+    projects: new ProjectService(projectRepo, undefined, opts?.env ? r2ProjectStoragePurge(opts.env) : null),
     tasks: new TaskService(taskRepo, projectRepo),
     env: opts?.env,
     userId: opts?.userId ?? null,
@@ -3020,6 +3483,10 @@ export function listBuiltinTools(): McpToolEntry[] {
  * CATALOG-membership test (every id below must exist in CATALOG).
  */
 export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
+  // Compliance agents can explain the jurisdiction matrix and launch the tracked
+  // repository audit. The launch mutates only by recording a report and filing
+  // remediation tickets; it does not change source or external systems.
+  'compliance.requirements', 'compliance.run_audit',
   // Session introspection — read-only. Lets a run answer "what model am I on?" and
   // report the model/tier it is actually driving on the timeline.
   'session.current_model',
@@ -3043,6 +3510,17 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'work_items.convert_type', 'pmo.tree', 'pmo.rollup', 'pmo.link_project', 'pmo.add_dependency',
   // Team chat — a PM/manager agent asks the team for status or shares a burndown.
   'team_chat.read', 'team_chat.post',
+  // Mailboxes and campaigns — READ AND DRAFT ONLY.
+  //
+  // An autonomous run may read an inbox, triage it, look at the template and
+  // asset library, and draft a campaign, because none of that reaches anyone.
+  // `mailbox.send`, `campaign.send` and `marketing.generate_logo` are all
+  // deliberately absent: the first two contact real strangers with no human in
+  // the loop to stop them, and the third spends the tenant's image credits. Same
+  // restraint as excluding executions.submit — a run proposes, a person sends.
+  'mailbox.list_connections', 'mailbox.list_messages', 'mailbox.get_message',
+  'marketing.list_templates', 'marketing.create_template', 'marketing.list_assets',
+  'campaign.list', 'campaign.create',
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',
@@ -3057,7 +3535,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // which required roles still must execute + sign off, and performs a Resource Assessment
   // (add a role the ticket needs beyond the template). Without these on the allowlist an
   // unattended Coordinator can SEE the tools in the catalog but not invoke them.
-  'kanban.participants', 'kanban.accountability', 'kanban.assess_resource',
+  'kanban.participants', 'kanban.accountability', 'kanban.assess_resource', 'kanban.assign_participant',
   'kanban.coordinate', 'kanban.materialize_work_items',
   // Autonomy self-diagnosis — the wiring audit ("can work complete at all?"), the
   // outcome funnel, and a single ticket's chain of custody. All read-only. An agent

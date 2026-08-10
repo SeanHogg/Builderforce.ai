@@ -19,7 +19,7 @@
  * (`buildDatabase(c.env)`) — no raw neon client lives here.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNotNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -71,7 +71,7 @@ const mapPosting = (r: typeof jobPostings.$inferSelect) => ({
 // ---------------------------------------------------------------------------
 // /api/marketplace — publish a ticket as a gig
 // ---------------------------------------------------------------------------
-export function createGigMarketplaceRoutes(_db: Db): Hono<HonoEnv> {
+export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   // POST /publish — turn a work item into a hireable gig. The server derives the
@@ -124,6 +124,38 @@ export function createGigMarketplaceRoutes(_db: Db): Hono<HonoEnv> {
       ? b.requirements.slice(0, 8000)
       : (t.description ?? null);
     const discipline = typeof b.discipline === 'string' ? (b.discipline as string) : (t.taskType === 'design' ? 'designer' : null);
+
+    // A ticket owns one posting identity. Re-publishing a closed/filled posting reopens
+    // that row instead of minting a replacement and orphaning proposals/history.
+    const [prior] = await db.select().from(jobPostings)
+      .where(and(eq(jobPostings.sourceTicketId, ticketId), eq(jobPostings.tenantId, tenantId)))
+      .orderBy(desc(jobPostings.updatedAt))
+      .limit(1);
+    if (prior) {
+      const [reopened] = await db.update(jobPostings).set({
+        projectId: t.projectId,
+        title: t.title,
+        description: t.description ?? null,
+        discipline,
+        rateMinCents: typeof b.rateMinCents === 'number' ? Math.round(b.rateMinCents) : prior.rateMinCents,
+        rateMaxCents: typeof b.rateMaxCents === 'number' ? Math.round(b.rateMaxCents) : prior.rateMaxCents,
+        currency: typeof b.currency === 'string' ? b.currency.slice(0, 3).toUpperCase() : prior.currency,
+        visibility: b.visibility === 'private' ? 'private' : 'public',
+        postingType,
+        engagementType,
+        requirements,
+        status: 'open',
+        closedAt: null,
+        updatedAt: new Date(),
+      }).where(and(eq(jobPostings.id, prior.id), eq(jobPostings.tenantId, tenantId))).returning();
+      await db.update(tasks).set({ hireable: true, jobPostingId: prior.id }).where(eq(tasks.id, ticketId));
+      await Promise.all([
+        invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
+        invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
+      ]);
+      return c.json({ jobId: prior.id, posting: reopened ? mapPosting(reopened) : null, reused: true });
+    }
+
     const id = crypto.randomUUID();
     await db.insert(jobPostings).values({
       id,
@@ -147,7 +179,10 @@ export function createGigMarketplaceRoutes(_db: Db): Hono<HonoEnv> {
       invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
       invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
     ]);
-    const [row] = await db.select().from(jobPostings).where(eq(jobPostings.id, id));
+    const [row] = await db.select().from(jobPostings).where(and(
+      eq(jobPostings.id, id),
+      eq(jobPostings.tenantId, tenantId),
+    ));
     return c.json({ jobId: id, posting: row ? mapPosting(row) : null }, 201);
   });
 
@@ -190,6 +225,7 @@ export function createGigMarketplaceRoutes(_db: Db): Hono<HonoEnv> {
   router.get('/ticket/:taskId/posting', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ error: 'invalid taskId' }, 400);
     const posting = await getOrSetCached(c.env as Env, ticketPostingKey(tenantId, taskId), async () => {
       const db = buildDatabase(c.env);
       const [row] = await db
@@ -316,7 +352,10 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const [eng] = await db
       .select({ createdByUserId: freelancerEngagements.createdByUserId })
       .from(freelancerEngagements)
-      .where(eq(freelancerEngagements.id, grant.engagementId));
+      .where(and(
+        eq(freelancerEngagements.id, grant.engagementId),
+        eq(freelancerEngagements.tenantId, grant.tenantId),
+      ));
     if (eng?.createdByUserId) {
       await notify(db, c.env, {
         userId: eng.createdByUserId, tenantId: grant.tenantId, kind: 'review',
@@ -421,7 +460,10 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     const [eng] = await db
       .select({ createdByUserId: freelancerEngagements.createdByUserId })
       .from(freelancerEngagements)
-      .where(eq(freelancerEngagements.id, engagementId));
+      .where(and(
+        eq(freelancerEngagements.id, engagementId),
+        eq(freelancerEngagements.tenantId, grant.tenantId),
+      ));
     const [me] = await db.select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
     if (eng?.createdByUserId) {
       await notify(db, c.env, {
@@ -445,8 +487,12 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
         ? and(
             eq(deliverableProposals.authorUserId, userId),
             eq(deliverableProposals.engagementId, engagementId),
+            isNotNull(deliverableProposals.tenantId),
           )
-        : eq(deliverableProposals.authorUserId, userId))
+        : and(
+            eq(deliverableProposals.authorUserId, userId),
+            isNotNull(deliverableProposals.tenantId),
+          ))
       .orderBy(desc(deliverableProposals.createdAt))
       .limit(200);
     return c.json(rows.map(mapDeliverable));
@@ -534,7 +580,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     await db
       .update(deliverableProposals)
       .set({ lastEvalOverall: overall100, updatedAt: sql`NOW()` })
-      .where(eq(deliverableProposals.id, id));
+      .where(and(eq(deliverableProposals.id, id), eq(deliverableProposals.tenantId, tenantId)));
     return c.json({ ...scores, overall100 });
   });
 

@@ -29,7 +29,10 @@ import { legalDocuments, userLegalAcceptances } from '../../infrastructure/datab
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 /** Cache key for the platform-wide active terms version. */
-const ACTIVE_TERMS_KEY = 'terms:active-version';
+// Bump the key with each migration-published legal release. SQL migrations cannot
+// invalidate Cloudflare KV, so changing the namespace prevents a deploy from
+// serving the cached 1.0.0 version for up to an hour after 2.0.0 is published.
+const ACTIVE_TERMS_KEY = 'terms:active-version:v2';
 
 /** Cache key for one user's accepted terms version. */
 const acceptedTermsKey = (userId: string): string => `terms:accepted:${userId}`;

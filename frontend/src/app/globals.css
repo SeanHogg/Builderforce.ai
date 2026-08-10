@@ -74,8 +74,8 @@
 
   /* BuilderForceAgentsLink-style shell (same header, footer, slide-out nav) */
   --footer-height: 44px;
-  --shell-nav-width: 220px;
-  --shell-nav-width-collapsed: 52px;
+  --shell-nav-width: 240px;
+  --shell-nav-width-collapsed: 64px;
   --shell-topbar-height: 56px;
   /* Aliases for BuilderForceAgentsLink class names */
   --bg: var(--bg-deep);
@@ -95,8 +95,113 @@
   --chrome-strong: rgba(10, 15, 26, 0.98);
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-sm: 6px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
   --duration-fast: 120ms;
+
+  /* Canonical design-system metrics. Public pages and authenticated product
+     surfaces share these values; density changes through component sizes, not
+     one-off radii or padding at call sites. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --control-sm: 32px;
+  --control-md: 36px;
+  --control-lg: 44px;
+
+  /* ── The type scale (PRD 21 §2.3) ────────────────────────────────────────
+     Eight roles, declared once. Sizes do NOT flip per theme, so unlike colour
+     these live only here.
+
+     Why they exist at all: for a long time §2.3 was a table in a document with
+     nothing behind it — no token, and only one of the eight roles (Eyebrow) as
+     a class. There was nothing to import, so every author typed a number, and
+     the public pages ended up carrying 89 distinct font-size literals over
+     1,185 uses and 129 distinct clamp() ramps. Radius had five values, a token
+     family and a ratchet, and came in at nine off-scale corners. The difference
+     was never discipline; it was that one scale existed in code and the other
+     did not.
+
+     Use the `.ui-text-*` classes below rather than these tokens directly — a
+     role is a size AND a weight AND tracking AND a line height, and picking the
+     size alone is how a "page title" ends up at three different weights. */
+  --font-size-hero: clamp(2.6rem, 7.4vw, 5.1rem);
+  --font-size-page-title: clamp(1.85rem, 4.4vw, 2.9rem);
+  --font-size-section: clamp(1.25rem, 2.6vw, 1.62rem);
+  /* Lede — the sentence under a hero. §2.3 shipped with eight roles and no
+     slot for it, so every marketing page invented one: 1.12rem on the route
+     teaser, 1.18rem on /evermind, 1.16rem on /compare, 1.1rem on /product. It
+     is a real, repeated role and it is cheaper to name it than to keep
+     pretending hero subcopy is a card title. */
+  --font-size-lede: clamp(1rem, 2vw, 1.18rem);
+  --font-size-card-title: 1rem;
+  --font-size-body: 0.95rem;
+  --font-size-small: 0.82rem;
+  --font-size-eyebrow: 0.68rem;
+  --font-size-field-label: 0.62rem;
+  /* THE MARKETING COLUMN — one measure for the whole public site.
+     `--marketing-max` is the OUTER box, gutter included, so anything that sets
+     `max-width: var(--marketing-max)` + `padding-inline: var(--marketing-gutter)`
+     starts exactly under the logo and ends exactly under "Open the canvas". The
+     header IS the measure: `.mh-inner` reads the same two tokens, so the site
+     cannot drift away from its own chrome.
+     Every public page used to pick its own number — 1320 on the header and the
+     Meet carousel, 1240 on the landing hero and the domain pages, 1180 on
+     pricing / about / the deck, 1160 on the homepage sections, 1100 on
+     /features and /compare and /evermind, 1080 on /soc2, 980 on /integrations,
+     960 on /book-demo — so the content column jumped left and right as you
+     moved through the site, and jumped WITHIN the homepage between one band and
+     the next. There is one number now and it lives here. */
+  --marketing-max: 1320px;
+  --marketing-gutter: 24px;
+  /* The same column as a CONTENT width, for a band that already carries its
+     gutter on an ancestor (the `.section > .inner` shape). Derived, never
+     retyped — the two can't disagree. */
+  --marketing-column: calc(var(--marketing-max) - 2 * var(--marketing-gutter));
+  /* Vertical rhythm between marketing bands — the horizontal measure's twin, and
+     for the same reason: every section had picked its own clamp (9vw here, 8vw
+     there, 7vw on the deck), so the page breathed unevenly as you scrolled. */
+  --marketing-section-padding: clamp(76px, 9vw, 120px);
+  --content-narrow: 720px;
+  /* How much of the bottom of the screen the fixed mobile bar owns — zero above
+     the breakpoint, where the bar is not rendered at all. Anything that has to
+     clear it subtracts this unconditionally instead of repeating the media
+     query, and the bar itself reads it, so the bar and the clearance cannot
+     disagree. They already had: the height was written out as `56px` in one
+     place and `64px` in another, and the roster footer (`TeamBar`) reserved
+     nothing at all, so on a phone the bar sat on top of the team. */
+  --mobile-nav-height: 0px;
+  /* The three panel widths (PRD 21 §2.4 / §3.4) — sheet, wide, full, and no
+     fourth. A bespoke `min(560px, 96vw)` at a call site is how twenty distinct
+     panel widths arrived; `<SlideOutPanel width="sheet|wide|full">` resolves to
+     these, so the scale is enforced by the primitive rather than by review. */
+  --panel-width-sheet: 25%;
+  --panel-width-wide: 50%;
+  /* `full` is 70% of the viewport, not 94%. At 94% the board behind it was a
+     30px sliver — technically still mounted, which is the letter of §0 and not
+     its point: the panel is meant to sit OVER work you can still see. 70% keeps
+     a usable strip of canvas, so closing the panel is a decision rather than a
+     rescue. Narrow viewports override this below — 70vw on a phone is a column,
+     not a panel. */
+  --panel-width-full: 70vw;
+  --surface-page: var(--bg-deep);
+  --surface-panel: var(--bg-surface);
+  --surface-raised: var(--bg-elevated);
+  --surface-sunken: rgba(0, 0, 0, 0.16);
+  --border-default: var(--border-subtle);
+  --border-strong: rgba(136, 146, 176, 0.28);
+  --focus-color: #60a5fa;
+  --focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.28);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.3);
 
   /* Chat input bar (theme-aware: readable in light and dark) */
   --chat-input-bg: rgba(255, 255, 255, 0.08);
@@ -146,6 +251,128 @@
   --info-text: #bfdbfe;
   --info-bg: rgba(59, 130, 246, 0.18);
   --info-border: rgba(59, 130, 246, 0.45);
+  /* `success` was the one semantic family missing its border, so call sites that
+     wanted one fell through to a literal. Completed here rather than at the call
+     site, so all five families (error/danger/success/warning/info) are uniform. */
+  --success-border: rgba(34, 197, 94, 0.45);
+
+  /* Categorical hues — the "bright" palette family.
+     `--coral-bright` / `--cyan-bright` above are the brand's two signal slots; these
+     five are the CATEGORICAL extension, used where a chart series, a speaker tile or
+     a run-source badge needs hues that stay distinct from each other AND from the
+     brand. They were used at ~14 call sites but never declared, so each one painted
+     its dark-mode literal onto light stock as well (a pale #a78bfa violet on white).
+     The dark values below are exactly those literals, so dark is unchanged; light
+     re-darkens each hue for paper the same way the accent slots do. Never hardcode
+     these — a categorical hue has to flip per theme like everything else. */
+  --violet-bright: #a78bfa;
+  --indigo-bright: #7c83fd;
+  --emerald-bright: #34d399;
+  --amber-bright: #fbbf24;
+  --red-bright: #ff6b6b;
+  /* The second half of the categorical family. A ten-series chart needs ten
+     distinct hues, and the five above ran out at series six — which is why the
+     shared `CHART_PALETTE` still carried five raw literals that rendered the
+     same on paper as on slate. These complete the wheel: teal, pink, purple,
+     sky, yellow, orange. Purple sits between violet and pink deliberately —
+     adjacent series are never adjacent hues in the palette's ORDER. */
+  --teal-bright: #14b8a6;
+  --pink-bright: #ec4899;
+  --purple-bright: #8b5cf6;
+  --sky-bright: #38bdf8;
+  --yellow-bright: #eab308;
+  --orange-bright: #f97316;
+  /* The step ABOVE `--error`. Severity is an ordinal scale, not four unrelated
+     signals: a fatal is not "very error", it is its own rung, and a swatch that
+     cannot be told apart from the rung below it is not carrying information. */
+  --error-strong: #fb7185;
+
+  /* Evermind's brain-region hues. One identity per region, used by the brain map,
+     the Studio's learning swatches, the run chip and the Canvas object — four
+     surfaces that had THREE copies of this list between them (two inline <style>
+     blocks and a Canvas module rule), of which only one carried a light override.
+     A region's colour is an identity, so it is declared once, here, like every
+     other categorical family. */
+  --ev-neocortex: #3987e5;
+  --ev-hippocampus: #199e70;
+  --ev-amygdala: #e66767;
+  --ev-hypothalamus: #d95926;
+  --ev-thalamus: #c98500;
+  --ev-basal: #d55181;
+  --ev-personality: var(--violet-bright);
+  --ev-core: var(--coral-bright);
+
+  /* SEAT identities (PRD 21 §11.10.1). A seat's colour was being invented three
+     times over — BurnRateOS coloured each domain on its marketing cards, the
+     roster picked its own, and the canvas picked a third for agent objects. One
+     declaration, five readers: the roster chip, the nav row's seat badge, the
+     panel's top rule and index marker, the marketing/features card, and any
+     chart series broken down by owner. Read through `lib/seats.ts`, never
+     hard-coded at a call site.
+
+     Every value is an ALIAS of a categorical hue already declared for both
+     themes above, so this list spends no new colour — it only stops three
+     surfaces from each picking their own. Twelve seats consume all eleven
+     categorical hues plus the brand: a THIRTEENTH always-on seat needs a twelfth
+     hue declared before it needs a menu entry. */
+  --seat-ceo: var(--violet-bright);
+  --seat-cfo: var(--emerald-bright);
+  --seat-cro: var(--amber-bright);
+  --seat-cmo: var(--pink-bright);
+  --seat-cto: var(--sky-bright);
+  --seat-cpo: var(--yellow-bright);
+  --seat-hr: var(--teal-bright);
+  --seat-recruiter: var(--orange-bright);
+  --seat-security: var(--red-bright);
+  --seat-support: var(--purple-bright);
+  --seat-manager: var(--indigo-bright);
+  --seat-brain: var(--coral-bright);
+
+  /* STAGE identities — the Idea → Make → Run arc the left panel groups by. Four
+     of the six reuse a seat-adjacent hue deliberately: a stage is a phase, not a
+     brand, so it should read as a quiet marker beside the row rather than as a
+     seventh accent competing with the seats. */
+  --stage-idea: var(--amber-bright);
+  --stage-make: var(--coral-bright);
+  --stage-run: var(--emerald-bright);
+  --stage-measure: var(--violet-bright);
+  --stage-market: var(--pink-bright);
+  --stage-admin: var(--text-muted);
+  /* The Learn ▾ columns are stages of a different journey — reading, proving,
+     building with — and take three hues from the same ramp. */
+  --stage-read: var(--cyan-bright);
+  --stage-prove: var(--emerald-bright);
+  --stage-buildWith: var(--indigo-bright);
+
+  /* The brand gradient, ported from burnrateos.com/features (§11.10.2). It is
+     restricted to TWO positions on a page — the hero word-mark and the closing
+     CTA band — because a gradient that also appears on cards stops meaning "this
+     is the beginning or the end of the page" and becomes decoration. */
+  --grad-brand: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+  --wash-hero: linear-gradient(135deg, rgba(77, 158, 255, 0.10) 0%, rgba(124, 131, 253, 0.12) 100%);
+
+  /* Canvas OBJECT identities. They live here rather than with the board's own
+     surfaces because two surfaces read them — the board's minimap and the
+     dashboard's session tiles — and the dashboard is not inside the board, so a
+     `.canvasShell`-scoped declaration would resolve to nothing there. That is
+     exactly how the dashboard came to carry its own drifting copy of the list. */
+  --canvas-obj-workflow: #7357ed;
+  --canvas-obj-website: #3978f6;
+  --canvas-obj-dashboard: #08b59d;
+  --canvas-obj-agent: #8a5cf5;
+  --canvas-obj-staff: #f09a3e;
+  --canvas-obj-evaluation: #6941d7;
+  --canvas-obj-evermind: #df4fa5;
+  --canvas-obj-comparison: #0d8f82;
+  --canvas-obj-pitch: #e0653f;
+  --canvas-obj-chat: #e94b9b;
+  --canvas-obj-dataset: #12a6c8;
+  --canvas-obj-mockup: #ef6d92;
+  --canvas-obj-unknown: #6f8099;
+
+  /* Ambient shadow colour, for the shadows composed at a call site (drawer, palette)
+     rather than taken whole from --shadow-*. Flips warm on light like the scale. */
+  --shadow-color: rgba(0, 0, 0, 0.5);
   /* Opaque panel surfaces — theme-aware aliases that flip via the tokens they
      reference (bg-elevated / surface-interactive are overridden per theme). Many
      components reference these intuitive names; defining them here keeps them
@@ -153,6 +380,27 @@
   --surface: var(--bg-elevated);
   --surface-2: var(--surface-interactive);
   --text-on-accent: #fff;
+  /* The mirror of --text-on-accent, for the handful of surfaces that are light in
+     BOTH themes because their fill is computed rather than themed — a DevEx score
+     chip is an HSL ramp at 68–88% lightness, so it is a pale tile on slate as much
+     as on paper and wants dark ink either way. Declared (rather than written
+     `#16241c` at the tile) so the pairing has a name and one place to change. */
+  --ink-on-light: #16241c;
+  /* The other mirror: a band that is DARK in both themes because it is a
+     deliberate inversion of the page around it — the About page's closing CTA
+     is the only one today. It was written as `var(--surface-inverse, #17171b)`
+     with the literal doing all the work and the name declared nowhere, which is
+     the failure mode this guard exists for: a fallback paints in both themes,
+     so nothing looks broken and nothing is themeable either. Naming it changes
+     no pixel; it gives the pairing one place to change. */
+  --surface-inverse: #17171b;
+  --text-inverse: #fff;
+  /* Ink for a label printed ON a categorical fill. The whole `*-bright` family is
+     built so a hue is PALE on slate and DEEP on paper, which is one relationship
+     and therefore one token — a stacked-bar segment cannot measure its own fill
+     once that fill is a `var()`, and it does not need to. Flips with the theme,
+     which is exactly what a per-segment luminance test could never do. */
+  --ink-on-categorical: #0b1220;
   /* Unread-message badge (distinct indigo, so it reads apart from the coral/amber
      run-state dots). Matches the NotificationBell badge for a consistent "unread"
      hue across the app. Same value in dark; legible on white text in both. */
@@ -181,83 +429,174 @@
   --bf-font-mono: var(--font-mono);
 }
 
-/* ── Light theme overrides ── */
+/* ── Light theme overrides — "Warm stock, brand-blue ink" ──
+   The light palette is NOT a transposition of the dark one. Dark builds depth out
+   of glow (blue bloom on a near-black ground); on paper that reads as a smudge, so
+   light builds depth out of SHADE instead:
+
+   1. A real elevation scale. The page ground is a warm stock (#f4f1ec), the board
+      sits above it (#fdfcfa) and cards are pure white — three distinguishable
+      steps, where the old palette had three tokens holding one white.
+   2. Neutral, downward shadows. Every `--shadow-*` here is warm-grey at low alpha,
+      never the accent hue. Accent-coloured shadow is a dark-mode mechanic.
+   3. The accent stays BRAND BLUE, darkened for paper. An earlier revision led the
+      light theme with teal ink and demoted blue to the secondary slot; it read as
+      a different product's palette, because the mark, the hero word and every
+      dark-theme surface are blue. Warm ground already supplies the warm/cool
+      separation that teal was reaching for — the ink does not have to change hue
+      to get it, it only has to get darker (#4d9eff glows on black and smudges on
+      stock; #1d4ed8 is the same hue at 6.3:1 against white).
+      The secondary signal (`--cyan-*`) moves to sky so the two still separate by
+      lightness and temperature rather than by being two different brands.
+
+   Because the accent slots darken by theme, never hardcode #3b82f6 / #1d4ed8 at
+   a call site — go through --accent / --coral-* / --cyan-* so both themes follow. */
 html[data-theme='light'] {
-  --bg-deep: #fcfeff;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f5f9ff;
+  /* Elevation scale: stock ground → board → white card */
+  --bg-deep: #f4f1ec;
+  --bg-surface: #fdfcfa;
+  --bg-elevated: #ffffff;
 
-  --coral-bright: #3b82f6;
-  --coral-mid: #2563eb;
-  --coral-dark: #1e40af;
+  /* Primary accent slot: brand blue, darkened for paper */
+  --coral-bright: #1d4ed8;
+  --coral-mid: #1e40af;
+  --coral-dark: #1e3a8a;
 
-  --cyan-bright: #008f87;
-  --cyan-mid: #00766e;
-  --cyan-glow: rgba(0, 143, 135, 0.24);
+  /* Secondary signal slot: sky — separates from the primary by lightness, not by
+     being a second brand colour */
+  --cyan-bright: #0284c7;
+  --cyan-mid: #0369a1;
+  --cyan-glow: rgba(2, 132, 199, 0.22);
 
-  --text-primary: #0b1220;
-  --text-secondary: #2e405c;
-  --text-muted: #5f7290;
+  /* Warm-biased near-black ink */
+  --text-primary: #1c1917;
+  --text-secondary: #4f463d;
+  --text-muted: #736961;
 
-  --border-subtle: rgba(15, 23, 42, 0.16);
-  --border-accent: rgba(59, 130, 246, 0.34);
+  /* Rules are warm brown-grey, not slate — they must sit ON the stock, not fight it */
+  --border-subtle: rgba(60, 48, 36, 0.14);
+  --border-accent: rgba(29, 78, 216, 0.32);
 
-  --surface-card: rgba(255, 255, 255, 0.88);
-  --surface-card-strong: rgba(255, 255, 255, 0.95);
-  --surface-overlay: rgba(160, 174, 194, 0.26);
-  --panel-overlay-bg: rgba(15, 23, 42, 0.2);
+  --surface-card: rgba(255, 255, 255, 0.9);
+  --surface-card-strong: rgba(255, 255, 255, 0.97);
+  --surface-overlay: rgba(60, 48, 36, 0.1);
+  --panel-overlay-bg: rgba(28, 25, 23, 0.28);
   --panel-drawer-bg: #ffffff;
-  --surface-interactive: rgba(15, 23, 42, 0.1);
-  --surface-interactive-hover: rgba(15, 23, 42, 0.16);
-  --surface-cyan-soft: rgba(0, 143, 135, 0.16);
-  --surface-coral-soft: rgba(59, 130, 246, 0.16);
-  --surface-inset-highlight: rgba(15, 23, 42, 0.06);
+  --surface-interactive: rgba(60, 48, 36, 0.07);
+  --surface-interactive-hover: rgba(60, 48, 36, 0.13);
+  --surface-cyan-soft: rgba(2, 132, 199, 0.1);
+  --surface-coral-soft: rgba(29, 78, 216, 0.11);
+  --surface-inset-highlight: rgba(60, 48, 36, 0.05);
 
-  --shadow-coral-soft: rgba(59, 130, 246, 0.19);
-  --shadow-coral-mid: rgba(59, 130, 246, 0.27);
-  --shadow-coral-strong: rgba(59, 130, 246, 0.33);
-  --shadow-cyan-soft: rgba(0, 143, 135, 0.22);
+  /* Shade, not glow: neutral warm shadow at every strength. */
+  --shadow-coral-soft: rgba(60, 48, 36, 0.07);
+  --shadow-coral-mid: rgba(60, 48, 36, 0.12);
+  --shadow-coral-strong: rgba(60, 48, 36, 0.18);
+  --shadow-cyan-soft: rgba(60, 48, 36, 0.08);
 
-  --hero-title-start: #1e40af;
-  --hero-title-end: #3b82f6;
-  --logo-glow: rgba(59, 130, 246, 0.2);
-  --logo-glow-hover: rgba(0, 143, 135, 0.35);
+  --hero-title-start: #1c1917;
+  --hero-title-end: #1d4ed8;
+  --logo-glow: rgba(29, 78, 216, 0.18);
+  --logo-glow-hover: rgba(2, 132, 199, 0.3);
+  --logo-gradient-start: #1d4ed8;
+  --logo-gradient-end: #1e3a8a;
 
   --newsletter-gradient: linear-gradient(135deg,
-      rgba(59, 130, 246, 0.11) 0%,
+      rgba(29, 78, 216, 0.09) 0%,
       rgba(255, 255, 255, 0.98) 52%,
-      rgba(0, 143, 135, 0.12) 100%);
+      rgba(29, 78, 216, 0.07) 100%);
 
   --bg: var(--bg-deep);
   --bg-base: var(--bg-surface);
-  --bg-hover: rgba(0, 0, 0, 0.06);
-  --chrome: rgba(252, 254, 255, 0.92);
-  --chrome-strong: rgba(252, 254, 255, 0.98);
+  --bg-hover: rgba(60, 48, 36, 0.06);
+  /* Chrome is a shade LIGHTER than the stock ground, so the nav reads as a sheet
+     over the page instead of dissolving into it (the old --chrome was the ground). */
+  --chrome: rgba(251, 250, 247, 0.92);
+  --chrome-strong: rgba(251, 250, 247, 0.98);
 
-  /* Chat input bar (light theme) */
-  --chat-input-bg: rgba(248, 250, 252, 0.98);
-  --chat-input-border: rgba(15, 23, 42, 0.12);
-  --chat-input-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  /* Chat input bar (light theme): white card on stock, warm shade beneath */
+  --chat-input-bg: #ffffff;
+  --chat-input-border: rgba(60, 48, 36, 0.16);
+  --chat-input-shadow: 0 1px 2px rgba(60, 48, 36, 0.06), 0 10px 24px rgba(60, 48, 36, 0.1);
 
-  /* Semantic: error / success (light theme) */
-  --error: #dc2626;
-  --error-text: #b91c1c;
-  --error-bg: rgba(239, 68, 68, 0.12);
-  --error-border: rgba(239, 68, 68, 0.4);
-  --success: #16a34a;
-  --success-text: #15803d;
-  --success-bg: rgba(34, 197, 94, 0.12);
-  --warning: #d97706;
-  --warning-text: #b45309;
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --warning-border: rgba(245, 158, 11, 0.4);
-  /* danger-* alias the light `error-*` values above; info-* darken for white surfaces. */
-  --info: #2563eb;
-  --info-text: #1e40af;
-  --info-bg: rgba(59, 130, 246, 0.12);
-  --info-border: rgba(59, 130, 246, 0.35);
+  /* Semantic: error / success (light theme). Re-checked against a WARM ground —
+     each hue is pulled toward its warm-neutral neighbour so none of them reads as
+     a cool sticker dropped onto cream. */
+  --error: #b91c1c;
+  --error-text: #991b1b;
+  --error-bg: rgba(185, 28, 28, 0.1);
+  --error-border: rgba(185, 28, 28, 0.35);
+  --success: #15803d;
+  --success-text: #166534;
+  --success-bg: rgba(21, 128, 61, 0.11);
+  --warning: #b45309;
+  --warning-text: #92400e;
+  --warning-bg: rgba(180, 83, 9, 0.12);
+  --warning-border: rgba(180, 83, 9, 0.38);
+  /* danger-* alias the light `error-*` values above; info-* uses the blue signal. */
+  --info: #1d4ed8;
+  --info-text: #1e3a8a;
+  --info-bg: rgba(29, 78, 216, 0.1);
+  --info-border: rgba(29, 78, 216, 0.32);
+  --success-border: rgba(21, 128, 61, 0.35);
+
+  /* Categorical hues on paper: same eleven identities, darkened to carry on warm
+     stock (each ≥4.5:1 on white) instead of glowing as they do on near-black. */
+  --violet-bright: #6d28d9;
+  --indigo-bright: #4338ca;
+  --emerald-bright: #047857;
+  --amber-bright: #b45309;
+  --red-bright: #b91c1c;
+  /* Historical categorical token; light mode intentionally resolves it to the
+     primary blue so no teal ink leaks into the unified light experience. */
+  --teal-bright: var(--coral-bright);
+  --pink-bright: #be185d;
+  --purple-bright: #7e22ce;
+  --sky-bright: #0369a1;
+  --yellow-bright: #a16207;
+  --orange-bright: #c2410c;
+  --error-strong: #7f1d1d;
+
+  /* The brand gradient on paper. `--seat-*` and `--stage-*` need no override —
+     they alias the categorical hues above, so they flip with them. These two do,
+     because a gradient cannot be expressed as an alias of a single token. */
+  --grad-brand: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
+  --wash-hero: linear-gradient(135deg, rgba(29, 78, 216, 0.07) 0%, rgba(67, 56, 202, 0.09) 100%);
+
+  /* Brain regions on paper. Every region also carries a text label, which is what
+     relieves the two steps that land under 3:1 on white. */
+  --ev-neocortex: #2a78d6;
+  --ev-hippocampus: #1baf7a;
+  --ev-amygdala: #e34948;
+  --ev-hypothalamus: #eb6834;
+  --ev-thalamus: #eda100;
+  --ev-basal: #e87ba4;
+  --ev-personality: #4a3aa7;
+
+  /* Object identities on paper: the two neutrals lift/deepen, the saturated
+     identities carry unchanged so an object is the same colour on either board. */
+  --canvas-obj-unknown: #9aa8bd;
+
+  --shadow-color: rgba(60, 48, 36, 0.16);
   --text-on-accent: #fff;
-  --badge-unread: #6366f1;
+  --ink-on-light: #16241c;
+  /* Same in both themes, and declared in both for the same reason `--ink-on-light`
+     is: the guard asks a name to resolve on paper as well as on slate. */
+  --surface-inverse: #17171b;
+  --text-inverse: #fff;
+  --ink-on-categorical: #ffffff;
+  --badge-unread: #4f46e5;
+  --surface-page: var(--bg-deep);
+  --surface-panel: var(--bg-surface);
+  --surface-raised: var(--bg-elevated);
+  --surface-sunken: rgba(60, 48, 36, 0.045);
+  --border-default: var(--border-subtle);
+  --border-strong: rgba(60, 48, 36, 0.24);
+  --focus-color: var(--coral-bright);
+  --focus-ring: 0 0 0 3px rgba(29, 78, 216, 0.22);
+  --shadow-xs: 0 1px 2px rgba(60, 48, 36, 0.08);
+  --shadow-sm: 0 10px 28px rgba(60, 48, 36, 0.1);
+  --shadow-lg: 0 28px 80px rgba(60, 48, 36, 0.15);
 }
 
 /* Touch: restore comfortable tap targets on coarse pointers. The compact metrics
@@ -305,7 +644,7 @@ textarea::placeholder {
   color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -348,7 +687,11 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   max-width: 100vw;
-  overflow-x: hidden;
+  /* Keep wide decorative elements from creating horizontal scroll without
+     turning the page body into a scroll container. Sticky chrome such as the
+     marketing header must remain anchored to the viewport while the page
+     scrolls. */
+  overflow-x: clip;
 }
 
 button,
@@ -358,10 +701,13 @@ textarea {
   font-family: inherit;
 }
 
+/* Warm stock, warmed further at the top corners with two restrained blue blooms.
+   The tints must stay under the stock's own warmth or the ground turns
+   grey and the elevation step to the board disappears. */
 html[data-theme='light'] body {
   background:
-    radial-gradient(1200px circle at 12% -10%, rgba(59, 130, 246, 0.05), transparent 58%),
-    radial-gradient(900px circle at 88% -12%, rgba(0, 143, 135, 0.05), transparent 56%),
+    radial-gradient(1200px circle at 12% -10%, rgba(29, 78, 216, 0.05), transparent 58%),
+    radial-gradient(900px circle at 88% -12%, rgba(29, 78, 216, 0.04), transparent 56%),
     var(--bg-deep);
 }
 
@@ -434,46 +780,10 @@ html[data-theme='light'] .stars {
 /* ============================================================
    QuickStart interactive install block (copied from BuilderForce AgentsLink)
    ============================================================ */
-.quickstart-skin {
-  --bg-deep: #050810;
-  --bg-elevated: #111827;
-  --coral-bright: #4d9eff;
-  --coral-dark: #1e40af;
-  --cyan-bright: #00e5cc;
-  --text-primary: #f0f4ff;
-  --text-secondary: #8892b0;
-  --text-muted: #5a6480;
-  --border-subtle: rgba(136, 146, 176, 0.15);
-  --surface-overlay: rgba(0, 0, 0, 0.3);
-  --surface-interactive: rgba(255, 255, 255, 0.1);
-  --surface-interactive-hover: rgba(255, 255, 255, 0.2);
-  --surface-cyan-soft: rgba(0, 229, 204, 0.15);
-  --surface-coral-soft: rgba(77, 158, 255, 0.15);
-  --shadow-coral-mid: rgba(77, 158, 255, 0.25);
-  --shadow-coral-strong: rgba(77, 158, 255, 0.35);
-  --font-display: var(--font-sans);
-  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-}
-
-:root[data-theme="light"] .quickstart-skin {
-  --bg-deep: #fcfeff;
-  --bg-elevated: #f5f9ff;
-  --coral-bright: #3b82f6;
-  --coral-dark: #1e40af;
-  --cyan-bright: #008f87;
-  --text-primary: #0b1220;
-  --text-secondary: #2e405c;
-  --text-muted: #5f7290;
-  --border-subtle: rgba(15, 23, 42, 0.16);
-  --surface-overlay: rgba(160, 174, 194, 0.26);
-  --surface-interactive: rgba(15, 23, 42, 0.1);
-  --surface-interactive-hover: rgba(15, 23, 42, 0.16);
-  --surface-cyan-soft: rgba(0, 143, 135, 0.16);
-  --surface-coral-soft: rgba(59, 130, 246, 0.16);
-  --shadow-coral-mid: rgba(59, 130, 246, 0.27);
-  --shadow-coral-strong: rgba(59, 130, 246, 0.33);
-}
-
+/* The skin used to carry its OWN copy of the palette (a dark block plus a
+   :root[data-theme="light"] override) — a second source of truth that silently
+   drifted the moment the real light palette changed. It now inherits the theme
+   tokens, which already flip per theme. Do not re-declare them here. */
 .quickstart-skin {
   display: block;
   max-width: 1100px;
@@ -502,7 +812,7 @@ html[data-theme='light'] .stars {
 .quickstart-skin .code-block {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -547,7 +857,7 @@ html[data-theme='light'] .stars {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-interactive);
   color: var(--text-muted);
   cursor: pointer;
@@ -595,7 +905,7 @@ html[data-theme='light'] .stars {
   gap: 4px;
   background: var(--surface-overlay);
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 html[data-theme='light'] .nebula {
@@ -614,7 +924,7 @@ html[data-theme='light'] .nebula {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -622,6 +932,25 @@ html[data-theme='light'] .nebula {
 }
 
 /* ── Theme toggle (global, used by layout) ── */
+.theme-control {
+  display: grid;
+  width: var(--control-md);
+  height: var(--control-md);
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+.theme-control svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.theme-control:hover { color: var(--text-primary); background: var(--surface-interactive); border-color: var(--border-strong); transform: translateY(-1px); }
+.theme-control:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
 .theme-toggle {
   position: fixed;
   top: 16px;
@@ -631,7 +960,7 @@ html[data-theme='light'] .nebula {
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
   background: var(--surface-card-strong);
   cursor: pointer;
@@ -685,7 +1014,7 @@ html[data-theme='light'] .nebula {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   backdrop-filter: blur(12px);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
 }
 
 .glass-card:hover {
@@ -693,15 +1022,20 @@ html[data-theme='light'] .nebula {
   box-shadow: 0 12px 40px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
 }
 
-/* ── Utility: section title ── */
+/* ── Utility: section title ──
+   Reconciled onto the §2.3 Section role (was clamp(1.4rem, 3vw, 1.8rem)/600,
+   which disagreed with the spec it was implementing). Layout — the flex row and
+   the bottom margin — is this class's own; the type comes from the role. */
 .section-title {
   font-family: var(--font-display);
-  font-size: clamp(1.4rem, 3vw, 1.8rem);
-  font-weight: 600;
-  margin-bottom: 28px;
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  letter-spacing: -.022em;
+  line-height: 1.15;
+  margin-bottom: var(--space-6);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   color: var(--text-primary);
 }
 
@@ -771,6 +1105,23 @@ html[data-theme='light'] .nebula {
   grid-template-columns: var(--shell-nav-width-collapsed) minmax(0, 1fr);
 }
 
+/* The marketing header, seated in the shell's topbar row.
+   A logged-out visitor keeps the header they arrived with (see AppShell), and
+   `.mh` is written for a marketing PAGE — a 1320px centred column at 66px. In
+   the shell it is chrome: it spans the frame, matches the shell's own topbar
+   height, and takes the shell's gutter so the brand lines up with the rail
+   below it. Scoped to a direct child of `.shell` so the marketing pages'
+   own header is untouched. */
+.shell > .mh {
+  grid-area: topbar;
+  height: var(--shell-topbar-height);
+}
+.shell > .mh .mh-inner {
+  height: 100%;
+  max-width: none;
+  padding-inline: 12px;
+}
+
 .topbar {
   grid-area: topbar;
   display: flex;
@@ -808,9 +1159,9 @@ html[data-theme='light'] .nebula {
 }
 
 .topbar-role-preview__select {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   color: var(--text-muted);
   font-size: 11px;
   padding: 3px 6px;
@@ -820,7 +1171,7 @@ html[data-theme='light'] .nebula {
 .topbar-role-preview__badge {
   background: rgba(59, 130, 246, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.4);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   color: #60a5fa;
   font-size: 11px;
   font-weight: 600;
@@ -969,10 +1320,10 @@ html[data-theme='light'] .nebula {
 }
 
 .global-footer-inner {
-  max-width: 1200px;
+  max-width: var(--marketing-max);
   margin: 0 auto;
   min-height: 44px;
-  padding: 0 24px;
+  padding: 0 var(--marketing-gutter);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -982,10 +1333,19 @@ html[data-theme='light'] .nebula {
   font-size: 12px;
 }
 
+/* The compact auth footer keeps ownership on the left and the operational /
+   legal links on the right. Marketing already renders the same copyright in
+   its larger brand block. */
+.global-footer-inner--legal .global-footer-copyright {
+  margin-right: auto;
+  white-space: nowrap;
+}
+
 .global-footer-links {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 18px;
 }
 
 .global-footer-links a,
@@ -996,6 +1356,8 @@ html[data-theme='light'] .nebula {
   border: none;
   padding: 0;
   font: inherit;
+  line-height: 1.4;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1009,9 +1371,9 @@ html[data-theme='light'] .nebula {
    Desktop: a full-width row — brand on the left, link columns on the right.
    Tablet/mobile: the grid collapses to stacked rows. */
 .global-footer-full {
-  max-width: 1200px;
+  max-width: var(--marketing-max);
   margin: 0 auto;
-  padding: 48px 24px 28px;
+  padding: 48px var(--marketing-gutter) 28px;
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 2.2fr);
   gap: 48px;
@@ -1080,13 +1442,16 @@ html[data-theme='light'] .nebula {
   min-height: 0;
   margin: 0;
   padding: 0;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: flex-start;
+  gap: 8px;
 }
 
 /* Link columns. */
 .global-footer-cols {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 24px;
 }
 .global-footer-col h3 {
@@ -1127,10 +1492,10 @@ html[data-theme='light'] .nebula {
   }
 }
 
-/* Mobile: keep the three link columns side by side (don't stack to rows);
-   just tighten the gap and type so they fit the narrow viewport. */
+/* Mobile: arrange the four link columns in two readable rows. */
 @media (max-width: 520px) {
   .global-footer-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
   .global-footer-col h3 {
@@ -1155,6 +1520,9 @@ html[data-theme='light'] .nebula {
     flex-wrap: wrap;
     justify-content: center;
   }
+  .global-footer-inner--legal .global-footer-copyright {
+    margin-right: 0;
+  }
   /* Nested under the copyright credit, keep it left-aligned to match the credit
      above it instead of centering like the standalone bottom strip. */
   .global-footer-brand .global-footer-inner {
@@ -1170,7 +1538,9 @@ html[data-theme='light'] .nebula {
 .nav {
   grid-area: nav;
   position: relative;
-  z-index: 2;
+  /* The handle straddles the nav/content boundary. Keep this stacking context
+     above positioned canvas chrome, whose own local layers reach z-index 20. */
+  z-index: 30;
   /* min-height:0 stops this tall (flex-column) grid item from forcing the
      shell's `1fr` row to grow to the full menu height — without it the row
      blows past the viewport, the shell clips, the menu can't scroll, and page
@@ -1179,19 +1549,20 @@ html[data-theme='light'] .nebula {
   min-height: 0;
   /* visible so the collapse handle can straddle the right divider */
   overflow: visible;
-  padding: 16px 12px;
-  background: color-mix(in srgb, var(--bg) 86%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  padding: 18px 14px 14px;
+  background: var(--chrome-strong);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  transition: width 0.2s ease;
+  box-shadow: 8px 0 24px color-mix(in srgb, var(--bg-deep) 12%, transparent);
+  transition: width 0.2s ease, padding 0.2s ease;
 }
 
 .nav-main {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
   overflow-x: hidden;
   min-height: 0;
 }
@@ -1242,7 +1613,7 @@ html[data-theme='light'] .nebula {
 }
 /* Clicking a meter's trend chart drills into its Insights report. */
 .usage-meter .usage-meter-chart-link {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   opacity: 0.92;
   transition: opacity 0.2s, background 0.2s;
 }
@@ -1265,8 +1636,22 @@ html[data-theme='light'] .nebula {
   font-size: 12px;
 }
 
+/* A button, not a label: it opens the Product Updates panel, exactly as the
+   marketing footer's version does. Styled back down to plain text so the rail
+   reads the same as before it became clickable. */
 .nav-legal-version {
   color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-legal-version:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .nav-legal-links {
@@ -1296,32 +1681,135 @@ html[data-theme='light'] .nebula {
    and straddling the right divider so it bridges the sidebar/content border. */
 .nav-collapse-toggle {
   position: absolute;
-  top: 14px;
-  right: -13px;
+  top: 16px;
+  right: -15px;
   z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--bg-elevated, var(--bg));
   color: var(--muted);
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
-  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+  box-shadow: 0 4px 12px var(--surface-overlay);
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease, transform var(--duration-fast) ease;
 }
 
 .nav-collapse-toggle:hover {
   color: var(--text);
   background: var(--bg-hover);
   border-color: var(--accent-subtle, var(--border));
+  transform: translateX(2px);
+}
+
+.nav-collapse-tooltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  z-index: 20;
+  width: max-content;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px var(--surface-overlay);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.nav-collapse-toggle:hover .nav-collapse-tooltip,
+.nav-collapse-toggle:focus-visible .nav-collapse-tooltip {
+  opacity: 1;
+  transform: translate(0, -50%);
 }
 
 .nav-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   margin-bottom: 16px;
+}
+
+/* The left panel's sessions (PRD 21 §3.2) — the person's own work, above the
+   destinations. Chrome, so every value is a token and it reads in both themes. */
+.nav-sessions {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  max-height: 42%;
+  min-height: 0;
+  overflow: hidden;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Session count must not displace the destination menu. New Canvas and Active
+   stay visible; only the recents rows consume this bounded scrolling region. */
+.nav-sessions__recents {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nav-sessions__recent-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.nav-sessions__label,
+.nav-section__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2) var(--space-1);
+}
+
+/* The live dot §3.2 asks for on Active — a state, so it does not animate for
+   anyone who asked for less motion. */
+.nav-sessions__live {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--surface-cyan-soft);
+}
+
+.nav-sessions__item {
+  font-weight: 500;
+}
+
+.nav-sessions__item .nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An account-less board lives in this browser only. Saying so is the difference
+   between "I'll get back to it" and losing it. */
+.nav-sessions__draft {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warning);
 }
 
 .nav-section-label {
@@ -1338,14 +1826,15 @@ html[data-theme='light'] .nebula {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 9px 10px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: all var(--duration-fast) ease;
-  font-size: 13px;
-  font-weight: 500;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease, transform var(--duration-fast) ease;
+  font-size: var(--font-size-body);
+  font-weight: 550;
   width: 100%;
   text-align: left;
   background: transparent;
@@ -1355,31 +1844,84 @@ html[data-theme='light'] .nebula {
 .nav-item:hover {
   color: var(--text);
   background: var(--bg-hover);
+  transform: translateX(2px);
 }
 
 .nav-item.active {
   color: var(--text-strong);
   background: var(--accent-subtle);
   border-color: rgba(77, 158, 255, 0.15);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.nav-item-icon {
+  display: grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: currentColor;
+}
+
+.nav-item-icon svg {
+  display: block;
+}
+
+/* One icon language across shell, panels, cards and controls. SVGs inherit ink
+   and never establish their own colour, baseline or pointer target. */
+.ui-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  color: currentColor;
+}
+
+.ui-icon--custom {
+  display: inline-grid;
+  place-items: center;
+  line-height: 0;
+}
+
+/* Disable, never hide (PRD 21 §2.6 rule 7) — a destination a signed-out visitor
+   cannot open yet still occupies its row, dimmed and inert, so the product's
+   shape is legible before the account exists. */
+.nav-item--locked {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+.nav-item--locked:hover {
+  color: var(--muted);
+  background: transparent;
+}
+
+.nav-item__lock {
+  margin-left: auto;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.nav.collapsed .nav-item__lock {
+  display: none;
 }
 
 .nav-item-highlight {
-  color: var(--warning, #f59e0b);
+  color: var(--warning);
 }
 
 .nav-item-highlight:hover {
-  color: var(--warning, #f59e0b);
-  background: color-mix(in srgb, var(--warning, #f59e0b) 15%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
 }
 
 .nav-item-highlight.active {
-  color: var(--warning, #f59e0b);
-  background: color-mix(in srgb, var(--warning, #f59e0b) 20%, transparent);
-  border-color: color-mix(in srgb, var(--warning, #f59e0b) 40%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
 .nav.collapsed {
-  padding: 16px 8px;
+  padding: 14px 10px 68px;
 }
 
 .nav.collapsed .nav-section-label {
@@ -1395,9 +1937,56 @@ html[data-theme='light'] .nebula {
 }
 
 .nav.collapsed .nav-item {
-  padding: 8px;
+  position: relative;
+  min-height: 42px;
+  padding: 9px;
   justify-content: center;
   gap: 0;
+}
+
+.nav.collapsed .nav-item::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  z-index: 30;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px var(--surface-overlay);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.nav.collapsed .nav-item:hover::after,
+.nav.collapsed .nav-item:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.nav.collapsed .nav-collapse-toggle {
+  top: auto;
+  right: 11px;
+  bottom: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.nav.collapsed .nav-collapse-toggle:hover {
+  background: var(--accent-subtle);
+  border-color: var(--border-accent);
+  transform: none;
 }
 
 .nav.collapsed .nav-item-label {
@@ -1450,25 +2039,212 @@ html[data-theme='light'] .nebula {
   background: transparent;
 }
 
-/* The one section tab bar (SectionTabs.tsx). Breaks out of .content's padding so
-   it sits flush against the top bar and spans the full content width; the inline
-   scrollbar is hidden (it stays scrollable on narrow screens via touch/trackpad). */
-.section-tabs {
+/* THE index (DestinationIndex.tsx) — PRD 21 §3.4.
+   One component replaced three (`SectionTabs`, `PillTabs`, `AdminGroupNav`) and
+   one style block replaces theirs. It decides its own orientation: at or under
+   six items it is a compact row; above six it becomes a vertical index column,
+   because "no horizontal tab bar renders more than 6 items anywhere" (§6.3) and
+   Workforce's fourteen sub-views never fit in a bar. */
+.ui-index {
   display: flex;
-  gap: 2px;
-  margin: calc(var(--content-pad-y) * -1) calc(var(--content-pad-x) * -1) 0;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-base);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Firefox */
+  gap: var(--space-2);
+  min-width: 0;
 }
-.section-tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari/Edge */
-.section-tabs__inner {
-  display: flex;
-  gap: 2px;
-  width: 100%;
+
+.ui-index[data-orientation='horizontal'] {
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-1);
+  overflow-x: auto;
+}
+
+.ui-index[data-orientation='vertical'] {
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 168px;
+}
+
+.ui-index__item {
+  display: inline-flex;
+  min-height: var(--control-md);
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+/* A vertical index reads as a list, not as a row of chips wrapped onto lines. */
+.ui-index[data-orientation='vertical'] .ui-index__item {
+  justify-content: flex-start;
+  background: transparent;
+  border-color: transparent;
+  white-space: normal;
+}
+
+.ui-index__item:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.ui-index__item[aria-current='page'] {
+  color: var(--text-strong);
+  background: var(--accent-subtle);
+  border-color: var(--border-accent);
+}
+.ui-index__item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* A locked destination stays visible and disabled with a reason (§2.6 rule 7).
+   Hiding it turns "you need Pro" into "this product cannot do that". */
+.ui-index__item[aria-disabled='true'] {
+  opacity: .5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ui-index__group {
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: var(--space-3) var(--space-3) var(--space-1);
+}
+
+/* The body of a destination opened over the board (PRD 21 §3.4).
+   ---------------------------------------------------------------------------
+   A route rendered here is the SAME route that used to own the whole screen, and
+   the trade PRD 21 makes is that it renders unchanged — that is the only reason
+   the shell survives the hundreds of surfaces PRD 18/19 bring. What it must not
+   do is measure the VIEWPORT. A panel at 660px on a 2560px monitor is a narrow
+   column inside a wide window, so `@media (max-width: 700px)` never fires and
+   the destination lays itself out for a screen it does not have.
+
+   `container-type: inline-size` fixes that at the seam rather than at the six
+   hundred call sites: a destination inside a panel asks the PANEL how wide it is.
+
+       @container panel (max-width: 640px) { .myGrid { grid-template-columns: 1fr } }
+
+   `container-type: inline-size` also establishes containment, which is why the
+   size properties below are restated: the body still has to fill its flex row
+   and scroll its own overflow. Wide content (a table, a Gantt) scrolls HERE,
+   inside the panel, instead of pushing the drawer past the viewport. */
+.ui-panel-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  container-type: inline-size;
+  container-name: panel;
+}
+
+/* A reference page inside the panel gets NO wrapper padding — it brings its own
+   full-bleed bands, and boxing them produced a marketing page with a 16px frame
+   inside a drawer, which reads as a mistake in both. Its READING COLUMN still
+   needs a gutter though, and a page written against a 1320px column has none to
+   spare at panel width: the hero ran into the drawer's left border.
+   So the column's own token is widened rather than the wrapper padded — bands
+   keep painting edge to edge, and both marketing columns (`.mk-in` and
+   `.mkt-in`) read the same variable, so every reference page gets it.
+   `cqi` is the PANEL's inline size (`.ui-panel-body` is the named container), so
+   the gutter tracks how wide the reader has made the panel rather than the
+   window it happens to sit in. */
+.ref-panel-body {
+  --marketing-gutter: clamp(24px, 5cqi, 48px);
+}
+
+/* ── The eight type roles (PRD 21 §2.3) ──────────────────────────────────────
+   A role carries size, weight, tracking and line height together, because those
+   four are what make a heading READ as a heading. Splitting them is how the tree
+   ended up with a "page title" at 1.5rem/700 in one place and clamp(1.5rem,
+   2.5vw, 2rem)/700/-.025em in another, against a spec that said neither.
+
+   Colour is deliberately NOT set here except where the role implies it (eyebrow
+   and field label are always muted). A section heading inside an accent panel
+   still needs to inherit its ink. */
+.ui-text-hero {
+  font-family: var(--font-display);
+  font-size: var(--font-size-hero);
+  font-weight: 800;
+  letter-spacing: -.045em;
+  line-height: .95;
+}
+.ui-text-page-title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  letter-spacing: -.033em;
+  line-height: 1.02;
+}
+.ui-text-section {
+  font-family: var(--font-display);
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  letter-spacing: -.022em;
+  line-height: 1.15;
+}
+.ui-text-lede {
+  font-family: var(--font-body);
+  font-size: var(--font-size-lede);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.ui-text-card-title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  font-weight: 650;
+  letter-spacing: -.006em;
+  line-height: 1.3;
+}
+.ui-text-body {
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 1.6;
+}
+.ui-text-small {
+  font-family: var(--font-body);
+  font-size: var(--font-size-small);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Eyebrow — mono, small, tracked (§2.3). One declaration, so a panel crumb and a
+   footer group label cannot drift into two different eyebrows. */
+.ui-eyebrow,
+.ui-text-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Field label — the eyebrow's smaller sibling, tighter tracking (§2.3). */
+.ui-text-field-label {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Numeric columns. §2.3: "pair with font-variant-numeric: tabular-nums" — this
+   is that pairing, so a count in a table does not jitter as it updates. */
+.ui-text-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-index__item { transition: none; }
 }
 
 /* Canonical authenticated-page padding (set by PageContainer). Generous on
@@ -1493,28 +2269,30 @@ html[data-theme='light'] .nebula {
   flex-direction: column;
 }
 
-/* On phones the fixed .mobile-bottom-nav (56px + safe-area) would overlap the
-   bottom of a full-bleed IDE/project page, whose padding is 0 above. Reserve
-   exactly that clearance so the child fills the area ABOVE the bottom bar. */
-@media (max-width: 767px) {
-  .content:has(.ide-full-height),
-  .content:has(.app-full-height) {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-  }
-}
+/* The bar's clearance used to be reserved here, on the full-bleed pages that
+   noticed it first. It is reserved at `.app-frame` now (one place, one token,
+   `--mobile-nav-height`), which covers these AND the roster footer below them —
+   so this rule would double it. */
 
-/* Page title / sub (Settings, Security, Admin, etc.) */
+/* Page title / sub (Settings, Security, Admin, etc.)
+   Reconciled onto the §2.3 Page-title role — this was a flat 1.5rem, the
+   THIRD distinct "page title" in the tree alongside .ui-page-header__title and
+   the spec's own value. All three are now one. */
 .page-title {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: var(--font-size-page-title);
   font-weight: 700;
-  margin: 0 0 8px;
+  letter-spacing: -.033em;
+  line-height: 1.02;
+  margin: 0 0 var(--space-2);
   color: var(--text-strong);
 }
 
 .page-sub {
-  font-size: 0.875rem;
+  font-size: var(--font-size-body);
+  line-height: 1.6;
   color: var(--text-muted);
-  margin: 0 0 24px;
+  margin: 0 0 var(--space-6);
 }
 
 /* ============================================================
@@ -1539,76 +2317,178 @@ html[data-theme='light'] .nebula {
   flex-wrap: wrap;
 }
 
-/* Buttons */
-.btn {
+/* Buttons — React primitives and legacy class call-sites intentionally share
+   the same selectors so older screens adopt the system without a flag day. */
+.ui-button,
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-ghost,
+.btn-danger {
   -webkit-appearance: none;
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
+  gap: var(--space-2);
+  min-height: var(--control-md);
+  padding: 0 var(--space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
-  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+  text-decoration: none;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease,
+    transform var(--duration-fast) ease;
 }
-.btn:hover { opacity: 0.88; }
-.btn:active { transform: translateY(0.5px); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.ui-button:hover,
+.btn:hover,
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-ghost:hover,
+.btn-danger:hover { transform: translateY(-1px); }
+.ui-button:active,
+.btn:active,
+.btn-primary:active,
+.btn-secondary:active,
+.btn-ghost:active,
+.btn-danger:active { transform: translateY(0); }
+.ui-button:focus-visible,
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-ghost:focus-visible,
+.btn-danger:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ui-button:disabled,
+.btn:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-ghost:disabled,
+.btn-danger:disabled,
+.ui-button[aria-disabled='true'] { opacity: .48; cursor: not-allowed; pointer-events: none; transform: none; }
 
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-secondary { background: transparent; color: var(--text-primary); border-color: var(--border-subtle); }
-.btn-secondary:hover { background: var(--bg-elevated); opacity: 1; }
-.btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-.btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); opacity: 1; }
-.btn-danger { background: transparent; color: var(--error); border-color: var(--border-subtle); }
-.btn-danger:hover { background: var(--error-bg); border-color: var(--error-border); opacity: 1; }
+.ui-button--primary,
+.btn-primary { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); box-shadow: var(--shadow-xs); }
+.ui-button--primary:hover,
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.ui-button--secondary,
+.btn-secondary { background: var(--surface-raised); color: var(--text-primary); border-color: var(--border-default); }
+.ui-button--secondary:hover,
+.btn-secondary:hover { background: var(--surface-interactive-hover); border-color: var(--border-strong); }
+.ui-button--ghost,
+.btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; box-shadow: none; }
+.ui-button--ghost:hover,
+.btn-ghost:hover { background: var(--surface-interactive); color: var(--text-primary); }
+.ui-button--danger,
+.btn-danger { background: transparent; color: var(--error-text); border-color: var(--error-border); }
+.ui-button--danger:hover,
+.btn-danger:hover { background: var(--error-bg); }
 
-.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: var(--radius-sm, 7px); }
+.ui-button--sm,
+.btn-sm { min-height: var(--control-sm); padding: 0 var(--space-3); font-size: 12px; border-radius: var(--radius-sm); }
+.ui-button--lg { min-height: var(--control-lg); padding: 0 var(--space-5); font-size: 14px; }
+.ui-button--block { width: 100%; }
+.ui-button__spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-spin .7s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
 
 /* Inputs / labels */
+.ui-input,
 .input {
   width: 100%;
-  padding: 8px 10px;
+  min-height: var(--control-lg);
+  padding: 0 var(--space-3);
   border-radius: var(--radius-md);
   font-family: inherit;
   font-size: 13px;
   color: var(--text-primary);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  transition: border-color 0.15s ease;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
 }
-.input:focus { outline: none; border-color: var(--border-accent); }
+.ui-input:hover,
+.input:hover { border-color: var(--border-strong); }
+.ui-input:focus,
+.input:focus { outline: none; border-color: var(--focus-color); box-shadow: var(--focus-ring); }
+.ui-input::placeholder,
 .input::placeholder { color: var(--text-muted); }
-textarea.input { resize: vertical; line-height: 1.5; }
+.ui-input:disabled,
+.input:disabled { opacity: .55; cursor: not-allowed; }
+.ui-textarea,
+textarea.input { min-height: 108px; padding-top: var(--space-3); padding-bottom: var(--space-3); resize: vertical; line-height: 1.5; }
+/* A native <option> is painted by the OS dropdown, NOT by the <select> that owns
+   it — it inherits neither the control's background nor its colour. On a dark
+   theme that leaves dark-on-dark (or, on Windows, white-on-white) options in an
+   otherwise correct control. Every `.input` select gets an opaque pair of its
+   own, so the fix lands once instead of per form. See [[native-select-option-contrast]]. */
+select.input option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
 
+.ui-field { display: grid; gap: var(--space-2); }
+.ui-field__label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.ui-field__label,
 .label {
   display: block;
-  margin-bottom: 6px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text-secondary);
 }
+.label { margin-bottom: var(--space-2); }
+.ui-field__optional { color: var(--text-muted); font-size: 11px; }
+.ui-field__message { color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.ui-field__message--error { color: var(--error-text); }
+.ui-field--error .ui-input { border-color: var(--error-border); }
 
 /* Cards */
+.ui-surface,
+.card {
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.ui-surface--raised { background: var(--surface-raised); }
+.ui-surface--sunken { background: var(--surface-sunken); box-shadow: none; }
+.ui-surface--accent { background: var(--accent-subtle); border-color: var(--border-accent); box-shadow: none; }
+.ui-surface--pad-none { padding: 0; }
+.ui-surface--pad-sm { padding: var(--space-3); }
+.ui-surface--pad-md { padding: var(--space-5); }
+.ui-surface--pad-lg { padding: var(--space-6); }
+.ui-surface--interactive { transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease, transform var(--duration-fast) ease; }
+.ui-surface--interactive:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+
 .card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
+/* Reconciled onto the §2.3 Card-title role (was 15px/700). */
 .card-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  font-weight: 650;
+  letter-spacing: -.006em;
   color: var(--text-primary);
   line-height: 1.3;
 }
+
+.ui-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-6); margin-bottom: var(--space-6); }
+.ui-page-header__copy { min-width: 0; }
+/* Both reconciled onto their §2.3 roles. The eyebrow keeps `--accent` ink
+   (a page header's eyebrow is a brand mark, not metadata) but takes the role's
+   size and tracking; the title was the second of three competing page titles. */
+.ui-page-header__eyebrow { margin-bottom: var(--space-2); color: var(--accent); font: 600 var(--font-size-eyebrow)/1.3 var(--font-mono); letter-spacing: .15em; text-transform: uppercase; }
+.ui-page-header__title { margin: 0; color: var(--text-strong); font: 700 var(--font-size-page-title)/1.02 var(--font-display); letter-spacing: -.033em; }
+.ui-page-header__description { max-width: 720px; margin: var(--space-2) 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
+.ui-page-header__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex-shrink: 0; }
 
 /* Modal title */
 .modal-title {
@@ -1630,6 +2510,15 @@ textarea.input { resize: vertical; line-height: 1.5; }
   white-space: nowrap;
 }
 
+.ui-badge { display: inline-flex; min-height: 22px; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid transparent; border-radius: var(--radius-full); font-size: 11px; font-weight: 650; line-height: 1.4; white-space: nowrap; }
+.ui-badge__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ui-badge--neutral { color: var(--text-secondary); background: var(--surface-interactive); border-color: var(--border-default); }
+.ui-badge--accent { color: var(--accent); background: var(--accent-subtle); border-color: var(--border-accent); }
+.ui-badge--info { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
+.ui-badge--success { color: var(--success-text); background: var(--success-bg); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+.ui-badge--warning { color: var(--warning-text); background: var(--warning-bg); border-color: var(--warning-border); }
+.ui-badge--danger { color: var(--error-text); background: var(--error-bg); border-color: var(--error-border); }
+
 /* Empty-state container (icon + title + sub live below) */
 .empty-state {
   display: flex;
@@ -1641,6 +2530,17 @@ textarea.input { resize: vertical; line-height: 1.5; }
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+}
+
+.ui-empty-state { display: grid; min-height: 240px; place-items: center; align-content: center; padding: var(--space-12) var(--space-6); text-align: center; background: var(--surface-sunken); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); }
+.ui-empty-state__icon { display: grid; width: 44px; height: 44px; margin-bottom: var(--space-4); place-items: center; color: var(--accent); background: var(--accent-subtle); border-radius: var(--radius-md); }
+.ui-empty-state__title { margin: 0; color: var(--text-primary); font-size: 16px; }
+.ui-empty-state__description { max-width: 520px; margin: var(--space-2) 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.ui-empty-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); margin-top: var(--space-5); }
+
+@media (max-width: 640px) {
+  .ui-page-header { align-items: stretch; flex-direction: column; gap: var(--space-4); }
+  .ui-page-header__actions { width: 100%; }
 }
 
 /* Admin page (inside shell) */
@@ -1683,9 +2583,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 
 .alert-error {
-  background: var(--error-bg, #fef2f2);
-  color: var(--error-text, #991b1b);
-  border: 1px solid var(--error-border, #fecaca);
+  background: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
 }
 
 /* Admin data tables (same shell style) */
@@ -1753,12 +2653,12 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 
 .admin-page .health-card.health-ok {
-  border-color: var(--success, #10b981);
+  border-color: var(--success);
   background: var(--success-bg, rgba(16, 185, 129, 0.08));
 }
 
 .admin-page .health-card.health-degraded {
-  border-color: var(--error, #ef4444);
+  border-color: var(--error);
   background: var(--error-bg, rgba(239, 68, 68, 0.08));
 }
 
@@ -1779,7 +2679,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
 .admin-page .badge {
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1795,8 +2695,8 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 
 .admin-page .badge-success {
-  background: var(--success-bg, #d1fae5);
-  color: var(--success-text, #065f46);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .admin-page .admin-select {
@@ -1826,7 +2726,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .admin-page .admin-token-textarea {
   width: 100%;
   min-height: 84px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 10px;
   border-radius: var(--radius-md);
@@ -1912,7 +2812,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   height: 100%;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg);
 }
@@ -1947,7 +2847,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
 .bs-chat-item {
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin-bottom: 2px;
   cursor: pointer;
   border: 1px solid transparent;
@@ -2007,7 +2907,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .bs-bubble {
   max-width: 75%;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -2046,7 +2946,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   font-size: 12px;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .bs-action-btn:hover {
@@ -2065,8 +2965,8 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
 /* Card / empty state for agentHosts */
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: 20px;
 }
@@ -2088,75 +2988,50 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: var(--muted);
 }
 
-.badge-gray {
-  background: rgba(107, 114, 128, 0.2);
-  color: #9ca3af;
+.badge-gray,
+.badge-blue,
+.badge-yellow,
+.badge-red,
+.badge-green,
+.badge-amber,
+.badge-orange,
+.badge-muted {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
   padding: 2px 8px;
-  border-radius: var(--radius-full, 6px);
-  font-size: 11px;
-  font-weight: 600;
-}
-.badge-blue {
-  background: rgba(77, 158, 255, 0.2);
-  color: var(--coral-bright);
-  padding: 2px 8px;
-  border-radius: var(--radius-full, 6px);
-  font-size: 11px;
-  font-weight: 600;
-}
-.badge-yellow {
-  background: rgba(234, 179, 8, 0.2);
-  color: #eab308;
-  padding: 2px 8px;
-  border-radius: var(--radius-full, 6px);
-  font-size: 11px;
-  font-weight: 600;
-}
-.badge-red {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  padding: 2px 8px;
-  border-radius: var(--radius-full, 6px);
-  font-size: 11px;
-  font-weight: 600;
-}
-.badge-green {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-  padding: 2px 8px;
+  border: 1px solid transparent;
   border-radius: var(--radius-full);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
 }
+.badge-gray,
+.badge-muted { background: var(--surface-interactive); color: var(--text-secondary); border-color: var(--border-default); }
+.badge-blue { background: var(--accent-subtle); color: var(--accent); border-color: var(--border-accent); }
+.badge-yellow,
+.badge-amber { background: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
+.badge-red { background: var(--error-bg); color: var(--error-text); border-color: var(--error-border); }
+.badge-green { background: var(--success-bg); color: var(--success-text); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
 /* "Attention needed" — distinct from yellow (in-review) and red (blocked).
    Used for GAP task-type badges minted by the Validator. */
 .badge-amber {
-  background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
-  padding: 2px 8px;
-  border-radius: var(--radius-full, 6px);
-  font-size: 11px;
-  font-weight: 600;
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 /* "Live / urgent" — used for INCIDENT task-type + severity accents. Distinct from
    red (blocked/security) and amber (gap/in-review); reads in both themes. */
 .badge-orange {
-  background: rgba(249, 115, 22, 0.2);
-  color: #fb923c;
-  padding: 2px 8px;
-  border-radius: var(--radius-full, 6px);
-  font-size: 11px;
-  font-weight: 600;
+  background: color-mix(in srgb, var(--warning-bg) 78%, var(--error-bg));
+  color: var(--warning-text);
+  border-color: color-mix(in srgb, var(--warning-border) 70%, var(--error-border));
 }
 /* Muted/"off" counterpart to .badge-green (DRAFT, OFFLINE, inactive states).
    Previously re-inlined as a style object everywhere a non-green badge was needed. */
 .badge-muted {
-  background: var(--bg-elevated);
-  color: var(--muted);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
+  background: var(--surface-interactive);
+  color: var(--text-secondary);
 }
 
 /* Slide-out panels: standard overlay (blur) + drawer (background)
@@ -2197,7 +3072,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-base);
   color: var(--text-secondary);
   font-size: 13px;
@@ -2250,7 +3125,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   transition: color var(--duration-fast) ease;
 }
 .mbn-item:hover { color: var(--text); }
-.mbn-item.active { color: var(--accent, #4d9eff); }
+.mbn-item.active { color: var(--accent); }
 .mbn-icon { font-size: 1.25rem; line-height: 1; }
 .mbn-label { font-size: 10px; line-height: 1; }
 
@@ -2267,7 +3142,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   width: 34px;
   height: 34px;
   margin-top: -6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--coral-bright), var(--coral-mid));
   color: #fff;
   box-shadow: 0 3px 10px color-mix(in srgb, var(--coral-bright) 45%, transparent);
@@ -2276,6 +3151,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .mbn-accent .mbn-label { font-weight: 700; }
 
 @media (max-width: 767px) {
+  /* The bar exists from here down, so this is where it starts costing space. */
+  :root { --mobile-nav-height: calc(56px + env(safe-area-inset-bottom, 0px)); }
+
+  /* The operator shell reserves it ONCE, at the frame — so the last thing in
+     the column clears the bar whatever that thing is. It was the roster footer
+     (§3.3, always on), and nothing reserved anything for it: the bar covered the
+     team on every phone-width board. Reserving it here rather than on `.content`
+     is why it works for the footer too. */
+  .app-frame { padding-bottom: var(--mobile-nav-height); }
+
   /* Marketplace chip lives in the bottom bar / drawer on mobile */
   .topbar-center { display: none; }
 
@@ -2289,7 +3174,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
     margin-right: 2px;
     padding: 0;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -2307,8 +3192,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
     --shell-nav-width-collapsed: 0px;
     /* Docked slide-out panels (Projects, IDE settings) anchor their bottom to
        --footer-height. On mobile the global footer is replaced by the fixed
-       bottom nav, so point this at the bottom-nav height to keep panels clear. */
-    --footer-height: calc(56px + env(safe-area-inset-bottom, 0px));
+       bottom nav, so point this at the bar's own height — the token, not a
+       fifth copy of the number. */
+    --footer-height: var(--mobile-nav-height);
   }
 
   .nav {
@@ -2343,7 +3229,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
     width: 40px;
     height: 40px;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -2378,6 +3264,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   }
   .nav.collapsed .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
   .nav.collapsed .nav-item-label { display: inline; }
+  .nav.collapsed .nav-item::after { display: none; }
 
   /* Hide the desktop collapse chevron in the drawer — the X closes it */
   .nav-collapse-toggle { display: none; }
@@ -2403,7 +3290,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
     right: 0;
     bottom: 0;
     z-index: 900;
-    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    height: var(--mobile-nav-height);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(12px);
@@ -2411,11 +3298,13 @@ textarea.input { resize: vertical; line-height: 1.5; }
     border-top: 1px solid var(--border);
   }
 
-  /* Tighter content padding + clearance for the bottom bar */
+  /* Tighter content padding. The bar's clearance is NOT repeated here — the
+     frame reserves it above, and doing it in both places pushed every mobile
+     page up by an extra bar's height for nothing. */
   .content {
     --content-pad-x: 6px;
     --content-pad-y: 8px;
-    padding: var(--content-pad-y) var(--content-pad-x) calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: var(--content-pad-y) var(--content-pad-x);
   }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
@@ -2518,14 +3407,14 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 
 .emulation-bar__timer--warn {
-  color: #fca5a5;               /* red-300 */
+  color: var(--error-text);               /* red-300 */
   font-weight: 700;
 }
 
 .emulation-bar__btn {
   flex-shrink: 0;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: transparent;
   color: inherit;
@@ -2575,7 +3464,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   z-index: 10000;
   background: #292524;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   list-style: none;
   margin: 0;
   padding: 4px 0;
@@ -2616,7 +3505,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   z-index: 10001;
   background: #1c1917;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   min-width: 220px;
   font-size: 11px;
@@ -2645,13 +3534,13 @@ textarea.input { resize: vertical; line-height: 1.5; }
   z-index: 9998;
   width: 420px;
   max-width: 95vw;
-  background: var(--surface, #18181b);
+  background: var(--surface);
   border-left: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   display: flex;
   flex-direction: column;
   box-shadow: -4px 0 24px var(--shadow-color, rgba(0, 0, 0, 0.5));
   font-size: 12px;
-  color: var(--text-primary, #e4e4e7);
+  color: var(--text-primary);
 }
 
 .perm-debugger-header {
@@ -2677,7 +3566,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   gap: 4px 12px;
   padding: 8px 14px;
   font-size: 11px;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
   flex-shrink: 0;
 }
@@ -2695,16 +3584,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
   padding: 7px 4px;
   background: none;
   border: none;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
   transition: background 0.1s;
 }
 
-.perm-debugger-tab:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.05)); }
+.perm-debugger-tab:hover { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.05)); }
 .perm-debugger-tab--active {
-  color: var(--text-primary, #e4e4e7);
-  border-bottom: 2px solid var(--accent, #6366f1);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
   font-weight: 600;
 }
 
@@ -2729,11 +3618,11 @@ textarea.input { resize: vertical; line-height: 1.5; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
   position: sticky;
   top: 0;
-  background: var(--surface, #18181b);
+  background: var(--surface);
 }
 
 .perm-debugger-table td {
@@ -2742,27 +3631,27 @@ textarea.input { resize: vertical; line-height: 1.5; }
   vertical-align: middle;
 }
 
-.perm-debugger-table tr:hover td { background: var(--surface-hover, rgba(255, 255, 255, 0.03)); }
+.perm-debugger-table tr:hover td { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.03)); }
 
 .perm-debugger-btn {
   min-height: 28px;
   padding: 3px 8px;
   font-size: 11px;
   border: 1px solid var(--border, rgba(255, 255, 255, 0.2));
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-primary, #e4e4e7);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
-.perm-debugger-btn:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.1)); }
+.perm-debugger-btn:hover { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.1)); }
 .perm-debugger-btn--close { font-size: 16px; padding: 1px 7px; }
 
 .perm-debugger-count-badge {
   margin-left: 4px;
-  background: var(--error, #ef4444);
+  background: var(--error);
   color: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0 5px;
   font-size: 10px;
 }
@@ -2804,7 +3693,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   justify-content: space-between;
   align-items: flex-start;
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -2812,7 +3701,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   display: flex;
   gap: 2px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -2827,7 +3716,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
 
@@ -2870,6 +3759,10 @@ textarea.input { resize: vertical; line-height: 1.5; }
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
+  /* Same reservation the operator shell makes, from the same token — the fixed
+     bar covered the end of the footer on every marketing page too. Zero above
+     the breakpoint. */
+  padding-bottom: var(--mobile-nav-height);
 }
 .marketing-content {
   flex: 1 1 auto;
@@ -2887,10 +3780,48 @@ textarea.input { resize: vertical; line-height: 1.5; }
   min-height: 0;
   overflow: hidden;
 }
-@media (max-width: 767px) {
-  .marketing-content-full-height {
-    box-sizing: border-box;
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+/* The bar's clearance is NOT repeated here — `.marketing-frame` reserves it for
+   both the scrolling and the full-height case, from `--mobile-nav-height`. This
+   was the fourth hand-written copy of the bar's height. */
+
+/* ── THE MARKETING COLUMN ──────────────────────────────────────────────────
+   One container for every public band. A marketing section is full-bleed (its
+   background runs edge to edge) with its CONTENT held in this column, so the
+   band paints wide and reads narrow. Compose it: `<section class="…"><div
+   class="mkt-in">`, and let the section own only vertical rhythm and paint.
+
+   Narrow the gutter and the header narrows with it, because both read the same
+   token — that is the entire point of the primitive. */
+.mkt-in {
+  width: 100%;
+  /* A band that is deliberately narrower than the column (a prose section, a
+     centred close) sets `--mkt-width` rather than its own `max-width`: a custom
+     property cannot lose a specificity or source-order fight with the
+     primitive, so the narrow case stays narrow without anyone reasoning about
+     which stylesheet loaded first. */
+  max-width: var(--mkt-width, var(--marketing-max));
+  margin-inline: auto;
+  padding-inline: var(--marketing-gutter);
+}
+
+/* A public page that is a plain column rather than a stack of painted bands
+   (the storefront, /prompts, /tools): the column plus its vertical rhythm. */
+.mkt-page { padding-block: var(--space-6); }
+
+@media (max-width: 560px) {
+  :root {
+    --marketing-gutter: 18px;
+    --marketing-section-padding: 64px;
+  }
+}
+
+/* Percentage-based panels preserve the underlying desktop context. On a phone
+   there is no useful canvas beside them, so every named width takes the screen. */
+@media (max-width: 900px) {
+  :root {
+    --panel-width-sheet: 96vw;
+    --panel-width-wide: 96vw;
+    --panel-width-full: 96vw;
   }
 }
 
@@ -2898,6 +3829,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .mh {
   position: sticky;
   top: 0;
+  flex: 0 0 auto;
   z-index: 50;
   width: 100%;
   background: var(--chrome);
@@ -2906,10 +3838,12 @@ textarea.input { resize: vertical; line-height: 1.5; }
   border-bottom: 1px solid var(--border);
 }
 .mh-inner {
-  max-width: 1320px;
+  /* The containing block for the mega panels — see `.mh-panel-wide`. */
+  position: relative;
+  max-width: var(--marketing-max);
   margin: 0 auto;
   height: 66px;
-  padding: 0 24px;
+  padding: 0 var(--marketing-gutter);
   display: flex;
   align-items: center;
   gap: 18px;
@@ -2936,13 +3870,17 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: var(--coral-bright);
   background: var(--surface-coral-soft);
   border: 1px solid var(--border-accent);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 2px 7px;
 }
 
 /* Nav */
 .mh-nav {
   display: flex;
+  /* Keep menu triggers hoverable all the way from their buttons to the bottom
+     edge of the header. Without this stretch, the nav's box ends at the link
+     text and leaves a dead strip before the dropdown bridge begins. */
+  align-self: stretch;
   align-items: center;
   gap: 2px;
   flex: 1 1 auto;
@@ -2953,7 +3891,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   align-items: center;
   gap: 5px;
   padding: 9px 13px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-display);
   font-size: 0.92rem;
   font-weight: 500;
@@ -2968,19 +3906,35 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .mh-link.active { color: var(--coral-bright); }
 .mh-caret { transition: transform 0.2s ease; opacity: 0.7; }
 .mh-item { position: relative; display: inline-flex; }
+.mh-item.has-menu {
+  align-self: stretch;
+  align-items: center;
+}
+/* A mega panel is anchored to the COLUMN, not to its trigger — so it opens
+   inside the header's own left and right edges instead of spilling past them
+   (Learn ▾ sits left of centre, so a trigger-centred panel hung 70px outside
+   the logo). Dropping the item's containing block hands the panel to
+   `.mh-inner`; the hover bridge below follows it and becomes column-wide,
+   which is what the wide panel wants anyway. */
+.mh-item.has-menu:has(> .mh-panel-wide) { position: static; }
 .mh-item.has-menu:hover .mh-caret,
 .mh-item.has-menu:focus-within .mh-caret { transform: rotate(180deg); }
 
 /* Dropdown panels */
 .mh-panel {
   position: absolute;
-  top: calc(100% + 6px);
+  /* FLUSH with the trigger. It used to sit at `calc(100% + 6px)`, and those six
+     pixels were not hoverable — moving the pointer down towards an item left the
+     hover area and shut the menu before it could be clicked. The breathing room
+     is `margin` on the inner content now, which is inside the hover target. */
+  top: 100%;
   left: 0;
   min-width: 220px;
-  padding: 8px;
+  padding: var(--space-2);
+  margin-top: var(--space-2);
   background: var(--chrome-strong);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
   opacity: 0;
   visibility: hidden;
@@ -2988,69 +3942,265 @@ textarea.input { resize: vertical; line-height: 1.5; }
   transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
   z-index: 60;
 }
-.mh-panel-wide {
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
-  width: min(900px, 92vw);
+/* The bridge across that margin. Without it the gap is still dead space, and a
+   diagonal path from the trigger to the first item still crosses it. */
+.mh-item.has-menu::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: var(--space-3);
+  display: none;
 }
+.mh-item.has-menu:hover::after,
+.mh-item.has-menu[data-open]::after { display: block; }
+
+.mh-panel-wide {
+  left: var(--marketing-gutter);
+  right: var(--marketing-gutter);
+  width: auto;
+  transform: translateY(8px);
+}
+/* Three ways in, one open state: hover for a pointer, focus for a keyboard, and
+   `data-open` for the click that a touchscreen has and hover does not. */
 .mh-item.has-menu:hover .mh-panel:not(.mh-panel-wide),
-.mh-item.has-menu:focus-within .mh-panel:not(.mh-panel-wide) {
+.mh-item.has-menu:focus-within .mh-panel:not(.mh-panel-wide),
+.mh-item.has-menu[data-open] .mh-panel:not(.mh-panel-wide) {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
 }
 .mh-item.has-menu:hover .mh-panel-wide,
-.mh-item.has-menu:focus-within .mh-panel-wide {
+.mh-item.has-menu:focus-within .mh-panel-wide,
+.mh-item.has-menu[data-open] .mh-panel-wide {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
-.mh-panel-link {
-  display: block;
-  padding: 9px 11px;
-  border-radius: 9px;
-  font-size: 0.88rem;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color 0.16s ease, background 0.16s ease;
-}
-.mh-panel-link:hover { color: var(--text-primary); background: var(--surface-interactive); }
-
-/* Product mega-menu */
+.mh-trigger[aria-expanded='true'] .mh-caret { transform: rotate(180deg); }
+/* ── The mega-menus (PRD 21 §11.4.6) ──────────────────────────────────────
+   ONE layout for Product ▾ and Learn ▾. `.mh-panel-link` — the flat row the
+   Learn dropdown used to be — is gone with it: two menus rendered two ways is
+   how they came to say different things. */
 .mh-mega {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  padding: 6px;
+  /* Tracks, not columns. A group with more than five rows claims two of them and
+     flows down both, so Run's eight business seats read as a block rather than
+     as a long leg beside two short ones. The count is computed from the registry
+     and handed in as `--mega-tracks`. */
+  grid-template-columns: repeat(var(--mega-tracks, 3), minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3);
+  align-items: start;
 }
-.mh-mega-col { display: flex; flex-direction: column; }
+.mh-mega-col { grid-column: span var(--track-span, 1); min-width: 0; }
+.mh-mega-rows {
+  display: grid;
+  grid-template-columns: repeat(var(--track-span, 1), minmax(0, 1fr));
+  gap: 2px var(--space-4);
+}
 .mh-mega-head {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 9px 9px;
-  font-family: var(--font-display);
-  font-size: 0.82rem;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-eyebrow);
   font-weight: 700;
-  color: var(--text-primary);
-  text-decoration: none;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 4px;
 }
-.mh-mega-head:hover { color: var(--coral-bright); }
+/* The column's stage dot — the same colour the left panel gives that stage, so
+   the public menu and the signed-in rail teach one vocabulary. */
+.mh-mega-head i {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--stage, var(--text-muted));
+  flex-shrink: 0;
+}
 .mh-mega-link {
   display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 9px;
-  font-size: 0.8rem;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-small);
   color: var(--text-secondary);
   text-decoration: none;
   transition: color 0.16s ease, background 0.16s ease;
 }
 .mh-mega-link:hover { color: var(--text-primary); background: var(--surface-interactive); }
-.mh-mega-link-icon { width: 18px; text-align: center; flex-shrink: 0; }
+.mh-mega-link-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--seat, var(--text-muted));
+  background: color-mix(in srgb, var(--seat, var(--border)) 14%, transparent);
+}
+.mh-mega-link-body { min-width: 0; }
+.mh-mega-link strong,
+.mh-mega-link small { display: block; }
+.mh-mega-link strong { color: var(--text-primary); font-weight: 600; }
+.mh-mega-link small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 400;
+  line-height: 1.45;
+}
+.mh-mega-foot {
+  grid-column: 1 / -1;
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.6;
+}
+@media (max-width: 1080px) {
+  .mh-mega { grid-template-columns: minmax(0, 1fr); }
+  .mh-mega-col { grid-column: auto; }
+  .mh-mega-rows { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── A reference page opened as a panel (PRD 21 §11.4.5) ──────────────────
+   The page itself is unchanged — it is the marketing page, rendered inside the
+   panel. What the panel adds is the chrome a long explainer needs when it is
+   sitting over a live board: an index of the page's own sections, and the
+   owning seat's hue on the header rule. */
+.ref-index {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+}
+/* One row, whether the rail scrolls to an anchor (`<a>`) or switches a view
+   (`<button>`) — a tabbed reference page keeps one section in the DOM, so its
+   rail is a choice rather than a list of anchors. The button resets are what
+   make the two render identically. */
+.ref-index__item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+.ref-index__item:hover {
+  color: var(--text-primary);
+  background: var(--surface-interactive);
+  border-left-color: var(--border-strong);
+}
+.ref-index__item[aria-current='true'] {
+  color: var(--text-primary);
+  background: var(--surface-interactive);
+  border-left-color: var(--accent);
+  font-weight: 650;
+}
+
+/* The footer's links carry their destination's seat hue on hover, so the footer
+   and the menus mark ownership the same way. */
+.global-footer-col a:hover { color: var(--seat, var(--text-primary)); }
+
+/* The left panel's ARC groups (PRD 21 §11.4.1). `.nav-domain-section` and
+   `.nav-domain-persona` were the second rail's chrome and went with it. */
+.nav-stage { margin-top: var(--space-3); }
+.nav-stage:first-child { margin-top: 0; }
+
+.nav-stage__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nav-stage__label:hover { background: var(--surface-interactive); color: var(--text-secondary); }
+
+/* The stage's own quiet marker — a phase, not a brand, so it is a 5px dot
+   rather than a seventh accent competing with the seat badges. */
+.nav-stage__dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--stage-admin);
+}
+.nav-stage[data-stage='idea'] .nav-stage__dot { background: var(--stage-idea); }
+.nav-stage[data-stage='make'] .nav-stage__dot { background: var(--stage-make); }
+.nav-stage[data-stage='run'] .nav-stage__dot { background: var(--stage-run); }
+.nav-stage[data-stage='measure'] .nav-stage__dot { background: var(--stage-measure); }
+.nav-stage[data-stage='market'] .nav-stage__dot { background: var(--stage-market); }
+
+.nav-stage__hint {
+  margin-left: auto;
+  font-style: normal;
+  font-size: var(--font-size-field-label);
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.nav-stage__chev {
+  margin-left: auto;
+  flex: none;
+  opacity: 0.7;
+  transition: transform var(--duration-fast) ease;
+}
+.nav-stage__hint + .nav-stage__chev { margin-left: var(--space-2); }
+.nav-stage__label[aria-expanded='false'] .nav-stage__chev { transform: rotate(-90deg); }
+
+.nav-stage__rows { display: flex; flex-direction: column; gap: 1px; }
+.nav-stage__rows[hidden] { display: none; }
+
+/* Dim, never absent. A locked row inside a dim stage still renders and still
+   reads — it is an offer, and the lock glyph plus the title say why. */
+.nav-stage--dim .nav-stage__label,
+.nav-stage--dim .nav-item-label { color: var(--text-muted); }
+
+/* The seat badge — one hue, from the one declaration in `lib/seats.ts`. */
+.nav-item__seat {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  color: var(--seat, var(--text-muted));
+  border: 1px solid color-mix(in srgb, var(--seat, var(--border-subtle)) 40%, transparent);
+  background: color-mix(in srgb, var(--seat, transparent) 10%, transparent);
+}
+.nav-item__seat + .nav-item__lock { margin-left: var(--space-2); }
+.nav-stage--dim .nav-item__seat { opacity: 0.5; }
+.nav.collapsed .nav-item__seat { display: none; }
+
+/* The nine BurnRateOS domain explainers render through the house .mk-* kit
+ * (components/reference/ReferencePage). Their private .br-domain-* stylesheet
+ * was the fourth copy of the same hero, band and card grid, and is deleted. */
 
 /* Right cluster */
 .mh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
@@ -3061,7 +4211,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: var(--text-primary);
   text-decoration: none;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   transition: background 0.18s ease;
 }
 .mh-signin:hover { background: var(--surface-interactive); }
@@ -3072,7 +4222,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: #fff;
   text-decoration: none;
   padding: 9px 18px;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
   box-shadow: 0 6px 18px var(--shadow-coral-mid);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -3117,7 +4267,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .mh-drawer-link {
   display: block;
   padding: 12px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 500;
@@ -3257,7 +4407,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   height: auto;
   display: block;
   margin: 28px auto;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 /* Document-scale Markdown typography (see DocumentMarkdown.tsx). Shared by every
@@ -3265,7 +4415,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
    reads at document scale, not chat scale. All colours come from theme tokens so
    it works in both light and dark; sizes use rem so it stays fluid on mobile. */
 .markdown-body {
-  color: var(--text-primary, #e5e7eb);
+  color: var(--text-primary);
   font-size: 0.95rem;
   line-height: 1.7;
   overflow-wrap: break-word;
@@ -3279,7 +4429,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  color: var(--text-primary, #f3f4f6);
+  color: var(--text-primary);
   font-family: var(--font-display, inherit);
   font-weight: 700;
   line-height: 1.3;
@@ -3289,15 +4439,15 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .markdown-body h2 {
   font-size: 1.35rem;
   padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--border, #333);
+  border-bottom: 1px solid var(--border);
 }
 .markdown-body h3 { font-size: 1.15rem; }
 .markdown-body h4 { font-size: 1rem; }
 .markdown-body h5,
-.markdown-body h6 { font-size: 0.9rem; color: var(--text-muted, #9ca3af); }
+.markdown-body h6 { font-size: 0.9rem; color: var(--text-muted); }
 .markdown-body p { margin: 0.9em 0; }
 .markdown-body a {
-  color: var(--coral-bright, #ff6b5e);
+  color: var(--coral-bright);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -3310,26 +4460,26 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .markdown-body blockquote {
   margin: 1.1em 0;
   padding: 0.4em 1em;
-  border-left: 3px solid var(--border, #444);
-  color: var(--text-muted, #9ca3af);
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
   background: var(--surface, rgba(127, 127, 127, 0.06));
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 .markdown-body code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;
   padding: 0.15em 0.4em;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: var(--surface, rgba(127, 127, 127, 0.12));
-  border: 1px solid var(--border-subtle, var(--border, #333));
+  border: 1px solid var(--border-subtle, var(--border));
 }
 .markdown-body pre {
   margin: 1.1em 0;
   padding: 1em;
   overflow-x: auto;
-  border-radius: 10px;
-  background: var(--surface, #111827);
-  border: 1px solid var(--border, #333);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 .markdown-body pre code {
   padding: 0;
@@ -3341,9 +4491,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .markdown-body hr {
   margin: 2em 0;
   border: none;
-  border-top: 1px solid var(--border, #333);
+  border-top: 1px solid var(--border);
 }
-.markdown-body img { max-width: 100%; height: auto; border-radius: 10px; }
+.markdown-body img { max-width: 100%; height: auto; border-radius: var(--radius-lg); }
 .markdown-body table {
   width: 100%;
   margin: 1.1em 0;
@@ -3354,7 +4504,535 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .markdown-body th,
 .markdown-body td {
   padding: 0.5em 0.8em;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--border);
   text-align: left;
 }
 .markdown-body th { background: var(--surface, rgba(127, 127, 127, 0.08)); font-weight: 600; }
+/* Keyboard users can bypass repeated navigation; hidden only until focused. */
+.skip-to-content { position: fixed; z-index: 20000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: var(--radius-md); background: #fff; color: #111; font-weight: 700; }
+.skip-to-content:focus { transform: translateY(0); outline: 3px solid #2563eb; outline-offset: 2px; }
+
+/* Privacy choices — compact toast-like card that stays clear of the primary
+   bottom-center composer on canvas/chat surfaces. */
+.privacy-choice-card {
+  position: fixed;
+  z-index: 10000;
+  left: 20px;
+  bottom: 20px;
+  width: min(410px, calc(100vw - 32px));
+  padding: 16px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, #4d9eff 22%);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .48), 0 0 0 1px rgba(77, 158, 255, .04) inset;
+  backdrop-filter: blur(18px);
+  font-family: var(--font-body);
+}
+.privacy-choice-heading { display: flex; align-items: center; gap: 10px; }
+.privacy-choice-heading h2 { margin: 0; font: 700 14px/1.3 var(--font-display); letter-spacing: -.01em; }
+.privacy-choice-heading > div > span { display: block; margin-top: 2px; color: var(--text-muted); font-size: 11px; }
+.privacy-choice-icon { display: grid; flex: 0 0 34px; width: 34px; height: 34px; place-items: center; color: #79adff; background: rgba(77, 158, 255, .12); border: 1px solid rgba(77, 158, 255, .2); border-radius: var(--radius-lg); }
+.privacy-choice-gpc { margin-left: auto; padding: 4px 7px; color: #6ee7b7; background: rgba(16, 185, 129, .1); border: 1px solid rgba(16, 185, 129, .22); border-radius: var(--radius-full); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.privacy-choice-copy { margin: 12px 0 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.privacy-choice-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.privacy-choice-button { min-height: 38px; padding: 8px 12px; border-radius: var(--radius-md); font: 700 12px/1 var(--font-display); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.privacy-choice-button:hover:not(:disabled) { transform: translateY(-1px); }
+.privacy-choice-button:focus-visible, .privacy-choice-footer button:focus-visible, .privacy-choice-footer a:focus-visible { outline: 2px solid #79adff; outline-offset: 2px; }
+.privacy-choice-primary { color: #fff; background: linear-gradient(135deg, #4d9eff, #2563eb); border: 1px solid #579fff; box-shadow: 0 5px 16px rgba(37, 99, 235, .24); }
+.privacy-choice-primary:hover:not(:disabled) { background: linear-gradient(135deg, #6aafff, #3474eb); }
+.privacy-choice-primary:disabled { opacity: .45; cursor: not-allowed; }
+.privacy-choice-secondary { color: var(--text-primary); background: var(--bg-base); border: 1px solid var(--border-subtle); }
+.privacy-choice-secondary:hover { border-color: #58749d; background: color-mix(in srgb, var(--bg-base) 82%, #4d9eff 18%); }
+.privacy-choice-footer { display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: 11px; color: var(--text-muted); font-size: 11px; }
+.privacy-choice-footer button, .privacy-choice-footer a { padding: 1px; color: var(--text-muted); background: none; border: 0; font: inherit; text-decoration: none; cursor: pointer; }
+.privacy-choice-footer button:hover, .privacy-choice-footer a:hover { color: #79adff; text-decoration: underline; }
+.privacy-choice-settings { margin: 13px 0 14px; padding: 2px 11px; background: color-mix(in srgb, var(--bg-base) 86%, transparent); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
+.privacy-choice-setting { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 14px; }
+.privacy-choice-setting + .privacy-choice-setting { border-top: 1px solid var(--border-subtle); }
+.privacy-choice-setting strong { display: block; margin-bottom: 2px; font-size: 12px; }
+.privacy-choice-setting div span { display: block; color: var(--text-muted); font-size: 10px; line-height: 1.35; }
+.privacy-choice-always { flex: none; color: #6ee7b7; font-size: 10px; font-weight: 700; }
+.privacy-choice-toggle { width: 34px; height: 18px; accent-color: #4d9eff; cursor: pointer; }
+.privacy-choice-gpc-note { margin: 0 0 9px; color: #6ee7b7; font-size: 10px; line-height: 1.4; }
+@media (max-width: 600px) {
+  .privacy-choice-card { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto; padding: 14px; border-radius: var(--radius-lg); }
+}
+
+/* ---------------------------------------------------------------------------
+   Stage + panel (PRD 21 §3.1)
+   ---------------------------------------------------------------------------
+   The board is mounted once and kept; a destination opens as a panel OVER it
+   rather than replacing it. Layout only — the stage declares its own palette
+   (the board is palette-independent by convention) and the panel is shell-themed
+   by `SlideOutPanel`, so neither sets a colour here.
+   --------------------------------------------------------------------------- */
+.stage-split {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+/* The registrar renders nothing; it must not claim a row in the flex box. */
+.stage-split__registrar {
+  display: contents;
+}
+
+/* A route that keeps the whole screen while a board stays mounted behind it. */
+.stage-split__full {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--content-pad-y) var(--content-pad-x);
+}
+
+/* The panel portals to <body>, so it claims no row here — the stage keeps the
+   whole split and the panel floats over it. On a narrow screen the panel is
+   full-bleed by its own `max-width: 100%`, so the board is simply behind it;
+   it is still mounted, which is what the person is actually keeping. */
+
+/* ============================================================
+   PRD 21 §2.6 rule 6 — reduced motion, enforced globally
+   ============================================================
+   The rule always read "respect `prefers-reduced-motion`. Every transition and
+   animation." It was enforced by review, and review does not scale: on the
+   public surface 61 files animated and 23 declared the query, so 41 shipped
+   motion to people who had asked the OS not to send them any.
+
+   A per-file sweep would have closed those 41 and left the 42nd to the next
+   author. This closes the CLASS instead: a near-instant floor over every
+   animation and transition in the app, so a new hover lift is compliant the
+   moment it is written.
+
+   Why 0.01ms rather than `none`: a zeroed duration still FIRES `transitionend`
+   and `animationend`. Several surfaces (the panel scrim, the chunk-error
+   recovery, the carousel) advance their state on those events and would hang
+   forever if the events never arrived. This is the WCAG-recommended form.
+
+   This rule deliberately leaves `transform` values intact. Many components
+   (dropdowns, canvas nodes, centered dialogs) use transforms as layout
+   coordinates rather than optional motion; resetting them on hover moves the
+   element somewhere else. Decorative transform effects that need stronger
+   reduced-motion treatment must opt out in their own component rule, where the
+   structural and decorative transforms can be distinguished safely. Border,
+   shadow and colour hover states remain untouched, so affordances still read.
+
+   Deliberately NOT `!important`-free: an inline `style={{ transition }}` or a
+   CSS-module rule would otherwise out-specify this, and there are ~2,600 inline
+   style sites on the public surface alone. The whole point is that it wins.
+
+   Opt out for a genuinely load-bearing animation (a progress indicator that
+   conveys state, a canvas simulation) with `.motion-essential` — and only for
+   motion that carries information the user would otherwise lose. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.motion-essential):not(.motion-essential *),
+  *:not(.motion-essential):not(.motion-essential *)::before,
+  *:not(.motion-essential):not(.motion-essential *)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MARKETING BAND PRIMITIVES (PRD 21 §11.10.3)
+   ---------------------------------------------------------------------------
+   The six section shapes BurnRateOS's 95 marketing pages were built from,
+   ported as a SYSTEM rather than as pages — hand-authoring a third marketing
+   system is how a product ends up with a fourth.
+
+   The rhythm is fixed: wash (hero) → tint → raised → tint → raised → gradient
+   (close). Five content bands and a close; a page that needs a sixth content
+   band is two pages.
+
+   `.mk-*` sits BESIDE `.ui-*` rather than inside it on purpose: a marketing
+   section and a product surface are different contracts, and merging their
+   class namespaces is how `.card` came to mean three things.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.mk { position: relative; z-index: 1; color: var(--text-primary); }
+/* `.mk-in` is the marketing column under its own name — the band system's pages
+   were written against it before the primitive existed. It composes rather than
+   redeclares, so widening the site is one token. */
+.mk-in { width: 100%; max-width: var(--marketing-max); margin-inline: auto; padding-inline: var(--marketing-gutter); box-sizing: border-box; }
+
+/* The band paints edge to edge; `.mk-in` holds the content. Horizontal padding
+   belongs to the column, not the band, or the two gutters stack. */
+.mk-band { padding: clamp(36px, 6vw, 68px) 0; background: var(--bg-surface); }
+.mk-band--tint { background: var(--bg-deep); }
+.mk-band--wash { background: var(--wash-hero); border-bottom: 1px solid var(--border-subtle); }
+.mk-band--grad { background: var(--grad-brand); text-align: center; }
+.mk-band--grad h2 { color: #fff; }
+.mk-band--grad p { color: rgba(255, 255, 255, 0.84); max-width: 56ch; margin: var(--space-4) auto 0; }
+.mk-band--grad .mk-actions { justify-content: center; }
+.mk-band--grad .mk-cta { background: #fff; color: #1d4ed8; border-color: transparent; }
+.mk-band--grad .mk-cta--ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.55); }
+.mk-fine { color: rgba(255, 255, 255, 0.66); font-size: var(--font-size-small); margin-top: var(--space-5); }
+
+/* ── hero ─────────────────────────────────────────────────────────────── */
+.mk-hero {
+  display: grid;
+  gap: clamp(20px, 4vw, 40px);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: center;
+}
+/* The centred variant, for a page with no companion column beside the copy —
+   every reference page (PRD 21 §11.4.5) is one. It was the missing modifier
+   that made `/soc2`, `/integrations` and `/tools/<id>` each hand-roll a whole
+   private stylesheet (`.s2-*`, `.intx-*`, `.tref-*`) rather than extend the kit
+   by one rule; `components/reference/ReferencePage.tsx` is what emits it now. */
+.mk-hero--center { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+.mk-hero--center .mk-lede { max-width: 62ch; }
+.mk-hero--center .mk-actions { justify-content: center; }
+.mk-hero--center .mk-h1 { max-width: 20ch; }
+.mk-hero__mark { display: block; margin-bottom: var(--space-3); color: var(--seat, var(--coral-bright)); }
+
+.mk-badges { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
+
+/* The one badge shape. `--seat` is the owner's hue from `lib/seats.ts`; the
+   solid variant is for a persona, the outline for a section label. */
+.mk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  color: var(--seat, var(--coral-bright));
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, var(--seat, var(--coral-bright)) 11%, transparent);
+  white-space: nowrap;
+}
+.mk-badge--solid {
+  background: var(--seat, var(--coral-bright));
+  color: var(--text-on-accent);
+  border-color: transparent;
+}
+
+/* The gradient's FIRST of two allowed positions on a page. */
+.mk-h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -0.038em; line-height: 1.05; margin: 0; text-wrap: balance; }
+.mk-h1__grad {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* The fallback matters: a clipped gradient with no colour under it renders
+     invisible wherever background-clip is unsupported or disabled. */
+  color: var(--coral-bright);
+}
+.mk-h1__sub { display: block; font-size: 0.66em; color: var(--text-secondary); font-weight: 750; margin-top: var(--space-2); }
+.mk-lede { color: var(--text-secondary); font-size: var(--font-size-lede); margin-top: var(--space-4); max-width: 46ch; line-height: 1.65; }
+
+.mk-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-5); }
+.mk-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-lg);
+  padding: 0 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--coral-bright);
+  color: var(--text-on-accent);
+  font-weight: 650;
+  font-size: var(--font-size-small);
+  text-decoration: none;
+}
+.mk-cta:hover { filter: brightness(1.06); }
+.mk-cta--ghost { background: transparent; border-color: var(--border-accent); color: var(--coral-bright); }
+
+.mk-checks { display: flex; gap: var(--space-5); flex-wrap: wrap; margin-top: var(--space-5); }
+.mk-checks span { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-small); color: var(--text-muted); }
+.mk-tick { flex: none; }
+
+.mk-overview { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card-strong); padding: var(--space-5); box-shadow: var(--shadow-sm); }
+.mk-overview__head { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; margin: 0 0 var(--space-4); }
+.mk-overview__note { margin: var(--space-3) 0 0; text-align: center; font-size: var(--font-size-small); color: var(--text-muted); font-style: italic; }
+.mk-stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.mk-stat { border-radius: var(--radius-md); padding: 11px 9px; text-align: center; background: color-mix(in srgb, var(--seat, var(--coral-bright)) 11%, transparent); }
+.mk-stat b { display: block; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.03em; color: var(--seat, var(--coral-bright)); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.mk-stat small { font-size: var(--font-size-small); color: var(--text-muted); }
+
+/* ── centred section header ───────────────────────────────────────────── */
+.mk-center { text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); margin-bottom: var(--space-6); }
+.mk-center h2 { font-size: clamp(1.3rem, 3vw, 1.85rem); font-weight: 750; letter-spacing: -0.028em; margin: 0; text-wrap: balance; }
+.mk-center p { color: var(--text-secondary); max-width: 58ch; margin: 0; }
+
+/* ── card grid ────────────────────────────────────────────────────────── */
+.mk-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); }
+.mk-grid--wide { grid-template-columns: repeat(auto-fit, minmax(288px, 1fr)); }
+
+.mk-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  /* The owner's hue as a top rule — the card's one piece of identity, so the
+     body stays neutral and nine of them side by side stay readable. */
+  border-top: 3px solid var(--seat, var(--coral-bright));
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  color: inherit;
+  text-decoration: none;
+  transition: transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+}
+.mk-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+/* Dashed, because nobody owns a foundation — it is substrate every seat needs. */
+.mk-card--foundation { border-style: dashed; border-top-style: solid; }
+.mk-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.mk-card__icon {
+  width: 42px; height: 42px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--seat, var(--coral-bright));
+  background: color-mix(in srgb, var(--seat, var(--coral-bright)) 12%, transparent);
+}
+.mk-card__title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-card-title); font-weight: 700; letter-spacing: -0.012em; margin: 0; }
+.mk-card__title span { color: var(--seat, var(--coral-bright)); }
+.mk-card__lede { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.55; margin: 0; }
+.mk-feats { display: flex; flex-direction: column; gap: var(--space-1); }
+.mk-feats span { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--font-size-small); color: var(--text-secondary); }
+.mk-feats svg { margin-top: 3px; }
+
+/* ── the arc table ────────────────────────────────────────────────────── */
+.mk-tablewrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
+.mk-table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: var(--font-size-small); }
+.mk-table th, .mk-table td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+.mk-table thead th { font-family: var(--font-mono); font-size: var(--font-size-field-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; background: var(--surface-sunken); white-space: nowrap; }
+.mk-table tbody tr:last-child th, .mk-table tbody tr:last-child td { border-bottom: 0; }
+.mk-table tbody th { font-weight: 700; white-space: nowrap; }
+.mk-stagedot { display: inline-block; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--seat, var(--text-muted)); margin-right: var(--space-2); vertical-align: middle; }
+.mk-rowlist { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.mk-rowchip {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in srgb, var(--seat, var(--border-subtle)) 34%, transparent);
+  background: color-mix(in srgb, var(--seat, transparent) 8%, transparent);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: var(--font-size-small);
+}
+.mk-rowchip:hover { border-color: var(--seat, var(--border-strong)); }
+.mk-rowchip em { font-style: normal; font-family: var(--font-mono); font-size: var(--font-size-field-label); letter-spacing: 0.06em; color: var(--seat, var(--text-muted)); }
+.mk-note { margin-top: var(--space-4); font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.55; }
+
+/* A literal string the reader is meant to copy — a prompt, a command, a key.
+   `.mk-badge` is the wrong shape for it: that is an uppercase, letter-spaced
+   LABEL, and running a sentence through it makes it unreadable. */
+.mk-code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  padding: 3px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+/* ── FAQ ──────────────────────────────────────────────────────────────── */
+.mk-faq { display: flex; flex-direction: column; gap: var(--space-2); max-width: 760px; margin: 0 auto; }
+.mk-q { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-card); overflow: hidden; }
+.mk-q > summary {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 14px 16px; cursor: pointer; font-weight: 650; list-style: none;
+  min-height: var(--control-lg);
+}
+.mk-q > summary::-webkit-details-marker { display: none; }
+.mk-q > summary:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; }
+.mk-q__chev { margin-left: auto; flex: none; color: var(--text-muted); transition: transform var(--duration-fast) ease; }
+.mk-q[open] .mk-q__chev { transform: rotate(180deg); }
+.mk-q > p { margin: 0; padding: 0 16px 15px; font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.65; }
+
+@media (max-width: 860px) {
+  .mk-hero { grid-template-columns: 1fr; }
+  .mk-lede { max-width: none; }
+}
+
+/* The panel's width control (PRD 21 §11.4.4). Three steps, matching the three
+   named widths — `panelWidth()` picks the default, the reader picks the answer.
+   The glyph is a proportional bar rather than an icon so the control reads as
+   "how much of the screen", which is the thing being chosen. */
+.ui-panel-width {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  flex: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.ui-panel-width button {
+  width: 26px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.ui-panel-width button:hover { background: var(--surface-interactive); color: var(--text-secondary); }
+.ui-panel-width button[aria-pressed='true'] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+.ui-panel-width button:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 1px; }
+
+.ui-panel-width span {
+  display: block;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-sm);
+}
+.ui-panel-width span[data-w='sheet'] { width: 5px; }
+.ui-panel-width span[data-w='wide'] { width: 9px; }
+.ui-panel-width span[data-w='full'] { width: 14px; }
+
+/* Coarse pointers get the 44px touch floor; the drawer header wraps for it. */
+@media (pointer: coarse) {
+  .ui-panel-width button { width: 44px; height: 44px; }
+}
+
+/* ── Marketplace families (PRD 21 §11.5) ──────────────────────────────────
+   Four families, the kinds inside the active one, and a publish button whose
+   label AND flow are derived from the family — so the CTA cannot disagree with
+   the filter under it. `--seat` is the family's hue from `lib/seats.ts`. */
+.mp-head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.mp-head__copy { flex: 1 1 320px; min-width: 0; }
+.mp-title {
+  font-size: var(--font-size-page-title);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+  margin: 0 0 var(--space-2);
+}
+.mp-blurb {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+  max-width: 56ch;
+  margin: 0;
+}
+/* The families sit WITH the title, not in the filter bar: what you are shopping
+   for decides the vocabulary, the cards, the publish flow and the colour of
+   everything under it. That is not a filter. */
+.mp-switch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.mp-publish {
+  margin-left: auto;
+  min-height: var(--control-md);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--seat, var(--coral-bright));
+  color: var(--text-on-accent);
+  font-weight: 650;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-publish:hover:not(:disabled) { filter: brightness(1.06); }
+/* Disabled, never hidden: the family is real and coming, and a missing button
+   would read as "this product cannot do that". */
+.mp-publish:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mp-families { display: flex; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.mp-family {
+  font-size: var(--font-size-body);
+  min-height: var(--control-md);
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+}
+.mp-family:hover { border-color: var(--seat, var(--border-strong)); color: var(--text-primary); }
+.mp-family[aria-pressed='true'] {
+  background: var(--seat, var(--coral-bright));
+  border-color: var(--seat, var(--coral-bright));
+  color: var(--text-on-accent);
+}
+
+.mp-kinds { display: flex; gap: var(--space-1); flex-wrap: wrap; min-width: 0; }
+.mp-kind {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  min-height: var(--control-sm);
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mp-kind:hover { color: var(--text-secondary); }
+.mp-kind[aria-pressed='true'] {
+  border-color: var(--seat, var(--coral-bright));
+  color: var(--seat, var(--coral-bright));
+  background: color-mix(in srgb, var(--seat, var(--coral-bright)) 10%, transparent);
+}
+
+.mp-note {
+  margin: var(--space-5) 0 0;
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 78ch;
+}
+
+/* The company family's honest state until the company graph lands. */
+.mp-soon {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+.mp-soon h2 { margin: var(--space-3) 0 var(--space-4); font-size: var(--font-size-card-title); font-weight: 700; }
+.mp-soon > p:last-of-type { color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.65; margin: 0; }
+.mp-soon__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-md);
+  margin-top: var(--space-5);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-accent);
+  color: var(--coral-bright);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: var(--font-size-small);
+}
+
+@media (max-width: 560px) {
+  .mp-publish { margin-left: 0; width: 100%; justify-content: center; }
+}

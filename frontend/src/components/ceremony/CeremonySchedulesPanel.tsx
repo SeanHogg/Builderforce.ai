@@ -188,8 +188,8 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
 
       {error && (
         <div role="alert" style={{
-          fontSize: 12, padding: '8px 12px', borderRadius: 8,
-          background: 'var(--bg-elevated)', color: 'var(--danger, #ef4444)',
+          fontSize: 12, padding: '8px 12px', borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-elevated)', color: 'var(--danger)',
           border: '1px solid var(--border-subtle)',
         }}>{error}</div>
       )}
@@ -199,7 +199,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
       ) : sorted.length === 0 ? (
         <div style={{
           fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6,
-          padding: 20, borderRadius: 10, textAlign: 'center',
+          padding: 20, borderRadius: 'var(--radius-lg)', textAlign: 'center',
           background: 'var(--surface)', border: '1px dashed var(--border)',
         }}>{t('empty')}</div>
       ) : viewMode === 'card' ? (
@@ -208,7 +208,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
           {sorted.map((s) => (
             <div key={s.id} style={{
               background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 8,
+              borderRadius: 'var(--radius-lg)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8,
               opacity: s.enabled ? 1 : 0.6,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

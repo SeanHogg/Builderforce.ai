@@ -15,14 +15,14 @@ import { publishTicket, type PostingType, type EngagementType, type TicketPostin
 
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
-  borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
+  borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' };
 const btn = (primary: boolean): React.CSSProperties => ({
-  padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  padding: '8px 16px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
   border: primary ? 'none' : '1px solid var(--border-subtle)',
   background: primary ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-elevated)',
-  color: primary ? '#fff' : 'var(--text-primary)',
+  color: primary ? 'var(--text-on-accent)' : 'var(--text-primary)',
 });
 
 const POSTING_TYPES: PostingType[] = ['project_bid', 'design', 'fte'];
@@ -114,7 +114,7 @@ export function PublishToMarketplaceModal({
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('publish.rateHint')}</p>
 
-        {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button type="button" style={btn(false)} onClick={onClose}>{t('publish.cancel')}</button>

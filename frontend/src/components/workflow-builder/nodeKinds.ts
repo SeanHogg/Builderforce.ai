@@ -53,7 +53,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Trigger',
     icon: '⚡',
     group: 'Trigger',
-    accent: '#a78bfa',
+    accent: 'var(--violet-bright)',
     blurb: 'Entry point that starts the workflow.',
     defaultConfig: { triggerType: 'manual' },
     fields: [
@@ -75,7 +75,11 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'cron', label: 'Cron schedule', type: 'text', placeholder: 'e.g. 0 9 * * 1-5', visibleWhen: { field: 'triggerType', equals: 'schedule' } },
       { key: 'timezone', label: 'Timezone', type: 'text', placeholder: 'e.g. UTC, America/New_York', visibleWhen: { field: 'triggerType', equals: 'schedule' } },
       { key: 'webhookPath', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/lead', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
-      { key: 'secret', label: 'Signing secret', type: 'text', placeholder: 'Shared secret to verify payloads', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
+      // Twilio cannot be made to send a generic HMAC header — it signs the URL
+      // plus the sorted form parameters with its own scheme. Without this choice
+      // a Twilio number could not start a workflow at all.
+      { key: 'verify', label: 'Verify caller as', type: 'select', options: ['hmac', 'twilio'], visibleWhen: { field: 'triggerType', equals: 'webhook' } },
+      { key: 'secret', label: 'Signing secret / Twilio auth token', type: 'text', placeholder: 'Shared secret, or your Twilio auth token', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
       { key: 'boardEvent', label: 'Board event', type: 'select', options: ['task-created', 'task-moved', 'task-completed', 'comment-added'], visibleWhen: { field: 'triggerType', equals: 'board-event' } },
 
       // Reliability event filters (blank = fire on any). severity/affectedSystem apply
@@ -101,7 +105,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Agent Run',
     icon: '🤖',
     group: 'Agent',
-    accent: '#f4726e',
+    accent: 'var(--coral-bright)',
     blurb: 'Run one of your agents (role + runtime + model).',
     defaultConfig: { role: 'code-creator', runtime: 'cloud', model: '', task: '' },
     fields: [
@@ -116,7 +120,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Memory',
     icon: '🧠',
     group: 'LLM Logic',
-    accent: '#00e5cc',
+    accent: 'var(--cyan-bright)',
     blurb: 'Recall from or write to the SSM hippocampus memory.',
     defaultConfig: { op: 'recall', query: '', key: '', content: '', limit: 5 },
     fields: [
@@ -132,7 +136,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Knowledge Base',
     icon: '📚',
     group: 'LLM Logic',
-    accent: '#00e5cc',
+    accent: 'var(--cyan-bright)',
     blurb: 'Query a knowledge base or ingest source text into it.',
     defaultConfig: { op: 'query', query: '', source: '', namespace: '', limit: 5 },
     fields: [
@@ -148,7 +152,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Call LLM',
     icon: '✨',
     group: 'LLM Logic',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Call a model provider (OpenAI, Anthropic, Gemini…) via the gateway.',
     defaultConfig: { provider: 'openai', model: '', system: '', prompt: '', temperature: 0.7 },
     fields: [
@@ -164,7 +168,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'MCP Tool',
     icon: '🧩',
     group: 'Integrations',
-    accent: '#38bdf8',
+    accent: 'var(--sky-bright)',
     blurb: 'Invoke an MCP server / SaaS integration tool.',
     defaultConfig: { integration: '', operation: '', params: '{}' },
     fields: [
@@ -174,11 +178,24 @@ export const NODE_KINDS: NodeKindMeta[] = [
     ],
   },
   {
+    kind: 'connector',
+    label: 'Integration action',
+    icon: '🔌',
+    group: 'Integrations',
+    accent: 'var(--orange-bright)',
+    blurb: 'Call any connected integration — SMS, voice, WhatsApp, email, CRM, payments.',
+    // No declared fields: this node's options come from the tenant's LIVE catalog
+    // (including connectors they authored), so it renders its own editor —
+    // see ConnectorNodeFields.tsx.
+    defaultConfig: { connector: '', action: '', input: '{}' },
+    fields: [],
+  },
+  {
     kind: 'gmail',
     label: 'Send Gmail',
     icon: '✉️',
     group: 'Integrations',
-    accent: '#ea4335',
+    accent: 'var(--red-bright)',
     blurb: 'Send an email through your connected Gmail account.',
     defaultConfig: { to: '', subject: '', body: '{{input}}' },
     fields: [
@@ -192,7 +209,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Train',
     icon: '🎓',
     group: 'LLM Logic',
-    accent: '#00e5cc',
+    accent: 'var(--cyan-bright)',
     blurb: 'Train an Evermind model on a dataset (tokenizer → train → package).',
     defaultConfig: { model: '', dataset: '', epochs: 1 },
     fields: [
@@ -209,7 +226,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Train Tokenizer',
     icon: '🔤',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Learn a byte-BPE tokenizer from a corpus.',
     defaultConfig: { corpus: '', numMerges: 120 },
     fields: [
@@ -222,7 +239,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Dataset Quality',
     icon: '🧪',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Gate the corpus: min words/sequences + max duplicate ratio.',
     defaultConfig: { minWords: 20, minSequences: 3, maxDuplicateRatio: 0.5 },
     fields: [
@@ -236,7 +253,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Train Model',
     icon: '🧠',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Train an EvermindLM on the corpus (on-device, CPU).',
     defaultConfig: { corpus: '', epochs: 50, dModel: 24, numLayers: 2, hiddenDim: 32 },
     fields: [
@@ -252,7 +269,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Convergence Check',
     icon: '📉',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Assert training loss actually dropped.',
     defaultConfig: {},
     fields: [],
@@ -262,7 +279,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Evaluate',
     icon: '📊',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Score held-out perplexity / next-token accuracy.',
     defaultConfig: { prompt: '' },
     fields: [{ key: 'prompt', label: 'Seed prompt', type: 'text', placeholder: 'Optional' }],
@@ -272,7 +289,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Generation Check',
     icon: '✍️',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Non-empty + seed-reproducible sampling.',
     defaultConfig: { prompt: '' },
     fields: [{ key: 'prompt', label: 'Seed prompt', type: 'text', placeholder: 'Optional' }],
@@ -282,7 +299,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Benchmark',
     icon: '🏁',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Held-out perplexity + accuracy scorecard.',
     defaultConfig: {},
     fields: [],
@@ -292,7 +309,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Package (Round-trip)',
     icon: '📦',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Package → reload → prove identical output. Emits the .evermind artifact.',
     defaultConfig: { name: 'my-llm' },
     fields: [{ key: 'name', label: 'Model name', type: 'text' }],
@@ -302,7 +319,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Export',
     icon: '🚀',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Export a publishable repo (Hugging Face / ONNX / safetensors / GGUF).',
     defaultConfig: { format: 'huggingface', name: 'my-llm', version: '1.0.0' },
     fields: [
@@ -316,7 +333,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Distil Corpus',
     icon: '🧬',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Build a (prompt → completion) corpus from teacher exemplars (JSON pairs).',
     defaultConfig: { pairs: '[]' },
     fields: [{ key: 'pairs', label: 'Exemplar pairs (JSON)', type: 'textarea', placeholder: '[{"prompt":"…","completion":"…"}]' }],
@@ -326,7 +343,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Code Parse Check',
     icon: '🔩',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Structural/parse validity of generated code.',
     defaultConfig: { language: 'js' },
     fields: [{ key: 'language', label: 'Language', type: 'select', options: ['js'] }],
@@ -336,7 +353,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Code Test Reward',
     icon: '✅',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Execution-grounded test reward (JSON cases).',
     defaultConfig: { cases: '[]' },
     fields: [{ key: 'cases', label: 'Test cases (JSON)', type: 'textarea', placeholder: '[{"call":"add(2,3)","expect":5}]' }],
@@ -346,7 +363,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Code Benchmark (pass@1)',
     icon: '🎯',
     group: 'Evermind Build',
-    accent: '#a855f7',
+    accent: 'var(--purple-bright)',
     blurb: 'Held-out pass@1 on unseen prompts (JSON tasks).',
     defaultConfig: { tasks: '[]' },
     fields: [{ key: 'tasks', label: 'Tasks (JSON)', type: 'textarea', placeholder: '[{"prompt":"function add","cases":[…]}]' }],
@@ -356,7 +373,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Transform',
     icon: '🔧',
     group: 'ETL',
-    accent: '#facc15',
+    accent: 'var(--yellow-bright)',
     blurb: 'Shape / map the payload.',
     defaultConfig: { expression: '' },
     fields: [{ key: 'expression', label: 'Expression', type: 'textarea', placeholder: 'Mapping expression' }],
@@ -366,7 +383,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Filter',
     icon: '🚦',
     group: 'ETL',
-    accent: '#facc15',
+    accent: 'var(--yellow-bright)',
     blurb: 'Drop the payload unless a predicate holds.',
     defaultConfig: { predicate: '' },
     fields: [{ key: 'predicate', label: 'Predicate', type: 'text', placeholder: 'e.g. status == "ready"' }],
@@ -376,7 +393,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Branch',
     icon: '🔱',
     group: 'ETL',
-    accent: '#facc15',
+    accent: 'var(--yellow-bright)',
     blurb: 'Conditional fan-out to downstream nodes.',
     defaultConfig: { condition: '' },
     fields: [{ key: 'condition', label: 'Condition', type: 'text', placeholder: 'Branch condition' }],
@@ -386,7 +403,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     label: 'Output',
     icon: '📤',
     group: 'Output',
-    accent: '#22c55e',
+    accent: 'var(--success)',
     blurb: 'Terminal: write artifact / notify / push to board.',
     defaultConfig: { target: 'artifact', note: '' },
     fields: [
@@ -405,3 +422,20 @@ export const NODE_KIND_MAP: Record<WorkflowNodeKind, NodeKindMeta> = NODE_KINDS.
 );
 
 export const NODE_GROUPS: NodeGroup[] = ['Trigger', 'LLM Logic', 'Evermind Build', 'Integrations', 'Agent', 'ETL', 'Output'];
+
+/**
+ * The translation key each family is named by.
+ *
+ * The catalog's own group names are identifiers, not copy: the palette heading and
+ * the 3D group badge both show a family to a reader, so the catalog says which key
+ * names it rather than either surface shipping its own English.
+ */
+export const NODE_GROUP_KEYS: Record<NodeGroup, string> = {
+  'Trigger': 'trigger',
+  'LLM Logic': 'llmLogic',
+  'Evermind Build': 'evermindBuild',
+  'Integrations': 'integrations',
+  'Agent': 'agent',
+  'ETL': 'etl',
+  'Output': 'output',
+};

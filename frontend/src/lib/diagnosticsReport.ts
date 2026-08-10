@@ -65,9 +65,15 @@ export function line(label: string, value: unknown): string {
 }
 
 /** Cap free-form text, ANNOUNCING the overflow — an unannounced truncation of an error
- *  message is exactly the kind of quiet loss these reports exist to avoid. */
+ *  message is exactly the kind of quiet loss these reports exist to avoid.
+ *
+ *  Coerced rather than trusted: these bodies come from a server row or a restored local
+ *  snapshot, and one legacy entry with a missing/non-string body used to throw here and
+ *  take the WHOLE report down — the report that exists to explain what went wrong being
+ *  the thing that cannot be produced. A wrong-shaped body degrades to its own text. */
 export function capText(text: string, max: number = MAX_DETAIL_CHARS): string {
-  return text.length > max ? `${text.slice(0, max)}… (+${text.length - max} chars)` : text;
+  const value = typeof text === 'string' ? text : text == null ? '' : String(text);
+  return value.length > max ? `${value.slice(0, max)}… (+${value.length - max} chars)` : value;
 }
 
 /**

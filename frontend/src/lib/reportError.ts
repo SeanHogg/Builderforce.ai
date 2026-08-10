@@ -5,7 +5,6 @@ export interface ReportErrorPrefill {
   title?: string;
   message?: string;
   url?: string;
-  projectId?: number;
 }
 
 /** Global bus so a root-level surface (the API-error toast) can open the shared
@@ -19,7 +18,6 @@ export function requestReportError(prefill?: ReportErrorPrefill): void {
 }
 
 export interface ReportErrorInput {
-  projectId: number;
   message: string;
   title?: string;
   url?: string;
@@ -27,17 +25,42 @@ export interface ReportErrorInput {
 }
 
 /**
- * File a user-reported error into a project's Quality feed. Routes through the
- * same ingest engine as every automated source, so a manual report shows up in
- * /quality alongside SDK/webhook errors (grouped by title). Returns the ingest
- * result ({ ok, accepted, ... }).
+ * File a user-reported error into BuilderForce.ai's product Quality feed. The
+ * collector key fixes the destination, so reporting never depends on the
+ * visitor having an account or choosing one of their own projects.
  */
-export async function reportProjectError(input: ReportErrorInput): Promise<{ ok: boolean; accepted: number }> {
-  return apiRequest('/api/quality/report', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-    // A full monthly cap (429) is surfaced by the modal, not the global toast.
-    expectedErrors: [429],
-  });
+export async function reportProductError(
+  input: ReportErrorInput,
+  endpoint: string,
+): Promise<{ accepted: number }> {
+  return sendProductError({ ...input, source: 'manual' }, endpoint);
 }
+
+/** Automatically persist a global API failure to the same product project. */
+export async function reportProductApiError(
+  input: ReportErrorInput & { context?: Record<string, unknown> },
+  endpoint: string,
+): Promise<{ accepted: number }> {
+  return sendProductError({ ...input, source: 'api-client' }, endpoint);
+}
+
+async function sendProductError(
+  input: ReportErrorInput & { source: 'manual' | 'api-client'; context?: Record<string, unknown> },
+  endpoint: string,
+): Promise<{ accepted: number }> {
+  const result = await apiRequest<{ accepted?: number }>('/product-report', {
+    method: 'POST',
+    auth: 'none',
+    baseUrl: endpoint.replace(/\/$/, ''),
+    body: JSON.stringify(input),
+    // The panel renders ingest failures itself; do not create another global
+    // API-error toast (and another automatic product report) for this request.
+    expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,
+  });
+
+  if (result.accepted !== 1) throw new Error('Could not record the report');
+  return { accepted: result.accepted };
+}
+
+/** Prevent a failed reporting request from recursively reporting itself. */
+export const PRODUCT_REPORT_ERROR_STATUSES = Array.from({ length: 200 }, (_, index) => 400 + index);

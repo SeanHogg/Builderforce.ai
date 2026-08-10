@@ -6,8 +6,10 @@
 # Worker binds R2 + Durable Objects in production; locally wrangler dev
 # provides in-memory replacements automatically.
 #
-# `NEON_DATABASE_URL` is injected by docker-compose pointing at the bundled
-# postgres service. `JWT_SECRET` / `OPENROUTER_API_KEY` come from api/.dev.vars.
+# `NEON_DATABASE_URL`, `NEON_TRANSACTIONAL_DATABASE_URL`, `JWT_SECRET` and
+# `OPENROUTER_API_KEY` all come from api/.dev.vars, which docker-compose mounts.
+# There is no bundled postgres service — the api talks to Neon over the
+# @neondatabase/serverless HTTP transport.
 #
 # Targets:
 #   - deps  (intermediate)  node_modules only — reused by db-migrate
@@ -21,16 +23,38 @@ WORKDIR /repo/api
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates wget \
   && rm -rf /var/lib/apt/lists/*
-COPY api/package.json api/package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --no-audit --no-fund
+# api is a pnpm package: it ships `pnpm-lock.yaml` and no `package-lock.json`.
+# Installing with npm re-resolves from scratch and floats `wrangler ^4.69.0` up
+# to a release whose peerOptional `@cloudflare/workers-types@^5` conflicts with
+# the `^4` this package (and drizzle-orm) pins — ERESOLVE, every time. The
+# lockfile already pins a coherent wrangler 4.73.0 / workers-types 4.x pair, so
+# install the way the repo does and the conflict cannot arise.
+COPY api/package.json api/pnpm-lock.yaml* ./
+RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 # Force workerd download into the wrangler cache so first `wrangler dev`
 # doesn't pause for the pull.
 RUN npx wrangler --version
 
 FROM deps AS dev
+# api/tsconfig.json maps three `@builderforce/*` specifiers to ../packages/*/src.
+# They are tsconfig path aliases, NOT npm dependencies — no install brings them
+# in — so the sources have to exist at /repo/packages or esbuild cannot bundle
+# the Worker ("Could not resolve @builderforce/agent-tools"). All three are
+# dependency-free TypeScript; .dockerignore keeps node_modules/dist out.
+# Keep in sync with the `paths` block in api/tsconfig.json.
+COPY packages/agent-tools /repo/packages/agent-tools
+COPY packages/agent-stall /repo/packages/agent-stall
+COPY packages/creation-canvas-contract /repo/packages/creation-canvas-contract
 WORKDIR /repo/api
 COPY api/ ./
 ENV NODE_ENV=development
 EXPOSE 8787
-CMD ["npx", "wrangler", "dev", "--ip", "0.0.0.0", "--port", "8787"]
+# --enable-containers=false: wrangler.toml declares the `builderforce-qa-runner`
+# container, and `wrangler dev` otherwise shells out to a Docker CLI to build it
+# — which does not exist inside this container, so startup dies with "The Docker
+# CLI could not be launched". The QA runner is not part of the local stack; this
+# flag is a dev-only opt-out and does not affect `wrangler deploy`, which still
+# builds and ships the container to Cloudflare exactly as before.
+CMD ["npx", "wrangler", "dev", "--ip", "0.0.0.0", "--port", "8787", "--enable-containers=false"]

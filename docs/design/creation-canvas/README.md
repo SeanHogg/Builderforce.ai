@@ -1,5 +1,7 @@
 # Creation Canvas
 
+The execution and artifact handoff contract is documented in [DELIVERY-ARCHITECTURE.md](./DELIVERY-ARCHITECTURE.md).
+
 Production deployment, observation, and rollback guidance lives in [OPERATIONS.md](./OPERATIONS.md).
 
 ## Recommendation

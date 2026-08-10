@@ -8,6 +8,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { knowledgeApi, type KnowledgeTemplate, type DocType } from '@/lib/knowledgeApi';
 import { emptyCanvas, serializeCanvas } from '@/components/canvas/canvasModel';
 import { useCreateKnowledge } from '../useCreateKnowledge';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Template gallery — the Google-Docs-style replacement for the old create modal.
@@ -58,14 +59,14 @@ export default function NewKnowledgeClient() {
     <PageContainer>
       <div style={{ display: 'grid', gap: 28 }}>
         <header>
-          <Link href="/knowledge" style={{ color: 'var(--accent, #60a5fa)', textDecoration: 'none', fontSize: 13 }}>
+          <Link href="/knowledge" style={{ color: 'var(--accent, var(--info))', textDecoration: 'none', fontSize: 13 }}>
             ← {t('backToList')}
           </Link>
           <h1 style={{ margin: '8px 0 0', fontSize: 24 }}>{t('galleryTitle')}</h1>
-          <p style={{ margin: '6px 0 0', color: 'var(--text-muted, #9ca3af)', maxWidth: 680 }}>{t('gallerySubtitle')}</p>
+          <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', maxWidth: 680 }}>{t('gallerySubtitle')}</p>
         </header>
 
-        {error && <div style={{ color: 'var(--error-text, #f87171)' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--error-text, var(--error))' }}>{error}</div>}
 
         <section>
           <h2 style={{ fontSize: 15, margin: '0 0 12px' }}>{t('startBlank')}</h2>
@@ -92,7 +93,7 @@ export default function NewKnowledgeClient() {
 
         <section>
           <h2 style={{ fontSize: 15, margin: '0 0 12px' }}>{t('standardTemplates')}</h2>
-          {!loaded && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>}
+          {!loaded && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
             {templates.map((tpl) => (
               <TemplateCard
@@ -138,9 +139,9 @@ function TemplateCard({
       style={{
         textAlign: 'left',
         padding: 16,
-        borderRadius: 12,
-        border: '1px solid var(--border, #333)',
-        background: 'var(--surface, #1a1a1a)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface)',
         color: 'inherit',
         cursor: busy ? 'default' : 'pointer',
         opacity: busy ? 0.6 : 1,
@@ -151,16 +152,16 @@ function TemplateCard({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 22 }}>{icon}</span>
+        <span><Icon source={icon} size={22} /></span>
         {badge && (
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)', fontWeight: 600 }}>
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', color: 'var(--text-muted)', fontWeight: 600 }}>
             {badge}
           </span>
         )}
       </div>
       <span style={{ fontWeight: 600, fontSize: 15 }}>{title}</span>
-      <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)', flex: 1 }}>{desc}</span>
-      {hint && <span style={{ fontSize: 11, color: 'var(--success-text, #4ade80)' }}>✓ {hint}</span>}
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>{desc}</span>
+      {hint && <span style={{ fontSize: 11, color: 'var(--success-text)' }}><Icon name="check" size={12} /> {hint}</span>}
     </button>
   );
 }

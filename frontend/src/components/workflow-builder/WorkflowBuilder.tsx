@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { Icon } from '@/components/ui/Icon';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,9 +10,6 @@ import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
-  ControlButton,
-  Controls,
-  MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -33,22 +31,19 @@ import {
 import { fetchProjects } from '@/lib/api';
 import { downloadText } from '@/lib/download';
 import type { Project } from '@/lib/types';
-import { BuilderNode, type BuilderNodeData } from './BuilderNode';
+import { BuilderNode, configSummary, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { EvermindBuildPanel } from './EvermindBuildPanel';
-import { NODE_GROUPS, NODE_KINDS, NODE_KIND_MAP } from './nodeKinds';
+import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, type NodeGroup } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
   type Integration,
 } from './integrations';
-
-function MinimapIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
-  </svg>;
-}
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 
 /** dataTransfer MIME for palette → canvas drag-and-drop. */
 const DND_MIME = 'application/x-wf-node';
@@ -57,15 +52,15 @@ type DndPayload = { kind?: WorkflowNodeKind; integrationId?: string };
 const nodeTypes: NodeTypes = { builder: BuilderNode };
 
 const btnPrimary: React.CSSProperties = {
-  padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright, #f4726e)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright)',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '7px 12px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const fieldStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
 const groupLabelStyle: React.CSSProperties = {
@@ -78,7 +73,7 @@ function paletteItemStyle(accent: string): React.CSSProperties {
     padding: '6px 8px', marginBottom: 4, fontSize: 12, fontWeight: 600,
     background: 'var(--bg-elevated)', color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${accent}`,
-    borderRadius: 7, cursor: 'grab',
+    borderRadius: 'var(--radius-sm)', cursor: 'grab',
   };
 }
 
@@ -153,7 +148,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!definitionId);
   const [buildOpen, setBuildOpen] = useState(false);
-  const [minimapOpen, setMinimapOpen] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
 
   useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
   // Projects power the binding selector — a workflow runs under a project, or is
@@ -196,6 +191,45 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   const rfRef = useRef<ReactFlowInstance<Node<BuilderNodeData>, Edge> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [paletteSearch, setPaletteSearch] = useState('');
+
+  const cleanLayout = useCanvasCleanLayout({ boardRef: canvasRef, instanceRef: rfRef, setNodes, edges });
+
+  const threeD = useCanvasThreeD();
+  /**
+   * The one place a node family is named for a reader.
+   *
+   * The palette headings and the 3D group badge are the same seven families, so
+   * they read from one translation rather than each shipping its own copy of the
+   * catalog's internal English.
+   */
+  const nodeGroupLabel = useCallback(
+    (group: NodeGroup) => t(`nodeGroup.${NODE_GROUP_KEYS[group]}` as 'nodeGroup.trigger'),
+    [t],
+  );
+  /**
+   * How a step reads in the 3D space.
+   *
+   * A workflow IS a dependency flow, so the depth axis is the graph's own subject:
+   * stacked by it, "what runs after what" is distance rather than a line to follow,
+   * and a branch that rejoins three steps later reads at a glance. The node-kind
+   * catalog already owns each step's icon, accent and family, so the space uses
+   * exactly the vocabulary the palette and the flat node do.
+   */
+  const describeThreeD = useCallback((node: Node<BuilderNodeData>): Canvas3DDescriptor => {
+    const meta = NODE_KIND_MAP[node.data.kind];
+    return {
+      label: node.data.label || meta?.label || node.data.kind,
+      sublabel: configSummary(node.data.kind, node.data.config ?? {}),
+      group: nodeGroupLabel(meta?.group ?? 'Integrations'),
+      icon: meta?.icon,
+      accent: meta?.accent,
+      depthOffset: canvas3dDepthOffset(node),
+    };
+  }, [nodeGroupLabel]);
+  const moveThreeD = useCallback(
+    (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
+    [setNodes],
+  );
 
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, id: crypto.randomUUID() }, eds)),
@@ -421,7 +455,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   );
 
   if (loading) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
+    return <div style={{ padding: 24, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
   }
 
   const q = paletteSearch.trim().toLowerCase();
@@ -439,7 +473,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ ...fieldStyle, fontWeight: 700, fontSize: 14, minWidth: 220, flex: 1 }}
+          style={{ ...fieldStyle, fontWeight: 700, fontSize: 'var(--font-size-small)', minWidth: 220, flex: 1 }}
           placeholder={t('workflowNamePlaceholder')}
         />
         <Select
@@ -493,10 +527,10 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void importYaml(f); e.target.value = ''; }}
         />
         {hasBuild && (
-          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}>🧠 {t('builderBuild')}</button>
+          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}><Icon source="🧠" size="1em" /> {t('builderBuild')}</button>
         )}
-        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ {t('builderRun')}</button>
-        {status && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{status}</span>}
+        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}><Icon source="▶" size="1em" /> {t('builderRun')}</button>
+        {status && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{status}</span>}
       </div>
 
       <EvermindBuildPanel
@@ -514,9 +548,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             value={paletteSearch}
             onChange={(e) => setPaletteSearch(e.target.value)}
             placeholder={t('searchIntegrations')}
-            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 12 }}
+            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 'var(--font-size-small)' }}
           />
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
+          <div style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
 
           {/* Core node kinds */}
           {NODE_GROUPS.map((group) => {
@@ -524,7 +558,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             if (!items.length) return null;
             return (
               <div key={group} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{group}</div>
+                <div style={groupLabelStyle}>{nodeGroupLabel(group)}</div>
                 {items.map((m) => (
                   <button
                     key={m.kind}
@@ -535,7 +569,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
                     title={m.blurb}
                     style={paletteItemStyle(m.accent)}
                   >
-                    <span>{m.icon}</span> {m.label}
+                    <Icon source={m.icon} size={18} /> {m.label}
                   </button>
                 ))}
               </div>
@@ -548,7 +582,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             if (!items.length) return null;
             return (
               <div key={cat.id} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{cat.icon} {cat.label}</div>
+                <div style={groupLabelStyle}><Icon source={cat.icon} size={16} /> {cat.label}</div>
                 {items.map((i) => (
                   <button
                     key={i.id}
@@ -559,14 +593,14 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
                     title={i.description}
                     style={paletteItemStyle(integrationAccent(i.category))}
                   >
-                    <span>{integrationIcon(i)}</span> {i.label}
+                    <Icon source={integrationIcon(i)} size={18} /> {i.label}
                   </button>
                 ))}
               </div>
             );
           })}
           {filteredIntegrations.length === 0 && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
           )}
         </div>
 
@@ -577,6 +611,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
           onDragOver={onCanvasDragOver}
           onDrop={onCanvasDrop}
         >
+          <Canvas3DControlsProvider>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -588,28 +623,32 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             onNodeClick={(_, n) => setSelectedId(n.id)}
             onPaneClick={() => setSelectedId(null)}
             fitView
+            fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }}
+            minZoom={CANVAS_FIT_MIN_ZOOM}
             proOptions={{ hideAttribution: true }}
           >
             <Background color="var(--border-subtle)" gap={18} />
-            <Controls>
-              {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
-                <MinimapIcon />
-              </ControlButton>}
-            </Controls>
-            {minimapOpen && <>
-              <MiniMap pannable zoomable style={{ background: 'var(--bg-deep)' }} />
-              <button
-                type="button"
-                onClick={() => setMinimapOpen(false)}
-                aria-label="Close mini map"
-                title="Close mini map"
-                style={{ position: 'absolute', zIndex: 6, right: 20, bottom: 136, display: 'grid', width: 24, height: 24, padding: 0, placeItems: 'center', color: 'var(--text-primary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,.2)', fontSize: 17, lineHeight: 1, cursor: 'pointer' }}
-              >×</button>
-            </>}
+            <CanvasCommands
+              minimapOpen={minimapOpen}
+              setMinimapOpen={setMinimapOpen}
+              onCleanLayout={cleanLayout}
+              minimapStyle={{ background: 'var(--bg-deep)' }}
+              {...threeD.commandProps}
+            />
           </ReactFlow>
+          {threeD.active && <Canvas3DView
+            nodes={nodes}
+            edges={edges.map((edge) => ({ source: edge.source, target: edge.target }))}
+            describe={describeThreeD}
+            selectedIds={selectedId ? [selectedId] : []}
+            onSelect={setSelectedId}
+            onMove={moveThreeD}
+            onExit={threeD.exit}
+          />}
+          </Canvas3DControlsProvider>
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center' }}>
                 {t('canvasHintLine1')}<br />{t('canvasHintLine2')}
               </div>
             </div>

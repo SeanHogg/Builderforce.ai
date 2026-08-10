@@ -24,7 +24,7 @@ const SURFACES: CompileSurface[] = ['cloud-durable', 'ide', 'workflow-node', 'cl
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -48,7 +48,7 @@ function SpecView({ spec, t }: { spec: CompiledAgentSpec; t: ReturnType<typeof u
       {skills.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {skills.map((s) => (
-            <span key={s} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>{s}</span>
+            <span key={s} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>{s}</span>
           ))}
         </div>
       )}
@@ -136,7 +136,7 @@ export default function CompilePage() {
               rows={4}
               style={{
                 width: '100%', resize: 'vertical', fontSize: 15, lineHeight: 1.5,
-                padding: 12, borderRadius: 10, boxSizing: 'border-box',
+                padding: 12, borderRadius: 'var(--radius-lg)', boxSizing: 'border-box',
                 background: 'var(--bg-elevated)', color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
               }}
@@ -149,7 +149,7 @@ export default function CompilePage() {
               <Select
                 value={surface}
                 onChange={(e) => setSurface(e.target.value as CompileSurface)}
-                style={{ fontSize: 13, padding: '6px 10px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
+                style={{ fontSize: 13, padding: '6px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
               >
                 {SURFACES.map((s) => <option key={s} value={s}>{s}</option>)}
               </Select>
@@ -159,7 +159,7 @@ export default function CompilePage() {
               onClick={onCompile}
               disabled={!text.trim() || !!busy}
               style={{
-                fontSize: 14, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: text.trim() && !busy ? 'pointer' : 'not-allowed',
+                fontSize: 14, fontWeight: 700, padding: '9px 18px', borderRadius: 'var(--radius-md)', cursor: text.trim() && !busy ? 'pointer' : 'not-allowed',
                 background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', opacity: !text.trim() || busy ? 0.6 : 1,
               }}
             >
@@ -169,8 +169,8 @@ export default function CompilePage() {
               onClick={onRun}
               disabled={!text.trim() || !!busy}
               style={{
-                fontSize: 14, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: text.trim() && !busy ? 'pointer' : 'not-allowed',
-                background: 'var(--accent, #e2603f)', color: '#fff', border: '1px solid transparent', opacity: !text.trim() || busy ? 0.6 : 1,
+                fontSize: 14, fontWeight: 700, padding: '9px 18px', borderRadius: 'var(--radius-md)', cursor: text.trim() && !busy ? 'pointer' : 'not-allowed',
+                background: 'var(--accent)', color: 'var(--text-on-accent)', border: '1px solid transparent', opacity: !text.trim() || busy ? 0.6 : 1,
               }}
             >
               {busy === 'run' ? t('running') : t('runBtn')}
@@ -179,7 +179,7 @@ export default function CompilePage() {
         </div>
 
         {error && (
-          <div style={{ ...card, borderColor: 'var(--warning-border, #b45309)', color: 'var(--warning-text, #b45309)', fontSize: 14 }}>{error}</div>
+          <div style={{ ...card, borderColor: 'var(--warning-border)', color: 'var(--warning-text)', fontSize: 14 }}>{error}</div>
         )}
 
         {spec && <SpecView spec={spec} t={t} />}

@@ -11,7 +11,7 @@ import {
   AuditEventType, ExecutionStatus,
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
-import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
+import { NotFoundError, ForbiddenError, ServiceUnavailableError } from '../../domain/shared/errors';
 import {
   cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON,
   PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON,
@@ -29,6 +29,8 @@ export interface SubmitTaskDto {
   submittedBy: string;
   sessionId?:  string | null;
   payload?:    string;
+  /** Trusted execution surface, assigned by server routing/auth context. */
+  source?:     'agent' | 'vscode' | 'brain';
 }
 
 export interface UpdateExecutionDto {
@@ -194,6 +196,9 @@ export class RuntimeService {
       id: string,
       tenantId: number,
     ) => Promise<{ active: boolean } | null>,
+    /** Authoritative workspace kill switch. Appended to preserve constructor
+     * compatibility; production always wires it at the composition root. */
+    private readonly isAgentExecutionEnabled?: (tenantId: number) => Promise<boolean>,
   ) {}
 
   /**
@@ -250,7 +255,9 @@ export class RuntimeService {
 
   /**
    * Stamp the effective governance gates onto a dispatch payload. Returns the
-   * payload unchanged when nothing resolves, when the resolver is unwired, or when
+   * payload unchanged when nothing resolves or when the resolver is unwired. A
+   * wired resolver that fails is fail-closed: an agent run must not start without
+   * knowing which governance policy applies.
    * the caller ALREADY carried gates (a `deploy()`-and-dispatch run compiles its
    * own onto the spec — the explicit spec wins over the ambient tenant policy).
    */
@@ -274,12 +281,14 @@ export class RuntimeService {
       obj.policyGates = gates;
       return JSON.stringify(obj);
     } catch (error) {
-      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "withPolicyGates", context: { logMessage: '[runtime-policy] policy gate resolution failed; dispatch continues ungated', details: {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "withPolicyGates", context: { logMessage: '[runtime-policy] policy gate resolution failed; dispatch blocked', details: {
         tenantId,
         projectId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
       } } });
-      return payload; // never block a dispatch on governance resolution
+      throw new ServiceUnavailableError(
+        'Agent execution is temporarily paused because governance policy could not be resolved. Try again shortly.',
+      );
     }
   }
 
@@ -342,6 +351,13 @@ export class RuntimeService {
   }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
+    const source = dto.source ?? 'agent';
+    if (source === 'agent' && this.isAgentExecutionEnabled && !(await this.isAgentExecutionEnabled(dto.tenantId))) {
+      throw new ForbiddenError(
+        'Agent execution is disabled for this workspace. A manager must re-enable it in Settings.',
+      );
+    }
+
     const task = await this.tasks.findById(asTaskId(dto.taskId));
     if (!task) throw new NotFoundError('Task', dto.taskId);
 
@@ -373,6 +389,7 @@ export class RuntimeService {
         submittedBy: dto.submittedBy,
         sessionId:   dto.sessionId ?? null,
         payload:     payload ?? null,
+        source,
       }),
     );
 
@@ -388,6 +405,7 @@ export class RuntimeService {
         agentRegistrationId: dto.agentRegistrationId ?? null,
         agentHostId: dto.agentHostId ?? null,
         sessionId: dto.sessionId ?? null,
+        source,
       }),
     }));
 

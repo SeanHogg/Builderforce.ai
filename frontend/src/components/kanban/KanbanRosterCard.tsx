@@ -7,6 +7,7 @@
  * tickets from the per-ticket role/diagnostic audit. Self-contained: fetches its own
  * data and decides its own visibility for manager-only actions.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
@@ -17,7 +18,7 @@ import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workfor
 import { Select } from '@/components/Select';
 
 const chip = (bg: string, fg: string): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)',
   fontSize: 11, fontWeight: 600, background: bg, color: fg,
 });
 
@@ -102,7 +103,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
   };
 
   const cardStyle: React.CSSProperties = {
-    background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16,
+    background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
   };
 
   return (
@@ -138,7 +139,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
         {busy && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('applying')}</span>}
       </div>
 
-      {error && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger-text, #dc2626)' }}>{error}</div>}
+      {error && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger-text)' }}>{error}</div>}
 
       {/* Roster */}
       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -148,28 +149,28 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
           return (
           <div key={role.roleKey} style={{
             display: 'flex', flexDirection: 'column', gap: 8,
-            padding: '8px 10px', borderRadius: 8, background: 'var(--surface-2)',
+            padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
+              <span aria-hidden><Icon source={role.icon ?? 'person'} size={16} /></span>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{role.name}</span>
               {role.required
-                ? <span style={chip('var(--warning-bg, #fef3c7)', 'var(--warning-text, #92400e)')}>{t('required')}</span>
+                ? <span style={chip('var(--warning-bg)', 'var(--warning-text)')}>{t('required')}</span>
                 : <span style={chip('var(--surface)', 'var(--text-muted)')}>{t('optional')}</span>}
               <span style={{ flex: 1 }} />
               {role.status === 'filled'
-                ? <span style={chip('var(--success-bg, #dcfce7)', 'var(--success-text, #166534)')} title={role.filledBy.map((f) => f.name).join(', ')}>
+                ? <span style={chip('var(--success-bg)', 'var(--success-text)')} title={role.filledBy.map((f) => f.name).join(', ')}>
                     ✓ {t('filled')}
                   </span>
-                : <span style={chip('var(--danger-bg, #fee2e2)', 'var(--danger-text, #991b1b)')}>{t('gap')}</span>}
+                : <span style={chip('var(--danger-bg)', 'var(--danger-text)')}>{t('gap')}</span>}
               {canManage && (
                 <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                   <button
                     type="button"
                     onClick={() => setAssigningRole(assigningRole === role.roleKey ? null : role.roleKey)}
                     style={{
-                      fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-                      background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)',
+                      fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                      background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)',
                     }}
                   >
                     {t('assign')}
@@ -180,8 +181,8 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
                       onClick={() => onCreateAgent(role)}
                       disabled={creating === role.roleKey}
                       style={{
-                        fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-                        background: 'var(--accent, #2563eb)', color: '#fff', border: 'none',
+                        fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                        background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none',
                       }}
                     >
                       {creating === role.roleKey ? t('creating') : t('createAgent')}
@@ -196,7 +197,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {assigned.map((f) => (
                   <span key={f.assignmentId} style={{ ...chip('var(--surface)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
-                    <span aria-hidden>{f.kind === 'agent' ? '🤖' : f.kind === 'hire' ? '🤝' : '🧑'}</span>
+                    <span aria-hidden>{f.kind === 'agent' ? <Icon source="🤖" size="1em" /> : f.kind === 'hire' ? <Icon source="🤝" size="1em" /> : <Icon source="🧑" size="1em" />}</span>
                     {f.name}
                     <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(f.kind)}</span>
                     {canManage && (
@@ -233,7 +234,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
           {t('auditTitle')} {flagged.length > 0 && (
-            <span style={chip('var(--danger-bg, #fee2e2)', 'var(--danger-text, #991b1b)')}>{flagged.length}</span>
+            <span style={chip('var(--danger-bg)', 'var(--danger-text)')}>{flagged.length}</span>
           )}
         </div>
         {flagged.length === 0

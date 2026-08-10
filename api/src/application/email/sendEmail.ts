@@ -22,6 +22,8 @@
  */
 
 import type { Db } from '../../infrastructure/database/connection';
+import { emailDeliveryFailures } from '../../infrastructure/database/schema';
+import { EmailDeliveryError } from '../../infrastructure/email/EmailService';
 import type { Env } from '../../env';
 import type { EmailLocale } from '../../infrastructure/email/emailLocale';
 import { signState, verifyState } from '../../infrastructure/auth/oauthState';
@@ -34,6 +36,7 @@ import {
   resolveEmailLocale,
   type LocaleHeaderHints,
 } from './emailLocaleResolver';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What a template is handed once the locale (and consent) are settled. */
 export interface TransactionalSendContext {
@@ -53,6 +56,57 @@ export interface SendOptions {
   headers?: LocaleHeaderHints;
   /** An already-loaded `users.locale`, to skip the lookup. */
   storedLocale?: string | null;
+  /** Stable template/purpose label shown in the SuperAdmin delivery ledger. */
+  deliveryType?: string;
+  /** Verification uses a typed failure result so routes never catch providers. */
+  onDeliveryFailure?: 'throw' | 'return';
+}
+
+export type DeliveryResult = 'sent' | 'failed';
+
+async function recordDeliveryFailure(
+  db: Db,
+  to: string,
+  deliveryType: string,
+  error: unknown,
+): Promise<void> {
+  const providerError = error instanceof EmailDeliveryError ? error : null;
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    await db.insert(emailDeliveryFailures).values({
+      recipient: normalizeEmailKey(to).slice(0, 255),
+      deliveryType: deliveryType.slice(0, 64),
+      provider: providerError?.provider ?? 'resend',
+      providerStatus: providerError?.status ?? null,
+      errorMessage: message.slice(0, 2_000),
+    });
+  } catch (ledgerError) {
+    // Delivery remains the primary failure. A ledger outage must not replace its
+    // useful provider error or make callers believe the message was sent.
+    reportCaughtError(ledgerError, {
+      source: 'application/email/sendEmail.ts',
+      operation: 'recordDeliveryFailure',
+      context: { provider: providerError?.provider ?? 'resend', deliveryType },
+    });
+  }
+}
+
+/** The single provider-failure boundary for transactional and lifecycle mail. */
+async function deliverTracked(
+  db: Db,
+  to: string,
+  deliveryType: string,
+  onFailure: 'throw' | 'return',
+  send: () => Promise<void>,
+): Promise<DeliveryResult> {
+  try {
+    await send();
+    return 'sent';
+  } catch (error) {
+    await recordDeliveryFailure(db, to, deliveryType, error);
+    if (onFailure === 'return') return 'failed';
+    throw error;
+  }
 }
 
 /**
@@ -65,13 +119,19 @@ export async function sendTransactionalEmail(
   to: string,
   send: (ctx: TransactionalSendContext) => Promise<void>,
   opts?: SendOptions,
-): Promise<void> {
+): Promise<DeliveryResult> {
   const locale = await resolveEmailLocale(env, db, {
     email: to,
     stored: opts?.storedLocale,
     headers: opts?.headers,
   });
-  await send({ locale });
+  return deliverTracked(
+    db,
+    to,
+    opts?.deliveryType ?? 'transactional',
+    opts?.onDeliveryFailure ?? 'throw',
+    () => send({ locale }),
+  );
 }
 
 /**
@@ -86,7 +146,7 @@ export async function sendLifecycleEmail(
   category: LifecycleCategory,
   send: (ctx: LifecycleSendContext) => Promise<void>,
   opts?: SendOptions,
-): Promise<'sent' | 'suppressed'> {
+): Promise<DeliveryResult | 'suppressed'> {
   if (!(await canSendLifecycleEmail(env, db, to, category))) return 'suppressed';
 
   const [locale, unsubscribeUrl] = await Promise.all([
@@ -94,8 +154,13 @@ export async function sendLifecycleEmail(
     buildUnsubscribeUrl(env, to),
   ]);
 
-  await send({ locale, unsubscribeUrl });
-  return 'sent';
+  return deliverTracked(
+    db,
+    to,
+    opts?.deliveryType ?? `lifecycle:${category}`,
+    opts?.onDeliveryFailure ?? 'throw',
+    () => send({ locale, unsubscribeUrl }),
+  );
 }
 
 // ---------------------------------------------------------------------------

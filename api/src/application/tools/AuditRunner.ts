@@ -70,6 +70,7 @@ const LOCKFILE_RE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|poetry
 const SECRET_RE = /(^|\/)(\.env(\.(local|production|prod|dev|development))?|id_rsa|id_dsa|.*\.pem|.*\.key|.*\.p12|.*\.pfx|credentials\.json|service[-_]?account.*\.json)$/i;
 
 // ── privacy / data-law path heuristics (GDPR / CCPA·CPRA / CAN-SPAM) ───────────
+const LEGAL_DOCUMENT_RE = /legal[-_]?(documents?|polic(y|ies))/i;
 const PRIVACY_POLICY_RE = /(privacy[-_]?policy|(^|\/)privacy(\.|\/|$))/i;
 const TERMS_RE = /(terms[-_]?(of[-_]?(service|use))?|(^|\/)(tos|terms)(\.|\/|$))/i;
 const COOKIE_POLICY_RE = /cookie[-_]?(policy|notice)/i;
@@ -78,6 +79,18 @@ const UNSUBSCRIBE_RE = /(unsubscribe|opt[-_]?out|list[-_]?unsubscribe|email[-_]?
 const DATA_EXPORT_RE = /(data[-_]?export|export[-_]?data|download[-_]?(my[-_]?)?data|dsar|data[-_]?portability|export[-_]?account)/i;
 const DATA_DELETION_RE = /(delete[-_]?account|account[-_]?deletion|right[-_]?to[-_]?(be[-_]?forgotten|erasure)|erasure|gdpr[-_]?delete|data[-_]?deletion|forget[-_]?me)/i;
 const RETENTION_RE = /(retention|purge|data[-_]?ttl|expire[-_]?(records|data)|prune[-_]?(logs|data)|cleanup[-_]?(job|cron))/i;
+const RIGHTS_REQUEST_RE = /(privacy[-_]?request|data[-_]?subject[-_]?request|dsar|privacy[-_]?appeal)/i;
+const UNIVERSAL_OPTOUT_RE = /(global[-_]?privacy[-_]?control|sec[-_]?gpc|universal[-_]?opt[-_]?out)/i;
+const DPA_RE = /(^|\/)(dpa|data[-_]?processing[-_]?(agreement|addendum))([./_-]|$)/i;
+const SUBPROCESSOR_RE = /(subprocessor|sub[-_]?processor|vendor[-_]?register)/i;
+const DATA_INVENTORY_RE = /(record[-_]?of[-_]?processing|ropa|pii[-_]?(inventory|map)|data[-_]?(inventory|flow|map|lineage))/i;
+const IMPACT_ASSESSMENT_RE = /(dpia|privacy[-_]?impact|data[-_]?protection[-_]?assessment|admt[-_]?(risk|impact)|ai[-_]?(risk|impact)[-_]?assessment)/i;
+const PRIVACY_INCIDENT_RE = /(privacy[-_]?incident|data[-_]?breach|breach[-_]?(response|runbook|notification)|incident[-_]?response)/i;
+const AI_TRANSPARENCY_RE = /(ai[-_]?(disclosure|notice|transparency)|automated[-_]?decision[-_]?(notice|disclosure)|bot[-_]?disclosure)/i;
+const AUTOMATED_SAFEGUARD_RE = /(human[-_]?(review|oversight)|contest[-_]?(decision|result)|profiling[-_]?opt[-_]?out|automated[-_]?decision[-_]?(appeal|review|opt[-_]?out))/i;
+const MINOR_SAFETY_RE = /(parental[-_]?consent|age[-_]?(gate|assurance|verification|estimate)|minor[-_]?(safety|privacy)|coppa|teen[-_]?safety|self[-_]?harm[-_]?response)/i;
+const TRANSFER_RE = /(standard[-_]?contractual[-_]?clauses|(^|\/)sccs?([./_-]|$)|international[-_]?data[-_]?transfer|transfer[-_]?impact|uk[-_]?(idta|addendum)|cross[-_]?border[-_]?(assessment|transfer))/i;
+const ACCESSIBILITY_RE = /(accessibility[-_]?(statement|audit|test)|wcag|axe[-_]?(core|playwright)|pa11y|lighthouse.*accessibility)/i;
 
 /** Reduce a repo's file path list to the boolean/scalar signals a scan needs.
  *  Exported (pure) so the exact prod extraction can be reused/tested against a
@@ -97,14 +110,26 @@ export function signalsFromPaths(paths: string[]): Omit<ScannedRepo, 'provider' 
     hasContributing: lower.some((p) => /^contributing(\.|$)/i.test(base(p))),
     suspectedSecrets,
     fileCount: paths.length,
-    hasPrivacyPolicy: anyMatch(lower, PRIVACY_POLICY_RE),
-    hasTermsOfService: anyMatch(lower, TERMS_RE),
+    hasPrivacyPolicy: anyMatch(lower, PRIVACY_POLICY_RE) || anyMatch(lower, LEGAL_DOCUMENT_RE),
+    hasTermsOfService: anyMatch(lower, TERMS_RE) || anyMatch(lower, LEGAL_DOCUMENT_RE),
     hasCookiePolicy: anyMatch(lower, COOKIE_POLICY_RE),
     hasCookieConsent: anyMatch(lower, COOKIE_CONSENT_RE),
     hasUnsubscribe: anyMatch(lower, UNSUBSCRIBE_RE),
     hasDataExport: anyMatch(lower, DATA_EXPORT_RE),
     hasDataDeletion: anyMatch(lower, DATA_DELETION_RE),
     hasRetentionPolicy: anyMatch(lower, RETENTION_RE),
+    hasRightsRequestWorkflow: anyMatch(lower, RIGHTS_REQUEST_RE),
+    hasUniversalOptOut: anyMatch(lower, UNIVERSAL_OPTOUT_RE),
+    hasDpa: anyMatch(lower, DPA_RE),
+    hasSubprocessorRegister: anyMatch(lower, SUBPROCESSOR_RE),
+    hasDataInventory: anyMatch(lower, DATA_INVENTORY_RE),
+    hasImpactAssessment: anyMatch(lower, IMPACT_ASSESSMENT_RE),
+    hasPrivacyIncidentResponse: anyMatch(lower, PRIVACY_INCIDENT_RE),
+    hasAiTransparency: anyMatch(lower, AI_TRANSPARENCY_RE),
+    hasAutomatedDecisionSafeguards: anyMatch(lower, AUTOMATED_SAFEGUARD_RE),
+    hasMinorSafety: anyMatch(lower, MINOR_SAFETY_RE),
+    hasTransferSafeguards: anyMatch(lower, TRANSFER_RE),
+    hasAccessibilityEvidence: anyMatch(lower, ACCESSIBILITY_RE),
   };
 }
 
@@ -301,5 +326,10 @@ function emptySignals(): Omit<ScannedRepo, 'provider' | 'owner' | 'repo' | 'defa
     suspectedSecrets: 0, fileCount: 0,
     hasPrivacyPolicy: false, hasTermsOfService: false, hasCookiePolicy: false, hasCookieConsent: false,
     hasUnsubscribe: false, hasDataExport: false, hasDataDeletion: false, hasRetentionPolicy: false,
+    hasRightsRequestWorkflow: false, hasUniversalOptOut: false, hasDpa: false,
+    hasSubprocessorRegister: false, hasDataInventory: false, hasImpactAssessment: false,
+    hasPrivacyIncidentResponse: false, hasAiTransparency: false,
+    hasAutomatedDecisionSafeguards: false, hasMinorSafety: false,
+    hasTransferSafeguards: false, hasAccessibilityEvidence: false,
   };
 }

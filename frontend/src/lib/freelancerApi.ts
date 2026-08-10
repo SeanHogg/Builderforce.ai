@@ -7,6 +7,9 @@
  */
 import { getStoredWebToken } from './auth';
 import { apiRequestStream, type AuthMode } from './apiClient';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+
+const MY_PROFILE_CACHE_KEY = 'talent-profile:mine';
 
 /**
  * Which credential a messaging call carries. A freelancer may have no workspace
@@ -278,6 +281,16 @@ async function jsonOrThrow<T>(res: Response, fallback: string): Promise<T> {
 export async function getMyFreelancerProfile(): Promise<FreelancerProfile> {
   const res = await apiRequestStream(`/api/freelancers/me`, { auth: 'web' });
   return jsonOrThrow<FreelancerProfile>(res, 'Failed to load profile');
+}
+
+/** Shared wizard read: step changes reuse one profile request until a write. */
+export function getMyFreelancerProfileCached(force = false): Promise<FreelancerProfile> {
+  if (force) invalidateClientCache(MY_PROFILE_CACHE_KEY);
+  return getOrSetClientCached(MY_PROFILE_CACHE_KEY, () => getMyFreelancerProfile());
+}
+
+export function invalidateMyFreelancerProfile(): void {
+  invalidateClientCache(MY_PROFILE_CACHE_KEY);
 }
 
 export async function updateMyFreelancerProfile(patch: Partial<FreelancerProfile>): Promise<void> {

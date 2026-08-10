@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
@@ -54,6 +55,7 @@ import { WorkforceMetricsProvider } from './WorkforceMetricsContext';
 import { MemberConsolidationPanel } from '@/components/contributors/MemberConsolidationPanel';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
+import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -86,10 +88,10 @@ import {
 type AgentKind = 'cloud' | 'host';
 
 // "Add agent" split button: primary action + caret that opens the configured quickstart.
-const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
-const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
+const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
+const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
 // "Invite" (a person) — secondary to the coral "+ Agent" split button.
-const inviteBtn: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' };
+const inviteBtn: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', cursor: 'pointer', whiteSpace: 'nowrap' };
 
 // Host (remote agentHost) card chrome — cloud/purchased agents render via <AgentCard>.
 const cardStyle: React.CSSProperties = {
@@ -447,6 +449,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         {tWf('intro')}
       </p>
 
+      <div style={{ marginBottom: 16 }}>
+        <ActiveRunsPanel />
+      </div>
+
       {error && !dialogOpen && (
         <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>
       )}
@@ -455,17 +461,17 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>{tWf('loadingWorkforce')}</div>
       ) : isEmpty ? (
         <div className="empty-state" style={{ padding: 48 }}>
-          <div className="empty-state-icon">📁</div>
+          <div className="empty-state-icon"><Icon source="📁" size="1em" /></div>
           <div className="empty-state-title">{tWf('emptyTitle')}</div>
           <div className="empty-state-sub">{tWf('emptySub')}</div>
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
             <RoleGate capability="members.invite">
-              <button type="button" onClick={() => setInviteOpen(true)} style={{ ...inviteBtn, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+              <button type="button" onClick={() => setInviteOpen(true)} style={{ ...inviteBtn, padding: '10px 18px', fontSize: 14, borderRadius: 'var(--radius-lg)' }}>
                 {tWf('inviteTeammate')}
               </button>
             </RoleGate>
             <RoleGate capability="agents.create">
-              <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+              <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, padding: '10px 18px', fontSize: 14, borderRadius: 'var(--radius-lg)' }}>
                 {tWf('addAgent')}
               </button>
             </RoleGate>
@@ -512,7 +518,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{host.name}</span>
                   <AgentTypePill kind="host" />
                   {isDefault && (
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
                   )}
                   <StatusBadge variant={connected ? 'online' : 'offline'} />
                 </div>
@@ -649,7 +655,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     <td style={tdStyle}>
                       {host.name}
                       {isDefault && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
                       )}
                     </td>
                     <td style={tdStyle}><AgentTypePill kind="host" /></td>
@@ -832,7 +838,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           ) : (
             <>
               {/* Type toggle */}
-              <div style={{ display: 'flex', gap: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                 {(['cloud', 'host'] as AgentKind[]).map((k) => (
                   <button
                     key={k}
@@ -841,7 +847,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     style={{
                       flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
                       background: createKind === k ? 'var(--accent)' : 'transparent',
-                      color: createKind === k ? '#fff' : 'var(--text-strong)',
+                      color: createKind === k ? 'var(--text-on-accent)' : 'var(--text-strong)',
                     }}
                   >
                     {k === 'cloud' ? tAdd('tabCloud') : tAdd('tabRemote')}

@@ -13,10 +13,10 @@ import { DaysWindowSelect } from './LensShell';
 /** Colour a percentile: green (leading) → red (lagging). */
 function percentileColor(p: number | null): string {
   if (p == null) return 'var(--text-muted)';
-  if (p >= 75) return '#059669';
-  if (p >= 50) return '#2563eb';
-  if (p >= 25) return '#b45309';
-  return '#dc2626';
+  if (p >= 75) return 'var(--emerald-bright)';
+  if (p >= 50) return 'var(--info)';
+  if (p >= 25) return 'var(--warning)';
+  return 'var(--error)';
 }
 
 const METRIC_ORDER: CrossTeamMetricKey[] = ['throughput', 'avg_cycle_time_hours', 'rework_rate_pct', 'effectiveness'];

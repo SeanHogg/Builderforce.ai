@@ -12,6 +12,7 @@ import {
   isWorkerForProjects,
   type RequestOptions,
 } from './apiClient';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type {
   Project,
   IdeProject,
@@ -50,23 +51,17 @@ function projectsRequest<T>(path: string, opts: RequestOptions = {}): Promise<T>
 // each firing their own. Browser-side, so this is request coalescing — not the
 // server's cross-isolate getOrSetCached, which can't run here. Cleared on settle,
 // so there's no staleness window: later (sequential) calls always re-fetch.
-let inFlightProjects: Promise<Project[]> | null = null;
+const PROJECTS_CACHE_KEY = 'projects:list';
 
 export async function fetchProjects(): Promise<Project[]> {
-  if (inFlightProjects) return inFlightProjects;
-  inFlightProjects = (async () => {
+  return getOrSetClientCached(PROJECTS_CACHE_KEY, async () => {
     if (isWorkerForProjects()) {
       const arr = await projectsRequest<Project[]>('/api/projects');
       return Array.isArray(arr) ? arr : [];
     }
     const res = await apiRequest<{ projects: Project[] }>('/api/projects');
     return res?.projects ?? [];
-  })();
-  try {
-    return await inFlightProjects;
-  } finally {
-    inFlightProjects = null;
-  }
+  }, { ttlMs: 0 });
 }
 
 export async function fetchProject(id: number | string): Promise<Project> {
@@ -93,6 +88,7 @@ export async function createProject(data: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
   const p = res as Project;
   return {
     ...p,
@@ -116,11 +112,13 @@ export async function updateProject(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
   return res as Project;
 }
 
 export async function deleteProject(id: number | string): Promise<void> {
   await projectsRequest(`/api/projects/${id}`, { method: 'DELETE' });
+  invalidateClientCache(PROJECTS_CACHE_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -549,12 +547,39 @@ export async function updateTrainingJob(
 
 export async function uploadArtifact(
   jobId: string,
-  data: ArrayBuffer
+  data: ArrayBuffer,
+  metadata?: {
+    format?: 'safetensors' | 'evermind-lora';
+    filename?: string;
+    baseModel?: string;
+    rank?: number;
+    alpha?: number;
+  },
 ): Promise<{ r2Key: string }> {
-  return apiRequest<{ r2Key: string }>(`${IDE}/training/${jobId}/artifact`, {
+  const query = metadata?.format ? `?format=${encodeURIComponent(metadata.format)}` : '';
+  return apiRequest<{ r2Key: string }>(`${IDE}/training/${jobId}/artifact${query}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
+    headers: {
+      'Content-Type': metadata?.format === 'safetensors' ? 'application/x-safetensors' : 'application/octet-stream',
+      ...(metadata?.filename ? { 'X-Artifact-Filename': metadata.filename } : {}),
+      ...(metadata?.baseModel ? { 'X-Base-Model': metadata.baseModel } : {}),
+      ...(metadata?.rank != null ? { 'X-LoRA-Rank': String(metadata.rank) } : {}),
+      ...(metadata?.alpha != null ? { 'X-LoRA-Alpha': String(metadata.alpha) } : {}),
+    },
     body: data,
+  });
+}
+
+/** Persist a binary artifact through the same authenticated workspace route. */
+export async function saveBinaryFile(
+  projectId: number | string,
+  filePath: string,
+  content: Blob,
+): Promise<void> {
+  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': content.type || 'application/octet-stream' },
+    body: content,
   });
 }
 

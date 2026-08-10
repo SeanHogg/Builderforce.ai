@@ -32,7 +32,7 @@ const grid: React.CSSProperties = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14,
 };
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 
 /** One member → a capacity-vs-WIP bar: value = open WIP, faint track = WIP ceiling. */
@@ -44,7 +44,7 @@ function memberBars(members: WorkforcePlanMember[], color: string): BarDatum[] {
       label: m.memberName,
       value: m.openWip,
       secondary: m.maxConcurrentWip ?? undefined,
-      color: m.overAllocated ? 'var(--coral-bright, #f4726e)' : color,
+      color: m.overAllocated ? 'var(--coral-bright)' : color,
     }));
 }
 
@@ -61,7 +61,7 @@ export function WorkforcePlanView() {
     return () => { alive = false; };
   }, []);
 
-  if (error) return <div style={{ fontSize: 13, color: 'var(--coral-bright, #f4726e)' }}>{error}</div>;
+  if (error) return <div style={{ fontSize: 13, color: 'var(--coral-bright)' }}>{error}</div>;
   if (!plan) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 
   const { totals, members } = plan;

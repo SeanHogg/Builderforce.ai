@@ -52,21 +52,21 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
       <div style={{ padding: 20 }}>
         {loading && <div className="text-muted">Loading ticket...</div>}
         {error && (
-          <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--surface-rose-soft)' }}>
+          <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--danger-bg)' }}>
             {error}
           </div>
         )}
         {task && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {task.restricted ? (
-              <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+              <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
                 This security ticket requires additional clearance to view.
               </div>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
                   {facts.map(([label, value]) => (
-                    <div key={label} style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                    <div key={label} style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
                       <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>{label}</div>
                       <div style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
                     </div>

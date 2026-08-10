@@ -14,6 +14,8 @@ export interface ExecutionProps {
   status:       ExecutionStatus;
   /** JSON payload sent to the agent. */
   payload:      string | null;
+  /** Surface that initiated the run. Kill-switch exempt surfaces are explicit. */
+  source?:      'agent' | 'vscode' | 'brain';
   /** Cloud agent (ide_agents.id) that ran this execution; null for host/default runs. */
   cloudAgentRef: string | null;
   /** JSON result returned by the agent. */
@@ -69,10 +71,12 @@ export class Execution {
     submittedBy: string;
     sessionId:   string | null;
     payload:     string | null;
+    source?:     'agent' | 'vscode' | 'brain';
   }): Execution {
     const now = new Date();
     return new Execution({
       ...props,
+      source:       props.source ?? 'agent',
       id:           0 as ExecutionId,
       status:       ExecutionStatus.PENDING,
       cloudAgentRef: null, // set at dispatch once the cloud agent is resolved
@@ -105,6 +109,7 @@ export class Execution {
   get sessionId():    string | null    { return this.props.sessionId; }
   get status():       ExecutionStatus  { return this.props.status; }
   get payload():      string | null    { return this.props.payload; }
+  get source():       'agent' | 'vscode' | 'brain' { return this.props.source ?? 'agent'; }
   get cloudAgentRef(): string | null   { return this.props.cloudAgentRef; }
   get result():       string | null    { return this.props.result; }
   get errorMessage(): string | null    { return this.props.errorMessage; }
@@ -204,5 +209,5 @@ export class Execution {
     return new Execution({ ...this.props, ...extra, status, updatedAt: new Date() });
   }
 
-  toPlain(): ExecutionProps { return { ...this.props }; }
+  toPlain(): ExecutionProps { return { ...this.props, source: this.source }; }
 }

@@ -6,7 +6,7 @@ import { cronApi, type CronJob } from '@/lib/builderforceApi';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -103,7 +103,7 @@ export function CronJobsContent({
     padding: '8px 10px',
     fontSize: 13,
     border: '1px solid var(--border-subtle)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     background: 'var(--bg-deep)',
     color: 'var(--text-primary)',
   };
@@ -128,9 +128,9 @@ export function CronJobsContent({
             fontSize: 13,
             fontWeight: 600,
             background: 'var(--coral-bright)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             cursor: 'pointer',
           }}
         >
@@ -139,7 +139,7 @@ export function CronJobsContent({
       </div>
 
       {error && (
-        <div style={{ padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>
+        <div style={{ padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>
           {error}
         </div>
       )}
@@ -169,9 +169,9 @@ export function CronJobsContent({
                 fontSize: 13,
                 fontWeight: 600,
                 background: 'var(--coral-bright)',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: saving ? 'wait' : 'pointer',
               }}
             >
@@ -203,9 +203,9 @@ export function CronJobsContent({
                   fontSize: 11,
                   fontWeight: 600,
                   padding: '3px 8px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   background: job.enabled ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
-                  color: job.enabled ? '#22c55e' : 'var(--text-muted)',
+                  color: job.enabled ? 'var(--success)' : 'var(--text-muted)',
                 }}
               >
                 {job.enabled ? 'Enabled' : 'Disabled'}
@@ -226,7 +226,7 @@ export function CronJobsContent({
                   background: 'var(--surface-interactive)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                 }}
               >
@@ -240,9 +240,9 @@ export function CronJobsContent({
                   fontSize: 12,
                   fontWeight: 600,
                   background: 'rgba(239,68,68,0.1)',
-                  color: '#ef4444',
+                  color: 'var(--error-text)',
                   border: '1px solid rgba(239,68,68,0.3)',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
                 }}
               >

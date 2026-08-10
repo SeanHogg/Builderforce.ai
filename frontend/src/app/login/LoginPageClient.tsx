@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken, resolveAndSelectTenant, requestMagicLink } from '@/lib/auth';
 import { safeRedirectPath } from '@/lib/safeRedirect';
+import { Icon } from '@/components/ui/Icon';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
@@ -32,6 +33,7 @@ export default function LoginPageClient() {
   // Set when an unverified account tries to sign in — swaps the form for the
   // email-OTP step (a fresh code is emailed by the login endpoint).
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   const finishAndRedirect = async () => {
     // Open-redirect guard (M5): only same-origin relative paths are honoured.
@@ -71,6 +73,7 @@ export default function LoginPageClient() {
       const res = await login(email, password);
       if (res.needsVerification) {
         setPendingEmail(res.email);
+        setEmailDeliveryFailed(res.emailDeliveryFailed === true);
         return;
       }
       await finishAndRedirect();
@@ -101,7 +104,7 @@ export default function LoginPageClient() {
     background: 'var(--bg-elevated)',
     color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     padding: '11px 14px',
     fontSize: '0.9rem',
     outline: 'none',
@@ -155,9 +158,9 @@ export default function LoginPageClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ThemeToggleButton />
             <Link href={`/register${searchParams.get('next') ? `?next=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}` : ''}`} style={{
-              padding: '7px 16px', borderRadius: 10,
+              padding: '7px 16px', borderRadius: 'var(--radius-lg)',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff', textDecoration: 'none',
+              color: 'var(--text-on-accent)', textDecoration: 'none',
               fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
             }}>
               {t('navSignUp')}
@@ -190,7 +193,7 @@ export default function LoginPageClient() {
                 background: 'var(--surface-coral-soft)',
                 color: 'var(--coral-bright)',
                 border: '1px solid var(--border-accent)',
-                borderRadius: 999, padding: '4px 12px',
+                borderRadius: 'var(--radius-full)', padding: '4px 12px',
                 fontFamily: 'var(--font-display)',
               }}>{f}</span>
             ))}
@@ -201,6 +204,7 @@ export default function LoginPageClient() {
               email={pendingEmail}
               onVerified={finishAndRedirect}
               onChangeEmail={() => setPendingEmail(null)}
+              initialDeliveryFailed={emailDeliveryFailed}
             />
           ) : (
           <>
@@ -208,7 +212,7 @@ export default function LoginPageClient() {
           <div style={{
             background: 'var(--surface-card)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 20,
+            borderRadius: 'var(--radius-xl)',
             padding: '32px 28px',
             backdropFilter: 'blur(12px)',
             boxShadow: '0 16px 48px var(--shadow-coral-soft)',
@@ -244,7 +248,7 @@ export default function LoginPageClient() {
               </div>
 
               {error && (
-                <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
+                <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: '0.875rem' }}>
                   {error}
                 </div>
               )}
@@ -255,9 +259,9 @@ export default function LoginPageClient() {
                 style={{
                   width: '100%',
                   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff',
+                  color: 'var(--text-on-accent)',
                   border: 'none',
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-lg)',
                   padding: '13px',
                   fontFamily: 'var(--font-display)',
                   fontWeight: 700,
@@ -328,7 +332,7 @@ export default function LoginPageClient() {
               display: 'inline-block', marginBottom: 12,
               fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
-              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
               fontFamily: 'var(--font-display)',
             }}>{marketing.eyebrow}</span>
 
@@ -344,7 +348,7 @@ export default function LoginPageClient() {
             {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
               {marketing.stats.map(s => (
-                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                 </div>
@@ -355,14 +359,14 @@ export default function LoginPageClient() {
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {marketing.bullets.map(b => (
                 <li key={b.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1.4 }} aria-hidden>{b.icon}</span>
+                  <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>
               ))}
             </ul>
 
             {/* Comparison quote */}
-            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 10px 10px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 var(--radius-lg) var(--radius-lg) 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
               &ldquo;{marketing.quote}&rdquo;
             </blockquote>
 

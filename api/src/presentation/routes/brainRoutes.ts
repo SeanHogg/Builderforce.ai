@@ -8,9 +8,12 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { isValidRoomCode } from '../../application/guest/guestToken';
+import { isValidVisitorId } from '../../application/marketing/MarketingService';
+import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
-import { fetchWebDocument } from '../../application/web/webFetch';
+import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
@@ -77,13 +80,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
   // POST /chats
   router.post('/chats', async (c) => {
-    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }>();
     const result = await brainService.createChat({
       tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
       title: body.title,
       projectId: body.projectId,
       capability: body.capability,
+      mode: body.mode,
     });
     if (result && 'error' in result) return c.json({ error: result.error }, 404);
     return c.json(result, 201);
@@ -132,10 +136,11 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }>();
+    const tenantId = c.get('tenantId') as number;
     const result = await brainService.updateChat(
       id,
-      c.get('tenantId') as number,
+      tenantId,
       c.get('userId') as string,
       body,
     );
@@ -143,7 +148,31 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       const status = result.error === 'Chat not found' ? 404 : 404;
       return c.json({ error: result.error }, status);
     }
-    return c.json(result);
+    // A mode switch is the moment a conversation gains (or gives up) the authority to
+    // open and dispatch work, so it belongs on the audit timeline rather than only in a
+    // column — "who turned this chat into an execution, and when". `modeChangedTo` is
+    // null for a PATCH that did not touch the mode or merely restated it, so a no-op
+    // never manufactures an audit row. Off the response path; best-effort.
+    const { modeChangedTo, ...chat } = result;
+    if (modeChangedTo) {
+      c.executionCtx.waitUntil((async () => {
+        const actor = await resolveActorFromContext(c.env as Env, db, c);
+        await recordActivity(c.env as Env, db, {
+          tenantId,
+          projectId: chat.projectId ?? null,
+          actor,
+          verb: 'chat.mode.set',
+          targetType: 'chat',
+          targetId: String(id),
+          targetLabel: chat.title ?? null,
+          summary: `Chat #${id} switched to ${modeChangedTo} mode`,
+          metadata: { chatId: id, mode: modeChangedTo },
+        }).catch((error) => {
+          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'recordChatModeSwitch' });
+        });
+      })());
+    }
+    return c.json(chat);
   });
 
   // DELETE /chats/:id
@@ -414,6 +443,52 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json(result);
   });
 
+  /**
+   * POST /chats/claim-guest-room — keep a shared GUEST session after signing up.
+   *
+   * A logged-out visitor who invited people into a free room has the conversation
+   * living in that room's Durable Object, which expires. Signing up is exactly the
+   * moment that work should stop being disposable, so this copies the room's
+   * transcript into a real Brain chat owned by the new account — the room-side
+   * twin of the local-canvas `claim` flow.
+   *
+   * Authorization is two-sided on purpose: the tenant JWT says who is asking, and
+   * the ROOM says whether they were ever in it (by the anonymous `visitorId` on
+   * its persisted roster). Neither alone is enough. Claiming is once per visitor,
+   * enforced in the DO, so re-signing in cannot fork a second copy — and the room
+   * is left running, because other people may still be in it.
+   */
+  router.post('/chats/claim-guest-room', async (c) => {
+    const body = await c.req
+      .json<{ code?: string; visitorId?: string }>()
+      .catch((): { code?: string; visitorId?: string } => ({}));
+    if (!isValidRoomCode(body.code)) return c.json({ error: 'Invalid room code' }, 400);
+    if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+
+    const claim = await claimGuestRoom(c.env as Env, body.code, body.visitorId);
+    if (!claim) {
+      return c.json({ error: 'That shared session has ended.', code: 'guest_room_unavailable' }, 410);
+    }
+    // Already converted, or nothing was ever said — either way there is nothing to
+    // create, and creating an empty chat would just be litter in their history.
+    if (claim.alreadyClaimed || claim.messages.length === 0) {
+      return c.json({ claimed: false, reason: claim.alreadyClaimed ? 'already_claimed' : 'empty' });
+    }
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const chat = await brainService.createChat({ tenantId, userId, title: claim.title });
+    if (!chat || 'error' in chat) {
+      return c.json({ error: chat && 'error' in chat ? chat.error : 'Could not create the chat' }, 400);
+    }
+
+    const result = await brainService.appendMessages(chat.id, tenantId, userId, {
+      messages: claim.messages.map((m) => ({ role: m.role, content: m.content, metadata: m.metadata ?? undefined })),
+    });
+    if ('error' in result) return c.json({ error: result.error }, 400);
+    return c.json({ claimed: true, chat, messageCount: result.length }, 201);
+  });
+
   // GET /chats/:id/agents — agents invited into this chat.
   router.get('/chats/:id/agents', async (c) => {
     const id = parseId(c.req.param('id'));
@@ -474,7 +549,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
     if (!body.email) return c.json({ error: 'email is required' }, 400);
 
-    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) });
+    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) }, c.env as Env);
     if ('error' in result) return c.json({ error: result.error }, result.error === 'Chat not found' ? 404 : 400);
 
     // Deliver the invite (best-effort — never fails the invite itself).
@@ -574,7 +649,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
     let result;
     try {
-      result = await fetchWebDocument(url);
+      // Cached (L1 Map + L2 KV) like every other read of this document: the canvas
+      // Web page panel probes the SAME url on every board that frames it, and a
+      // research turn re-reads its sources. Failures throw and are never cached.
+      result = await fetchWebDocumentCached(c.env as Env, url);
     } catch (e) {
       // SSRF rejection or unreachable origin — a 400 the model can relay.
       return c.json({ error: e instanceof Error ? e.message : 'Could not fetch the URL' }, 400);

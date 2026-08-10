@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
@@ -13,6 +14,8 @@ import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
+import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
+import type { ProjectConnection } from '@/lib/projectConnections';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 
 export interface ProjectCardProps {
@@ -31,13 +34,15 @@ export interface ProjectCardProps {
   onDelete?: (project: Project) => void;
   /** Show the delete icon. Defaults to true when onDelete is provided. */
   showDeleteButton?: boolean;
-  /** Override the 💻 IDE button action. Defaults to opening the project in the
-   *  editor (`/ide/<id>`); the Projects page overrides this to route through the
-   *  IDE dashboard scoped to the project. */
-  onOpenIde?: (project: Project) => void;
+  /** Override the Builder action. Defaults to opening the project on Canvas. */
+  onOpenBuilder?: (project: Project) => void;
   /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
    *  workspace rollup. Rendered as a compact score strip; omit/empty hides it. */
   diagnostics?: ProjectDiagnosticSummary[];
+  /** What this project is connected to (repos, external boards) with live health,
+   *  build verdict and open-PR count, from the tenant-wide connections read.
+   *  Omit/empty hides the strip. */
+  connections?: ProjectConnection[];
 }
 
 const createdDate = (project: Project): string => {
@@ -54,12 +59,13 @@ export function ProjectCard({
   onAssignedAgentClick,
   onDelete,
   showDeleteButton = !!onDelete,
-  onOpenIde,
+  onOpenBuilder,
   diagnostics,
+  connections,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
   const openProjectChat = useOpenProjectChat();
-  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
+  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
       e.preventDefault();
@@ -81,7 +87,7 @@ export function ProjectCard({
     background: 'var(--bg-base)',
     color: 'var(--coral-bright)',
     border: '1px solid var(--coral-bright)',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -100,7 +106,7 @@ export function ProjectCard({
         padding: 20,
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         transition: 'border-color 0.2s',
         display: 'flex',
         flexDirection: 'column',
@@ -126,7 +132,7 @@ export function ProjectCard({
                   color: 'var(--text-secondary)',
                   background: 'var(--surface-interactive)',
                   padding: '2px 6px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   textTransform: 'capitalize',
                   display: 'inline-block',
                 }}
@@ -146,8 +152,8 @@ export function ProjectCard({
                 window.location.href = `/create/${sessionId}`;
               });
             }}
-            aria-label="Open project on canvas"
-            title="Open on Create canvas"
+            aria-label={t('openOnCanvas')}
+            title={t('openOnCanvasTitle')}
             style={iconButtonStyle}
           >
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -221,17 +227,17 @@ export function ProjectCard({
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </button>
-          {/* IDE button */}
+          {/* Open the project's Builder object on Canvas. */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              openIde(project);
+              openBuilder(project);
             }}
-            aria-label={t('openIde')}
+            aria-label={t('openBuilder')}
             style={iconButtonStyle}
           >
-            <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+            <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>
           </button>
           {showDeleteButton && onDelete && (
             <>
@@ -331,6 +337,14 @@ export function ProjectCard({
         onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
       />
 
+      {/* What this project is connected to — repo(s) and external board(s) — with
+          live health, the latest build verdict and open PRs. Self-hides when the
+          project has nothing wired up; "manage" opens the Integrations tab. */}
+      <ProjectConnectionsStrip
+        connections={connections}
+        onManage={onDetailsClick ? () => onDetailsClick(project, 'integrations') : undefined}
+      />
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
         {project.taskCount != null && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -364,7 +378,7 @@ export function ProjectCard({
             color: 'var(--coral-bright)',
             background: 'transparent',
             border: '1px solid var(--coral-bright)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             padding: '4px 10px',
             cursor: 'pointer',
           }}

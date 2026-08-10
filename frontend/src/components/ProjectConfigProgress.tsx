@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { computeProjectConfig, type ProjectConfigItem } from '@/lib/projectInspection';
@@ -23,10 +24,10 @@ export function ProjectConfigBadge({ project }: { project: Project }) {
         display: 'inline-flex', alignItems: 'center', gap: 4,
         fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
         background: 'var(--surface-interactive, var(--bg-elevated))',
-        border: '1px solid var(--border-subtle)', borderRadius: 999, padding: '2px 8px',
+        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-full)', padding: '2px 8px',
       }}
     >
-      <span aria-hidden>🛠</span>
+      <span aria-hidden><Icon source="🛠" size="1em" /></span>
       {t('configPct', { pct: cfg.pct })}
     </span>
   );
@@ -54,7 +55,7 @@ export function ProjectConfigProgress({ project }: { project: Project }) {
   const goalsMissing = cfg.missing.includes('goals');
 
   const segments = [
-    { key: 'done', label: t('configDone'), value: cfg.done.length, color: '#22c55e' },
+    { key: 'done', label: t('configDone'), value: cfg.done.length, color: 'var(--success-text)' },
     { key: 'todo', label: t('configTodo'), value: cfg.missing.length, color: 'var(--border-subtle)' },
   ];
 
@@ -63,7 +64,7 @@ export function ProjectConfigProgress({ project }: { project: Project }) {
       onClick={(e) => e.stopPropagation()}
       style={{
         display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        padding: '10px 12px', borderRadius: 10,
+        padding: '10px 12px', borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
       }}
     >
@@ -86,7 +87,7 @@ export function ProjectConfigProgress({ project }: { project: Project }) {
               style={{
                 fontSize: 11, color: 'var(--text-muted)',
                 background: 'var(--surface-interactive, var(--bg-elevated))',
-                border: '1px solid var(--border-subtle)', borderRadius: 999, padding: '2px 8px',
+                border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-full)', padding: '2px 8px',
               }}
             >
               {t(`config_${item}`)}
@@ -102,10 +103,10 @@ export function ProjectConfigProgress({ project }: { project: Project }) {
               display: 'inline-flex', alignItems: 'center', gap: 6,
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
               color: 'var(--coral-bright)', background: 'transparent',
-              border: '1px solid var(--coral-bright)', borderRadius: 8, padding: '4px 10px',
+              border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', padding: '4px 10px',
             }}
           >
-            <span aria-hidden>💡</span>
+            <span aria-hidden><Icon source="💡" size="1em" /></span>
             {t('brainstormGoals')}
           </button>
         )}

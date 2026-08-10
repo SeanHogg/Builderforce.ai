@@ -8,8 +8,16 @@ import { getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
 import type { PsychometricProfile } from './psychometric';
 import type { FeedbackQueue, FeedbackStatus } from './feedbackApi';
+import type { ReleaseNoteStage } from './releaseNotesApi';
+import type { PublicPricingContract, PublicPricingPlan } from './publicPricing';
 
 export type { LlmModelStatus, VendorId };
+
+export interface AdminPricingDocument {
+  currency: string;
+  managedAgentHostMonthly: number;
+  plans: PublicPricingPlan[];
+}
 
 // ---------------------------------------------------------------------------
 // Types (mirror api/admin routes)
@@ -30,8 +38,8 @@ export interface AdminTenant {
   name: string;
   slug: string;
   status: string;
-  plan: 'free' | 'pro';
-  effectivePlan: 'free' | 'pro';
+  plan: 'free' | 'pro' | 'teams';
+  effectivePlan: 'free' | 'pro' | 'teams';
   billingStatus: string;
   billingEmail: string | null;
   billingUpdatedAt: string | null;
@@ -66,6 +74,25 @@ export interface AdminTenant {
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. */
   premiumOverride: boolean;
+  discountCode: string | null;
+  discountPercentOff: number | null;
+  discountDurationYears: number | null;
+  discountStatus: 'pending' | 'redeemed' | null;
+  discountAppliedAt: string | null;
+}
+
+export interface AdminDiscountCode {
+  id: string;
+  code: string;
+  percentOff: number;
+  applicablePlan: 'pro' | 'teams';
+  billingCycle: 'monthly' | 'yearly';
+  durationYears: number;
+  isActive: boolean;
+  redemptionCount: number;
+  redeemedCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AdminHealth {
@@ -95,9 +122,7 @@ export interface AdminGuestSession {
   visitorId: string;
   guestChatCount: number;
   guestChatTokens: number;
-  guestChatDay: string | null;
   toolRuns: number;
-  lastToolId: string | null;
   landingPath: string | null;
   referrer: string | null;
   converted: boolean;
@@ -107,7 +132,79 @@ export interface AdminGuestSession {
   firstSeenAt: string;
   lastSeenAt: string;
   isPaid: boolean;
+  /** What they asked for. Derived server-side from `marketing_session_prompts` —
+   *  never a column on the lead row, so it cannot drift from the prompts. */
+  promptCount: number;
+  firstPrompt: string | null;
+  lastPrompt: string | null;
+  lastPromptAt: string | null;
+  lastSurface: string | null;
 }
+
+/** The funnel in five numbers, above the leads list. */
+export interface AdminGuestFunnelSummary {
+  sessions: number;
+  sessionsWithPrompt: number;
+  prompts: number;
+  registered: number;
+  paid: number;
+  conversionPct: number;
+}
+
+export interface AdminGuestSessionsPage {
+  summary: AdminGuestFunnelSummary;
+  sessions: AdminGuestSession[];
+}
+
+/** One prompt in a visitor's history — the drill-in. */
+export interface AdminGuestPrompt {
+  id: string;
+  prompt: string;
+  surface: string;
+  sessionRef: string | null;
+  mode: string | null;
+  createdAt: string;
+}
+
+/** A superadmin message to visitors, and how it performed. */
+export interface AdminBroadcast {
+  id: number;
+  key: string;
+  message: string;
+  tone: 'info' | 'success' | 'warning' | 'critical';
+  ctaLabel: string | null;
+  ctaHref: string | null;
+  dismissible: boolean;
+  status: 'draft' | 'live' | 'archived';
+  audience: { scope: 'all' | 'guest' | 'registered' | 'paid'; visitorIds: string[]; minPrompts: number };
+  startsAt: string | null;
+  endsAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  impressions: number;
+  clicks: number;
+  dismissals: number;
+  reach: number;
+  clickThroughPct: number;
+}
+
+/** The vocabulary the server offers, so the composer never hard-codes a second copy. */
+export interface AdminBroadcastVocabulary {
+  tones: readonly AdminBroadcast['tone'][];
+  statuses: readonly AdminBroadcast['status'][];
+  scopes: readonly AdminBroadcast['audience']['scope'][];
+  maxVisitorIds: number;
+}
+
+export interface AdminBroadcastPage {
+  broadcasts: AdminBroadcast[];
+  vocabulary: AdminBroadcastVocabulary;
+}
+
+/** The writable half of a broadcast. */
+export type AdminBroadcastInput = Partial<Pick<AdminBroadcast,
+  'message' | 'tone' | 'ctaLabel' | 'ctaHref' | 'dismissible' | 'status' | 'audience' | 'startsAt' | 'endsAt'>>;
 
 export interface AdminCreationSessionInvitation {
   id: string;
@@ -133,6 +230,30 @@ export interface AdminCreationSession {
   createdAt: string;
   lastActivityAt: string;
   invitations: AdminCreationSessionInvitation[];
+}
+
+export interface AdminOutcomeMetric {
+  key: string;
+  label: string;
+  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
+  direction: 'higher' | 'lower';
+  current: number | null;
+  baseline: number | null;
+}
+
+export interface AdminOutcomeRollup {
+  scope: 'platform' | 'tenant' | 'project';
+  filters: { days: number; tenantId?: number; projectId?: number };
+  period: { start: string; end: string; days: number };
+  previousPeriod: { start: string; end: string };
+  sampleSize: number;
+  deliveredSessions: number;
+  metrics: AdminOutcomeMetric[];
+  trends: Array<{ day: string; sessions: number; deliveries: number }>;
+  tenants: Array<{ tenantId: number; tenantName: string; sessions: number; deliveries: number }>;
+  projects: Array<{ projectId: number; projectName: string; tenantId: number; tenantName: string; sessions: number; deliveries: number }>;
+  generatedAt: string;
+  privacy: { contentFree: true; minimumExternalCohort: number; externalClaimsEligible: boolean };
 }
 
 // Sales-cycle demo accounts (migration 0360).
@@ -347,6 +468,31 @@ export interface AdminErrorPage {
   sources: string[];
 }
 
+export interface AdminEmailDeliveryFailure {
+  id: number;
+  recipient: string;
+  deliveryType: string;
+  provider: string;
+  providerStatus: number | null;
+  errorMessage: string;
+  createdAt: string;
+}
+
+export interface AdminEmailDeliveryFailurePage {
+  failures: AdminEmailDeliveryFailure[];
+  total: number;
+  returned: number;
+  offset: number;
+  hasMore: boolean;
+  summary: {
+    total: number;
+    last24Hours: number;
+    affectedRecipients: number;
+    latestAt: string | null;
+  };
+  deliveryTypes: string[];
+}
+
 /** One row in the superadmin LLM trace list (summary columns only). */
 export interface AdminLlmTraceSummary {
   traceId: string;
@@ -526,8 +672,14 @@ export interface AdminReleaseNote {
   title: string;
   body: string | null;
   category: string;
+  stage: string;
+  betaOptIn: boolean;
+  betaTerms: string | null;
+  stageEndsAt: string | null;
   publishedAt: string | null;
   emailedAt: string | null;
+  /** People currently IN this beta — 0 for anything not opened for enrolment. */
+  participants: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -537,6 +689,11 @@ export interface AdminReleaseNoteInput {
   title: string;
   body?: string | null;
   category?: AdminReleaseNoteCategory;
+  stage?: ReleaseNoteStage;
+  betaOptIn?: boolean;
+  betaTerms?: string | null;
+  /** ISO date — "scheduled for release" on a beta, sunset date on a sunset. */
+  stageEndsAt?: string | null;
   publish?: boolean;
 }
 
@@ -780,6 +937,15 @@ async function adminRequest<T>(path: string, opts: RequestOptions = {}): Promise
 // ---------------------------------------------------------------------------
 
 export const adminApi = {
+  async pricing(): Promise<{ draft: AdminPricingDocument; published: PublicPricingContract }> {
+    return adminRequest('/api/admin/pricing');
+  },
+  async savePricingDraft(draft: AdminPricingDocument): Promise<{ draft: AdminPricingDocument }> {
+    return adminRequest('/api/admin/pricing/draft', { method: 'PUT', body: JSON.stringify(draft) });
+  },
+  async publishPricing(): Promise<{ published: PublicPricingContract }> {
+    return adminRequest('/api/admin/pricing/publish', { method: 'POST', body: JSON.stringify({}) });
+  },
   /**
    * Cross-tenant product feedback — the dogfooding inbox. Returns the SAME row
    * shape as the tenant-side queue (`feedbackApi.queue`), so both render through
@@ -807,14 +973,68 @@ export const adminApi = {
     return res.users;
   },
 
-  async guestSessions(): Promise<AdminGuestSession[]> {
-    const res = await adminRequest<{ sessions: AdminGuestSession[] }>('/api/admin/guest-sessions');
-    return res.sessions;
+  async guestSessions(): Promise<AdminGuestSessionsPage> {
+    return adminRequest<AdminGuestSessionsPage>('/api/admin/guest-sessions');
+  },
+
+  /** One visitor's prompts, newest first. */
+  async guestPrompts(visitorId: string): Promise<AdminGuestPrompt[]> {
+    const res = await adminRequest<{ prompts: AdminGuestPrompt[] }>(
+      `/api/admin/guest-sessions/${encodeURIComponent(visitorId)}`,
+    );
+    return res.prompts;
+  },
+
+  /** Erase everything a visitor typed. Personal data keyed by an opaque visitor
+   *  id, which no account deletion would ever reach — so this is the actioning
+   *  half of a privacy request that names one. Returns how many rows went. */
+  async forgetGuestPrompts(visitorId: string): Promise<number> {
+    const res = await adminRequest<{ erased: number }>(
+      `/api/admin/guest-sessions/${encodeURIComponent(visitorId)}/prompts`,
+      { method: 'DELETE' },
+    );
+    return res.erased;
+  },
+
+  // ── Platform broadcasts ──────────────────────────────────────────────────
+  //
+  // The channel to visitors who have no workspace to reach them through. Writes
+  // publish immediately: the server drops its delivery caches and pushes one
+  // frame to the shared relay room, so an open tab shows the banner rather than
+  // waiting for the next page load.
+
+  async broadcasts(): Promise<AdminBroadcastPage> {
+    return adminRequest<AdminBroadcastPage>('/api/admin/broadcasts');
+  },
+
+  async createBroadcast(input: AdminBroadcastInput): Promise<AdminBroadcast> {
+    const res = await adminRequest<{ broadcast: AdminBroadcast }>('/api/admin/broadcasts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return res.broadcast;
+  },
+
+  async updateBroadcast(id: number, patch: AdminBroadcastInput): Promise<void> {
+    await adminRequest(`/api/admin/broadcasts/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+
+  async deleteBroadcast(id: number): Promise<void> {
+    await adminRequest(`/api/admin/broadcasts/${id}`, { method: 'DELETE' });
   },
 
   async creationSessions(): Promise<AdminCreationSession[]> {
     const res = await adminRequest<{ sessions: AdminCreationSession[] }>('/api/admin/creation-sessions');
     return res.sessions;
+  },
+
+  async outcomeMetrics(filters: { days?: number; tenantId?: number; projectId?: number } = {}): Promise<AdminOutcomeRollup> {
+    const params = new URLSearchParams();
+    if (filters.days) params.set('days', String(filters.days));
+    if (filters.tenantId) params.set('tenantId', String(filters.tenantId));
+    if (filters.projectId) params.set('projectId', String(filters.projectId));
+    const query = params.toString();
+    return adminRequest<AdminOutcomeRollup>(`/api/admin/outcome-metrics${query ? `?${query}` : ''}`);
   },
 
   // Demo-account conversion funnel + book-a-demo pipeline (migration 0360).
@@ -936,6 +1156,25 @@ export const adminApi = {
     return adminRequest<AdminCronState>('/api/admin/cron');
   },
 
+  async discountCodes(): Promise<AdminDiscountCode[]> {
+    const res = await adminRequest<{ discountCodes: AdminDiscountCode[] }>('/api/admin/discount-codes');
+    return res.discountCodes ?? [];
+  },
+
+  async createDiscountCode(input: Omit<AdminDiscountCode, 'id' | 'redemptionCount' | 'redeemedCount' | 'createdAt' | 'updatedAt'>): Promise<AdminDiscountCode> {
+    const res = await adminRequest<{ discountCode: AdminDiscountCode }>('/api/admin/discount-codes', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    return res.discountCode;
+  },
+
+  async updateDiscountCode(id: string, input: Partial<Pick<AdminDiscountCode, 'code' | 'percentOff' | 'applicablePlan' | 'billingCycle' | 'durationYears' | 'isActive'>>): Promise<AdminDiscountCode> {
+    const res = await adminRequest<{ discountCode: AdminDiscountCode }>(`/api/admin/discount-codes/${id}`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
+    return res.discountCode;
+  },
+
   /** Enable or pause one registered sweep platform-wide. */
   async cronSetEnabled(key: string, enabled: boolean): Promise<{ key: string; enabled: boolean }> {
     return adminRequest(`/api/admin/cron/${encodeURIComponent(key)}`, {
@@ -974,6 +1213,16 @@ export const adminApi = {
   async errorDetail(id: number): Promise<AdminError> {
     const res = await adminRequest<{ error: AdminError }>(`/api/admin/errors/${id}`);
     return res.error;
+  },
+
+  /** Provider-rejected outbound mail, newest first. */
+  async emailDeliveryFailures(params: { q?: string; deliveryType?: string; limit?: number; offset?: number } = {}): Promise<AdminEmailDeliveryFailurePage> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== '') query.set(key, String(value));
+    }
+    const suffix = query.toString();
+    return adminRequest<AdminEmailDeliveryFailurePage>(`/api/admin/email-delivery-failures${suffix ? `?${suffix}` : ''}`);
   },
 
   /** Platform-wide historical trends (growth / LLM usage / errors) for the

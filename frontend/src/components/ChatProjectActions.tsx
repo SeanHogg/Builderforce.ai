@@ -92,7 +92,7 @@ export function ChatProjectActions({
             cursor: prdLoading ? 'wait' : 'pointer',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             color: 'var(--text-secondary)',
             fontFamily: 'var(--font-display)',
           }}
@@ -109,7 +109,7 @@ export function ChatProjectActions({
             cursor: tasksLoading ? 'wait' : 'pointer',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-sm)',
             color: 'var(--text-secondary)',
             fontFamily: 'var(--font-display)',
           }}
@@ -119,7 +119,7 @@ export function ChatProjectActions({
       </div>
 
       {error && (
-        <div style={{ marginTop: 8, padding: 8, fontSize: 12, background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 6 }}>
+        <div style={{ marginTop: 8, padding: 8, fontSize: 12, background: 'rgba(239,68,68,0.1)', color: 'var(--error-text)', borderRadius: 'var(--radius-sm)' }}>
           {error}
         </div>
       )}

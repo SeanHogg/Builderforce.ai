@@ -60,6 +60,30 @@ export interface ScannedRepo {
   hasDataDeletion: boolean;
   /** A data-retention / purge / TTL routine for aging out stored data. */
   hasRetentionPolicy: boolean;
+  /** A user-facing privacy-rights intake and appeal workflow. */
+  hasRightsRequestWorkflow: boolean;
+  /** Global Privacy Control / Sec-GPC or equivalent universal opt-out handling. */
+  hasUniversalOptOut: boolean;
+  /** Data Processing Addendum or processor-contract artifact. */
+  hasDpa: boolean;
+  /** Public or governed vendor/subprocessor inventory. */
+  hasSubprocessorRegister: boolean;
+  /** Record of processing, PII inventory, or data-flow map. */
+  hasDataInventory: boolean;
+  /** DPIA, privacy impact assessment, ADMT risk assessment, or AI impact assessment. */
+  hasImpactAssessment: boolean;
+  /** Personal-data incident / breach response procedure. */
+  hasPrivacyIncidentResponse: boolean;
+  /** Clear notice that a user is interacting with AI or that AI processes data. */
+  hasAiTransparency: boolean;
+  /** Human-review, contest, appeal, or profiling opt-out implementation. */
+  hasAutomatedDecisionSafeguards: boolean;
+  /** Child/minor age gate, parental-consent, or teen-safety implementation. */
+  hasMinorSafety: boolean;
+  /** Cross-border transfer mechanism, SCC, UK addendum, or transfer assessment. */
+  hasTransferSafeguards: boolean;
+  /** Accessibility statement, WCAG audit/config, or automated accessibility checks. */
+  hasAccessibilityEvidence: boolean;
 }
 
 export interface GovernanceSignal {
@@ -253,7 +277,7 @@ export function pmVisionScan(ctx: AuditScanContext): ToolResult {
   return compose({ score, scannedNote: '', metrics, recommendations, summary: 'Product direction from planning-spine completeness: objectives, key results, roadmap, and a documented vision.' });
 }
 
-// ── Privacy & Data-Law Compliance (GDPR / CCPA·CPRA / CAN-SPAM) ────────────────
+// ── Privacy, AI & Website Compliance (multi-jurisdiction) ─────────────────────
 
 /**
  * A pragmatic privacy & data-law readiness scan. Each legal pillar is scored from
@@ -281,15 +305,29 @@ export function privacyScan(ctx: AuditScanContext): ToolResult {
   const hasUnsubscribe = repoFrac(readable, (r) => r.hasUnsubscribe);
   const hasTerms = repoFrac(readable, (r) => r.hasTermsOfService);
   const hasRetention = repoFrac(readable, (r) => r.hasRetentionPolicy);
+  const hasRightsWorkflow = repoFrac(readable, (r) => r.hasRightsRequestWorkflow);
+  const hasUniversalOptOut = repoFrac(readable, (r) => r.hasUniversalOptOut);
+  const hasDpa = repoFrac(readable, (r) => r.hasDpa);
+  const hasSubprocessors = repoFrac(readable, (r) => r.hasSubprocessorRegister);
+  const hasInventory = repoFrac(readable, (r) => r.hasDataInventory);
+  const hasAssessment = repoFrac(readable, (r) => r.hasImpactAssessment);
+  const hasIncidentResponse = repoFrac(readable, (r) => r.hasPrivacyIncidentResponse);
+  const hasAiTransparency = repoFrac(readable, (r) => r.hasAiTransparency);
+  const hasAutomatedSafeguards = repoFrac(readable, (r) => r.hasAutomatedDecisionSafeguards);
+  const hasMinorSafety = repoFrac(readable, (r) => r.hasMinorSafety);
+  const hasTransfers = repoFrac(readable, (r) => r.hasTransferSafeguards);
+  const hasAccessibility = repoFrac(readable, (r) => r.hasAccessibilityEvidence);
 
   const pillars: Array<{ ref: string; label: string; frac: number }> = [
-    { ref: 'GDPR Art. 13–14', label: 'Transparency (privacy policy published)', frac: hasPrivacyPolicy },
-    { ref: 'GDPR Art. 7 · ePrivacy', label: 'Consent (cookie/tracking consent surface)', frac: hasCookieConsent * 0.7 + hasCookiePolicy * 0.3 },
-    { ref: 'GDPR Art. 20 · CCPA §1798.100', label: 'Access & portability (self-service data export)', frac: hasDataExport },
-    { ref: 'GDPR Art. 17 · CCPA §1798.105', label: 'Erasure / deletion (right to be forgotten)', frac: hasDataDeletion },
-    { ref: 'CAN-SPAM §5', label: 'Opt-out (unsubscribe + List-Unsubscribe path)', frac: hasUnsubscribe },
-    { ref: 'GDPR Art. 5(1)(e)', label: 'Storage limitation (retention / purge routine)', frac: hasRetention },
-    { ref: 'Contract', label: 'Terms of service published', frac: hasTerms },
+    { ref: 'GDPR 13–14 · US state notices · APP 1', label: 'Public notice and ownership terms', frac: hasPrivacyPolicy * 0.65 + hasTerms * 0.35 },
+    { ref: 'GDPR 15–22 · US state rights · LGPD 18', label: 'Rights intake, access, portability, deletion, and appeal', frac: hasRightsWorkflow * 0.25 + hasDataExport * 0.35 + hasDataDeletion * 0.4 },
+    { ref: 'ePrivacy/PECR · GPC · CAN-SPAM', label: 'Tracking and marketing choice controls', frac: hasCookieConsent * 0.35 + hasCookiePolicy * 0.15 + hasUniversalOptOut * 0.25 + hasUnsubscribe * 0.25 },
+    { ref: 'GDPR 5/30 · PIPEDA · APP 11', label: 'Data inventory, minimization, and retention', frac: hasInventory * 0.45 + hasRetention * 0.55 },
+    { ref: 'GDPR 28/44–49 · UK · APP 8', label: 'DPA, subprocessors, and international transfers', frac: hasDpa * 0.35 + hasSubprocessors * 0.3 + hasTransfers * 0.35 },
+    { ref: 'GDPR 32–35 · US assessments · NDB', label: 'Impact assessment and breach response', frac: hasAssessment * 0.5 + hasIncidentResponse * 0.5 },
+    { ref: 'EU AI Act · CCPA ADMT · CO ADMT', label: 'AI transparency and consequential-decision safeguards', frac: hasAiTransparency * 0.45 + hasAutomatedSafeguards * 0.55 },
+    { ref: 'COPPA · state minor/health/biometric laws', label: 'Minor and sensitive-data safeguards', frac: hasMinorSafety },
+    { ref: 'ADA Title III · WCAG 2.2', label: 'Website accessibility evidence', frac: hasAccessibility },
   ];
 
   const metrics: ToolMetric[] = pillars.map((p) => ({
@@ -299,12 +337,16 @@ export function privacyScan(ctx: AuditScanContext): ToolResult {
   }));
 
   const recommendations: ToolRecommendation[] = [];
-  if (hasPrivacyPolicy < 1) recommendations.push({ title: 'GDPR/CCPA — Publish a privacy policy', detail: 'Ship a public, versioned privacy policy that names the data you collect, the legal basis, retention, and how to exercise data-subject rights. It must be reachable without logging in.' });
-  if (hasCookieConsent < 1) recommendations.push({ title: 'ePrivacy/CPRA — Add cookie consent', detail: 'Gate analytics/marketing tags behind an opt-in consent banner (Consent Mode). Do not fire trackers before consent; offer a "reject all" as prominent as "accept".' });
-  if (hasDataExport < 1) recommendations.push({ title: 'GDPR Art. 20 — Self-service data export', detail: 'Add a "download my data" endpoint that returns a user\'s personal data in a portable (JSON/CSV) format, so DSARs are not a manual process.' });
-  if (hasDataDeletion < 1) recommendations.push({ title: 'GDPR Art. 17 / CCPA — Right to erasure', detail: 'Add a self-service account-deletion / erasure endpoint that actually deletes (or irreversibly anonymises) the subject\'s rows, not just suspends the account.' });
-  if (hasUnsubscribe < 1) recommendations.push({ title: 'CAN-SPAM — Unsubscribe + physical address', detail: 'Every marketing email must carry a working unsubscribe link, a List-Unsubscribe header, and a valid physical postal address in the footer. Honour opt-outs within 10 business days.' });
-  if (hasRetention < 1) recommendations.push({ title: 'GDPR Art. 5(1)(e) — Define retention', detail: 'Add a scheduled purge that ages out PII-bearing logs (sessions, IPs, marketing events) on a documented retention window instead of keeping them forever.' });
+  if (hasPrivacyPolicy < 1 || hasTerms < 1) recommendations.push({ title: 'Global notice — Publish versioned legal documents', detail: 'No complete repository path signal was found for both Terms and Privacy. Publish public, versioned documents naming Fix Faster LLC d/b/a BuilderForce.ai, data categories, purposes, legal bases, recipients, retention, AI processing, and rights.' });
+  if (hasRightsWorkflow < 1 || hasDataExport < 1 || hasDataDeletion < 1) recommendations.push({ title: 'Global rights — Export, erasure, and DSAR operations', detail: 'Verify or add authenticated access, correction, portable export, deletion across primary stores/processors/backups, identity verification, statutory timing, denial reasons, and an appeal channel. A ticket table alone is not end-to-end fulfillment.' });
+  if (hasCookieConsent < 1 || hasUniversalOptOut < 1) recommendations.push({ title: 'EU/UK/US states — Consent and universal opt-out', detail: 'Block non-essential tags before opt-in where required, make Reject as easy as Accept, retain consent evidence, expose preference controls, and honor Sec-GPC/Global Privacy Control for sale, sharing, and targeted advertising.' });
+  if (hasUnsubscribe < 1) recommendations.push({ title: 'CAN-SPAM/Canada/EU — Unsubscribe and suppression', detail: 'Verify working unsubscribe links, List-Unsubscribe headers, lawful sender identity and postal address, consent where required, and a durable suppression list applied to every sender.' });
+  if (hasInventory < 1 || hasRetention < 1) recommendations.push({ title: 'Global governance — Inventory data and enforce retention', detail: 'Maintain a record of processing/data-flow inventory covering prompts, chats, repositories, model providers, logs, billing, and integrations; map purpose, legal basis, owner, region, and deletion schedule to an enforced purge.' });
+  if (hasDpa < 1 || hasSubprocessors < 1 || hasTransfers < 1) recommendations.push({ title: 'EU/UK/Australia — Contract and transfer controls', detail: 'Publish the subprocessor list and provide a DPA. Verify processor terms, deletion/training restrictions, SCCs or UK transfer terms, transfer assessments, notice of changes, and likely overseas locations.' });
+  if (hasAssessment < 1 || hasIncidentResponse < 1) recommendations.push({ title: 'GDPR/US states/Canada/Australia — Assessments and breach plan', detail: 'Add repeatable DPIA/data-protection/ADMT assessment records and a tested incident plan with jurisdiction-aware notification clocks, processor escalation, evidence preservation, and breach registers.' });
+  if (hasAiTransparency < 1 || hasAutomatedSafeguards < 1) recommendations.push({ title: 'AI laws — Transparency and human review', detail: 'Disclose AI interactions and providers; classify prohibited/high-risk/consequential uses; document tests, limitations, provenance, and monitoring; and add notice, explanation, correction, appeal, opt-out, and meaningful human-review controls where applicable.' });
+  if (hasMinorSafety < 1) recommendations.push({ title: 'COPPA and state minor laws — Age and safety controls', detail: 'Because this is a conversational-agent platform, verify audience and age-assurance strategy, parental consent where required, minor-safe defaults, data minimization/deletion, content safeguards, self-harm response, and upcoming Colorado reporting readiness.' });
+  if (hasAccessibility < 1) recommendations.push({ title: 'ADA/WCAG — Validate accessible operation', detail: 'Add automated and manual WCAG 2.2 AA evidence for keyboard use, focus, names/labels, contrast, errors, live AI updates, reduced motion, and screen readers, plus an accessibility feedback route.' });
 
   const parts = pillars.map((p) => p.frac);
   const score = fracToScore(parts.reduce((s, v) => s + v, 0) / parts.length);
@@ -313,6 +355,6 @@ export function privacyScan(ctx: AuditScanContext): ToolResult {
     scannedNote,
     metrics,
     recommendations,
-    summary: 'Privacy & data-law readiness across GDPR, CCPA/CPRA, and CAN-SPAM, scored from repository signals. Run the deep compliance pass for a content-level review (email footers, consent gating, DPA/subprocessors).',
+    summary: 'Privacy, AI-governance, marketing, minor-safety, transfer, and accessibility readiness across US federal/state, EU/EEA, UK, Canada, Brazil, and Australia requirements. Path signals are evidence leads, not legal certification; run the Compliance Audit Agent for content and behavior validation.',
   });
 }

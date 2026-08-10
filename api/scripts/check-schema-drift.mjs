@@ -110,7 +110,9 @@ function recordColumns(table, sqlBlock) {
   for (let part of splitTopLevel(sqlBlock)) {
     part = part.trim().replace(/^ADD COLUMN(?:\s+IF NOT EXISTS)?\s+/i, '');
     const m = part.match(/^([a-z_][a-z_0-9]*)/i);
-    if (m) cols.add(m[1].toLowerCase());
+    if (m && !['primary', 'unique', 'constraint', 'foreign', 'check', 'exclude'].includes(m[1].toLowerCase())) {
+      cols.add(m[1].toLowerCase());
+    }
   }
 }
 
@@ -182,11 +184,29 @@ for (const file of sqlFiles) {
   for (const m of text.matchAll(createRe)) recordColumns(m[1].toLowerCase(), m[2]);
 
   // ALTER TABLE <name> ADD COLUMN [IF NOT EXISTS] <col> …;  — single-column form
-  const alterSingleRe = /ALTER TABLE\s+([a-z_][a-z_0-9]*)\s+ADD COLUMN(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z_0-9]*)/gi;
+  const alterSingleRe = /ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+ADD COLUMN(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z_0-9]*)/gi;
   for (const m of text.matchAll(alterSingleRe)) recordColumns(m[1].toLowerCase(), m[2]);
 
+  // A later DROP COLUMN removes it from the live schema just like DROP TABLE removes
+  // the table. Process before renames, in migration order.
+  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+DROP COLUMN(?:\s+IF EXISTS)?\s+([a-z_][a-z_0-9]*)/gi)) {
+    const table = m[1].toLowerCase();
+    const column = m[2].toLowerCase();
+    const direct = migratedColumns.get(table);
+    if (direct) {
+      direct.delete(column);
+      continue;
+    }
+    // A migration may rename the table and then drop a legacy column in the same
+    // file. Renames are applied at the end of the file, so resolve that one-step
+    // alias here to preserve statement-order semantics.
+    for (const rename of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+RENAME TO\s+([a-z_][a-z_0-9]*)/gi)) {
+      if (rename[2].toLowerCase() === table) migratedColumns.get(rename[1].toLowerCase())?.delete(column);
+    }
+  }
+
   // ALTER TABLE <name> [...]; — multi-action form with comma-separated ADD COLUMN clauses.
-  const alterBlockRe = /ALTER TABLE\s+([a-z_][a-z_0-9]*)\s+([\s\S]*?);/gi;
+  const alterBlockRe = /ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+([\s\S]*?);/gi;
   for (const m of text.matchAll(alterBlockRe)) {
     const cols = m[2].matchAll(/ADD COLUMN(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z_0-9]*)/gi);
     for (const c of cols) recordColumns(m[1].toLowerCase(), c[1]);
@@ -204,6 +224,12 @@ for (const file of sqlFiles) {
   // Apply this migration's renames AFTER its creates, in file order, so a later
   // migration's rename mutates columns/tables added by earlier ones.
   applyRenames(raw, text);
+
+  // Re-apply drops after renames as well. This handles `RENAME TO new; DROP COLUMN`
+  // sequences in one migration without requiring a full SQL statement parser.
+  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+DROP COLUMN(?:\s+IF EXISTS)?\s+([a-z_][a-z_0-9]*)/gi)) {
+    migratedColumns.get(m[1].toLowerCase())?.delete(m[2].toLowerCase());
+  }
 }
 
 return migratedColumns;
@@ -287,6 +313,7 @@ const reverseAllowlist = existsSync(reverseAllowlistFile)
   : new Set();
 
 const declaredTables = new Set(drizzleTables.map((t) => t.table));
+const declaredColumns = new Map(drizzleTables.map((t) => [t.table, t.cols]));
 let reverseAllowed = 0;
 
 for (const table of migratedColumns.keys()) {
@@ -298,11 +325,27 @@ for (const table of migratedColumns.keys()) {
   );
 }
 
+// A table-level reverse check is not enough: an omitted column still forces callers
+// back onto untyped SQL even though the table itself looks mapped. Compare against the
+// same rename-aware, post-migration model used by the forward check so historical
+// table/column renames do not become false positives.
+for (const [table, columns] of migratedColumns) {
+  const declared = declaredColumns.get(table);
+  if (!declared) continue; // Reported by the table-level reverse check above.
+  for (const column of columns) {
+    if (declared.has(column)) continue;
+    const msg = `Column '${table}.${column}' exists in migrations but is missing from schema.ts.`;
+    if (allowlist.has(msg)) { reverseAllowed++; continue; }
+    errors.push(msg);
+  }
+}
+
 if (errors.length > 0) {
   console.error('NEW schema drift detected (not in allowlist):\n');
   for (const err of errors) console.error('  - ' + err);
   console.error('\nAdd a migration in api/migrations/ that creates the missing column(s), or remove from schema.ts.');
   console.error('For an OPERATIONAL-track column, the migration belongs in api/transactional-migrations/ — that table is written to a different database.');
+  console.error('For a reverse-column item, declare the migrated column in schema.ts or explicitly grandfather the exact message in scripts/.schema-drift-allowlist.txt.');
   console.error('To deliberately grandfather this drift (e.g. for a baseline-push table), add the bullet to scripts/.schema-drift-allowlist.txt.');
   console.error("For a migrated table with no pgTable() declaration: add it to schema.ts, or list the bare table name in scripts/.schema-missing-allowlist.txt if it is intentionally unmapped (e.g. a pure join/audit table written only by SQL migrations).");
   process.exit(1);

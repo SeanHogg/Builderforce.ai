@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { useMediaRoom } from '@/lib/useMediaRoom';
+import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
 import {
@@ -74,7 +74,7 @@ export function CeremonyStage({
   onModeChange: (mode: CeremonyMode) => void;
   onClose?: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, tenant } = useAuth();
   const tMeet = useTranslations('meetings');
   const t = useTranslations('ceremony');
   // Narrow viewports can't fit the two 240px rails + the absolute round table side
@@ -152,11 +152,25 @@ export function CeremonyStage({
   // standup on a board reused one room. The project-scoped key survives only as the
   // fallback for an informal huddle with no session open.
   const mediaRoomKey = session?.meetingRoomKey ?? `ceremony-${projectId}`;
-  const media = useMediaRoom(
-    camerasOn ? mediaRoomKey : null,
-    { name: me.name, ref: me.ref },
-    { enabled: camerasOn },
-  );
+  const media = useLiveSession();
+  const onMediaLeft = useCallback(() => setCamerasOn(false), []);
+  useEffect(() => {
+    if (!camerasOn) return;
+    media.start({
+      roomKey: mediaRoomKey,
+      label: t(mode === 'standup' ? 'standup' : 'planning'),
+      tenantId: tenant?.id ?? null,
+      href: '/projects?tab=ceremonies',
+      participant: { name: me.name, ref: me.ref },
+      privacyMode: 'direct-only',
+      onLeave: onMediaLeft,
+    });
+  }, [camerasOn, me.name, me.ref, media.start, mediaRoomKey, mode, onMediaLeft, t, tenant?.id]);
+
+  const leaveMedia = useCallback(() => {
+    if (media.room?.roomKey === mediaRoomKey) media.leave();
+    setCamerasOn(false);
+  }, [media, mediaRoomKey]);
 
   // Seats that are "live": connected peers matched by identity, plus myself.
   const presentKeys = useMemo(() => {
@@ -393,11 +407,11 @@ export function CeremonyStage({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={() => setCamerasOn((v) => !v)}
+            onClick={() => { if (camerasOn) leaveMedia(); else setCamerasOn(true); }}
             aria-pressed={camerasOn}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+              padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
               background: camerasOn ? 'var(--coral-bright)' : 'var(--bg-deep)',
               color: camerasOn ? 'var(--bg-deep)' : 'var(--text-secondary)',
               border: `1px solid ${camerasOn ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
@@ -430,7 +444,7 @@ export function CeremonyStage({
               background: 'var(--bg-deep)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -441,13 +455,13 @@ export function CeremonyStage({
       </div>
 
       {error && (
-        <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', fontSize: 13 }}>
+        <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', fontSize: 13 }}>
           {error}
         </div>
       )}
 
       {camerasOn && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 'var(--radius-lg)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}>
           {media.mediaError ? (
             <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{tMeet('cameraError', { error: media.mediaError })}</div>
           ) : (
@@ -463,9 +477,10 @@ export function CeremonyStage({
               micOn={media.micOn}
               onToggleCam={media.toggleCam}
               onToggleMic={media.toggleMic}
-              onLeave={() => setCamerasOn(false)}
+              onLeave={leaveMedia}
             />
           </div>
+          <div title={media.mediaPaths.map((path) => `${path.localCandidateType} ↔ ${path.remoteCandidateType}`).join('\n')} style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>{media.mediaPaths.length ? `Direct ICE path verified · ${media.mediaPaths.length}` : 'Direct-only media · TURN disabled'}</div>
         </div>
       )}
 
@@ -497,7 +512,7 @@ export function CeremonyStage({
                   alignItems: 'center',
                   gap: 10,
                   padding: '8px 12px',
-                  borderRadius: 10,
+                  borderRadius: 'var(--radius-lg)',
                   background: 'var(--bg-deep)',
                   border: '1px dashed var(--border-subtle)',
                 }}
@@ -509,7 +524,7 @@ export function CeremonyStage({
                   <Select
                     value={activeSprintId}
                     onChange={(e) => setActiveSprintId(e.target.value)}
-                    style={{ fontSize: 13, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
+                    style={{ fontSize: 13, padding: '4px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                   >
                     {sprints.map((s) => (
                       <option key={s.id} value={s.id}>{s.name} ({s.status})</option>
@@ -539,7 +554,7 @@ export function CeremonyStage({
                 position: 'relative',
                 flex: 1,
                 minHeight: isMobile ? 'auto' : 360,
-                borderRadius: 16,
+                borderRadius: 'var(--radius-xl)',
                 background: 'radial-gradient(circle at 50% 50%, var(--surface-card), var(--bg-deep))',
                 border: '1px solid var(--border-subtle)',
                 overflow: 'hidden',
@@ -566,7 +581,7 @@ export function CeremonyStage({
                   justifyContent: 'center',
                   gap: 8,
                   padding: '8px 12px',
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-lg)',
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border-subtle)',
                   textAlign: 'center',
@@ -647,7 +662,7 @@ export function CeremonyStage({
                   style={{ position: 'absolute', left: `${c.x}%`, top: `${c.y}%`, transform: 'translate(-2px, -2px)', pointerEvents: 'none', zIndex: 5 }}
                 >
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--cyan-bright)', boxShadow: '0 0 8px var(--cyan-glow)' }} />
-                  <span style={{ fontSize: 10, color: 'var(--cyan-bright)', background: 'var(--bg-deep)', padding: '1px 4px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 10, color: 'var(--cyan-bright)', background: 'var(--bg-deep)', padding: '1px 4px', borderRadius: 'var(--radius-sm)', whiteSpace: 'nowrap' }}>
                     {c.name}
                   </span>
                 </div>

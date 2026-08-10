@@ -1,20 +1,68 @@
 /** @type {import('next').NextConfig} */
 const createNextIntlPlugin = require('next-intl/plugin');
+const path = require('path');
 const { version } = require('./package.json');
 
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+/**
+ * Dev-only `connect-src` additions.
+ *
+ * It was the single literal `http://localhost:8787`, and a local API on any
+ * other port was blocked by CSP with no clue in the failure: the request never
+ * leaves the page, so the console says "refused to connect" and the feature
+ * (guest chat, the diagnostics catalog, anything through the gateway) just does
+ * nothing. `wrangler dev` picks a free port when 8787 is taken, and the api,
+ * agent-runtime and worker packages each run one — so pinning one number was
+ * always going to be wrong for somebody.
+ *
+ * Any loopback port and scheme, development only. Production keeps `'self'
+ * https: wss:` exactly as before, so this loosens nothing that ships.
+ */
+const developmentConnectOrigins = process.env.NODE_ENV === 'development'
+  ? ' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*'
+  : '';
 
 const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  outputFileTracingRoot: __dirname,
   // Cloudflare Pages (next-on-pages) does not run Next's default image
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.
   images: { unoptimized: true },
   transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk', '@seanhogg/builderforce-brain-ui'],
+  // Turbopack powers local development. Keep its behavior aligned with the
+  // webpack production build below: resolve linked workspace packages from the
+  // monorepo root, load blog Markdown as source text, and prevent browser
+  // bundles from following Transformers.js into Node-only native bindings.
+  turbopack: {
+    root: path.join(__dirname, '..'),
+    rules: {
+      '*.md': {
+        loaders: [path.join(__dirname, 'scripts/rawContentLoader.cjs')],
+        as: '*.js',
+      },
+    },
+    resolveAlias: {
+      // Turbopack resolves linked packages from their physical workspace paths,
+      // where pnpm's host-created dependency symlinks are not valid inside the
+      // Linux container. Route their runtime imports back through the canonical
+      // frontend dependency graph (the same behavior webpack's symlinks:false
+      // provides below).
+      '@huggingface/transformers': './node_modules/@huggingface/transformers/dist/transformers.web.js',
+      '@seanhogg/builderforce-brain-embedded': '../brain-embedded/dist/index.mjs',
+      '@seanhogg/builderforce-sdk': '../sdk/dist/index.mjs',
+      '@seanhogg/builderforce-studio': '../studio/dist/index.mjs',
+      '@seanhogg/builderforce-studio-embedded': '../studio-embedded/dist/index.mjs',
+      'mp4-muxer': './node_modules/mp4-muxer/build/mp4-muxer.mjs',
+      'onnxruntime-node': './src/lib/turbopackEmptyModule.ts',
+      'onnxruntime-web': './node_modules/onnxruntime-web/dist/ort.bundle.min.mjs',
+      'react-markdown': './node_modules/react-markdown/index.js',
+      'remark-gfm': './node_modules/remark-gfm/index.js',
+      sharp: './src/lib/turbopackEmptyModule.ts',
+    },
+  },
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,
@@ -37,6 +85,13 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       'onnxruntime-node$': false,
+      // Linked packages have their own development installs. With
+      // `symlinks:false`, resolving `onnxruntime-web` from one of those packages
+      // can pair that nested runtime with a different hoisted
+      // `onnxruntime-common`, causing missing-export failures at build time.
+      // Keep every browser consumer on the frontend's pinned, self-contained
+      // bundle, matching the Turbopack alias above.
+      'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'),
       sharp$: false,
     };
     // Silence unactionable "Critical dependency" warnings emitted from inside
@@ -59,24 +114,14 @@ const nextConfig = {
       { source: '/coderclaw/:path*', destination: '/agents/:path*', permanent: true },
       // The guided demo deck moved from /marketing to /demo.
       { source: '/marketing', destination: '/demo', permanent: true },
-    ]
-  },
-  async rewrites() {
-    // /docs/* is the Astro Starlight site, deployed as a SEPARATE Cloudflare
-    // Pages project (`builderforce-docs`). The apex builderforce.ai is a Pages
-    // custom domain bound to THIS Next worker, which otherwise answers /docs/*
-    // with its own 404. Reverse-proxy those requests (same-origin, no redirect)
-    // to the docs deployment.
-    //
-    // IMPORTANT: we STRIP the /docs prefix when forwarding. Astro `base: '/docs'`
-    // only prefixes the emitted *links/assets* (so in-page URLs are /docs/*); it
-    // does NOT nest the build *output* — content is written to dist root and
-    // therefore served at the pages.dev ROOT (pages.dev/agents, not /docs/agents).
-    // So /docs/agents must map to pages.dev/agents. Assets referenced as
-    // /docs/_astro/* likewise resolve via the strip to pages.dev/_astro/*.
-    return [
-      { source: '/docs', destination: 'https://builderforce-docs.pages.dev/' },
-      { source: '/docs/:path*', destination: 'https://builderforce-docs.pages.dev/:path*' },
+      // Preserve published documentation links to public pages that moved.
+      { source: '/privacy', destination: '/legal/privacy-rights', permanent: true },
+      { source: '/showcase', destination: '/agents/showcase', permanent: true },
+      { source: '/trust', destination: '/legal/compliance', permanent: true },
+      // Workforce sub-views replaced the old standalone routes. Keep published
+      // blog links and external bookmarks working while preserving the tab.
+      { source: '/chats', destination: '/workforce?tab=chats', permanent: true },
+      { source: '/approvals', destination: '/workforce?tab=approvals', permanent: true },
     ]
   },
   async headers() {
@@ -128,7 +173,6 @@ const nextConfig = {
             //     auto-injected by Cloudflare into responses from the deployed Worker,
             //     so it is never in our source and must be allowlisted here or every
             //     page logs a CSP violation. Its RUM POST is covered by `connect-src https:`.
-            //   • Fontshare @import CSS (api.fontshare.com) + its font files (cdn.fontshare.com)
             //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, WebContainer)
             //   • the in-browser IDE preview frames (*.webcontainer-api.io / *.staticblitz.com)
             //   • WebRTC/relay sockets (wss:) for meetings, execution steering, live rooms
@@ -142,14 +186,22 @@ const nextConfig = {
               "object-src 'none'",
               "frame-ancestors 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://static.cloudflareinsights.com",
-              "style-src 'self' 'unsafe-inline' https://api.fontshare.com",
-              "font-src 'self' data: https://cdn.fontshare.com https://api.fontshare.com",
+              // Fonts are system stacks (`--font-sans` in globals.css) plus
+              // JetBrains Mono self-hosted by `next/font/google`, so 'self' is
+              // the whole font surface — no third-party font origin is loaded.
+              "style-src 'self' 'unsafe-inline'",
+              "font-src 'self' data:",
               "img-src 'self' data: blob: https:",
               "media-src 'self' blob: data: https:",
               "worker-src 'self' blob:",
               "child-src 'self' blob:",
-              "frame-src 'self' blob: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
-              "connect-src 'self' https: wss:",
+              // `https:` is what lets the Creation Canvas frame an arbitrary web
+              // page in a Web page panel — the feature IS "load any page onto the
+              // board", so no allowlist can express it. Each frame is sandboxed
+              // and cross-origin, so it reads nothing of ours; our own
+              // clickjacking protection is `frame-ancestors`, which is unchanged.
+              "frame-src 'self' blob: https: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
+              `connect-src 'self' https: wss:${developmentConnectOrigins}`,
               "manifest-src 'self'",
             ].join('; '),
           },

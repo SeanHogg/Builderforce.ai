@@ -1,9 +1,11 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { EMBED_CAPABILITIES, type EmbedCapability } from '@seanhogg/builderforce-embedded';
 import { embedApi } from '@/lib/builderforceApi';
-import { getStoredTenant } from '@/lib/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { EmbedConsentModal } from './EmbedConsentModal';
 import { EmbedInstallSnippet } from './EmbedInstallSnippet';
 
@@ -19,21 +21,17 @@ import { EmbedInstallSnippet } from './EmbedInstallSnippet';
  * <BuilderForceEmbed> component into their pages.
  */
 
-const CAPABILITY_LABELS: Record<EmbedCapability, string> = {
-  product: 'Product',
-  agile: 'Agile',
-  security: 'Security',
-};
-
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
 export function EmbedIntegrationSettings() {
-  const role = getStoredTenant()?.role;
+  const t = useTranslations('embedded.surfaces');
+  const { tenant, tenantToken } = useAuth();
+  const role = tenant?.role;
   const canManage = role === 'owner' || role === 'manager';
 
   const [enabled, setEnabled] = useState(false);
@@ -48,7 +46,7 @@ export function EmbedIntegrationSettings() {
   const [consentOpen, setConsentOpen] = useState(false);
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || !tenantToken) return;
     let cancelled = false;
     embedApi
       .getConfig()
@@ -60,14 +58,14 @@ export function EmbedIntegrationSettings() {
         setConsentVersion(cfg.consentVersion);
         setRequiredVersion(cfg.consentRequiredVersion);
       })
-      .catch(() => !cancelled && setError('Could not load integration settings.'))
+      .catch(() => !cancelled && setError(t('loadError')))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [canManage]);
+  }, [canManage, t, tenantToken]);
 
-  if (!canManage) return null;
+  if (!canManage || !tenantToken) return null;
 
   const needsConsent = enabled && consentVersion !== requiredVersion;
 
@@ -87,7 +85,7 @@ export function EmbedIntegrationSettings() {
       setPersistedEnabled(res.enabled);
       setSaved(true);
     } catch {
-      setError('Save failed.');
+      setError(t('saveError'));
     } finally {
       setSaving(false);
     }
@@ -109,14 +107,14 @@ export function EmbedIntegrationSettings() {
   return (
     <div style={cardStyle}>
       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
-        Embedded Integration
+        {t('title')}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
-        Surface BuilderForce Product, Agile, and Security capabilities as embedded widgets inside your host application.
+        {t('description')}
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Loading…</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('loading')}</div>
       ) : (
         <>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14 }}>
@@ -128,10 +126,10 @@ export function EmbedIntegrationSettings() {
                 setEnabled(e.target.checked);
               }}
             />
-            <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>Enable embedded integration</span>
+            <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('enable')}</span>
           </label>
 
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Capabilities</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('capabilities')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, opacity: enabled ? 1 : 0.5 }}>
             {EMBED_CAPABILITIES.map((cap) => (
               <label key={cap} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: enabled ? 'pointer' : 'default' }}>
@@ -141,7 +139,7 @@ export function EmbedIntegrationSettings() {
                   checked={capabilities.includes(cap)}
                   onChange={() => toggleCapability(cap)}
                 />
-                <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{CAPABILITY_LABELS[cap]}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t(`capability.${cap}`)}</span>
               </label>
             ))}
           </div>
@@ -152,14 +150,14 @@ export function EmbedIntegrationSettings() {
               disabled={saving}
               style={{
                 padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                background: 'var(--accent, #2563eb)', color: '#fff',
-                border: 'none', borderRadius: 8, cursor: saving ? 'default' : 'pointer',
+                background: 'var(--accent)', color: 'var(--text-on-accent)',
+                border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer',
               }}
             >
-              {saving ? 'Saving…' : needsConsent ? 'Review & enable…' : 'Save'}
+              {saving ? t('saving') : needsConsent ? t('reviewEnable') : t('save')}
             </button>
-            {saved && <span style={{ fontSize: 12, color: '#16a34a' }}>Saved ✓</span>}
-            {error && <span style={{ fontSize: 12, color: '#dc2626' }}>{error}</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success-text)' }}>{t('saved')} <Icon source="✓" size="1em" /></span>}
+            {error && <span style={{ fontSize: 12, color: 'var(--error-text)' }}>{error}</span>}
           </div>
 
           {/* The install snippet is only meaningful once embedding is actually on. */}

@@ -153,8 +153,7 @@ export function GlobalErrorHandler() {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        maxWidth: 420,
-        width: '100%',
+        width: 'min(520px, calc(100vw - 32px))',
         pointerEvents: 'none',
       }}
     >
@@ -194,27 +193,30 @@ function Toast({
       role="alert"
       style={{
         pointerEvents: 'auto',
-        background: 'var(--bg-elevated, #111827)',
+        background: 'var(--bg-elevated, var(--bg-elevated))',
         border: '1px solid var(--error-border, rgba(239,68,68,0.5))',
         borderRadius: 'var(--radius-md, 8px)',
         padding: '12px 14px',
-        color: 'var(--text-primary, #f0f4ff)',
+        color: 'var(--text-primary, var(--text-primary))',
         fontFamily: 'var(--font-body, system-ui, sans-serif)',
-        fontSize: 14,
+        fontSize: 'var(--font-size-small)',
         boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
         animation: 'toast-slide-in 200ms ease-out',
       }}
     >
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--error, #f87171)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ color: 'var(--error, var(--error))', flexShrink: 0 }}>
           <IconAlert />
         </span>
         <span
           style={{
             fontWeight: 600,
-            color: 'var(--error-text, #fca5a5)',
-            flexShrink: 0,
+            color: 'var(--error-text)',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {ev.status}
@@ -222,8 +224,8 @@ function Toast({
         </span>
         <span
           style={{
-            color: 'var(--text-muted, #5a6480)',
-            fontSize: 12,
+            color: 'var(--text-muted, var(--text-muted))',
+            fontSize: 'var(--font-size-small)',
             marginLeft: 'auto',
             flexShrink: 0,
           }}
@@ -239,7 +241,7 @@ function Toast({
         >
           {expanded ? <IconChevronUp /> : <IconChevronDown />}
         </button>
-        {/* Report this error into a project's Quality feed. */}
+        {/* Add user context to this error in BuilderForce.ai's product Quality feed. */}
         <button
           onClick={() => requestReportError({
             title: `${ev.status}${ev.code ? ` ${ev.code}` : ''}`.trim(),
@@ -258,8 +260,8 @@ function Toast({
           style={{
             ...iconBtnStyle,
             color: copied
-              ? 'var(--success, #22c55e)'
-              : 'var(--text-muted, #5a6480)',
+              ? 'var(--success, var(--success))'
+              : 'var(--text-muted, var(--text-muted))',
           }}
         >
           {copied ? <IconCheck /> : <IconCopy />}
@@ -289,8 +291,8 @@ function Toast({
       <div
         style={{
           marginTop: 2,
-          fontSize: 12,
-          color: 'var(--text-muted, #5a6480)',
+          fontSize: 'var(--font-size-small)',
+          color: 'var(--text-muted, var(--text-muted))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -305,17 +307,17 @@ function Toast({
           style={{
             marginTop: 8,
             padding: 10,
-            background: 'var(--bg-deep, #050810)',
+            background: 'var(--bg-deep, var(--bg-deep))',
             border: '1px solid var(--border, rgba(136,146,176,0.15))',
             borderRadius: 'var(--radius-md, 8px)',
-            fontSize: 12,
+            fontSize: 'var(--font-size-small)',
             fontFamily: 'var(--font-mono, monospace)',
             overflowX: 'auto',
             maxHeight: 192,
             overflowY: 'auto',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            color: 'var(--text-secondary, #8892b0)',
+            color: 'var(--text-secondary, var(--text-secondary))',
           }}
         >
           {JSON.stringify(
@@ -347,7 +349,7 @@ const iconBtnStyle: React.CSSProperties = {
   border: 'none',
   cursor: 'pointer',
   padding: 4,
-  color: 'var(--text-muted, #5a6480)',
+  color: 'var(--text-muted, var(--text-muted))',
   display: 'flex',
   alignItems: 'center',
   flexShrink: 0,

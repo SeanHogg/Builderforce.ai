@@ -13,6 +13,7 @@
  *   GET /dora          LENS #2 — DORA four-keys (deployment_events)      [developer]
  *   GET /finance       LENS #3 — FinOps (llm_usage_log + budgets)        [manager]
  *   GET /compliance    LENS #6 — audit summary (tool_audit_events)       [manager]
+ *   GET /chat-modes    Conversations vs executions (brain_chats.mode)    [manager]
  *   GET /compliance/export?format=csv|json — evidence pack download      [manager]
  *   …/budgets          FinOps budget CRUD (generic tracker, manager-gated writes)
  */
@@ -43,6 +44,7 @@ import { computeLifecycleInsights } from '../../application/insights/lifecycleIn
 import { normalizeAllocationCategory } from '../../application/llm/allocationCategories';
 import { computeComplianceSummary, buildEvidencePack, evidencePackToCsv } from '../../application/insights/complianceInsights';
 import { computeQualityInsights } from '../../application/insights/qualityInsights';
+import { computeChatModeUsage } from '../../application/insights/chatModeInsights';
 import { computePeopleInsights } from '../../application/insights/peopleInsights';
 import { computeRdFinancials } from '../../application/insights/rdFinancialsInsights';
 import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../application/insights/boardImport';
@@ -396,6 +398,19 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const key = `insights:comp:t:${tenantId}:d:${days}`;
     return c.json(await getOrSetCached(env, key, () => computeComplianceSummary(db, tenantId, days), SHORT_TTL));
+  });
+
+  // Chat MODE usage (0409) — conversations vs executions: how many of each, how much
+  // work they produced, how much of that work actually got dispatched, and what each
+  // mode costs. Role-gated to manager like the other rollups (it exposes tenant-wide
+  // spend). Cached on the same short TTL: the inputs are hot-write, and the rollup is a
+  // multi-CTE scan that must not run per page view.
+  router.get('/chat-modes', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const days = parseDays(c.req.query('days'));
+    const env = c.env as Env;
+    const key = `insights:chatmode:t:${tenantId}:d:${days}`;
+    return c.json(await getOrSetCached(env, key, () => computeChatModeUsage(db, tenantId, days), SHORT_TTL));
   });
 
   // LENS #6 — evidence-pack export (manager). Not cached: it's a download, and the

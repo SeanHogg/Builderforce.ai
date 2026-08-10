@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
-import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
+import { Icon } from '@/components/ui/Icon';
 import { usePermission } from '@/lib/rbac';
 import {
   ManagerAutonomyControls, ManagerEffectiveSummary, ManagerKillSwitch,
@@ -57,7 +58,7 @@ import {
  * the same control set /settings?sub=manager uses for the workspace tier — and displays
  * the SERVER-resolved effective policy rather than folding the tiers itself.
  *
- * The surface is split into sub-views by the shared <PillTabs> bar (the same
+ * The surface is split into sub-views by the shared <DestinationIndex> (the same
  * secondary nav Settings / Security use), driven by `?sub=` so each view is
  * deep-linkable: Overview ('') · Backlog · Activity · Policy. The header and the
  * data/polling effects live above the switch so a run keeps streaming whichever
@@ -104,18 +105,18 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
 const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
 const controlStyle: CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', minWidth: 220, maxWidth: '100%',
 };
 const primaryBtn: CSSProperties = {
-  padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: '#fff', fontWeight: 700, fontSize: '0.85rem',
+  padding: '9px 16px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: '0.85rem',
 };
 
 export interface ManagerContentProps {
@@ -364,7 +365,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   // `manager.manage`-gated anyway, and the server is the real authority — a
   // deep link to ?sub=policy still renders RoleGate's block notice).
   const href = (id: string) => (id ? `/projects?tab=manager&sub=${id}` : '/projects?tab=manager');
-  const subTabs: PillTab[] = [
+  const subTabs: IndexItem[] = [
     { id: '', label: t('subnav.overview'), icon: '📊', href: href('') },
     { id: 'backlog', label: t('subnav.backlog'), icon: '📋', href: href('backlog') },
     { id: 'stuck', label: t('subnav.stuck'), icon: '🚧', href: href('stuck') },
@@ -381,7 +382,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span aria-hidden>🧭</span> {t('title')}
+            <span aria-hidden><Icon source="🧭" size="1em" /></span> {t('title')}
           </h1>
           <p style={{ margin: '6px 0 0', ...mutedStyle, maxWidth: 640 }}>{t('subtitle')}</p>
           <p style={{ margin: '4px 0 0', ...mutedStyle }}>
@@ -411,7 +412,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       </div>
 
       {error && data && (
-        <div style={{ ...panelStyle, borderColor: 'var(--danger, #dc2626)', color: 'var(--danger, #dc2626)', fontSize: '0.85rem' }}>
+        <div style={{ ...panelStyle, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '0.85rem' }}>
           {error}
         </div>
       )}
@@ -428,13 +429,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
-            borderColor: 'var(--danger-fg, #dc2626)',
+            borderColor: 'var(--danger-text)',
             background: 'var(--danger-bg, rgba(220, 38, 38, 0.08))',
           }}
         >
-          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>🚫</span>
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}><Icon source="🚫" size="1em" /></span>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-fg, #dc2626)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-text)' }}>
               {t('notConfigured.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>{t('notConfigured.body')}</div>
@@ -457,13 +458,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10,
-            borderColor: 'var(--warning-fg, #b45309)',
+            borderColor: 'var(--warning-text)',
             background: 'var(--warning-bg, rgba(180, 83, 9, 0.08))',
           }}
         >
-          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>⏸️</span>
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}><Icon source="⏸️" size="1em" /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-fg, #b45309)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-text)' }}>
               {t('autonomyPaused.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>
@@ -473,8 +474,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         </div>
       )}
 
-      {/* ── Secondary nav (shared pill bar, same as /settings) ── */}
-      <PillTabs tabs={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
+      {/* ── Secondary nav (the ONE shared index, same as /settings) ── */}
+      <DestinationIndex items={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
 
       {activeSub === '' && (
       <>
@@ -547,13 +548,15 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           <div style={mutedStyle}>{t('chart.empty')}</div>
         )}
         {(stats.unscored > 0 || stats.unranked > 0) && (
-          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
-            💡 {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
+          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
+            
+            <Icon source="💡" size="1em" /> {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
           </div>
         )}
         {stats.flagged > 0 && (
-          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
-            🚩 {t('coverageNudge', { flagged: stats.flagged })}
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
+            
+            <Icon source="🚩" size="1em" /> {t('coverageNudge', { flagged: stats.flagged })}
           </div>
         )}
       </div>
@@ -563,7 +566,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       {activeSub === 'policy' && (
       <>
       {workspaceManagerDisabled && (
-        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-fg, #b45309)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-fg, #b45309)', fontWeight: 600, fontSize: '0.85rem' }}>
+        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-text)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-text)', fontWeight: 600, fontSize: '0.85rem' }}>
           {t('disabledNotice')}
         </div>
       )}
@@ -676,7 +679,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
 
           {/* Mode — standing directive vs a one-off task the manager executes once. */}
-          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4, marginBottom: 10 }}>
+          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 4, marginBottom: 10 }}>
             {(['directive', 'task'] as const).map((m) => {
               const active = coachMode === m;
               return (
@@ -687,9 +690,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                   aria-checked={active}
                   onClick={() => setCoachMode(m)}
                   style={{
-                    padding: '7px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                    background: active ? 'var(--accent, #2563eb)' : 'transparent',
-                    color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
+                    padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer',
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
                   }}
                 >
                   {t(`coaching.mode${m === 'task' ? 'Task' : 'Directive'}`)}
@@ -751,10 +754,10 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                     key={d.id}
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
-                      border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)',
+                      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)',
                     }}
                   >
-                    <span aria-hidden style={{ flexShrink: 0 }}>🎯</span>
+                    <span aria-hidden style={{ flexShrink: 0 }}><Icon source="🎯" size="1em" /></span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{d.directive}</div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -773,7 +776,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                         title={t('coaching.markDone')}
                         aria-label={t('coaching.markDone')}
                         style={{
-                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
                         }}
                       >
@@ -785,7 +788,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                         title={t('coaching.dismiss')}
                         aria-label={t('coaching.dismiss')}
                         style={{
-                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
                         }}
                       >
@@ -903,7 +906,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={sectionTitleStyle}>{t('activity.title')}</span>
           {running && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)' }}>
               <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', animation: 'bf-pulse 1.2s ease-in-out infinite' }} />
               {t('activity.working')}
             </span>
@@ -944,7 +947,7 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
   return (
     <div style={{ ...panelStyle, padding: 14 }}>
-      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-fg, #b45309)' : 'var(--text-primary)' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
         {value.toLocaleString()}
       </div>
       <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
@@ -958,8 +961,8 @@ function BusinessValueBar({ value, rationale, noRationale }: { value: number | n
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={rationale || noRationale}>
       <span style={{ fontWeight: 700, fontSize: '0.82rem', minWidth: 26, color: 'var(--text-primary)' }}>{value}</span>
-      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 4 }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent, #2563eb)', borderRadius: 4 }} />
+      <div style={{ position: 'relative', flex: 1, height: 8, minWidth: 40, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 'var(--radius-sm)' }} />
       </div>
     </div>
   );
@@ -977,7 +980,7 @@ function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip 
       <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.key}</td>
       <td style={tdStyle}>{item.title}</td>
       <td style={tdStyle}>
-        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
           {priorityLabel}
         </span>
       </td>
@@ -1002,9 +1005,9 @@ function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 
 
 /** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
 const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
-  in_progress: 'var(--accent, #2563eb)',
-  done: 'var(--success-fg, #15803d)',
-  blocked: 'var(--warning-fg, #b45309)',
+  in_progress: 'var(--accent)',
+  done: 'var(--success-text, var(--success))',
+  blocked: 'var(--warning-text)',
   open: 'var(--text-secondary)',
 };
 
@@ -1020,7 +1023,7 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
       <td style={tdStyle}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
-          color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: '2px 9px',
+          color: tone, border: `1px solid ${tone}`, borderRadius: 'var(--radius-full)', padding: '2px 9px',
         }}>
           <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
           {statusLabel}
@@ -1036,12 +1039,12 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
 function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeLabel: string; when: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span aria-hidden style={{ flexShrink: 0, fontSize: '1rem', lineHeight: '1.3rem' }}>{managerActionIcon(action.actionType)}</span>
+      <span aria-hidden style={{ flexShrink: 0 }}><Icon source={managerActionIcon(action.actionType)} size={18} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {action.taskId != null && (
           <Link
             href={ticketHref(action.taskId)}
-            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent, #2563eb)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
+            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
           >
             {action.ticketKey ?? `#${action.taskId}`}{action.ticketTitle ? ` · ${action.ticketTitle}` : ''}
           </Link>

@@ -43,9 +43,9 @@ export function RunTaskButton({
             fontSize: 13,
             fontWeight: 600,
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             cursor: running ? 'default' : 'pointer',
             opacity: running ? 0.7 : 1,
             whiteSpace: 'nowrap',
@@ -63,7 +63,7 @@ export function RunTaskButton({
           )}
         </button>
       </RoleGate>
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</div>}
     </div>
   );
 }

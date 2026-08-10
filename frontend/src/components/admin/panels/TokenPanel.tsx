@@ -109,7 +109,7 @@ export default function TokenPanel() {
           className="admin-token-textarea"
         />
       ) : (
-        <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--mono)' }}>
+        <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>
           {webToken ? '••••••••••••••••••••••••••••' : t('token.noTokenFound')}
         </div>
       )}

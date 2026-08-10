@@ -102,7 +102,7 @@ export function BottleneckLens() {
 
 const tableStyle: React.CSSProperties = {
   width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem',
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden',
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden',
 };
 const thBase: React.CSSProperties = {
   padding: '10px 14px', fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)',

@@ -13,7 +13,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * Employer engagement actions use the TENANT JWT (the hiring workspace).
  */
 import { Hono } from 'hono';
-import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type AnyColumn } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -40,15 +40,6 @@ import {
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 
-/**
- * Timestamps flow straight into `c.json(...)`. Drizzle's neon-http driver globally
- * disables neon's date parsers (`initMappers`), so the raw client this file used
- * returned Postgres TEXT (`2026-07-25 14:03:11.123`) — selecting the same value as a
- * plain SQL expression keeps that byte-identical, where a `timestamp` Column would
- * decode to a Date and re-serialize as ISO-8601. Ordering still uses the Column.
- */
-const rawTs = (col: AnyColumn) => sql<string | null>`${col}`;
-
 /** `freelancer_profiles.*` under the SNAKE_CASE keys every consumer below (and the
  *  cached browse payload) has always seen — the response shape is the contract. */
 const profileColumns = {
@@ -73,8 +64,8 @@ const profileColumns = {
   resume_key: freelancerProfiles.resumeKey,
   resume_filename: freelancerProfiles.resumeFilename,
   resume_extract: freelancerProfiles.resumeExtract,
-  created_at: rawTs(freelancerProfiles.createdAt),
-  updated_at: rawTs(freelancerProfiles.updatedAt),
+  created_at: freelancerProfiles.createdAt,
+  updated_at: freelancerProfiles.updatedAt,
 } as const;
 
 /** Profile + the joined global user fields the talent card renders. */
@@ -88,18 +79,18 @@ const profileWithUserColumns = {
  *  columns that the Drizzle `freelancerReviews` model does not declare yet, so the
  *  correlated aggregates stay as SQL fragments (still parameter-safe). */
 const ratingColumns = {
-  avg_rating: sql<string | null>`(SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles.userId} AND r.direction = 'employer_to_freelancer')`,
-  rating_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles.userId} AND r.direction = 'employer_to_freelancer')::int`,
+  avg_rating: sql<string | null>`(SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer')`,
+  rating_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer')::int`,
 } as const;
 
 /** Extra reputation inputs the browse card's derived badge/JSS needs (list only). */
 const reputationColumns = {
-  again_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles.userId} AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int`,
-  distinct_clients: sql<number>`(SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles.userId} AND e.hired_at IS NOT NULL)::int`,
-  repeat_clients: sql<number>`(SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles.userId} AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int`,
-  awarded: sql<number>`(SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles.userId} AND e.hired_at IS NOT NULL)::int`,
-  activity_signals: sql<number>`(SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = ${freelancerProfiles.userId} AND s.occurred_at >= now() - interval '90 days')::int`,
-  earned_cents: sql<string>`(SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = ${freelancerProfiles.userId} AND i.status = 'paid')::bigint`,
+  again_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int`,
+  distinct_clients: sql<number>`(SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
+  repeat_clients: sql<number>`(SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int`,
+  awarded: sql<number>`(SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
+  activity_signals: sql<number>`(SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = ${freelancerProfiles}.user_id AND s.occurred_at >= now() - interval '90 days')::int`,
+  earned_cents: sql<string>`(SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = ${freelancerProfiles}.user_id AND i.status = 'paid')::bigint`,
 } as const;
 
 /** `freelancer_engagements.*` under the snake_case keys `mapEngagement` reads. */
@@ -115,12 +106,12 @@ const engagementColumns = {
   title: freelancerEngagements.title,
   note: freelancerEngagements.note,
   created_by_user_id: freelancerEngagements.createdByUserId,
-  invited_at: rawTs(freelancerEngagements.invitedAt),
-  hired_at: rawTs(freelancerEngagements.hiredAt),
-  terminated_at: rawTs(freelancerEngagements.terminatedAt),
+  invited_at: freelancerEngagements.invitedAt,
+  hired_at: freelancerEngagements.hiredAt,
+  terminated_at: freelancerEngagements.terminatedAt,
   terminated_reason: freelancerEngagements.terminatedReason,
-  created_at: rawTs(freelancerEngagements.createdAt),
-  updated_at: rawTs(freelancerEngagements.updatedAt),
+  created_at: freelancerEngagements.createdAt,
+  updated_at: freelancerEngagements.updatedAt,
 } as const;
 
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
@@ -589,11 +580,10 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     // register the title (hired.video parses the claimed upload on their side).
     const rawText = type.startsWith('text/') ? (await file.text()).slice(0, 100_000) : undefined;
 
-    // NOTE: this projection intentionally stays {hired_video_user_id, skills} — the
-    // `row?.resume_extract` read further down has therefore always been undefined.
     const selected = await db.select({
       hired_video_user_id: freelancerProfiles.hiredVideoUserId,
       skills: freelancerProfiles.skills,
+      resume_extract: freelancerProfiles.resumeExtract,
     }).from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
     const row = selected[0] as Record<string, unknown> | undefined;
     let resumeId: string | undefined;
@@ -849,7 +839,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const reviews = await db.select({
       rating: freelancerReviews.rating,
       comment: freelancerReviews.comment,
-      created_at: rawTs(freelancerReviews.createdAt),
+      created_at: freelancerReviews.createdAt,
       reviewer_name: users.displayName,
     }).from(freelancerReviews)
       .leftJoin(users, eq(users.id, freelancerReviews.reviewerUserId))
@@ -1118,14 +1108,14 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       .where(and(eq(freelancerEngagements.id, id), eq(freelancerEngagements.tenantId, tenantId)));
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
     const wouldWorkAgain = typeof b.wouldWorkAgain === 'boolean' ? b.wouldWorkAgain : null;
-    // `direction` / `would_work_again` are real columns the Drizzle `freelancerReviews`
-    // model does not declare, and the conflict target IS (engagement_id, direction) —
-    // so the upsert rides the escape hatch rather than losing the conflict semantics.
-    await db.execute(sql`
-      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment, direction, would_work_again)
-      VALUES (${crypto.randomUUID()}, ${id}, ${tenantId}, ${eng.freelancer_user_id}, ${actor}, ${rating}, ${b.comment ?? null}, 'employer_to_freelancer', ${wouldWorkAgain})
-      ON CONFLICT (engagement_id, direction) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, would_work_again = EXCLUDED.would_work_again, updated_at = NOW()
-    `);
+    await db.insert(freelancerReviews).values({
+      id: crypto.randomUUID(), engagementId: id, tenantId,
+      freelancerUserId: eng.freelancer_user_id as string, reviewerUserId: actor,
+      rating, comment: b.comment ?? null, direction: 'employer_to_freelancer', wouldWorkAgain,
+    }).onConflictDoUpdate({
+      target: [freelancerReviews.engagementId, freelancerReviews.direction],
+      set: { rating, comment: b.comment ?? null, wouldWorkAgain, updatedAt: new Date() },
+    });
     // Rating + JSS show on the (cached) public list and the freelancer's stat block.
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(eng.freelancer_user_id as string));
@@ -1155,12 +1145,14 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       ));
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
     const wouldWorkAgain = typeof b.wouldWorkAgain === 'boolean' ? b.wouldWorkAgain : null;
-    // Escape hatch for the same reason as the employer→freelancer review above.
-    await db.execute(sql`
-      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment, direction, would_work_again)
-      VALUES (${crypto.randomUUID()}, ${id}, ${Number(eng.tenant_id)}, ${userId}, ${userId}, ${rating}, ${b.comment ?? null}, 'freelancer_to_employer', ${wouldWorkAgain})
-      ON CONFLICT (engagement_id, direction) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, would_work_again = EXCLUDED.would_work_again, updated_at = NOW()
-    `);
+    await db.insert(freelancerReviews).values({
+      id: crypto.randomUUID(), engagementId: id, tenantId: Number(eng.tenant_id),
+      freelancerUserId: userId, reviewerUserId: userId, rating,
+      comment: b.comment ?? null, direction: 'freelancer_to_employer', wouldWorkAgain,
+    }).onConflictDoUpdate({
+      target: [freelancerReviews.engagementId, freelancerReviews.direction],
+      set: { rating, comment: b.comment ?? null, wouldWorkAgain, updatedAt: new Date() },
+    });
     // Client rating rides the (cached) open-jobs list — bust it so it reflects promptly.
     await invalidateCached(c.env as Env, 'jobs:public:open');
     if (eng.created_by_user_id) {

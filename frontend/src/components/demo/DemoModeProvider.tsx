@@ -18,6 +18,7 @@
  *
  * All colors come from theme tokens; layout is fluid + mobile-safe.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -213,7 +214,7 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
             <button className="demo-btn demo-btn-ghost" onClick={openTour}>{t('tour.takeTour')}</button>
             <button className="demo-btn demo-btn-ghost" onClick={() => setPrompt('convert')}>{t('bookOrJoin')}</button>
             <button className="demo-btn demo-btn-primary" onClick={() => goRegister('banner')}>{t('createAccount')}</button>
-            <button className="demo-btn demo-btn-exit" onClick={exitDemo} aria-label={t('exit')}>✕</button>
+            <button className="demo-btn demo-btn-exit" onClick={exitDemo} aria-label={t('exit')}><Icon source="✕" size="1em" /></button>
           </div>
         </div>
       </div>
@@ -281,35 +282,35 @@ const bannerStyles = `
   }
   .demo-banner-inner {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
-    padding: 10px 14px; border-radius: 14px;
+    padding: 10px 14px; border-radius: var(--radius-lg);
     background: var(--surface-card-strong, rgba(20,24,33,0.96));
     border: 1px solid var(--border, rgba(255,255,255,0.14));
     box-shadow: 0 10px 40px rgba(0,0,0,0.35);
     backdrop-filter: blur(8px);
   }
   .demo-badge {
-    font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-    padding: 3px 8px; border-radius: 999px;
-    background: var(--surface-cyan-soft, rgba(0,229,204,0.16)); color: var(--cyan-bright, #00e5cc);
+    font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: var(--radius-full);
+    background: var(--surface-cyan-soft, rgba(0,229,204,0.16)); color: var(--cyan-bright, var(--cyan-bright));
   }
-  .demo-banner-text { font-size: 13.5px; color: var(--text-primary, #f0f4ff); flex: 1 1 auto; min-width: 160px; }
+  .demo-banner-text { font-size: var(--font-size-small); color: var(--text-primary, var(--text-primary)); flex: 1 1 auto; min-width: 160px; }
   .demo-banner-actions { display: flex; align-items: center; gap: 8px; }
-  .demo-btn { font-family: inherit; font-size: 13px; font-weight: 700; border-radius: 9px; cursor: pointer; border: 1px solid transparent; padding: 8px 12px; }
-  .demo-btn-primary { background: var(--accent, #4d9eff); color: #fff; }
-  .demo-btn-ghost { background: transparent; color: var(--text-primary, #f0f4ff); border-color: var(--border, rgba(255,255,255,0.18)); }
-  .demo-btn-exit { background: transparent; color: var(--text-secondary, #aab3c5); padding: 8px 10px; }
-  .demo-btn-exit:hover { color: var(--text-primary, #f0f4ff); }
+  .demo-btn { font-family: inherit; font-size: var(--font-size-small); font-weight: 700; border-radius: var(--radius-md); cursor: pointer; border: 1px solid transparent; padding: 8px 12px; }
+  .demo-btn-primary { background: var(--accent, var(--coral-bright)); color: var(--text-on-accent); }
+  .demo-btn-ghost { background: transparent; color: var(--text-primary, var(--text-primary)); border-color: var(--border, rgba(255,255,255,0.18)); }
+  .demo-btn-exit { background: transparent; color: var(--text-secondary); padding: 8px 10px; }
+  .demo-btn-exit:hover { color: var(--text-primary, var(--text-primary)); }
   @media (max-width: 520px) { .demo-banner-text { flex-basis: 100%; text-align: center; } }
 `;
 
 const panelStyles = `
   .demo-panel { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-  .demo-panel-lead { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-primary, #f0f4ff); }
+  .demo-panel-lead { margin: 0; font-size: var(--font-size-body); line-height: 1.5; color: var(--text-primary, var(--text-primary)); }
   .demo-benefits { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
-  .demo-benefits li { font-size: 14px; color: var(--text-secondary, #aab3c5); }
+  .demo-benefits li { font-size: var(--font-size-small); color: var(--text-secondary); }
   .demo-cta-col { display: flex; flex-direction: column; gap: 10px; }
-  .demo-btn-lg { padding: 12px 16px; font-size: 15px; }
-  .demo-btn-outline { background: transparent; color: var(--text-primary, #f0f4ff); border: 1px solid var(--border, rgba(255,255,255,0.2)); }
+  .demo-btn-lg { padding: 12px 16px; font-size: var(--font-size-body); }
+  .demo-btn-outline { background: transparent; color: var(--text-primary, var(--text-primary)); border: 1px solid var(--border, rgba(255,255,255,0.2)); }
   .demo-lead-wrap { border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.08)); padding-top: 14px; }
-  .demo-lead-title { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--text-secondary, #aab3c5); }
+  .demo-lead-title { margin: 0 0 10px; font-size: var(--font-size-small); font-weight: 700; color: var(--text-secondary); }
 `;

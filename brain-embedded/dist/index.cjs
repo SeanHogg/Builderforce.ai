@@ -27,14 +27,20 @@ __export(src_exports, {
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
   BrainRequestError: () => BrainRequestError,
+  CHAT_MODES: () => CHAT_MODES,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
+  DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
+  MODEL_CATEGORIES: () => MODEL_CATEGORIES,
+  NEW_CHAT_MODE: () => NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
+  RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
@@ -43,16 +49,22 @@ __export(src_exports, {
   XmlToolCallFilter: () => XmlToolCallFilter,
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
+  activeModelKey: () => activeModelKey,
   allowanceState: () => allowanceState,
   announcesUntakenAction: () => announcesUntakenAction,
   attachEvermindLearn: () => attachEvermindLearn,
   brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
+  buildModelItems: () => buildModelItems,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
+  byoVendorLabel: () => byoVendorLabel,
   catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
+  chatConversationDirective: () => chatConversationDirective,
   chatErrorAction: () => chatErrorAction,
+  chatModeDirective: () => chatModeDirective,
+  chatWorkDirective: () => chatWorkDirective,
   chatWorkLinkingDirective: () => chatWorkLinkingDirective,
   claimsMissingToolData: () => claimsMissingToolData,
   classifyModelFunding: () => classifyModelFunding,
@@ -72,6 +84,7 @@ __export(src_exports, {
   fetchApiVersionVia: () => fetchApiVersionVia,
   fetchMcpToolEntries: () => fetchMcpToolEntries,
   filterMentionCandidates: () => filterMentionCandidates,
+  filterModelItems: () => filterModelItems,
   findTools: () => findTools,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
   formatBrainProvenance: () => formatBrainProvenance,
@@ -84,6 +97,7 @@ __export(src_exports, {
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
   handleRouterCall: () => handleRouterCall,
+  isChatMode: () => isChatMode,
   isCodeChangeTool: () => isCodeChangeTool,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
@@ -99,15 +113,20 @@ __export(src_exports, {
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
   mcpActionsFrom: () => mcpActionsFrom,
   mentionRecipient: () => mentionRecipient,
+  modelCategoryLabel: () => modelCategoryLabel,
   modelFailoversInTrace: () => modelFailoversInTrace,
+  modelInUse: () => modelInUse,
   modelsUsedInTrace: () => modelsUsedInTrace,
   narratedUnadvertisedInTrace: () => narratedUnadvertisedInTrace,
   nextFallbackModel: () => nextFallbackModel,
+  normalizeChatMode: () => normalizeChatMode,
   parseByoUnresolved: () => parseByoUnresolved,
   parseDirectedRecipient: () => parseDirectedRecipient,
   parseMessageAuthor: () => parseMessageAuthor,
   parseMessageProvenance: () => parseMessageProvenance,
   parseStepMessage: () => parseStepMessage,
+  perMillionUsd: () => perMillionUsd,
+  premiumCostLabel: () => premiumCostLabel,
   prepareImageDataUrl: () => prepareImageDataUrl,
   reasoningForRun: () => reasoningForRun,
   resetApiVersionCache: () => resetApiVersionCache,
@@ -1049,6 +1068,164 @@ function useOptionalBrainContext() {
 
 // src/useBrainChats.ts
 var import_react5 = require("react");
+
+// src/chatWorkLinking.ts
+var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
+  "builtin_tickets_from_delta",
+  "builtin_chats_link_ticket",
+  "builtin_reviews_record"
+]);
+var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
+  "write_file",
+  "edit_file",
+  "delete_file"
+]);
+function isCodeChangeTool(name) {
+  return CODE_CHANGE_TOOLS.has(name);
+}
+var CREATE_TOOL_KIND = {
+  builtin_objectives_create: "objective",
+  builtin_specs_create: "spec",
+  builtin_portfolios_create: "portfolio",
+  builtin_initiatives_create: "initiative"
+};
+function workItemLinkFromCreate(toolName, result) {
+  if (!result || typeof result !== "object") return null;
+  const row = result;
+  const id = row.id;
+  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
+  if (!ref) return null;
+  const linkType = row.deduped === true ? "linked" : "created";
+  if (toolName === "builtin_tasks_create") {
+    const t = typeof row.taskType === "string" ? row.taskType : "task";
+    const kind2 = t === "epic" || t === "gap" ? t : "task";
+    return { kind: kind2, ref, linkType };
+  }
+  const kind = CREATE_TOOL_KIND[toolName];
+  return kind ? { kind, ref, linkType } : null;
+}
+function isTicketRecordingTool(name) {
+  return TICKET_RECORDING_TOOLS.has(name);
+}
+var READ_ONLY_PLATFORM_SUFFIXES = [
+  "_list",
+  "_get",
+  "_search",
+  "_recall",
+  "_read",
+  "_assignees",
+  "_audit",
+  "_trace",
+  "_tree",
+  "_rollup",
+  "_runs",
+  "_graph",
+  "_triggers",
+  "_metrics",
+  "_usage",
+  "_query",
+  "_health",
+  "_models",
+  "_providers",
+  "_proposals",
+  "_ticket_lineage",
+  "_get_messages",
+  "_run_targets",
+  "_activity_calendar",
+  "_check_key",
+  "_browse_public",
+  "_tool_audit",
+  "_task_file_changes",
+  "_list_active",
+  "_list_agents",
+  "_list_all",
+  "_list_for_task",
+  "_list_mine",
+  "_list_recent",
+  "_list_tickets",
+  "_list_sessions",
+  "_list_users",
+  "_list_templates",
+  "_list_purchased",
+  "_list_directories",
+  "_list_error_groups",
+  "_list_pull_requests",
+  "_get_session",
+  "_get_stats",
+  "_get_user",
+  "_get_config",
+  "_get_access",
+  "_get_error_group"
+];
+function isReadOnlyPlatformTool(name) {
+  if (!name.startsWith("builtin_")) return false;
+  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
+var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
+var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
+function linkedTicketsToAdvance(listResult) {
+  let rows = listResult;
+  if (typeof rows === "string") {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(rows)) return [];
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const row = r;
+    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (row.exists === false) continue;
+    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
+    if (!ref) continue;
+    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    out.push({ kind: row.kind, ref });
+  }
+  return out;
+}
+function codeChangeFile(args) {
+  if (args && typeof args === "object" && "path" in args) {
+    const p = args.path;
+    if (typeof p === "string" && p.trim()) return p;
+  }
+  return null;
+}
+function chatWorkLinkingDirective(chatId) {
+  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
+\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
+\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
+\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
+\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
+}
+
+// src/chatMode.ts
+var CHAT_MODES = ["chat", "work"];
+var NEW_CHAT_MODE = "work";
+var RESTING_CHAT_MODE = "chat";
+function isChatMode(value) {
+  return typeof value === "string" && CHAT_MODES.includes(value);
+}
+function normalizeChatMode(value) {
+  return isChatMode(value) ? value : RESTING_CHAT_MODE;
+}
+function chatConversationDirective() {
+  return "MODE: CHAT. This conversation is a conversation. Your job is to understand the question and answer it.\n\u2022 Read, search, inspect and reason as much as the question needs \u2014 every read-only tool is available to you and using them is encouraged. Ground the answer in what you actually looked up.\n\u2022 Do NOT create, staff, re-status, or dispatch board work as a side effect of answering. Identifying that something ought to be done is part of a good answer; opening a ticket about it is not.\n\u2022 If the work plainly ought to be tracked, END the answer with one short line naming it and telling the user they can switch this conversation to Work mode to have it opened and run. Offer it once; do not repeat the offer on later turns.\n\u2022 The single exception: if the user explicitly asks you to create, assign, schedule or run something in THIS message, do it. An explicit instruction outranks the mode.";
+}
+function chatWorkDirective(chatId) {
+  return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a running agent.
+${chatWorkLinkingDirective(chatId)}
+\u2022 FINISH BY DISPATCHING. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>).
+\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane \u2014 report the EXACT reason the tool returned and what would clear it. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
+}
+function chatModeDirective(mode, chatId) {
+  return mode === "work" ? chatWorkDirective(chatId) : chatConversationDirective();
+}
+
+// src/useBrainChats.ts
 var DEFAULT_CHAT_TITLE = "New chat";
 function deriveChatTitle(text) {
   const firstLine = (text.split("\n").find((l) => l.trim()) ?? "").replace(/\s+/g, " ").trim();
@@ -1122,7 +1299,7 @@ function useBrainChats(options = {}) {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null });
+      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? NEW_CHAT_MODE });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -1140,6 +1317,17 @@ function useBrainChats(options = {}) {
     } catch (e) {
       setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: prevValue } : c));
       setError(e instanceof Error ? e.message : "Failed to set capability");
+    }
+  }, [persistence]);
+  const setMode = (0, import_react5.useCallback)(async (id, mode) => {
+    const prevValue = normalizeChatMode(chatsRef.current.find((c) => c.id === id)?.mode);
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode } : c));
+    try {
+      const updated = await persistence.updateChat(id, { mode });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode: normalizeChatMode(updated.mode) } : c));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, mode: prevValue } : c));
+      setError(e instanceof Error ? e.message : "Failed to switch mode");
     }
   }, [persistence]);
   const rename = (0, import_react5.useCallback)(async (id, title) => {
@@ -1223,6 +1411,7 @@ function useBrainChats(options = {}) {
     create,
     rename,
     setCapability,
+    setMode,
     autoTitle,
     summarize,
     remove,
@@ -2175,139 +2364,6 @@ function handleRouterCall(catalog, name, args) {
   return { dispatch: { name: target, args: a.args ?? {} } };
 }
 
-// src/chatWorkLinking.ts
-var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
-  "builtin_tickets_from_delta",
-  "builtin_chats_link_ticket",
-  "builtin_reviews_record"
-]);
-var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
-  "write_file",
-  "edit_file",
-  "delete_file"
-]);
-function isCodeChangeTool(name) {
-  return CODE_CHANGE_TOOLS.has(name);
-}
-var CREATE_TOOL_KIND = {
-  builtin_objectives_create: "objective",
-  builtin_specs_create: "spec",
-  builtin_portfolios_create: "portfolio",
-  builtin_initiatives_create: "initiative"
-};
-function workItemLinkFromCreate(toolName, result) {
-  if (!result || typeof result !== "object") return null;
-  const row = result;
-  const id = row.id;
-  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
-  if (!ref) return null;
-  const linkType = row.deduped === true ? "linked" : "created";
-  if (toolName === "builtin_tasks_create") {
-    const t = typeof row.taskType === "string" ? row.taskType : "task";
-    const kind2 = t === "epic" || t === "gap" ? t : "task";
-    return { kind: kind2, ref, linkType };
-  }
-  const kind = CREATE_TOOL_KIND[toolName];
-  return kind ? { kind, ref, linkType } : null;
-}
-function isTicketRecordingTool(name) {
-  return TICKET_RECORDING_TOOLS.has(name);
-}
-var READ_ONLY_PLATFORM_SUFFIXES = [
-  "_list",
-  "_get",
-  "_search",
-  "_recall",
-  "_read",
-  "_assignees",
-  "_audit",
-  "_trace",
-  "_tree",
-  "_rollup",
-  "_runs",
-  "_graph",
-  "_triggers",
-  "_metrics",
-  "_usage",
-  "_query",
-  "_health",
-  "_models",
-  "_providers",
-  "_proposals",
-  "_ticket_lineage",
-  "_get_messages",
-  "_run_targets",
-  "_activity_calendar",
-  "_check_key",
-  "_browse_public",
-  "_tool_audit",
-  "_task_file_changes",
-  "_list_active",
-  "_list_agents",
-  "_list_all",
-  "_list_for_task",
-  "_list_mine",
-  "_list_recent",
-  "_list_tickets",
-  "_list_sessions",
-  "_list_users",
-  "_list_templates",
-  "_list_purchased",
-  "_list_directories",
-  "_list_error_groups",
-  "_list_pull_requests",
-  "_get_session",
-  "_get_stats",
-  "_get_user",
-  "_get_config",
-  "_get_access",
-  "_get_error_group"
-];
-function isReadOnlyPlatformTool(name) {
-  if (!name.startsWith("builtin_")) return false;
-  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
-}
-var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
-var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
-function linkedTicketsToAdvance(listResult) {
-  let rows = listResult;
-  if (typeof rows === "string") {
-    try {
-      rows = JSON.parse(rows);
-    } catch {
-      return [];
-    }
-  }
-  if (!Array.isArray(rows)) return [];
-  const out = [];
-  for (const r of rows) {
-    if (!r || typeof r !== "object") continue;
-    const row = r;
-    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
-    if (row.exists === false) continue;
-    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
-    if (!ref) continue;
-    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
-    out.push({ kind: row.kind, ref });
-  }
-  return out;
-}
-function codeChangeFile(args) {
-  if (args && typeof args === "object" && "path" in args) {
-    const p = args.path;
-    if (typeof p === "string" && p.trim()) return p;
-  }
-  return null;
-}
-function chatWorkLinkingDirective(chatId) {
-  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
-\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
-\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
-\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
-\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
-\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
-}
-
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
@@ -2799,8 +2855,12 @@ async function runLoop(chatId, c, req) {
   const convo = c.transcript;
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
+  const runMode = normalizeChatMode(req.chatMode ?? "work");
   const metadata = {
     chatId,
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
+    mode: runMode,
     ...req.projectId != null ? { projectId: req.projectId } : {}
   };
   let systemPrompt = resolvedSystemPrompt;
@@ -2879,7 +2939,7 @@ ${extra}`;
   }
   systemPrompt = `${systemPrompt}
 
-${chatWorkLinkingDirective(chatId)}`;
+${chatModeDirective(runMode, chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
   let announcementRecoveries = 0;
   let activeModel = model;
@@ -3309,7 +3369,8 @@ function useBrainConversation(options) {
     onActivity,
     onFirstUserTurn,
     evermind,
-    augmentSystemPrompt
+    augmentSystemPrompt,
+    chatMode
   } = options;
   const [messages, setMessages] = (0, import_react6.useState)([]);
   const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
@@ -3407,9 +3468,10 @@ ${extraSystem}` : resolvedSystemPrompt;
       augmentSystemPrompt,
       seed,
       userTurn,
-      projectId
+      projectId,
+      chatMode
     }),
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode]
   );
   const send = (0, import_react6.useCallback)(
     async (text, opts) => {
@@ -3697,9 +3759,121 @@ function takePendingPrompt() {
   }
 }
 
+// src/modelChoice.ts
+var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+var DEFAULT_MODEL_CHOICE_LABELS = {
+  categoryAuto: "Auto",
+  categoryByo: "BYO",
+  categoryFree: "Free",
+  categoryPlan: "Plan",
+  categoryPaid: "Paid",
+  categoryConfigured: "Configured",
+  autoLabel: "Auto",
+  autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
+  poolLabel: "BYO pool",
+  poolDetail: "Tries your connected accounts in the order configured in Account settings.",
+  freeDetail: "Free \xB7 included with BuilderForce",
+  planDetail: "Included with your BuilderForce plan",
+  paidDetail: "Premium \u2014 metered at cost + 1\xA2 per request",
+  paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
+  byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
+  configuredDetail: "Saved workspace LLM configuration",
+  evermindLabel: "Project Evermind",
+  evermindDetail: "Your project's own learned Evermind model."
+};
+var BYO_VENDOR_LABELS = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  "kimi-code": "Kimi Code",
+  moonshot: "Moonshot AI",
+  google: "Google",
+  meta: "Meta",
+  xai: "xAI",
+  mistral: "Mistral",
+  deepseek: "DeepSeek"
+};
+function byoVendorLabel(vendor) {
+  return BYO_VENDOR_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
+}
+function perMillionUsd(rate) {
+  return `$${(rate * 1e6).toFixed(2)}`;
+}
+function premiumCostLabel(pricing, template) {
+  return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
+}
+var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
+function modelCategoryLabel(category, labels) {
+  switch (category) {
+    case "auto":
+      return labels.categoryAuto;
+    case "byo":
+      return labels.categoryByo;
+    case "free":
+      return labels.categoryFree;
+    case "plan":
+      return labels.categoryPlan;
+    case "paid":
+      return labels.categoryPaid;
+    case "configured":
+      return labels.categoryConfigured;
+  }
+}
+function buildModelItems(options, labels) {
+  const items = [
+    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
+  ];
+  const normalized = (value) => typeof value === "string" ? { id: value } : value;
+  const seen = /* @__PURE__ */ new Set();
+  const add = (id, label, detail, category) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
+  };
+  for (const value of options.free) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.freeDetail, "free");
+  }
+  const free = new Set(options.free.map((value) => normalized(value).id));
+  for (const value of options.plan) {
+    const model = normalized(value);
+    if (!free.has(model.id)) add(model.id, model.id, model.cost ?? labels.planDetail, "plan");
+  }
+  for (const value of options.paid) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
+  }
+  if (options.byo.length) {
+    items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
+  }
+  for (const model of options.byo) {
+    add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", byoVendorLabel(model.vendor)), "byo");
+  }
+  for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
+  return items;
+}
+function activeModelKey(selection) {
+  return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
+}
+function filterModelItems(items, labels, query, category) {
+  const needle = query.trim().toLowerCase();
+  return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
+}
+function modelInUse(selection, items, labels, effective) {
+  const resolve = (model) => {
+    const item = items.find((entry) => entry.key === `model:${model}`);
+    if (item) return { name: item.label, detail: item.detail };
+    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
+  };
+  if (selection.mode === "model") return resolve(selection.model);
+  if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
+  if (effective) return resolve(effective);
+  return { name: labels.autoLabel, detail: labels.autoDetail };
+}
+
 // src/chatDiagnostics.ts
 function classifyModelFunding(model, surface) {
   if (!model) return "auto";
+  if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) return "evermind";
   const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
   if (byo?.vendor) return `byo:${byo.vendor}`;
   if ((surface?.data ?? []).some((m) => m.id === model)) return "plan";
@@ -3904,14 +4078,20 @@ function formatChatDiagnostics(d) {
   BrainContextProvider,
   BrainProvider,
   BrainRequestError,
+  CHAT_MODES,
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE,
+  DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
+  MODEL_CATEGORIES,
+  NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
+  PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
+  RESTING_CHAT_MODE,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE,
@@ -3920,16 +4100,22 @@ function formatChatDiagnostics(d) {
   XmlToolCallFilter,
   accountUsedInTrace,
   activeMentionToken,
+  activeModelKey,
   allowanceState,
   announcesUntakenAction,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
+  buildModelItems,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  byoVendorLabel,
   catalogToolNamesMentionedIn,
+  chatConversationDirective,
   chatErrorAction,
+  chatModeDirective,
+  chatWorkDirective,
   chatWorkLinkingDirective,
   claimsMissingToolData,
   classifyModelFunding,
@@ -3949,6 +4135,7 @@ function formatChatDiagnostics(d) {
   fetchApiVersionVia,
   fetchMcpToolEntries,
   filterMentionCandidates,
+  filterModelItems,
   findTools,
   formatBrainDiagnostics,
   formatBrainProvenance,
@@ -3961,6 +4148,7 @@ function formatChatDiagnostics(d) {
   getRunSnapshot,
   getRunTrace,
   handleRouterCall,
+  isChatMode,
   isCodeChangeTool,
   isConnectedAccountUnused,
   isConsolidationMarker,
@@ -3976,15 +4164,20 @@ function formatChatDiagnostics(d) {
   linkedTicketsToAdvance,
   mcpActionsFrom,
   mentionRecipient,
+  modelCategoryLabel,
   modelFailoversInTrace,
+  modelInUse,
   modelsUsedInTrace,
   narratedUnadvertisedInTrace,
   nextFallbackModel,
+  normalizeChatMode,
   parseByoUnresolved,
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
   parseStepMessage,
+  perMillionUsd,
+  premiumCostLabel,
   prepareImageDataUrl,
   reasoningForRun,
   resetApiVersionCache,

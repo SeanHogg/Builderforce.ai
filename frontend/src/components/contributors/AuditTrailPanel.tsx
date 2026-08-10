@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/lib/builderforceApi';
@@ -15,36 +16,36 @@ import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/li
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
 // Actor-type visual system. Colours are literal accents layered on translucent
 // fills that read in BOTH themes (the fill carries the tint; text uses the accent).
 const ACTOR_STYLE: Record<ActivityActorType, { color: string; glyph: string }> = {
-  human:      { color: '#39d353', glyph: '👤' },
-  hire:       { color: '#f5a524', glyph: '🤝' },
-  cloud_agent:{ color: '#b388ff', glyph: '🤖' },
-  host_agent: { color: '#8a4be0', glyph: '🖥️' },
-  system:     { color: '#8b98a5', glyph: '⚙️' },
+  human:      { color: 'var(--emerald-bright)', glyph: '👤' },
+  hire:       { color: 'var(--amber-bright)', glyph: '🤝' },
+  cloud_agent:{ color: 'var(--violet-bright)', glyph: '🤖' },
+  host_agent: { color: 'var(--purple-bright)', glyph: '🖥️' },
+  system:     { color: 'var(--text-muted)', glyph: '⚙️' },
 };
 const ACTOR_ORDER: ActivityActorType[] = ['human', 'hire', 'cloud_agent', 'host_agent', 'system'];
 
 // Verb → an accent so the timeline scans by change-type at a glance.
 const VERB_COLOR: Record<string, string> = {
-  'task.created': '#39d353',
-  'task.updated': '#6366f1',
-  'task.status_changed': '#3b82f6',
-  'task.assigned': '#8a4be0',
-  'task.moved': '#6366f1',
-  'task.deleted': '#e5484d',
-  'code.changed': '#26a641',
-  'deploy.recorded': '#30a46c',
-  'deploy.failed': '#e5484d',
-  'role.assigned': '#8a4be0',
-  'engagement.created': '#f5a524',
-  'member.hired': '#f5a524',
-  'doc.published': '#0ea5e9',
+  'task.created': 'var(--emerald-bright)',
+  'task.updated': 'var(--indigo-bright)',
+  'task.status_changed': 'var(--coral-bright)',
+  'task.assigned': 'var(--purple-bright)',
+  'task.moved': 'var(--indigo-bright)',
+  'task.deleted': 'var(--error)',
+  'code.changed': 'var(--success)',
+  'deploy.recorded': 'var(--teal-bright)',
+  'deploy.failed': 'var(--error)',
+  'role.assigned': 'var(--purple-bright)',
+  'engagement.created': 'var(--amber-bright)',
+  'member.hired': 'var(--amber-bright)',
+  'doc.published': 'var(--sky-bright)',
 };
 
 /**
@@ -153,17 +154,17 @@ export function AuditTrailPanel() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {filters.map((f) => {
             const active = actorType === f;
-            const accent = f === 'all' ? 'var(--accent, #6366f1)' : ACTOR_STYLE[f].color;
+            const accent = f === 'all' ? 'var(--accent)' : ACTOR_STYLE[f].color;
             return (
               <button
                 key={f}
                 onClick={() => setActorType(f)}
                 aria-pressed={active}
                 style={{
-                  fontSize: 12, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
+                  fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
                   border: `1px solid ${active ? accent : 'var(--border-subtle)'}`,
                   background: active ? accent : 'var(--bg-base)',
-                  color: active ? '#fff' : 'var(--text-secondary)',
+                  color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                   fontWeight: active ? 600 : 400,
                 }}
               >
@@ -176,7 +177,7 @@ export function AuditTrailPanel() {
 
       {loading && <div style={{ color: 'var(--muted)', fontSize: 14, padding: 8 }}>{t('loading')}</div>}
       {error && (
-        <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>
+        <div style={{ ...cardStyle, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>
       )}
 
       {!loading && !error && events.length === 0 && (
@@ -211,7 +212,7 @@ export function AuditTrailPanel() {
                   aria-hidden
                   title={actorLabel(e.actorType)}
                   style={{
-                    flex: '0 0 auto', width: 30, height: 30, borderRadius: 999,
+                    flex: '0 0 auto', width: 30, height: 30, borderRadius: 'var(--radius-full)',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 12, fontWeight: 700, color: as.color,
                     background: `color-mix(in srgb, ${as.color} 16%, transparent)`,
@@ -227,11 +228,11 @@ export function AuditTrailPanel() {
                       {e.actorName ?? t('actor.unknown')}
                     </span>
                     <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-full)',
                       color: as.color, background: `color-mix(in srgb, ${as.color} 14%, transparent)`,
                       border: `1px solid color-mix(in srgb, ${as.color} 34%, transparent)`,
                     }}>
-                      {as.glyph} {actorLabel(e.actorType)}
+                      <Icon source={as.glyph} size={14} /> {actorLabel(e.actorType)}
                     </span>
                     <span style={{
                       fontSize: 11, fontWeight: 600, color: vColor,
@@ -255,21 +256,21 @@ export function AuditTrailPanel() {
                         title={t('model.tooltip', { model: mp.model ?? '' })}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%',
-                          fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+                          fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-full)',
                           color: 'var(--text-secondary)',
                           background: 'var(--bg-hover, rgba(127,127,127,0.08))',
                           border: '1px solid var(--border-subtle)',
                           minWidth: 0, overflow: 'hidden',
                         }}
                       >
-                        <span aria-hidden>◇</span>
+                        <span aria-hidden><Icon source="◇" size="1em" /></span>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {shortModel(mp.model ?? '')}
                         </span>
                       </span>
                       {mp.vendor && (
                         <span style={{
-                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 999,
+                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 'var(--radius-full)',
                           color: 'var(--muted)', border: '1px solid var(--border-subtle)',
                           whiteSpace: 'nowrap',
                         }}>
@@ -278,7 +279,7 @@ export function AuditTrailPanel() {
                       )}
                       {accountLabel && (
                         <span style={{
-                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 999,
+                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 'var(--radius-full)',
                           color: 'var(--muted)', border: '1px dashed var(--border-subtle)',
                           whiteSpace: 'nowrap',
                         }}>
@@ -300,7 +301,7 @@ export function AuditTrailPanel() {
             onClick={() => load(false)}
             disabled={loadingMore}
             style={{
-              fontSize: 13, padding: '8px 16px', borderRadius: 8,
+              fontSize: 13, padding: '8px 16px', borderRadius: 'var(--radius-md)',
               cursor: loadingMore ? 'default' : 'pointer',
               background: 'var(--bg-hover, rgba(127,127,127,0.08))',
               color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)',

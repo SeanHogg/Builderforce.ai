@@ -103,6 +103,12 @@ services:
       - ./api/src:/repo/api/src:ro
       - ./api/wrangler.toml:/repo/api/wrangler.toml:ro
       - ./api/.dev.vars:/repo/api/.dev.vars:ro
+      # The three `@builderforce/*` tsconfig path aliases api/src imports. The
+      # image bakes them too, but api/src is bind-mounted — without these the
+      # mounted source could reference package code the image predates.
+      - ./packages/agent-tools/src:/repo/packages/agent-tools/src:ro
+      - ./packages/agent-stall/src:/repo/packages/agent-stall/src:ro
+      - ./packages/creation-canvas-contract/src:/repo/packages/creation-canvas-contract/src:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8787/health || exit 1"]
       interval: 10s
@@ -123,6 +129,11 @@ services:
     environment:
       NEXT_PUBLIC_WORKER_URL: http://localhost:8787
       NEXT_PUBLIC_API_URL: http://localhost:8787
+      # Auth, guest rooms, their WebSocket relay, and meeting ICE all use the
+      # canonical auth/API origin. Without this, a localhost UI silently talks to
+      # the production API (the auth module's safe production fallback), so local
+      # room creation and video signaling are split across environments.
+      NEXT_PUBLIC_AUTH_API_URL: http://localhost:8787
     ports:
       - "3000:3000"
     volumes:
@@ -135,6 +146,17 @@ services:
       - sdk-dist:/repo/sdk/dist
       - studio-dist:/repo/studio/dist
       - studio-embedded-dist:/repo/studio-embedded/dist
+      # The other four `link:` targets frontend/package.json declares. They have
+      # no watcher — the frontend consumes the dist/ already built on the host —
+      # but they MUST be mounted: without them the image's stub package.json is
+      # what resolves, and every import of @seanhogg/builderforce-brain-embedded
+      # (28 files), -brain-ui, -embedded and -voice fails at runtime.
+      - ./brain-embedded:/repo/brain-embedded:ro
+      - ./packages/brain-ui:/repo/packages/brain-ui:ro
+      - ./builderforce-embedded:/repo/builderforce-embedded:ro
+      - ./voice:/repo/voice:ro
+      # tsconfig path alias (not an npm dep) that CreationCanvas.tsx imports.
+      - ./packages/creation-canvas-contract/src:/repo/packages/creation-canvas-contract/src:ro
     depends_on:
       api:
         condition: service_healthy

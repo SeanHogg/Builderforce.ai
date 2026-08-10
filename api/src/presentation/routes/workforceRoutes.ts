@@ -16,12 +16,13 @@
  * published to the marketplace with a price for revenue.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   agentFeedback,
   agentPurchases,
   artifactAssignments,
+  executions,
   ideAgents,
   projectAgents,
 } from '../../infrastructure/database/schema';
@@ -31,7 +32,7 @@ import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
-import { assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
+import { invalidateTeamCaches } from '../../application/kernel/TeamRoster';
 import { parseJsonArray } from '../../domain/shared/json';
 import { CLOUD_SURFACES } from '../../application/runtime/cloudDispatch';
 import type { Env, HonoEnv } from '../../env';
@@ -47,13 +48,15 @@ export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
 const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
 
 /** Every cached read an agent create/update/delete can stale: the public listing,
- *  this tenant's assignee-hovercard profiles, and the assignable-workforce union the
- *  role/ticket pickers read (so a just-created agent is pickable immediately). */
+ *  this tenant's assignee-hovercard profiles, and — through `invalidateTeamCaches`
+ *  — both projections of "who is on this team" (the footer roster and the
+ *  assignable-workforce union the role/ticket pickers read), so a just-created
+ *  agent is on the roster and pickable immediately. */
 async function invalidateAgentCaches(env: Env, tenantId: number): Promise<void> {
   await Promise.all([
     invalidateCached(env, PUBLIC_LIST_CACHE_KEY),
     invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
-    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+    invalidateTeamCaches(env, tenantId),
   ]);
 }
 
@@ -78,7 +81,7 @@ export async function invalidateHireCaches(env: Env, tenantId: number, opts: { p
   await Promise.all([
     invalidateCached(env, purchasedCacheKey(tenantId)),
     invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)),
-    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+    invalidateTeamCaches(env, tenantId),
     invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
     opts.publicListing ? invalidateCached(env, PUBLIC_LIST_CACHE_KEY) : Promise.resolve(),
   ]);
@@ -237,35 +240,25 @@ export async function loadAgentPerfRollup(
   db: Db,
   agentId: string,
 ): Promise<AgentPerfRollup> {
-  // Perf telemetry, scoped to runs that ran AS this agent for a currently-active
-  // hirer. Latency is server-side seconds*1000 so it survives JSON without TZ drift.
-  //
-  // `db.execute` (still Drizzle) rather than the query builder: this is four
-  // aggregates with per-aggregate FILTER clauses over a correlated EXISTS — the
-  // builder has no FILTER construct, so expressing it would mean one sql`` fragment
-  // per selected column plus a hand-written subquery, i.e. the same SQL with more
-  // ceremony and more places to drift.
-  const perfResult = await db.execute(sql`
-    SELECT
-      COUNT(*)::int                                                        AS total_runs,
-      COUNT(*) FILTER (WHERE e.status = 'completed')::int                  AS completed_runs,
-      COUNT(*) FILTER (WHERE e.status IN ('failed','cancelled'))::int      AS failed_runs,
-      AVG(EXTRACT(EPOCH FROM (e.completed_at - e.started_at)) * 1000)
-        FILTER (WHERE e.status = 'completed'
-                AND e.started_at IS NOT NULL AND e.completed_at IS NOT NULL) AS avg_latency_ms
-    FROM executions e
-    WHERE e.cloud_agent_ref = ${agentId}
-      AND EXISTS (
-        SELECT 1 FROM agent_purchases p
-        WHERE p.agent_id = ${agentId} AND p.tenant_id = e.tenant_id AND p.unhired_at IS NULL
-      )
-  `);
-  const [perf] = perfResult.rows as Array<{
-    total_runs: number | string | null;
-    completed_runs: number | string | null;
-    failed_runs: number | string | null;
-    avg_latency_ms: number | string | null;
-  }>;
+  // Query-builder read with conditional CASE aggregates. The active-hirer tenant
+  // subquery is itself typed Drizzle, so this rollup no longer needs db.execute or
+  // a hand-written correlated FILTER statement.
+  const activeHirerTenants = db.select({ tenantId: agentPurchases.tenantId })
+    .from(agentPurchases)
+    .where(and(eq(agentPurchases.agentId, agentId), isNull(agentPurchases.unhiredAt)));
+  const [perf] = await db.select({
+    total_runs: sql<number>`COUNT(*)::int`,
+    completed_runs: sql<number>`COALESCE(SUM(CASE WHEN ${executions.status} = 'completed' THEN 1 ELSE 0 END), 0)::int`,
+    failed_runs: sql<number>`COALESCE(SUM(CASE WHEN ${executions.status} IN ('failed', 'cancelled') THEN 1 ELSE 0 END), 0)::int`,
+    avg_latency_ms: sql<number | null>`AVG(CASE
+      WHEN ${executions.status} = 'completed' AND ${executions.startedAt} IS NOT NULL AND ${executions.completedAt} IS NOT NULL
+      THEN EXTRACT(EPOCH FROM (${executions.completedAt} - ${executions.startedAt})) * 1000
+      ELSE NULL
+    END)`,
+  }).from(executions).where(and(
+    eq(executions.cloudAgentRef, agentId),
+    inArray(executions.tenantId, activeHirerTenants),
+  ));
   const [hires] = await db
     .select({ hired_tenants: sql<number>`COUNT(*)::int` })
     .from(agentPurchases)
@@ -402,9 +395,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? await db
           .update(ideAgents)
           .set({ hireCount: sql`${ideAgents.hireCount} + 1`, updatedAt: sql`NOW()` })
-          .where(eq(ideAgents.id, id))
+          .where(and(eq(ideAgents.id, id), eq(ideAgents.tenantId, Number(agent.tenant_id))))
           .returning(agentRowColumns)
-      : await db.select(agentRowColumns).from(ideAgents).where(eq(ideAgents.id, id));
+      : await db.select(agentRowColumns).from(ideAgents).where(and(
+          eq(ideAgents.id, id),
+          eq(ideAgents.tenantId, Number(agent.tenant_id)),
+        ));
     await invalidateHireCaches(c.env as Env, tenantId, { publicListing: changed.length > 0 });
     return c.json(mapAgentRow(row));
   });
@@ -607,24 +603,26 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       .returning({ id: ideAgents.id });
     if (rows.length === 0) return c.json({ error: 'Agent not found' }, 404);
 
-    const bridges = await db
-      .delete(projectAgents)
+    const bridges = await db.select({ id: projectAgents.id }).from(projectAgents)
       .where(and(
         eq(projectAgents.tenantId, tenantId),
         eq(projectAgents.agentKind, 'workforce'),
         eq(projectAgents.agentRef, id),
         isNull(projectAgents.projectId),
-      ))
-      .returning({ id: projectAgents.id });
-    const bridgeId = bridges[0]?.id;
-    if (bridgeId != null) {
+      ));
+    const bridgeIds = bridges.map((bridge) => bridge.id);
+    if (bridgeIds.length > 0) {
       await db
         .delete(artifactAssignments)
         .where(and(
           eq(artifactAssignments.tenantId, tenantId),
           eq(artifactAssignments.scope, 'agent'),
-          eq(artifactAssignments.scopeId, bridgeId),
+          inArray(artifactAssignments.scopeId, bridgeIds),
         ));
+      await db.delete(projectAgents).where(and(
+        eq(projectAgents.tenantId, tenantId),
+        inArray(projectAgents.id, bridgeIds),
+      ));
     }
     await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });
@@ -731,9 +729,9 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         target: agentFeedback.purchaseId,
         set: { rating, comment, createdAt: sql`NOW()` },
       })
-      .returning({ id: agentFeedback.id });
+      .returning({ id: agentFeedback.id, created: sql<boolean>`(xmax = 0)` });
     await invalidateCached(c.env as Env, perfCacheKey(id));
-    return c.json({ id: row?.id }, 201);
+    return c.json({ id: row?.id }, row?.created ? 201 : 200);
   });
 
   // ----- Public: browse published agents ---------------------------------

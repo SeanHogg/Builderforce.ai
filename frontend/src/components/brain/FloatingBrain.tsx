@@ -10,6 +10,7 @@
  * without prop-drilling.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -115,7 +116,8 @@ export function FloatingBrain() {
             title={tLauncher('title')}
             className="brain-launcher"
           >
-            🧠
+            
+            <Icon source="🧠" size="1em" />
             {counts.awaiting > 0 ? (
               <span
                 className="brain-launcher-badge"
@@ -157,10 +159,10 @@ export function FloatingBrain() {
               border-radius: 50%;
               border: none;
               cursor: pointer;
-              background: linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c2410c));
-              color: #fff;
+              background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
+              color: var(--text-on-accent);
               box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-              font-size: 26px;
+              font-size: var(--font-size-section);
               display: flex;
               align-items: center;
               justify-content: center;
@@ -174,20 +176,20 @@ export function FloatingBrain() {
               min-width: 20px;
               height: 20px;
               padding: 0 5px;
-              border-radius: 10px;
-              background: var(--warning, #d97706);
-              color: #fff;
-              font-size: 11px;
+              border-radius: var(--radius-lg);
+              background: var(--warning);
+              color: var(--text-on-accent);
+              font-size: var(--font-size-eyebrow);
               font-weight: 700;
               line-height: 20px;
               text-align: center;
-              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              box-shadow: 0 0 0 2px var(--bg-base);
               animation: agentPulse 1.4s ease-in-out infinite;
             }
             /* "New unread messages" — indigo count, no pulse (informational, not a
                blocking ask). Distinct hue from the amber answer badge. */
             .brain-launcher-badge-unread {
-              background: var(--badge-unread, #6366f1);
+              background: var(--badge-unread);
               animation: none;
             }
             /* Background activity (something running, nothing blocked) — a quiet
@@ -199,8 +201,8 @@ export function FloatingBrain() {
               width: 12px;
               height: 12px;
               border-radius: 50%;
-              background: var(--coral-bright, #f4726e);
-              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              background: var(--coral-bright);
+              box-shadow: 0 0 0 2px var(--bg-base);
               animation: agentPulse 1.4s ease-in-out infinite;
             }
             @media (prefers-reduced-motion: reduce) {

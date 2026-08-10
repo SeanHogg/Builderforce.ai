@@ -2,16 +2,18 @@
 
 /**
  * IncidentsPageClient — the Incident Management surface. Four sub-views selected
- * via the shared <PillTabs> (?tab=): live Incident war rooms, On-call rotations,
+ * via the shared <DestinationIndex> (?tab=): live Incident war rooms, On-call rotations,
  * Escalation policies, and a Business-contact directory. Detail / create flows use
  * the canonical <SlideOutPanel> (never a modal) and destructive removals go through
  * useConfirm(). Writes are gated to manager+ (mirrors the API requireRole(MANAGER)).
  * Fully localized (incidents namespace) + theme-driven (never one-theme hex).
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
@@ -40,7 +42,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -134,7 +136,7 @@ function Loader({ t }: { t: T }) {
   return <div style={{ ...card, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 }
 function ErrorCard({ msg }: { msg: string }) {
-  return <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{msg}</div>;
+  return <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{msg}</div>;
 }
 function EmptyCard({ msg }: { msg: string }) {
   return <div style={{ ...card, color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>{msg}</div>;
@@ -499,13 +501,13 @@ function ImplicatedTicketsSection({ t, canManage, incidentId }: { t: T; canManag
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 999, background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden' }}>
-                    <div style={{ width: `${a.percentComplete}%`, height: '100%', background: complete ? 'var(--success, #16a34a)' : 'var(--coral-bright, #f97316)' }} />
+                  <div style={{ flex: 1, minWidth: 100, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep)', overflow: 'hidden' }}>
+                    <div style={{ width: `${a.percentComplete}%`, height: '100%', background: complete ? 'var(--success)' : 'var(--coral-bright)' }} />
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{t('implicated.signed', { done: a.completedCount, total: a.requiredCount })}</span>
                 </div>
                 {a.gaps.length > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--danger-text, #991b1b)' }}>{t('implicated.gaps', { count: a.gaps.length })}: {a.gaps.map((g) => g.roleName).join(', ')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--danger-text)' }}>{t('implicated.gaps', { count: a.gaps.length })}: {a.gaps.map((g) => g.roleName).join(', ')}</div>
                 )}
               </div>
             );
@@ -668,7 +670,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
               onChange={(e) => setItem(i, { detail: e.target.value })}
               placeholder={t('rca.actionItemDetail')}
             />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}>✕</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}><Icon source="✕" size="1em" /></button>
           </div>
         ))}
         <div>
@@ -737,7 +739,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
         </div>
       )}
       {defs.length === 0 && (
-        <a href="/workflows" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>{t('workflows.create')}</a>
+        <Link href="/workflows" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>{t('workflows.create')}</Link>
       )}
 
       <div>
@@ -747,11 +749,11 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {runs.map((r) => (
-                <a key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
+                <Link key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
                   <span className="badge-muted">{r.status}</span>
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{r.definitionName || r.description || r.id}</span>
                   <span style={{ color: 'var(--text-muted)' }}>{fmt(r.createdAt)}</span>
-                </a>
+                </Link>
               ))}
             </div>
           )}
@@ -856,7 +858,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
                           <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
                           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
                           <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}>✕</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
                         </div>
                       ))}
                   </div>
@@ -1026,7 +1028,7 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
                             })}
                           </span>
                           <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}>✕</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}><Icon source="✕" size="1em" /></button>
                         </div>
                       ))}
                   </div>

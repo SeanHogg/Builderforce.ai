@@ -23,6 +23,7 @@ import { AuditRepository }      from './infrastructure/repositories/AuditReposit
 
 // Application services
 import { ProjectService }  from './application/project/ProjectService';
+import { r2ProjectStoragePurge } from './application/ide/projectStorage';
 import { TaskService }     from './application/task/TaskService';
 import { TaskType }        from './domain/shared/types';
 import { llmEpicDecomposer } from './application/task/EpicDecomposer';
@@ -90,6 +91,8 @@ import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
 import { createGuestRoutes } from './presentation/routes/guestRoutes';
 import { createDemoRoutes } from './presentation/routes/demoRoutes';
 import { GuestChatService } from './application/guest/GuestChatService';
+import { GuestPromptService } from './application/marketing/GuestPromptService';
+import { PlatformBroadcastService } from './application/marketing/PlatformBroadcastService';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
@@ -100,7 +103,14 @@ import { createProjectAgentRoutes } from './presentation/routes/projectAgentRout
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
+import { createSalesRoutes } from './presentation/routes/salesRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
+import { createObjectRoutes } from './presentation/routes/objectRoutes';
+import { createDomainRoutes } from './presentation/routes/domainRoutes';
+import { createObjectRegistry } from './application/kernel/ObjectRegistry';
+import { createDomainService } from './application/kernel/DomainService';
+import { createTeamRosterService } from './application/kernel/TeamRoster';
+import { createEntityService } from './application/domains/EntityService';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
 import { createReleaseNoteRoutes } from './presentation/routes/releaseNoteRoutes';
@@ -111,6 +121,7 @@ import { createLimbicRoutes }           from './presentation/routes/limbicRoutes
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createPersonalityRoutes }      from './presentation/routes/personalityRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
+import { createMcpServerRoutes }    from './presentation/routes/mcpServerRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
@@ -119,6 +130,7 @@ import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
+import { createCreativeRoutes } from './presentation/routes/creativeRoutes';
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
@@ -128,6 +140,8 @@ import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
+import { createIntegrationCatalogRoutes } from './presentation/routes/integrationCatalogRoutes';
+import { createConnectorRoutes }    from './presentation/routes/connectorRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
@@ -138,9 +152,17 @@ import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRo
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
+import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
+import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRoutes } from './presentation/routes/campaignRoutes';
+import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
+import { createDriveRoutes }        from './presentation/routes/driveRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
+import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
+import { createProjectBackendRoutes } from './presentation/routes/projectBackendRoutes';
+import { createGameRoutes } from './presentation/routes/gameRoutes';
+import { createHooksRoutes }       from './presentation/routes/hooksRoutes';
 import { createIdeProjectRoutes }  from './presentation/routes/ideProjectRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
@@ -237,6 +259,7 @@ configureCaughtErrorReporter(persistCaughtError);
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { CeremonyRoomDO } from './infrastructure/relay/CeremonyRoomDO';
+export { GuestRoomDO } from './infrastructure/relay/GuestRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
 export { ProjectEvermindCoordinatorDO } from './infrastructure/relay/ProjectEvermindCoordinatorDO';
@@ -269,7 +292,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const paymentProvider = buildPaymentProvider(env);
 
   // --- Application ---
-  const projectService  = new ProjectService(projectRepo, taskRepo);
+  const projectService  = new ProjectService(projectRepo, taskRepo, r2ProjectStoragePurge(env));
   const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
     (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}),
     // Epic fan-out records its planned SEQUENCE as real precedence edges, through the
@@ -283,11 +306,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
         reportCaughtError(error, { source: "index.ts", operation: "taskService" });
       });
     });
-  const tenantService   = new TenantService(tenantRepo, paymentProvider);
+  const tenantService   = new TenantService(tenantRepo, paymentProvider, env);
   const toolService     = new ToolService(db);
   const auditRunner     = new AuditRunner(db, toolService, taskService);
   const marketingService = new MarketingService(db);
   const guestChatService = new GuestChatService(db);
+  const guestPromptService = new GuestPromptService(db);
+  const platformBroadcastService = new PlatformBroadcastService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo);
   // RuntimeService.update is the single canonical execution-status transition;
@@ -333,7 +358,17 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // auth. Reserved/platform hosts (api.builderforce.ai, www, …) return null from
   // subdomainFromHost and fall through to next() and normal routing.
   app.use('*', async (c, next) => {
-    const res = await tryServeHostedSite(c.env, c.req.header('host'), c.req.path);
+    // `executionCtx` is unavailable in some test harnesses; without it the
+    // traffic flush is awaited inline rather than skipped, so a request is
+    // never served uncounted.
+    let waitUntil: ((p: Promise<unknown>) => void) | undefined;
+    try {
+      const ctx = c.executionCtx;
+      waitUntil = (p) => ctx.waitUntil(p);
+    } catch {
+      waitUntil = undefined;
+    }
+    const res = await tryServeHostedSite(c.env, c.req.raw, waitUntil);
     if (res) return res;
     return next();
   });
@@ -348,6 +383,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // through for anonymous callers, so intentionally-public paths stay unlimited.
   app.use('/llm/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
   app.use('/v1/*',  rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  // The remote MCP server runs the same billable tools as /v1/mcp/call, and is
+  // reachable by any third-party MCP client, so it takes the same limit.
+  app.use('/mcp',   rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // Emulation token interception — runs before authMiddleware in each router.
   // When X-Emulation-Token is present, validates the emulation JWT, enforces
   // read-only mode, and sets userId/tenantId/role from the emulation identity.
@@ -432,8 +470,28 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // login for public profiles), cross-tenant engagements (hire/interview/terminate),
   // and the activity-signal → billable-timecard pipeline.
   app.route('/api/freelancers', createFreelancerRoutes());
+  app.route('/api/sales', createSalesRoutes(db));
   app.route('/api/engagements', createEngagementRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
+
+  // Anonymous guest routes must precede the generic `/api/:domain/...` router
+  // below. That router installs auth middleware at its mount root, so registering
+  // it first intercepts `/api/guest/*` before route-shape validation and turns
+  // room creation, invite joins, and WebSocket upgrades into tenant-auth 401s.
+  app.route('/api/guest', createGuestRoutes(guestChatService, guestPromptService, platformBroadcastService));
+
+  // ── The kernel, exposed ONCE (PRD 20 §6.3) ────────────────────────────────
+  //
+  // `/api/objects/:id` and its five relations replace the six-to-forty
+  // per-subsystem copies of each: one timeline endpoint, one comment thread, one
+  // member list, one share sheet with one revocation path, one revision history.
+  // `/api/<domain>` is the roster as a route surface — fifteen groups, one per
+  // seat, each answering the same four questions so a surface can be built once.
+  //
+  // Both take an application-layer PORT rather than a database: `src/index.ts` is
+  // outside the presentation layer, so this is where the connection is bound to
+  // the use cases and the route files stay free of `src/infrastructure`.
+  app.route('/api/objects', createObjectRoutes(createObjectRegistry(db, env)));
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
@@ -447,12 +505,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/release-notes', createReleaseNoteRoutes(db));
   // Gig Marketplace (0293): publish a ticket as a gig, a hired freelancer's scoped
   // board access, and deliverable proposals the employer AI-evaluates.
-  app.route('/api/marketplace', createGigMarketplaceRoutes(db));
+  app.route('/api/marketplace', createGigMarketplaceRoutes());
   app.route('/api/engagement-board', createEngagementBoardRoutes(db));
   app.route('/api/deliverables', createDeliverableRoutes(db));
   // In-platform messaging (0298): employer<->freelancer threads scoped to an
   // engagement / job / proposal, with attachments + notification-fed unread counts.
-  app.route('/api/conversations', createFreelancerMessagingRoutes(db));
+  app.route('/api/conversations', createFreelancerMessagingRoutes());
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).
@@ -465,7 +523,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
   app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
-  app.route('/api/guest', createGuestRoutes(guestChatService));
   // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
   // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
   app.route('/api/demo', createDemoRoutes());
@@ -483,7 +540,24 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Published IDE (Designer) sites — public static hosting from R2. Served at
   // <sub>.builderforce.ai via the wildcard route; the path form
   // /api/sites/<sub>/... is the always-on fallback. No JWT (these are public websites).
+  // Project backend ingress — where a provider's webhook lands (an inbound SMS,
+  // an IVR leg on a live call, a delivery-status callback). Public by necessity:
+  // Twilio cannot present a session. Authentication is per MESSAGE — each handler
+  // declares how its caller is proved and an unverified request never runs a step.
+  // The token in the path only prevents enumeration. See hooksRoutes.ts.
+  app.route('/hooks', createHooksRoutes(db));
+
   app.route('/api/sites', createSitesRoutes());
+
+  // Campaign open / click / unsubscribe. Hit by a recipient's MAIL CLIENT, so it
+  // is mounted here with the other unauthenticated public surfaces — the only
+  // credential is the unguessable per-recipient token in the path.
+  app.route('/api/campaign-track', createCampaignTrackRoutes(db));
+
+  // Campaign logos and images. Also hit by a recipient's mail client — an image
+  // behind authMiddleware renders as a broken box in every inbox — so it is
+  // public and addressed only by the asset's unguessable token.
+  app.route('/api/campaign-assets', createMarketingAssetRoutes(db));
 
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
   app.route('/api/v1', createPublicApiRoutes(db));
@@ -584,6 +658,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // per-user calendar connections that back scheduling.
   app.route('/api/meetings', createMeetingRoutes(db));
   app.route('/api/calendar', createCalendarRoutes(db));
+  // Connected mailboxes (Microsoft 365 / Gmail) — the inbox the canvas renders
+  // and the identity a campaign can send from.
+  app.route('/api/mailbox',  createMailboxRoutes(db));
+  app.route('/api/drive',    createDriveRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));
@@ -605,6 +683,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/bi',       createBiRoutes(db));
   // Cross-domain (channel-3) seams — server-to-server, scoped tenant API keys.
   app.route('/v1',           createSeamRoutes(db));
+  // Builderforce as a standard remote MCP server (JSON-RPC 2.0 / Streamable HTTP,
+  // stateless). This is the endpoint third-party MCP clients and marketplaces
+  // (Anthropic Connectors, AWS AI Agents & Tools, Gemini Enterprise) consume; it
+  // shares its catalog and dispatch with /v1/mcp/* via `mcpGateway`.
+  app.route('/mcp',          createMcpServerRoutes());
   app.route('/api/tenants/:tenantId/api-keys', createTenantApiKeyRoutes(db));
   app.route('/api/tenants/:tenantId/mcp-extensions', createMcpExtensionRoutes(db));
   app.route('/api/agents',   createAgentRoutes(agentService));
@@ -614,6 +697,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/audit',    createAuditRoutes(auditService));
   app.route('/api/admin',    createAdminRoutes());
   app.route('/api/specs',    createSpecRoutes(db));
+  // Canonical spec subresources. The legacy /api/prd/specs/* mount below stays as
+  // a compatibility entry point while canvas and extension clients migrate.
+  app.route('/api/specs',    createPrdRoutes(db, ''));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
@@ -625,7 +711,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/studio/voice-clones', createStudioVoiceCloneRoutes(db));
 
   // Phase 6 — Dev Analytics & Team Intelligence
+  // Public integration catalog — the projection the marketing page renders.
+  // Registered FIRST so the literal `catalog` segment wins over `/:id` in the
+  // authenticated router below.
+  app.route('/api/integrations/catalog', createIntegrationCatalogRoutes());
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  app.route('/api/connectors',      createConnectorRoutes(db));
   app.route('/api/contributors',    createContributorRoutes(db));
   app.route('/api/dev-teams',       createDevTeamRoutes(db));
   app.route('/api/reports',         createReportRoutes(db));
@@ -660,21 +751,45 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/compile',   createCompileRoutes(db, runtimeService));
+  // Paste a brief (a contest, an RFP, a hackathon prompt) → extracted requirements,
+  // a matched blueprint, a plan, and — on an explicit second call — a built project.
+  app.route('/api/challenges', createChallengeRoutes(db, runtimeService));
+  // Operating a project's server-side half: hosting strategy, live handlers, the
+  // per-project secret vault, and the inbound-delivery log.
+  app.route('/api/projects',  createProjectBackendRoutes(db));
+  // Shipping a canvas-authored game to somewhere it can actually be PLAYED: a
+  // sandboxed frame, an installable web app on a phone, a real APK or iOS build,
+  // or a Roblox place. See application/game/gameTarget.ts.
+  app.route('/api/projects',  createGameRoutes(db));
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));
+  // Creative generation — the generator Canvas's `creative.*` capabilities name.
+  // Geometry kinds are authored as a parametric spec and evaluated server-side;
+  // text kinds are authored directly and shape-checked. Free pool only.
+  app.route('/api/creative', createCreativeRoutes());
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
   app.route('/api/projects',  createProjectFactsRoutes(db));
   app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
 
+  // Owner-side control of a published site: custom domain, form collections and
+  // their submissions, and the traffic rollup (migration 0412).
+  app.route('/api/projects',  createSiteManageRoutes(db));
+  // Tenant marketing — audiences, verified senders, campaigns, sending. Mounted
+  // at /api/growth, NOT /api/marketing: that prefix already belongs to our own
+  // marketing-site visitor telemetry (marketingRoutes.ts), whose `/track`
+  // endpoint is deliberately anonymous and must not inherit this router's
+  // authMiddleware.
+  app.route('/api/growth', createGrowthRoutes(db));
+
   // Cloud Agent Boards
   app.route('/api/boards',            createBoardRoutes(db));
   app.route('/api/board-connections', createBoardConnectionRoutes(db));
   app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
   // Platform migration / import wizard (Jira/Monday/Rally/GitLab/Bitbucket → BF).
-  app.route('/api/migrations',        createMigrationRoutes(db));
+  app.route('/api/migrations',        createMigrationRoutes(db, env));
   // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
   app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
   app.route('/api/feedback',          createFeedbackRoutes(db));
@@ -688,6 +803,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
+
+  // The domain router is intentionally LAST among `/api` mounts. It owns dynamic
+  // `/api/:domain/*` paths and installs blanket auth for them; mounting it earlier
+  // makes that middleware intercept unrelated routes registered below it (including
+  // the public knowledge marketplace and marketplace stats feeds) before their own
+  // handlers can run.
+  app.route('/api', createDomainRoutes(createDomainService(db, env), createEntityService(db, env), createTeamRosterService(db, env)));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));

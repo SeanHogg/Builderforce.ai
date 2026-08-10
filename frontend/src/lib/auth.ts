@@ -72,6 +72,29 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
+/**
+ * Patch the stored user in place.
+ *
+ * The persisted copy is what the top bar, the sidebar and the footer roster
+ * read, so a write that changes an identity field has to land here too or the
+ * shell keeps showing the old value until the next sign-in. One helper rather
+ * than a `localStorage.setItem(USER_KEY, …)` at each writer — the key is private
+ * to this module for exactly that reason.
+ */
+export function patchStoredUser(patch: Partial<AuthUser>): AuthUser | null {
+  if (!isBrowser()) return null;
+  const current = getStoredUser();
+  if (!current) return null;
+  const next = { ...current, ...patch };
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(next));
+  } catch {
+    // Quota / private mode — the server copy is authoritative and the next
+    // /api/auth/me read restores it.
+  }
+  return next;
+}
+
 export function getStoredTenant(): Tenant | null {
   if (!isBrowser()) return null;
   try {
@@ -144,6 +167,19 @@ export function clearSession(): void {
   document.cookie = `bf_tenant_token=; path=/; expires=${COOKIE_EXPIRE}; Max-Age=0`;
 }
 
+/**
+ * THE way back in — `/login` carrying where the person was going.
+ *
+ * Fifteen call sites hand-built this string, and the hand-built ones disagreed:
+ * some encoded `next`, some did not, and an un-encoded path with a query string
+ * (`/create/x?share=1`) lost everything after the `&` on the round trip. One
+ * spelling, encoded once, so a sign-in never silently drops the destination.
+ */
+export function signInHref(next?: string): string {
+  const target = next ?? (isBrowser() ? window.location.pathname + window.location.search : '');
+  return target ? `/login?next=${encodeURIComponent(target)}` : '/login';
+}
+
 // ---------------------------------------------------------------------------
 // Centralized 401 (invalid/expired token) handling — redirect to login
 // ---------------------------------------------------------------------------
@@ -165,10 +201,7 @@ export function handleApiUnauthorized(): never {
     throw new Error('Unauthorized');
   }
   clearSession();
-  const next = encodeURIComponent(
-    window.location.pathname + window.location.search || '/'
-  );
-  window.location.href = `/login?next=${next}`;
+  window.location.href = signInHref();
   throw new Error('Session expired');
 }
 
@@ -200,7 +233,7 @@ export interface AuthSession {
  * first (`needsVerification: true` — flip the UI to the code-entry step for `email`).
  */
 export type AuthStepResult =
-  | { needsVerification: true; email: string }
+  | { needsVerification: true; email: string; emailDeliveryFailed?: boolean }
   | ({ needsVerification: false } & AuthSession);
 
 export interface TenantTokenResponse {
@@ -215,11 +248,11 @@ export async function login(email: string, password: string): Promise<AuthStepRe
   });
   const body = await res.json().catch(() => ({})) as {
     token?: string; user?: AuthUser; error?: string; message?: string;
-    verificationRequired?: boolean; email?: string;
+    verificationRequired?: boolean; email?: string; emailDeliveryFailed?: boolean;
   };
   // 403 + verificationRequired: the account exists but its email isn't verified.
   if (body.verificationRequired) {
-    return { needsVerification: true, email: body.email ?? email };
+    return { needsVerification: true, email: body.email ?? email, emailDeliveryFailed: body.emailDeliveryFailed };
   }
   if (!res.ok || !body.token || !body.user) {
     throw new Error(body.error ?? body.message ?? 'Login failed');
@@ -232,23 +265,25 @@ export async function register(
   password: string,
   name: string | undefined,
   agreeToTerms: boolean,
-  accountType?: 'standard' | 'freelancer'
+  accountType?: 'standard' | 'freelancer' | 'sales',
+  referralCode?: string,
+  ageAttested = false,
 ): Promise<AuthStepResult> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name, agreeToTerms, accountType }),
+    body: JSON.stringify({ email, password, name, agreeToTerms, accountType, referralCode, ageAttested }),
   });
   const body = await res.json().catch(() => ({})) as {
     token?: string; user?: AuthUser; error?: string; message?: string;
-    verificationRequired?: boolean; email?: string;
+    verificationRequired?: boolean; email?: string; emailDeliveryFailed?: boolean;
   };
   if (!res.ok) {
     throw new Error(body.error ?? body.message ?? 'Registration failed');
   }
   // Normal path: registration never returns a session — the email must be verified.
   if (body.verificationRequired || !body.token || !body.user) {
-    return { needsVerification: true, email: body.email ?? email };
+    return { needsVerification: true, email: body.email ?? email, emailDeliveryFailed: body.emailDeliveryFailed };
   }
   return { needsVerification: false, token: body.token, user: body.user };
 }
@@ -287,7 +322,8 @@ export async function resendVerificationCode(email: string): Promise<{ cooldownS
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
-  const body = await res.json().catch(() => ({})) as { cooldownSeconds?: number };
+  const body = await res.json().catch(() => ({})) as { cooldownSeconds?: number; error?: string };
+  if (!res.ok) throw new Error(body.error ?? 'Verification email could not be sent');
   return { cooldownSeconds: body.cooldownSeconds };
 }
 
@@ -454,7 +490,7 @@ export async function getMe(webToken: string): Promise<{
   onboardingCompletedAt: string | null;
   onboardingProgress: OnboardingProgress | null;
   psychometric: PsychometricProfile | null;
-  accountType: 'standard' | 'freelancer';
+  accountType: 'standard' | 'freelancer' | 'sales';
   accountTypeSelected: boolean;
   availableForHire: boolean;
 }> {
@@ -463,7 +499,7 @@ export async function getMe(webToken: string): Promise<{
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) return { onboardingCompletedAt: null, onboardingProgress: null, psychometric: null, accountType: 'standard', accountTypeSelected: true, availableForHire: false };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; onboardingProgress?: OnboardingProgress | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean; availableForHire?: boolean } };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; onboardingProgress?: OnboardingProgress | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer' | 'sales'; accountTypeSelected?: boolean; availableForHire?: boolean } };
   return {
     onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
     onboardingProgress: data.user?.onboardingProgress ?? null,
@@ -505,12 +541,13 @@ export async function setAvailableForHire(
  */
 export async function selectAccountType(
   webToken: string,
-  accountType: 'standard' | 'freelancer',
+  accountType: 'standard' | 'freelancer' | 'sales',
+  ageAttested: boolean,
 ): Promise<AuthUser> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me/account-type`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
-    body: JSON.stringify({ accountType }),
+    body: JSON.stringify({ accountType, ageAttested }),
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) {
@@ -519,6 +556,32 @@ export async function selectAccountType(
   }
   const data = (await res.json()) as { user: AuthUser };
   return data.user;
+}
+
+/**
+ * Update the signed-in user's display name.
+ *
+ * Same `PATCH /api/auth/me` the personality write uses — the endpoint already
+ * accepted `displayName` and nothing in the product called it, which is why the
+ * Settings Account view rendered a name it could not change. The stored user is
+ * refreshed in place so the top bar and the footer roster show the new name
+ * without a reload.
+ */
+export async function updateMyDisplayName(webToken: string, displayName: string): Promise<string | null> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ displayName }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { user?: { displayName?: string | null } };
+  const next = data.user?.displayName ?? null;
+  patchStoredUser({ name: next ?? undefined });
+  return next;
 }
 
 /** Update the signed-in user's OWN personality (psychometric profile). Pass null to
@@ -602,6 +665,26 @@ export async function listTenantMembers(
   return data.users ?? [];
 }
 
+/**
+ * Drop the shell's held team roster after a membership write — the client half of
+ * the api's `membershipChanged`.
+ *
+ * The api clears the roster cache and the footer would otherwise keep the copy it
+ * already holds, so a person you just invited did not appear beside their team
+ * until the next full page load. Dynamically imported because `AuthContext`
+ * imports THIS file, and a static import of the hook module would close that
+ * loop. Best-effort: a roster that cannot be refreshed self-heals on the next
+ * mount.
+ */
+async function refreshTeamRoster(): Promise<void> {
+  try {
+    const { invalidateTeamRoster } = await import('./team/useTeamRoster');
+    invalidateTeamRoster();
+  } catch {
+    // no-op — see above.
+  }
+}
+
 /** Remove a member from the workspace. Requires manager role. */
 export async function removeTenantMember(
   tenantToken: string,
@@ -618,6 +701,7 @@ export async function removeTenantMember(
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to remove member');
   }
+  await refreshTeamRoster();
 }
 
 /** Change an existing member's workspace role. Requires manager (owner to touch owners). */
@@ -638,6 +722,7 @@ export async function updateMemberRole(
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to change role');
   }
+  await refreshTeamRoster();
 }
 
 /** A pending (not-yet-accepted) workspace invitation. */
@@ -674,6 +759,9 @@ export async function inviteByEmail(
     throw new Error(body.error ?? 'Failed to invite user');
   }
   const body = await res.json().catch(() => ({})) as { status?: 'added' | 'pending' };
+  // 'added' means the invitee already had an account and is a member NOW — the
+  // footer roster is stale the instant this resolves.
+  if ((body.status ?? 'added') === 'added') await refreshTeamRoster();
   return { status: body.status ?? 'added', email: email.toLowerCase().trim() };
 }
 

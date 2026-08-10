@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -243,7 +244,8 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={h2Style}>{t('bulkUploadTitle')}</h2>
           <button type="button" onClick={handleDownloadTemplate} style={linkBtnStyle}>
-            ⬇ {t('bulkDownloadTemplate')}
+            
+            <Icon source="⬇" size="1em" /> {t('bulkDownloadTemplate')}
           </button>
         </div>
 
@@ -267,7 +269,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
           aria-label={t('bulkUploadAria')}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
         >
-          <div style={{ fontSize: 40, marginBottom: 12 }} aria-hidden="true">📁</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }} aria-hidden="true"><Icon source="📁" size="1em" /></div>
           <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px' }}>
             {t('bulkDropzoneTitle')}
           </p>
@@ -285,12 +287,12 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         </div>
 
         {fileError && (
-          <div style={{ color: 'var(--coral-bright)', fontSize: 14, marginTop: 12, padding: '8px 12px', background: 'rgba(255,80,80,0.08)', borderRadius: 6 }} role="alert">
+          <div style={{ color: 'var(--coral-bright)', fontSize: 14, marginTop: 12, padding: '8px 12px', background: 'rgba(255,80,80,0.08)', borderRadius: 'var(--radius-sm)' }} role="alert">
             {fileError}
           </div>
         )}
         {parseError && (
-          <div style={{ color: 'var(--coral-bright)', fontSize: 14, marginTop: 12, padding: '8px 12px', background: 'rgba(255,80,80,0.08)', borderRadius: 6 }} role="alert">
+          <div style={{ color: 'var(--coral-bright)', fontSize: 14, marginTop: 12, padding: '8px 12px', background: 'rgba(255,80,80,0.08)', borderRadius: 'var(--radius-sm)' }} role="alert">
             {parseError}
           </div>
         )}
@@ -338,7 +340,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
                           width: '100%',
                           padding: '6px 10px',
                           border: '1px solid var(--border-subtle)',
-                          borderRadius: 6,
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: 13,
                           background: 'var(--bg-base)',
                           color: 'var(--text-primary)',
@@ -364,7 +366,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         </div>
 
         {parsed.rows.length > IMPORT_ASYNC_THRESHOLD_ROWS && (
-          <div style={{ padding: '10px 14px', background: 'rgba(100,150,255,0.08)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+          <div style={{ padding: '10px 14px', background: 'rgba(100,150,255,0.08)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
             {t('bulkAsyncNote', { threshold: IMPORT_ASYNC_THRESHOLD_ROWS })}
           </div>
         )}
@@ -394,7 +396,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         <h2 style={h2Style}>{t('bulkDryRunTitle')}</h2>
 
         {/* Summary stats (FR-3.6) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
           <StatCard label={t('bulkTotalRows')} value={dryRunResult.totalRows} tone="neutral" />
           <StatCard label={t('bulkValidRows')} value={dryRunResult.validCount} tone="success" />
           <StatCard label={t('bulkErrorRows')} value={dryRunResult.errorCount} tone={hasErrors ? 'error' : 'neutral'} />
@@ -437,7 +439,8 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         {hasErrors && (
           <div style={{ marginBottom: 20 }}>
             <button type="button" onClick={handleDownloadErrorReport} style={linkBtnStyle}>
-              ⬇ {t('bulkDownloadErrorReport')}
+              
+              <Icon source="⬇" size="1em" /> {t('bulkDownloadErrorReport')}
             </button>
           </div>
         )}
@@ -492,15 +495,15 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
   if (step === 'importing') {
     return (
       <div style={{ ...cardStyle, textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 16 }} aria-hidden="true">⏳</div>
+        <div style={{ fontSize: 40, marginBottom: 16 }} aria-hidden="true"><Icon source="⏳" size="1em" /></div>
         <h2 style={h2Style}>{t('bulkImportingTitle')}</h2>
         <div style={{
-          width: '100%', height: 8, background: 'var(--border-subtle)', borderRadius: 4,
+          width: '100%', height: 8, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)',
           overflow: 'hidden', marginBottom: 16,
         }}>
           <div style={{
             width: `${importProgress}%`, height: '100%', background: 'var(--accent)',
-            borderRadius: 4, transition: 'width 0.3s ease',
+            borderRadius: 'var(--radius-sm)', transition: 'width 0.3s ease',
           }} />
         </div>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
@@ -514,11 +517,11 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
   if (step === 'import-result') {
     return (
       <div style={{ ...cardStyle, textAlign: 'center' }}>
-        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true">✓</div>
+        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true"><Icon source="✓" size="1em" /></div>
         <h2 style={h2Style}>{t('bulkSuccessTitle')}</h2>
 
         {/* FR-3.9: confirmation with counts */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
           <StatCard label={t('bulkImportedCount')} value={importedCount} tone="success" />
           <StatCard label={t('bulkSkippedCount')} value={skippedCount} tone={skippedCount > 0 ? 'error' : 'neutral'} />
           <StatCard label={t('bulkTotalProcessed')} value={importedCount + skippedCount} tone="neutral" />
@@ -527,7 +530,8 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         {/* FR-3.9: downloadable summary report */}
         <div style={{ marginBottom: 24 }}>
           <button type="button" onClick={handleDownloadSummary} style={linkBtnStyle}>
-            ⬇ {t('bulkDownloadSummary')}
+            
+            <Icon source="⬇" size="1em" /> {t('bulkDownloadSummary')}
           </button>
         </div>
 
@@ -555,7 +559,7 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
     <div style={{
       padding: '16px 20px',
       background: 'var(--bg-elevated)',
-      borderRadius: 10,
+      borderRadius: 'var(--radius-lg)',
       border: '1px solid var(--border-subtle)',
       textAlign: 'center',
     }}>
@@ -570,7 +574,7 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
 const cardStyle: React.CSSProperties = {
   padding: 24,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   background: 'var(--bg-base)',
 };
 
@@ -584,9 +588,9 @@ const h2Style: React.CSSProperties = {
 const primaryBtnStyle: React.CSSProperties = {
   padding: '10px 22px',
   background: 'var(--accent)',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   border: 'none',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 600,
@@ -597,7 +601,7 @@ const secondaryBtnStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 500,
@@ -608,7 +612,7 @@ const ghostBtnStyle: React.CSSProperties = {
   background: 'transparent',
   color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 500,
@@ -619,7 +623,7 @@ const linkBtnStyle: React.CSSProperties = {
   background: 'transparent',
   color: 'var(--accent)',
   border: '1px solid var(--accent)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-sm)',
   cursor: 'pointer',
   fontSize: 13,
   fontWeight: 600,

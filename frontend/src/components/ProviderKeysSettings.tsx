@@ -63,7 +63,7 @@ const PROVIDERS: ProviderConfig[] = [
 ];
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 const wrapStyle: React.CSSProperties = {
   display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
@@ -73,16 +73,16 @@ const sectionTitle: React.CSSProperties = {
 };
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)',
-  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   boxSizing: 'border-box', fontFamily: 'var(--font-mono)', minWidth: 0,
 };
 const buttonPrimary: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--surface-interactive)',
-  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const buttonDanger: React.CSSProperties = {
   padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'none',
-  color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const dividerRow: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600,
@@ -191,9 +191,9 @@ function ReorderableList({
           aria-label={t('precedence.rowLabel', { provider: labelFor(key), position: i + 1 })}
           style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             cursor: 'grab', opacity: drag.draggingKey === key ? 0.4 : 1,
-            outline: drag.dropKey === key ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
+            outline: drag.dropKey === key ? '2px dashed var(--coral-bright)' : 'none',
             outlineOffset: 2, transition: 'opacity 120ms ease',
           }}
         >
@@ -349,18 +349,24 @@ function formatDiagnosticTrace(d: ProbeDiagnostic): string {
  */
 function probeVerdict(
   t: TFn,
-  result: { ok: boolean; status: string; model?: string; error?: string; diagnostic?: ProbeDiagnostic },
+  result: { ok: boolean; status: string; model?: string; limitedModels?: string[]; error?: string; diagnostic?: ProbeDiagnostic },
 ): ProbeVerdict {
   if (result.ok) {
     return {
-      tone: 'ok',
-      message: result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'),
+      // Amber communicates that routing is working but some of the selected cascade is
+      // temporarily unavailable. Crucially this is not the red, connection-disabled state.
+      tone: result.limitedModels?.length ? 'warn' : 'ok',
+      message: result.limitedModels?.length
+        ? t('diagnostic.verifiedWithLimited', { model: result.model ?? '', limited: result.limitedModels.join(', ') })
+        : result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'),
     };
   }
   return {
     // An upstream outage is not this account's fault and not this operator's job to fix.
     tone: result.status === 'upstream_error' ? 'warn' : 'error',
-    message: result.error ?? t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),
+    // Server responses carry machine status codes; compose all operator-facing prose
+    // here so every supported locale sees the same diagnostic contract.
+    message: t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),
     ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
   };
 }
@@ -377,8 +383,8 @@ function probeVerdict(
  */
 function ProbeResultLine({ result, t }: { result: ProbeVerdict; t: TFn }) {
   const color = result.tone === 'ok' ? 'rgba(34,197,94,0.9)'
-    : result.tone === 'warn' ? 'var(--warning-text, #b45309)'
-    : 'var(--error, #ef4444)';
+    : result.tone === 'warn' ? 'var(--warning-text)'
+    : 'var(--error)';
   const { diagnostic } = result;
   return (
     <div
@@ -479,12 +485,12 @@ function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
         gap: 6,
         marginTop: 8,
         padding: '8px 10px',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         fontSize: 11.5,
         lineHeight: 1.5,
         background: 'var(--warning-bg, rgba(245,158,11,0.16))',
-        color: 'var(--warning-text, #b45309)',
-        border: '1px solid var(--warning, #d97706)',
+        color: 'var(--warning-text)',
+        border: '1px solid var(--warning)',
       }}
     >
       <strong style={{ fontWeight: 700 }}>{t('authAlert.title')}</strong>
@@ -526,7 +532,7 @@ function ProviderStatusChip({
     : authType === 'oauth' ? t('status.connected', { subscription })
     : t('status.keyConfigured', { label });
   const color = authType === null ? 'var(--text-muted)'
-    : alert ? 'var(--warning-text, #b45309)'
+    : alert ? 'var(--warning-text)'
     : 'rgba(34,197,94,0.9)';
   return <span style={{ fontSize: 12, fontWeight: 650, color, ...style }}>{text}</span>;
 }
@@ -676,12 +682,12 @@ function ProviderConnectionCard({
       <div style={sectionTitle}>{config.label}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
-      <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+      <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           {/* `usable` alone would paint this green for a credential that decrypts and then
               403s on every call, so an outstanding alert downgrades it the same way it
               downgrades the chip below. */}
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text, #b45309)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
             {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
@@ -1034,7 +1040,7 @@ function OpenRouterConnectionsPanel({
             placeholder={t('openRouter.search')}
             style={{ ...inputStyle, marginBottom: 8 }}
           />
-          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
             {visibleModels.map((model) => (
               <label key={model.id} style={{ display: 'flex', gap: 9, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={selected.includes(model.id)} onChange={() => toggleModel(model.id)} />
@@ -1225,7 +1231,7 @@ export function ProviderKeysSettings({
                   <span style={{
                     flex: 1, minWidth: 0,
                     fontSize: 12, fontWeight: 650, whiteSpace: 'normal',
-                    color: brokenConnections ? 'var(--warning-text, #b45309)'
+                    color: brokenConnections ? 'var(--warning-text)'
                       : openRouterConnections.length ? 'rgba(34,197,94,0.9)'
                       : 'var(--text-muted)',
                   }}>

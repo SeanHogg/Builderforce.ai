@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 /**
- * Lets a page publish per-tab counts that the shared <SectionTabs> bar (which is
+ * Lets a page publish per-tab counts that the shared <ShellIndex> (which is
  * decoupled from the page, in the app shell) renders as a badge — e.g. the
  * Projects count on the Projects tab. The page is the single source of the
  * number (it already fetches it); this just carries it the short distance from

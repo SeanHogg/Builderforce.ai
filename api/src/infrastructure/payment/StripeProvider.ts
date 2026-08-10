@@ -12,18 +12,21 @@
  *              customer.subscription.deleted, invoice.payment_failed,
  *              setup_intent.setup_failed
  *
- * PRICE IDs — create recurring prices in Stripe dashboard, then set:
+ * OPTIONAL PRICE IDs — reusable Stripe Prices are preferred when set:
  *   Pro plan (flat rate):
  *        STRIPE_PRICE_PRO_MONTHLY    — price_...  ($29/mo)
  *        STRIPE_PRICE_PRO_YEARLY     — price_...  ($290/yr)
  *   Teams plan (per-seat):
  *        STRIPE_PRICE_TEAMS_MONTHLY  — price_...  ($20/seat/mo)
  *        STRIPE_PRICE_TEAMS_YEARLY   — price_...  ($192/seat/yr)
+ * When an ID is absent, checkout uses inline recurring `price_data` resolved from
+ * Builderforce's server-side published pricing contract.
  *
  * NOTE: Uses fetch-based Stripe client — compatible with Cloudflare Workers.
  */
 
 import type {
+  BusinessPhoneCheckoutOpts,
   PaymentProvider,
   CheckoutSessionOpts,
   CheckoutSessionResult,
@@ -66,13 +69,12 @@ export class StripeProvider implements PaymentProvider {
     const isTeams = opts.targetPlan === TenantPlan.TEAMS;
     const seats = isTeams ? (opts.seats ?? 1) : 1;
 
-    const priceId = isTeams
+    const priceId = (isTeams
       ? (opts.billingCycle === 'yearly' ? this.config.priceTeamsYearly : this.config.priceTeamsMonthly)
-      : (opts.billingCycle === 'yearly' ? this.config.priceProYearly : this.config.priceProMonthly);
+      : (opts.billingCycle === 'yearly' ? this.config.priceProYearly : this.config.priceProMonthly)).trim();
 
     const params = new URLSearchParams({
       mode: 'subscription',
-      'line_items[0][price]': priceId,
       'line_items[0][quantity]': String(seats),
       customer_email: opts.billingEmail,
       success_url: opts.successUrl,
@@ -85,6 +87,36 @@ export class StripeProvider implements PaymentProvider {
       'subscription_data[metadata][targetPlan]': opts.targetPlan ?? TenantPlan.PRO,
       'subscription_data[metadata][seats]': String(seats),
     });
+
+    if (priceId) {
+      params.set('line_items[0][price]', priceId);
+    } else {
+      const currency = opts.currency?.trim().toLowerCase();
+      if (!currency || !Number.isInteger(opts.unitAmountCents) || (opts.unitAmountCents ?? 0) <= 0 || !opts.productName?.trim()) {
+        throw new PaymentNotConfiguredError(
+          isTeams
+            ? (opts.billingCycle === 'yearly' ? 'STRIPE_PRICE_TEAMS_YEARLY or published Teams yearly pricing' : 'STRIPE_PRICE_TEAMS_MONTHLY or published Teams monthly pricing')
+            : (opts.billingCycle === 'yearly' ? 'STRIPE_PRICE_PRO_YEARLY or published Pro yearly pricing' : 'STRIPE_PRICE_PRO_MONTHLY or published Pro monthly pricing'),
+        );
+      }
+      params.set('line_items[0][price_data][currency]', currency);
+      params.set('line_items[0][price_data][unit_amount]', String(opts.unitAmountCents));
+      params.set('line_items[0][price_data][recurring][interval]', opts.billingCycle === 'yearly' ? 'year' : 'month');
+      params.set('line_items[0][price_data][product_data][name]', opts.productName.trim());
+    }
+
+    if (opts.discount) {
+      const couponId = await this.ensureDiscountCoupon(opts.discount);
+      params.set('discounts[0][coupon]', couponId);
+      params.set('metadata[discountRedemptionId]', opts.discount.redemptionId);
+      params.set('metadata[discountCode]', opts.discount.code);
+      params.set('subscription_data[metadata][discountRedemptionId]', opts.discount.redemptionId);
+      params.set('subscription_data[metadata][discountCode]', opts.discount.code);
+    }
+    if (opts.salesReferralId) {
+      params.set('metadata[salesReferralId]', opts.salesReferralId);
+      params.set('subscription_data[metadata][salesReferralId]', opts.salesReferralId);
+    }
 
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
@@ -112,6 +144,66 @@ export class StripeProvider implements PaymentProvider {
       externalCustomerId: session.customer ?? null,
       externalSubscriptionId: null, // arrives via webhook after payment
     };
+  }
+
+  async createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult> {
+    this.requireConfigured();
+    const currency = opts.currency.toLowerCase();
+    const params = new URLSearchParams({
+      mode: 'subscription', customer_email: opts.billingEmail, success_url: opts.successUrl, cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': '1', 'line_items[0][price_data][currency]': currency,
+      'line_items[0][price_data][unit_amount]': String(opts.activationCents),
+      'line_items[0][price_data][product_data][name]': 'BuilderForce Business Phone activation',
+      'line_items[1][quantity]': '1', 'line_items[1][price_data][currency]': currency,
+      'line_items[1][price_data][unit_amount]': String(opts.monthlyCents),
+      'line_items[1][price_data][recurring][interval]': 'month',
+      'line_items[1][price_data][product_data][name]': 'BuilderForce Business Phone',
+      'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'business_phone',
+      'metadata[cartId]': opts.cartId,
+      'metadata[activationCents]': String(opts.activationCents), 'metadata[monthlyCents]': String(opts.monthlyCents),
+      'subscription_data[metadata][tenantId]': String(opts.tenantId),
+      'subscription_data[metadata][purchaseKind]': 'business_phone',
+      'subscription_data[metadata][cartId]': opts.cartId,
+      'subscription_data[metadata][activationCents]': String(opts.activationCents),
+      'subscription_data[metadata][monthlyCents]': String(opts.monthlyCents),
+    });
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe business-phone checkout error: ${err.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string; customer: string | null };
+    return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
+  }
+
+  private async ensureDiscountCoupon(discount: NonNullable<CheckoutSessionOpts['discount']>): Promise<string> {
+    const couponId = `bf_${discount.id.replace(/-/g, '')}_${discount.percentOff}_${discount.durationYears * 12}`;
+    const params = new URLSearchParams({
+      id: couponId,
+      name: `${discount.code} — ${discount.percentOff}% off`,
+      percent_off: String(discount.percentOff),
+      duration: 'repeating',
+      duration_in_months: String(discount.durationYears * 12),
+      'metadata[discountCodeId]': discount.id,
+    });
+    const res = await fetch('https://api.stripe.com/v1/coupons', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `builderforce-discount-${couponId}`,
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { code?: string; message?: string } };
+      if (err.error?.code !== 'resource_already_exists') {
+        throw new Error(`Stripe coupon error: ${err.error?.message ?? res.status}`);
+      }
+    }
+    return couponId;
   }
 
   async createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult> {
@@ -240,13 +332,13 @@ export class StripeProvider implements PaymentProvider {
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
         const sub = obj['subscription'] as string | null;
         const customer = obj['customer'] as string;
+        const rawTenantId = Number(meta['tenantId']);
 
         // `setup` mode = the explicit CARD-VALIDATION flow (a $0 SetupIntent), not a
         // subscription purchase. Stripe reuses checkout.session.completed for both, so
         // branch on mode BEFORE the subscription mapping below (a setup session has no
         // subscription and would otherwise activate a plan the tenant never bought).
         if (obj['mode'] === 'setup') {
-          const rawTenantId = Number(meta['tenantId']);
           const setupIntentId = obj['setup_intent'] as string | null;
           const card = setupIntentId
             ? await this.fetchCard(`https://api.stripe.com/v1/setup_intents/${setupIntentId}?expand[]=payment_method`)
@@ -268,6 +360,16 @@ export class StripeProvider implements PaymentProvider {
         }
 
         const customerDetails = obj['customer_details'] as Record<string, string> | undefined;
+        if (meta['purchaseKind'] === 'business_phone') {
+          return {
+            type: 'addon.activated', purchaseKind: 'business_phone',
+            activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']),
+            cartId: meta['cartId'],
+            ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+            externalCustomerId: customer, externalSubscriptionId: sub ?? '',
+            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'], raw: event,
+          };
+        }
         const rawSeats = parseInt(meta['seats'] ?? '1', 10);
 
         // A Checkout Session carries no card details of its own, so read them off the
@@ -281,6 +383,9 @@ export class StripeProvider implements PaymentProvider {
 
         return {
           type: 'subscription.activated',
+          ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+          ...(meta['discountRedemptionId'] ? { discountRedemptionId: meta['discountRedemptionId'] } : {}),
+          ...(meta['salesReferralId'] ? { salesReferralId: meta['salesReferralId'] } : {}),
           externalCustomerId: customer,
           externalSubscriptionId: sub ?? '',
           billingCycle: (meta['billingCycle'] as TenantBillingCycle) ?? TenantBillingCycle.MONTHLY,
@@ -300,6 +405,13 @@ export class StripeProvider implements PaymentProvider {
         const status = obj['status'] as string;
         const customer = obj['customer'] as string;
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
+        if (meta['purchaseKind'] === 'business_phone') {
+          const rawTenantId = Number(meta['tenantId']);
+          const addonType = status === 'active' || status === 'trialing' ? 'addon.activated'
+            : status === 'past_due' || status === 'unpaid' ? 'addon.past_due'
+              : status === 'canceled' ? 'addon.cancelled' : null;
+          return addonType ? { type: addonType, purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event } : null;
+        }
 
         // Only statuses that carry an actual billing verdict may move the tenant's
         // plan. Anything else (incomplete, paused, …) is acknowledged and ignored —
@@ -317,6 +429,11 @@ export class StripeProvider implements PaymentProvider {
       }
 
       case 'customer.subscription.deleted': {
+        const meta = (obj['metadata'] ?? {}) as Record<string, string>;
+        if (meta['purchaseKind'] === 'business_phone') {
+          const rawTenantId = Number(meta['tenantId']);
+          return { type: 'addon.cancelled', purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: obj['customer'] as string, externalSubscriptionId: obj['id'] as string, raw: event };
+        }
         return {
           type: 'subscription.cancelled',
           externalCustomerId: obj['customer'] as string,

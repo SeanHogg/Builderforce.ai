@@ -34,6 +34,7 @@ import { forget, listGovernedMemories, purgeExpiredMemories } from '../../applic
 import {
   TRIAL_MAX_TICKETS,
   getRehearsal,
+  compareRehearsals,
   isRehearsalKind,
   listRehearsals,
   runRehearsal,
@@ -43,6 +44,7 @@ import type { DbHandle } from '../../application/shared/dbHandle';
 import type { HonoEnv } from '../../env';
 import { getReconciliationDiagnostics, listReconciliationRuns, reconciliationRequesterId, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { listIdeAgentVersions, releaseIdeAgentVersion } from '../../application/agentIdentity/agentRunIdentity';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -177,6 +179,13 @@ export function createAgentOpsRoutes(db: DbHandle) {
     return json({ rehearsals: rehearsalRows });
   });
 
+  router.get('/rehearsals/compare', async (c) => {
+    const left = c.req.query('left'); const right = c.req.query('right');
+    if (!left || !right || left === right) return json({ error: 'left and right must name two distinct rehearsals' }, 400);
+    const comparison = await compareRehearsals(db, c.get('tenantId'), left, right);
+    return comparison ? json(comparison) : json({ error: 'rehearsal not found' }, 404);
+  });
+
   router.get('/rehearsals/:id', async (c) => {
     const found = await getRehearsal(db, c.get('tenantId'), c.req.param('id'));
     return found ? json(found) : json({ error: 'rehearsal not found' }, 404);
@@ -228,6 +237,23 @@ export function createAgentOpsRoutes(db: DbHandle) {
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 400);
     }
+  });
+
+  router.get('/agents/:ref/versions', async (c) => {
+    return json(await listIdeAgentVersions(db, c.get('tenantId'), c.req.param('ref')));
+  });
+
+  router.post('/agents/:ref/releases', requireRole(TenantRole.MANAGER), async (c) => {
+    const body: { versionId?: string; mode?: string; canaryPercent?: number } = await c.req.json<{ versionId?: string; mode?: string; canaryPercent?: number }>().catch(() => ({}));
+    if (!body.versionId || !['stable', 'canary', 'rollback'].includes(body.mode ?? '')) return json({ error: 'versionId and mode (stable, canary, rollback) are required' }, 400);
+    try {
+      await releaseIdeAgentVersion(db, {
+        tenantId: c.get('tenantId'), agentRef: c.req.param('ref'), versionId: body.versionId,
+        mode: body.mode as 'stable' | 'canary' | 'rollback', canaryPercent: body.canaryPercent,
+        actorRef: c.get('userId') ?? undefined,
+      });
+      return json({ ok: true });
+    } catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 400); }
   });
 
   return router;

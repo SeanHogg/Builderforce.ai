@@ -54,10 +54,10 @@ function fmtBench(value: number | null, unit: string | null): string {
 }
 
 const RATING_COLOR: Record<BenchmarkRating, { bg: string; fg: string }> = {
-  elite: { bg: 'rgba(16,185,129,0.16)', fg: '#059669' },
-  high: { bg: 'rgba(59,130,246,0.16)', fg: '#2563eb' },
-  medium: { bg: 'rgba(245,158,11,0.16)', fg: '#b45309' },
-  low: { bg: 'rgba(239,68,68,0.16)', fg: '#dc2626' },
+  elite: { bg: 'rgba(16,185,129,0.16)', fg: 'var(--emerald-bright)' },
+  high: { bg: 'rgba(59,130,246,0.16)', fg: 'var(--info)' },
+  medium: { bg: 'rgba(245,158,11,0.16)', fg: 'var(--warning)' },
+  low: { bg: 'rgba(239,68,68,0.16)', fg: 'var(--error)' },
 };
 
 function RatingBadge({ rating }: { rating: BenchmarkRating | null }) {
@@ -66,7 +66,7 @@ function RatingBadge({ rating }: { rating: BenchmarkRating | null }) {
   const c = RATING_COLOR[rating];
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+      display: 'inline-block', padding: '2px 10px', borderRadius: 'var(--radius-full)',
       background: c.bg, color: c.fg, fontSize: '0.74rem', fontWeight: 700,
     }}>
       {t(`benchmarking.rating.${rating}`)}
@@ -75,7 +75,7 @@ function RatingBadge({ rating }: { rating: BenchmarkRating | null }) {
 }
 
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 

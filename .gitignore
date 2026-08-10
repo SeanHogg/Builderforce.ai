@@ -44,6 +44,9 @@ coverage/
 frontend/test-output/
 worker/test-output/
 
+# Temporary Chrome profile created by local browser automation.
+.tmp-chrome-artifact/
+
 # Ignore local secrets
 worker/secrets.json
 # Cloudflare Workers local secrets (NEON_DATABASE_URL etc.) — never commit

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { adminApi, type AdminTenant, type AdminError as AdminErrorRow } from '@/lib/adminApi';
+import { adminApi, type AdminTenant, type AdminDiscountCode, type AdminError as AdminErrorRow } from '@/lib/adminApi';
 import { AdminError, AdminLoading, composeMailto, errText, fmtDateTime } from '@/components/admin/adminShared';
 
 export default function BillingPanel() {
@@ -12,16 +12,22 @@ export default function BillingPanel() {
 
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
   const [errors, setErrors] = useState<AdminErrorRow[]>([]);
+  const [discounts, setDiscounts] = useState<AdminDiscountCode[]>([]);
+  const [newCode, setNewCode] = useState('');
+  const [percentOff, setPercentOff] = useState(50);
+  const [durationYears, setDurationYears] = useState(1);
+  const [savingDiscount, setSavingDiscount] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const reload = useCallback(() => {
     setLoading(true);
     setError('');
-    Promise.all([adminApi.tenants(), adminApi.errors({ limit: 20 })])
-      .then(([t, e]) => {
+    Promise.all([adminApi.tenants(), adminApi.errors({ limit: 20 }), adminApi.discountCodes()])
+      .then(([t, e, d]) => {
         setTenants(t);
         setErrors(e.errors);
+        setDiscounts(d);
       })
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
@@ -31,12 +37,49 @@ export default function BillingPanel() {
     reload();
   }, [reload]);
 
+  const createDiscount = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newCode.trim() || savingDiscount) return;
+    setSavingDiscount(true);
+    setError('');
+    try {
+      await adminApi.createDiscountCode({
+        code: newCode.trim().toUpperCase(), percentOff, durationYears,
+        applicablePlan: 'pro', billingCycle: 'yearly', isActive: true,
+      });
+      setNewCode('');
+      reload();
+    } catch (e) { setError(errText(e)); }
+    finally { setSavingDiscount(false); }
+  };
+
   if (loading && tenants.length === 0 && errors.length === 0) return <AdminLoading />;
 
   return (
     <>
       <AdminError message={error} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div>
+          <div style={{ marginBottom: 12, fontWeight: 600 }}>Signup discount codes</div>
+          <form onSubmit={createDiscount} style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', marginBottom: 12 }}>
+            <label style={{ fontSize: 12 }}>Code<input className="input" value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} placeholder="ANNUAL50" style={{ display: 'block', marginTop: 4 }} /></label>
+            <label style={{ fontSize: 12 }}>Percent off<input className="input" type="number" min={1} max={100} value={percentOff} onChange={(e) => setPercentOff(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 90 }} /></label>
+            <label style={{ fontSize: 12 }}>Years<input className="input" type="number" min={1} max={20} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 70 }} /></label>
+            <button className="btn-primary" type="submit" disabled={savingDiscount || !newCode.trim()}>{savingDiscount ? 'Creating…' : 'Create annual Individual code'}</button>
+          </form>
+          <div className="table-wrap">
+            <table className="data-table"><thead><tr><th>Code</th><th>Offer</th><th>Duration</th><th>Uses</th><th>Status</th><th></th></tr></thead>
+              <tbody>{discounts.map((d) => <tr key={d.id}>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{d.code}</td>
+                <td>{d.percentOff}% off {d.billingCycle} {d.applicablePlan === 'pro' ? 'Individual' : 'Teams'}</td>
+                <td>{d.durationYears} {d.durationYears === 1 ? 'year' : 'years'}</td>
+                <td>{d.redeemedCount} redeemed / {d.redemptionCount} applied</td>
+                <td><span className={`badge ${d.isActive ? 'badge-success' : 'badge-neutral'}`}>{d.isActive ? 'active' : 'inactive'}</span></td>
+                <td><button type="button" className="btn-ghost" onClick={async () => { try { await adminApi.updateDiscountCode(d.id, { isActive: !d.isActive }); reload(); } catch (e) { setError(errText(e)); } }}>{d.isActive ? 'Deactivate' : 'Activate'}</button></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </div>
         <div className="health-grid">
           <div className="health-card">
             <div className="health-label">{t('billing.paidWorkspaces')}</div>
@@ -73,6 +116,7 @@ export default function BillingPanel() {
                   <th>{t('billing.billing')}</th>
                   <th>{t('billing.billingEmail')}</th>
                   <th>{t('billing.updated')}</th>
+                  <th>Discount</th>
                   <th></th>
                 </tr>
               </thead>
@@ -92,6 +136,7 @@ export default function BillingPanel() {
                       <td className="text-muted">
                         {tn.billingUpdatedAt ? fmtDateTime(tn.billingUpdatedAt) : '—'}
                       </td>
+                      <td>{tn.discountCode ? <span title={`${tn.discountStatus} · applied ${tn.discountAppliedAt ? fmtDateTime(tn.discountAppliedAt) : '—'}`}><strong>{tn.discountCode}</strong> · {tn.discountPercentOff}% / {tn.discountDurationYears}y</span> : '—'}</td>
                       <td>
                         {tn.billingEmail ? (
                           <>
@@ -194,7 +239,7 @@ export default function BillingPanel() {
                 {errors.slice(0, 20).map((e) => (
                   <tr key={e.id}>
                     <td>{e.method ?? '—'}</td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{e.path ?? '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.path ?? '—'}</td>
                     <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.message ?? '—'}</td>
                     <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(e.createdAt)}</td>
                   </tr>

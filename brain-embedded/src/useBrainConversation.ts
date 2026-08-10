@@ -34,6 +34,7 @@ import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { ChatErrorAction } from './chatError';
+import type { ChatMode } from './chatMode';
 import {
   startRun,
   stopRun,
@@ -124,6 +125,13 @@ export interface UseBrainConversationOptions {
    * personality block is enough.
    */
   augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+  /**
+   * The active chat's MODE — `chat` (answer the question) or `work` (create, staff,
+   * link AND dispatch the work). Read from the chat row by the host so the choice
+   * follows the conversation rather than the browser. Omit to keep the pre-mode
+   * always-execute behaviour.
+   */
+  chatMode?: ChatMode;
 }
 
 export interface UseBrainConversation {
@@ -231,6 +239,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     onFirstUserTurn,
     evermind,
     augmentSystemPrompt,
+    chatMode,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
@@ -363,8 +372,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       seed,
       userTurn,
       projectId,
+      chatMode,
     }),
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode],
   );
 
   const send = useCallback(

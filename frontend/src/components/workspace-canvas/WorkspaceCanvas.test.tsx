@@ -3,15 +3,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
 
 describe('WorkspaceCanvas', () => {
-  it('keeps the mini map closed until it is opened from the canvas controls', () => {
+  it('keeps the mini map action visible while the mini map is opened, closed, and reopened', () => {
     render(<WorkspaceCanvas panels={[
       { id: 'overview', title: 'Overview', content: <div>Overview panel</div> },
     ]} />);
 
-    expect(screen.queryByRole('button', { name: 'Close mini map' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
-    expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'canvasCommands.cleanLayout' })).toBeInTheDocument();
+    const minimapAction = screen.getByRole('button', { name: 'canvasCommands.toggleMiniMap' });
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'canvasCommands.closeMiniMap' }));
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(minimapAction);
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'canvasCommands.closeMiniMap' })).toBeInTheDocument();
   });
 
   it('renders reusable application components as canvas panels', () => {
@@ -21,7 +25,7 @@ describe('WorkspaceCanvas', () => {
     ]} />);
 
     expect(screen.getByTestId('workspace-canvas')).toBeInTheDocument();
-    expect(screen.getByLabelText('BuilderForce canvas panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('workspaceCanvas.panelLabel BuilderForce')).toBeInTheDocument();
     expect(screen.getByText('Open project')).toBeInTheDocument();
     expect(screen.getByText('Task board component')).toBeInTheDocument();
   });
@@ -36,7 +40,7 @@ describe('WorkspaceCanvas', () => {
       onRemovePanel={onRemove}
     />);
 
-    fireEvent.click(screen.getByLabelText('Remove Alpha tasks from canvas'));
+    fireEvent.click(screen.getByLabelText('workspaceCanvas.removePanel Alpha tasks'));
     expect(onRemove).toHaveBeenCalledWith('tasks-1');
     expect(screen.getByText('Beta')).toBeInTheDocument();
   });
@@ -59,8 +63,8 @@ describe('WorkspaceCanvas', () => {
     ]} />);
 
     await waitFor(() => expect(screen.getByTestId('workspace-canvas')).toHaveAttribute('data-layout', 'widgets'));
-    expect(screen.getByLabelText('Quality canvas panel')).toBeInTheDocument();
-    expect(screen.getByLabelText('Recommendations canvas panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('workspaceCanvas.panelLabel Quality')).toBeInTheDocument();
+    expect(screen.getByLabelText('workspaceCanvas.panelLabel Recommendations')).toBeInTheDocument();
     expect(screen.getByText('Quality score')).toBeVisible();
     expect(screen.getByText('Fix CI first')).toBeVisible();
     vi.unstubAllGlobals();

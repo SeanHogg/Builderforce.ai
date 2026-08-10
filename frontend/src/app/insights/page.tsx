@@ -13,6 +13,7 @@
  * widgets whose cards can be pinned back here. Pin a card → it shows up here.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -39,14 +40,14 @@ import {
 const VIZ_OPTIONS: WidgetViz[] = ['stat', 'bar', 'line', 'gauge'];
 
 const inputStyle: React.CSSProperties = {
-  padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
 };
-const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: '1px solid transparent' };
+const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: '1px solid transparent' };
 
 /** 'me' = the personal pinned view; a number = a saved tenant-shared dashboard id. */
 type View = 'me' | number;
@@ -150,7 +151,7 @@ export default function InsightsHomePage() {
   if (!isAuthenticated || !hasTenant) return null;
 
   const tabStyle = (on: boolean): React.CSSProperties => ({
-    ...btnStyle, background: on ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)', color: on ? '#fff' : 'var(--text-primary)',
+    ...btnStyle, background: on ? 'var(--coral-bright)' : 'var(--bg-elevated)', color: on ? 'var(--text-on-accent)' : 'var(--text-primary)',
     border: `1px solid ${on ? 'transparent' : 'var(--border-subtle)'}`,
   });
 
@@ -159,9 +160,9 @@ export default function InsightsHomePage() {
       id: 'insights-dashboard-controls', title: t('home.title'), subtitle: t('home.subtitle'), icon: '📌',
       position: { x: 36, y: 36 }, width: 1300, height: 180,
       content: <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {error && <div style={{ color: 'var(--danger, #d33)', fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}>📌 {t('home.myDashboard')}</button>
+          <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}><Icon source="📌" size="1em" /> {t('home.myDashboard')}</button>
           {dashboards.map((d) => <button key={d.id} type="button" style={tabStyle(view === d.id)} onClick={() => setView(d.id)}>{d.name}</button>)}
           <RoleGate capability="dashboards.manage">
             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
@@ -180,7 +181,7 @@ export default function InsightsHomePage() {
           <input style={{ ...inputStyle, flex: '1 1 320px' }} placeholder={td('ask.placeholder')} value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void ask(); }} />
           <button style={btnStyle} onClick={() => void ask()} disabled={asking}>{asking ? td('ask.asking') : td('ask.button')}</button>
         </div>
-        {answer && <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)' }}>
+        {answer && <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{answer.value == null ? '—' : answer.unit === 'USD' ? `$${Math.round(answer.value).toLocaleString('en-US')}` : answer.unit === '%' ? `${Math.round(answer.value * 100) / 100}%` : `${Math.round(answer.value * 100) / 100}${answer.unit === '/day' ? '/day' : answer.unit === 'hours' ? 'h' : ''}`}</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{answer.explanation}</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{td('ask.matched')}: <code>{answer.matchedMetric}</code></div>
@@ -194,7 +195,7 @@ export default function InsightsHomePage() {
     if (definitions.length === 0) {
       panels.push({
         id: 'insights-empty', title: t('home.myDashboard'), icon: '📌', position: { x: 36, y: 420 }, width: 620, height: 260,
-        content: <div style={{ padding: 28, textAlign: 'center' }}><h3 style={{ margin: '0 0 8px' }}>{t('home.emptyTitle')}</h3><p style={{ color: 'var(--text-secondary)' }}>{t('home.emptyBody')}</p>{!pinsLoading && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>＋ {t('home.addWidgets')}</button>}</div>,
+        content: <div style={{ padding: 28, textAlign: 'center' }}><h3 style={{ margin: '0 0 8px' }}>{t('home.emptyTitle')}</h3><p style={{ color: 'var(--text-secondary)' }}>{t('home.emptyBody')}</p>{!pinsLoading && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}><Icon source="＋" size="1em" /> {t('home.addWidgets')}</button>}</div>,
       });
     } else {
       definitions.forEach((def, index) => {
@@ -222,7 +223,7 @@ export default function InsightsHomePage() {
         <Select style={inputStyle} value={pickMetric} onChange={(e) => setPickMetric(e.target.value)}>{metrics.map((m) => <option key={m.key} value={m.key}>{m.label} ({m.unit || 'count'})</option>)}</Select>
         <Select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)}>{VIZ_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}</Select>
         <button style={btnStyle} onClick={() => void addMetricWidget()}>{td('widget.add')}</button>
-        <button style={{ ...btnStyle, marginLeft: 'auto', color: 'var(--danger, #d33)' }} onClick={() => void deleteDashboard(active.id)}>{td('delete.button')}</button>
+        <button style={{ ...btnStyle, marginLeft: 'auto', color: 'var(--danger)' }} onClick={() => void deleteDashboard(active.id)}>{td('delete.button')}</button>
       </div></RoleGate>,
     });
     data?.widgets.forEach((w, index) => {
@@ -230,14 +231,14 @@ export default function InsightsHomePage() {
       panels.push({
         id: `insights-dashboard-widget:${w.widgetId}`, title: def ? tw(`title.${def.titleKey}`) : (w.title ?? w.label), subtitle: active.name, icon: '◇',
         position: { x: 36 + (index % 3) * 432, y: 600 + Math.floor(index / 3) * 390 }, width: def?.size === 'md' ? 820 : def?.size === 'lg' ? 1300 : 400, height: def?.size === 'lg' ? 430 : 350,
-        content: <div style={{ position: 'relative', height: '100%' }}>{def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}<RoleGate capability="dashboards.manage"><button onClick={() => void removeWidget(w.widgetId)} title={td('widget.remove')} style={{ position: 'absolute', top: 6, right: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button></RoleGate></div>,
+        content: <div style={{ position: 'relative', height: '100%' }}>{def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}<RoleGate capability="dashboards.manage"><button onClick={() => void removeWidget(w.widgetId)} title={td('widget.remove')} style={{ position: 'absolute', top: 6, right: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}><Icon source="✕" size="1em" /></button></RoleGate></div>,
       });
     });
     if (data && data.widgets.length === 0) panels.push({ id: `insights-dashboard-empty:${active.id}`, title: active.name, icon: '◇', position: { x: 36, y: 600 }, width: 500, height: 180, content: <p style={{ color: 'var(--text-secondary)' }}>{td('widget.empty')}</p> });
   }
 
   return <PageContainer style={{ padding: 0 }}>
-    <WorkspaceCanvas panels={panels} toolbar={<><DaysWindowSelect value={days} onChange={setDays} />{view === 'me' && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>＋ {t('home.addWidgets')}</button>}</>} />
+    <WorkspaceCanvas panels={panels} toolbar={<><DaysWindowSelect value={days} onChange={setDays} />{view === 'me' && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}><Icon source="＋" size="1em" /> {t('home.addWidgets')}</button>}</>} />
     <AddWidgetPicker open={picker} onClose={() => setPicker(false)} />
   </PageContainer>;
 }

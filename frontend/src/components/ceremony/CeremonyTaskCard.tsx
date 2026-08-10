@@ -30,7 +30,7 @@ export function CeremonyTaskCard({
       style={{
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         padding: compact ? '6px 8px' : 10,
         cursor: 'grab',
         display: 'flex',
@@ -55,7 +55,7 @@ export function CeremonyTaskCard({
         <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
         <span
           className={taskPriorityBadgeClass(task.priority)}
-          style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, textTransform: 'capitalize' }}
+          style={{ fontSize: 9, padding: '1px 6px', borderRadius: 'var(--radius-sm)', textTransform: 'capitalize' }}
         >
           {task.priority}
         </span>

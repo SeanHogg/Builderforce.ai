@@ -30,7 +30,7 @@ import { attributeRunToManifest } from './application/kanban/attributeRunToManif
 import { coordinateCompletedStage } from './application/manager/coordinateTicket';
 import { findCanonicalBoard } from './application/swimlane/canonicalBoard';
 import { resolvePolicyGates } from './application/governance/policyPackService';
-import { agentRegistrations } from './infrastructure/database/schema';
+import { agentRegistrations, tenants } from './infrastructure/database/schema';
 import { and, eq } from 'drizzle-orm';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
@@ -115,6 +115,16 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
         .where(and(eq(agentRegistrations.id, id), eq(agentRegistrations.tenantId, tenantId)))
         .limit(1);
       return row ? { active: row.status === 'active' } : null;
+    },
+    async (tenantId) => {
+      if (env.AGENT_EXECUTION_ENABLED?.trim().toLowerCase() === 'false') return false;
+      const [row] = await db.select({ enabled: tenants.agentExecutionEnabled })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      // Missing tenant is never a valid execution scope. Fail closed here and on
+      // database errors (which propagate) because this is an emergency control.
+      return row?.enabled === true;
     },
   );
   return runtimeService;

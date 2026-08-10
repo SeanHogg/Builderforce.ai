@@ -2,9 +2,11 @@
  * The `search` half of the cloud `web` capability. Three things matter here and they
  * are all load-bearing:
  *
- *   1. SELF-GATING — with no BYO key the capability has NO `search` method, so the
- *      engine's capability set omits `web.search` and the model is never shown a
- *      `web_search` tool that would certainly fail.
+ *   1. ALWAYS BACKED — search no longer self-gates on a BYO key. `resolveWebSearchBacking`
+ *      always resolves a vendor (tenant key → operator key → keyless floor), so
+ *      `web.search` is a surface capability and `web_search` is always advertised. The
+ *      old rule ("never advertise a tool certain to fail") is satisfied because the
+ *      tool can no longer be certain to fail.
  *   2. CACHING — a repeated (or merely re-worded) query must not be a second billable
  *      vendor call, and must go through the canonical read-through cache.
  *   3. METERING — a real query is one outbound fetch on the tenant's meter; a CACHED
@@ -19,9 +21,9 @@ const enforceOutboundFetchCap = vi.hoisted(() => vi.fn(async () => ({ allowed: t
 const recordOutboundFetch = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('../web/outboundFetchLedger', () => ({ enforceOutboundFetchCap, recordOutboundFetch }));
 
-import { buildCloudWebCapability, normalizeSearchQuery } from './cloudWeb';
-import { cloudSurfaceCaps, CLOUD_SURFACE_CAPS, cloudAgentToolsFor } from './cloudAgentTools';
-import type { WebSearchVendor } from './webSearchVendors';
+import { buildCloudWebCapability, normalizeSearchQuery, searchWeb } from './cloudWeb';
+import { CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS } from './cloudAgentTools';
+import type { WebSearchAuth, WebSearchVendor } from './webSearchVendors';
 
 /** No KV bound → `getOrSetCached` uses its L1 map only, which is exactly the isolate
  *  behaviour a DO tick sees. `test/setup.ts` clears L1 between tests. */
@@ -32,7 +34,8 @@ const db = {} as Db;
 function fakeVendor(result: WebSearchResult = { ok: true, query: 'q', results: [{ url: 'https://example.com' }] }) {
   const search = vi.fn(async (query: string): Promise<WebSearchResult> => ({ ...result, query }));
   const vendor: WebSearchVendor = {
-    id: 'brave_search', label: 'Fake', endpoint: 'https://vendor.example/search', credentialField: 'apiKey', search,
+    id: 'tavily', label: 'Fake', endpoint: 'https://vendor.example/search',
+    coverage: 'web', attribution: 'Fake', keyless: false, credentialField: 'apiKey', search,
   };
   return { vendor, search };
 }
@@ -43,42 +46,41 @@ beforeEach(() => {
   recordOutboundFetch.mockClear();
 });
 
-describe('self-gating', () => {
-  it('omits `search` entirely when no BYO key resolved', () => {
-    const web = buildCloudWebCapability({ env });
-    expect(web.search).toBeUndefined();
-    expect(typeof web.fetch).toBe('function'); // fetch is unconditional, as before
-  });
-
-  it('treats an explicit null backing the same as none', () => {
-    expect(buildCloudWebCapability({ env, search: null }).search).toBeUndefined();
-  });
-
-  it('provides `search` once a key resolved', () => {
+describe('always backed', () => {
+  it('wires both halves of the capability', () => {
     const { vendor } = fakeVendor();
-    expect(buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } }).search).toBeInstanceOf(Function);
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
+    expect(web.search).toBeInstanceOf(Function);
+    expect(typeof web.fetch).toBe('function');
   });
 
-  it('advertises `web_search` ONLY in the with-key capability set', () => {
-    const without = cloudSurfaceCaps({ webSearch: false });
-    const withKey = cloudSurfaceCaps({ webSearch: true });
+  it('runs a KEYLESS backing without an apiKey', async () => {
+    const search = vi.fn(async (query: string, auth: WebSearchAuth): Promise<WebSearchResult> => {
+      expect(auth.apiKey).toBeNull();
+      return { ok: true, query, results: [], coverage: 'encyclopedic' };
+    });
+    const vendor: WebSearchVendor = {
+      id: 'wikipedia', label: 'Fake keyless', endpoint: 'https://keyless.example/api',
+      coverage: 'encyclopedic', attribution: 'Fake', keyless: true, search,
+    };
+    const r = await searchWeb(env, { vendor, auth: { apiKey: null } }, 'keyless research');
+    expect(r).toMatchObject({ ok: true, coverage: 'encyclopedic' });
+    expect(search).toHaveBeenCalledTimes(1);
+  });
 
-    expect(without.has('web.search')).toBe(false);
-    expect(without).toBe(CLOUD_SURFACE_CAPS); // no-key path is the unchanged constant
-    expect(withKey.has('web.search')).toBe(true);
-    expect(withKey.has('web')).toBe(true); // fetch is not lost by adding search
-
-    const names = (caps: typeof without) => cloudAgentToolsFor(caps).map((t) => t.function.name);
-    expect(names(without)).not.toContain('web_search');
-    expect(names(withKey)).toContain('web_search');
-    expect(names(withKey)).toContain('web_fetch');
+  it('advertises `web_search` on the durable surface', () => {
+    expect(CLOUD_SURFACE_CAPS.has('web.search')).toBe(true);
+    expect(CLOUD_SURFACE_CAPS.has('web')).toBe(true); // fetch is not lost
+    const names = CLOUD_AGENT_TOOLS.map((t) => t.function.name);
+    expect(names).toContain('web_search');
+    expect(names).toContain('web_fetch');
   });
 });
 
 describe('search execution + cache', () => {
   it('returns the vendor results', async () => {
     const { vendor } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     const r = await web.search!('typescript satisfies operator');
     expect(r.ok).toBe(true);
     expect(r.results).toEqual([{ url: 'https://example.com' }]);
@@ -86,7 +88,7 @@ describe('search execution + cache', () => {
 
   it('serves a repeated query from the read-through cache — one real vendor call', async () => {
     const { vendor, search } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     await web.search!('cloudflare durable objects');
     await web.search!('cloudflare durable objects');
     expect(search).toHaveBeenCalledTimes(1);
@@ -94,7 +96,7 @@ describe('search execution + cache', () => {
 
   it('caches on the NORMALIZED query, so casing/whitespace variants are one paid call', async () => {
     const { vendor, search } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     await web.search!('Durable  Objects');
     await web.search!('  durable objects ');
     expect(search).toHaveBeenCalledTimes(1);
@@ -102,7 +104,7 @@ describe('search execution + cache', () => {
 
   it('keys distinct queries separately', async () => {
     const { vendor, search } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     await web.search!('alpha');
     await web.search!('beta');
     expect(search).toHaveBeenCalledTimes(2);
@@ -110,7 +112,7 @@ describe('search execution + cache', () => {
 
   it('never pins a FAILED search for the TTL — the next step retries for real', async () => {
     const { vendor, search } = fakeVendor({ ok: false, error: 'vendor 503' });
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     await web.search!('flaky');
     await web.search!('flaky');
     expect(search).toHaveBeenCalledTimes(2);
@@ -118,7 +120,7 @@ describe('search execution + cache', () => {
 
   it('rejects an empty query without touching the vendor', async () => {
     const { vendor, search } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     const r = await web.search!('   ');
     expect(r).toMatchObject({ ok: false });
     expect(search).not.toHaveBeenCalled();
@@ -128,7 +130,7 @@ describe('search execution + cache', () => {
 describe('consumption metering', () => {
   it('records one outbound fetch per REAL query', async () => {
     const { vendor } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k', meter: { db, tenantId: 7 } } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' }, meter: { db, tenantId: 7 } } });
     await web.search!('metered query');
     expect(recordOutboundFetch).toHaveBeenCalledTimes(1);
     expect(recordOutboundFetch).toHaveBeenCalledWith(db, 7, vendor.endpoint);
@@ -136,7 +138,7 @@ describe('consumption metering', () => {
 
   it('does NOT meter or gate a cache hit', async () => {
     const { vendor } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k', meter: { db, tenantId: 7 } } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' }, meter: { db, tenantId: 7 } } });
     await web.search!('cached query');
     await web.search!('cached query');
     expect(recordOutboundFetch).toHaveBeenCalledTimes(1);
@@ -146,7 +148,7 @@ describe('consumption metering', () => {
   it('refuses a query once the tenant is over its monthly allowance', async () => {
     enforceOutboundFetchCap.mockResolvedValue({ allowed: false, effectivePlan: 'free', used: 500, limit: 500 } as never);
     const { vendor, search } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k', meter: { db, tenantId: 7 } } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' }, meter: { db, tenantId: 7 } } });
     const r = await web.search!('over cap');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/allowance exhausted/);
@@ -156,7 +158,7 @@ describe('consumption metering', () => {
 
   it('skips metering when no tenant is in scope', async () => {
     const { vendor } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k' } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' } } });
     await web.search!('unmetered');
     expect(enforceOutboundFetchCap).not.toHaveBeenCalled();
     expect(recordOutboundFetch).not.toHaveBeenCalled();

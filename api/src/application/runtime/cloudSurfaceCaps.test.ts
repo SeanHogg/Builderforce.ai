@@ -24,8 +24,8 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
       'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'web_fetch', 'workspace_note', 'workspace_read',
-      'write_file',
+      'run_checks', 'search_code', 'web_fetch', 'web_search', 'workspace_note',
+      'workspace_read', 'write_file',
     ]);
   });
 
@@ -40,21 +40,22 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
   });
 
   it('backs `memory.forget` — a Postgres delete really deletes', () => {
-    // Split from `memory` for the same reason `web.search` is split from `web`: the
+    // Split from `memory` for the same reason `web.search` is a separate capability
+    // from `web` (a surface may back fetch without search): the
     // on-prem SSM store SUPERSEDES a belief rather than erasing it, so only a surface
     // whose delete is authoritative may advertise this.
     expect(CLOUD_SURFACE_CAPS.has('memory.forget')).toBe(true);
     expect(names(CLOUD_AGENT_TOOLS)).toContain('memory_forget');
   });
 
-  it('includes web_fetch but NOT web_search — search is TENANT-gated, not surface-wide', () => {
-    // `web` (fetch) is a property of the surface and is always on. `web.search` needs a
-    // BYO search key, so it is added per RUN by `cloudSurfaceCaps({ webSearch: true })`
-    // and must never leak into this base constant — see cloudWebSearch.test.ts.
+  it('includes BOTH web_fetch and web_search — search always has a backing', () => {
+    // `web.search` was tenant-gated while it needed a BYO key. `resolveWebSearchBacking`
+    // now always resolves a vendor (tenant key → operator key → keyless encyclopedic
+    // floor), so it belongs to the surface — see cloudWebSearch.test.ts.
     expect(CLOUD_SURFACE_CAPS.has('web')).toBe(true);
-    expect(CLOUD_SURFACE_CAPS.has('web.search')).toBe(false);
+    expect(CLOUD_SURFACE_CAPS.has('web.search')).toBe(true);
     expect(names(CLOUD_AGENT_TOOLS)).toContain('web_fetch');
-    expect(names(CLOUD_AGENT_TOOLS)).not.toContain('web_search');
+    expect(names(CLOUD_AGENT_TOOLS)).toContain('web_search');
   });
 
   it('has no shell tool — this surface cannot run a build/test and must not claim to', () => {
@@ -65,20 +66,17 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
 describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)', () => {
   it('advertises exactly what the image implements', () => {
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
-      'finish', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest',
+      'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest',
       'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'run_command', 'write_file',
+      'read_file', 'release_resource', 'run_command', 'workspace_note', 'workspace_read',
+      'write_file',
     ]);
   });
 
-  it('does NOT advertise `coordinate` — the image has no handler for those four tools', () => {
-    // Not a gap: the container commits through the Worker's `write` op, and THAT path
-    // takes the same implicit lease (`claimWriteLease`), so a container run is already
-    // serialised against durable runs. Advertising the tools without an image handler
-    // would 400 mid-run — the exact defect the `repo.edit` omission guards against.
-    expect(CONTAINER_SURFACE_CAPS.has('coordinate')).toBe(false);
+  it('backs `coordinate` through the Worker-owned lease and blackboard stores', () => {
+    expect(CONTAINER_SURFACE_CAPS.has('coordinate')).toBe(true);
     for (const t of ['claim_resource', 'release_resource', 'workspace_note', 'workspace_read']) {
-      expect(names(CONTAINER_AGENT_TOOLS)).not.toContain(t);
+      expect(names(CONTAINER_AGENT_TOOLS)).toContain(t);
     }
   });
 

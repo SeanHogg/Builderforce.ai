@@ -7,6 +7,7 @@
  * alongside the rest of the workforce. Renders its own inner sub-tab bar; the outer
  * page owns the section title. Keeps the `hires`/`freelancer` i18n namespaces.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
@@ -25,13 +26,13 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { Select } from '@/components/Select';
 
-const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
-const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
+const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
+const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
 const btn = (v: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
-  padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
   border: v === 'primary' ? 'none' : `1px solid ${v === 'danger' ? 'rgba(239,68,68,0.5)' : 'var(--border-subtle)'}`,
   background: v === 'primary' ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-elevated)',
-  color: v === 'primary' ? '#fff' : v === 'danger' ? '#f87171' : 'var(--text-primary)',
+  color: v === 'primary' ? 'var(--text-on-accent)' : v === 'danger' ? 'var(--error)' : 'var(--text-primary)',
 });
 const fmtHrs = (m: number) => `${(m / 60).toFixed(1)}h`;
 const money = (c: number, cur: string) => `${cur} ${(c / 100).toFixed(2)}`;
@@ -43,9 +44,9 @@ const ENGAGEMENT_TYPES: EngagementType[] = ['fixed_bid', 'hourly', 'fte'];
  *  convention (translucent bg + saturated text, readable in both themes). */
 function ScoreChip({ score }: { score: number }) {
   const hue = score >= 75 ? '34,197,94' : score >= 50 ? '245,158,11' : '239,68,68';
-  const fg = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#f87171';
+  const fg = score >= 75 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--error)';
   return (
-    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 6, background: `rgba(${hue},0.16)`, color: fg, flexShrink: 0 }}>
+    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: `rgba(${hue},0.16)`, color: fg, flexShrink: 0 }}>
       {Math.round(score)}
     </span>
   );
@@ -181,7 +182,7 @@ export function TalentView() {
     { id: 'team', label: t('team') }, { id: 'jobs', label: t('jobs') },
     { id: 'timecards', label: t('approvals') }, { id: 'invoices', label: t('invoices') },
   ];
-  const statusPill = (s: string, extra?: string) => <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{extra ?? s}</span>;
+  const statusPill = (s: string, extra?: string) => <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{extra ?? s}</span>;
 
   return (
     <section>
@@ -190,7 +191,7 @@ export function TalentView() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {TABS.map((tb) => (
           <button key={tb.id} type="button" onClick={() => setTab(tb.id)}
-            style={{ padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               background: tab === tb.id ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
               border: `1px solid ${tab === tb.id ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, color: 'var(--text-primary)' }}>
             {tb.label}
@@ -227,7 +228,7 @@ export function TalentView() {
                       const score = delivScores[d.id] ?? d.lastEvalOverall ?? null;
                       const decided = d.status === 'accepted' || d.status === 'changes_requested';
                       return (
-                        <div key={d.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                        <div key={d.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{d.title}</span>
@@ -253,7 +254,7 @@ export function TalentView() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button key={n} type="button" onClick={() => setReviewForm((r) => ({ ...r, rating: n }))} aria-label={`${n}`}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= reviewForm.rating ? 'var(--warning-fg, #f59e0b)' : 'var(--border-subtle)' }}>★</button>
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= reviewForm.rating ? 'var(--warning-text, var(--warning))' : 'var(--border-subtle)' }}><Icon source="★" size="1em" /></button>
                       ))}
                     </div>
                     <textarea style={{ ...input, minHeight: 56, resize: 'vertical' }} placeholder={t('reviewComment')} value={reviewForm.comment} onChange={(ev) => setReviewForm((r) => ({ ...r, comment: ev.target.value }))} />
@@ -326,7 +327,7 @@ export function TalentView() {
                         const score = propScores[p.id] ?? p.lastEvalOverall ?? null;
                         const actionable = p.status === 'submitted' || p.status === 'shortlisted';
                         return (
-                        <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                        <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -421,7 +422,7 @@ export function TalentView() {
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString() : ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: inv.status === 'paid' ? 'rgba(34,197,94,0.14)' : 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: inv.status === 'paid' ? 'rgba(34,197,94,0.95)' : 'var(--text-secondary)' }}>{t(`invoice.status.${inv.status}`)}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: inv.status === 'paid' ? 'rgba(34,197,94,0.14)' : 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: inv.status === 'paid' ? 'rgba(34,197,94,0.95)' : 'var(--text-secondary)' }}>{t(`invoice.status.${inv.status}`)}</span>
                   {inv.status === 'pending' && (
                     <button type="button" style={btn('primary')} disabled={busy === `pay:${inv.id}`} onClick={() => act(`pay:${inv.id}`, () => payInvoice(inv.id).then(() => undefined))}>{busy === `pay:${inv.id}` ? '…' : t('invoice.pay')}</button>
                   )}

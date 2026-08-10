@@ -61,7 +61,7 @@ const CAP_DORA = 'insights.delivery' as const;
 
 const TIER_ORDER = ['elite', 'high', 'medium', 'low'] as const;
 type TierKey = (typeof TIER_ORDER)[number];
-const TIER_COLOR: Record<TierKey, string> = { elite: '#15803d', high: '#22c55e', medium: '#f59e0b', low: '#ef4444' };
+const TIER_COLOR: Record<TierKey, string> = { elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: 'var(--error)' };
 const PHASE_ORDER: LifecyclePhase[] = ['refinement', 'work', 'review', 'deploy'];
 
 // DORA tier classification (index 0=Elite … 3=Low) — same thresholds as DoraLens.
@@ -166,8 +166,8 @@ function ChangeOutcomesCard({ days }: WidgetCardProps) {
       centerLabel={t('dora.cfr')}
       formatValue={() => ''}
       segments={[
-        { key: 'failed', label: t('dora.failed'), value: cfr, color: '#ef4444' },
-        { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: '#22c55e' },
+        { key: 'failed', label: t('dora.failed'), value: cfr, color: 'var(--error-text)' },
+        { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: 'var(--success-text)' },
       ]}
     />
   );
@@ -199,7 +199,7 @@ function LifecycleTrendCard({ days }: WidgetCardProps) {
   return (
     <TrendChart
       labels={data.trend.map((p) => p.period)}
-      series={[{ key: 'lifecycle', label: t('deliv.lifecycle.trendSeries'), values: data.trend.map((p) => p.avgLifecycleHours / 24), color: '#7c5cff' }]}
+      series={[{ key: 'lifecycle', label: t('deliv.lifecycle.trendSeries'), values: data.trend.map((p) => p.avgLifecycleHours / 24), color: 'var(--purple-bright)' }]}
       formatValue={(v) => `${v.toFixed(0)}d`}
       area
       ariaLabel={t('deliv.lifecycle.trendAria')}

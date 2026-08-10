@@ -3,7 +3,7 @@
  * on the TASK'S TICKET BRANCH (the same `builderforce/task-<id>` branch the agent's
  * code files commit to), so the PRD and the code it produces share ONE branch and
  * ONE pull request. It deliberately does NOT open its own PR — the single PR is
- * opened once at run finalize, covering `PRD.md` + every file. Runs via the provider
+ * opened once at run finalize, covering the task-scoped PRD + every file. Runs via the provider
  * REST API so it works from the cloud (Worker) path with no local git. GitHub-only;
  * degrades gracefully.
  */
@@ -14,8 +14,14 @@ import { commitFileToRepo } from './commitFileToRepo';
 import { ticketBranchName } from './commitFileAsPendingChange';
 
 export type CommitPrdResult =
-  | { ok: true; branch: string }
+  | { ok: true; branch: string; path: string }
   | { ok: false; reason: string };
+
+/** Keep concurrent ticket briefs independent instead of making every agent rewrite
+ * the repository-wide PRD.md (the source of hundreds of artificial conflicts). */
+export function taskPrdRepoPath(taskId: number): string {
+  return `specs/tasks/task-${taskId}.md`;
+}
 
 export async function commitPrdAsPendingChange(
   db: Db,
@@ -35,6 +41,7 @@ export async function commitPrdAsPendingChange(
   const base = (resolved.repo.defaultBranch ?? 'main').trim();
   // Same branch as the agent's code files — so PRD + code share one branch + one PR.
   const branch = ticketBranchName(taskId);
+  const path = taskPrdRepoPath(taskId);
 
   const commit = await commitFileToRepo({
     provider: resolved.repo.provider,
@@ -44,13 +51,13 @@ export async function commitPrdAsPendingChange(
     token: resolved.token,
     branch,
     base,
-    path: 'PRD.md',
+    path,
     content: prd,
     message: `PRD for task #${taskId}: ${taskTitle} (drafted by ${agentLabel})`,
   });
   if (!commit.ok) return { ok: false, reason: commit.reason };
 
   // No PR is opened here: the single run-level PR (opened at finalize) covers
-  // PRD.md + every file the agent writes on this same branch.
-  return { ok: true, branch };
+  // The task brief + every file the agent writes on this same branch.
+  return { ok: true, branch, path };
 }

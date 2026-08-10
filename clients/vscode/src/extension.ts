@@ -17,6 +17,9 @@ import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
+import { modelChoiceLabels } from "./modelChoiceLabels";
+// The model list itself: one builder for the composer `/` menu AND this picker.
+import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type ModelCategory } from "@seanhogg/builderforce-brain-embedded";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -1037,29 +1040,23 @@ async function signOut(
   meetings?.refresh();
 }
 
-/** Human-facing provider names for the BYO groups. Falls back to the raw key. */
-const BYO_PROVIDER_LABELS: Record<string, string> = {
-  anthropic: "Anthropic",
-  openai: "OpenAI",
-  "kimi-code": "Kimi Code",
-  moonshot: "Moonshot AI",
-  google: "Google",
-  meta: "Meta",
-  xai: "xAI",
-  mistral: "Mistral",
-  deepseek: "DeepSeek",
-};
-
-function byoProviderLabel(vendor: string): string {
-  return BYO_PROVIDER_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
-}
-
+/**
+ * `Change model` — the SAME rows the composer's `/` menu offers, in the same order,
+ * with the same funding line, rendered as a QuickPick.
+ *
+ * This picker and the Brain panel's menu used to build their lists independently:
+ * different grouping order, their own vendor names, their own "who pays" wording,
+ * both reading the same endpoints. The rows now come from the shared
+ * `buildModelItems` (brain-embedded — deliberately React-free so this Node host can
+ * import it) and the copy from the shared `modelChoiceLabels`, so the two surfaces
+ * can only differ in chrome. It stays because a user who never opens the Brain panel
+ * (Sessions view overflow, command palette, the native `@builderforce` participant)
+ * still needs a way to change models.
+ */
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
     const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
       await getModels(context.secrets, true);
-    const auto = "(auto — let the gateway choose)";
-    const pool = "$(layers) Pool — use my BYO priority order";
 
     // When premium is locked, the gateway tells us WHY and which step opens it.
     // Same unlock vocabulary the chat error banner uses, so the picker and a failed
@@ -1068,13 +1065,13 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       ? null
       : premiumInfo?.unlock === "validate_card"
         ? {
-            label: "$(credit-card) Add a card to unlock premium models",
-            detail: "Your plan allows premium; it needs a validated card on file",
+            label: vscode.l10n.t("$(credit-card) Add a card to unlock premium models"),
+            detail: vscode.l10n.t("Your plan allows premium; it needs a validated card on file"),
           }
         : premiumInfo?.unlock === "upgrade"
           ? {
-              label: "$(rocket) Upgrade to unlock premium models",
-              detail: "Any paid OpenRouter model, at cost + 1¢/request",
+              label: vscode.l10n.t("$(rocket) Upgrade to unlock premium models"),
+              detail: vscode.l10n.t("Any paid OpenRouter model, at cost + 1¢/request"),
             }
           : null;
 
@@ -1084,95 +1081,66 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     if (!canChooseModel) {
       setSelectedModel(undefined);
       const action = await vscode.window.showInformationMessage(
-        "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.",
-        "Open settings",
+        vscode.l10n.t(
+          "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.",
+        ),
+        vscode.l10n.t("Open settings"),
       );
       if (action) void vscode.commands.executeCommand("builderforce.openSettings");
       return;
     }
 
-    // Separator-grouped QuickPick, ordered by what it COSTS the user:
-    //   1. BYO — their own connected account. Billed to their key, $0 to us, so it
-    //      leads. Grouped per provider ("BYO — Anthropic") because a tenant can
-    //      connect several and needs to know whose key a pick will spend.
-    //   2. Plan models — included in the plan.
-    //   3. Premium — any paid OpenRouter model, metered at cost + 1¢/request.
-    // Groups the tenant isn't entitled to never render, so the picker can only ever
-    // offer models the gateway will accept.
-    const items: vscode.QuickPickItem[] = [{ label: auto, description: "Gateway chooses across entitled routes" }];
-    if (byo.providers.length > 0) items.push({ label: pool, description: "BYO · try connected accounts in configured order" });
-
-    if (configuredModels.length > 0) {
-      items.push(
-        { label: "Configured LLMs", kind: vscode.QuickPickItemKind.Separator },
-        ...configuredModels.map((model) => ({ label: model.ref, description: `Configured · ${model.name}`, detail: "Saved workspace LLM configuration" })),
-      );
-    }
-
-    // Group the BYO models by their serving provider, preserving catalog order.
-    const byVendor = new Map<string, typeof byo.models>();
-    for (const m of byo.models) {
-      const list = byVendor.get(m.vendor) ?? [];
-      list.push(m);
-      byVendor.set(m.vendor, list);
-    }
-    for (const [vendor, vendorModels] of byVendor) {
-      items.push(
-        {
-          label: `BYO — ${byoProviderLabel(vendor)} (billed to your own key)`,
-          kind: vscode.QuickPickItemKind.Separator,
-        },
-        ...vendorModels.map((m) => ({
-          label: m.id,
-          description: `BYO · your ${byoProviderLabel(vendor)} account · ${m.tier}`,
-          detail:
-            m.contextWindow != null
-              ? `${m.contextWindow.toLocaleString()} token context · no platform charge`
-              : "no platform charge",
-        })),
-      );
-    }
-
-    const freeSet = new Set(freeModels);
-    const availableFree = models.filter((model) => freeSet.has(model));
-    const planOnly = models.filter((model) => !freeSet.has(model));
-    if (availableFree.length > 0) items.push(
-      { label: "FREE models", kind: vscode.QuickPickItemKind.Separator },
-      ...availableFree.map((model) => ({ label: model, description: "FREE · included" })),
-    );
-    if (planOnly.length > 0) items.push(
-      { label: "Plan models — included in your plan", kind: vscode.QuickPickItemKind.Separator },
-      ...planOnly.map((model) => ({ label: model, description: "Plan · included in subscription" })),
+    const labels = modelChoiceLabels();
+    const items = buildModelItems(
+      {
+        configured: configuredModels.map((model) => ({ id: model.ref, label: model.name })),
+        byo: byo.models.map((model) => ({ id: model.id, vendor: model.vendor })),
+        free: freeModels,
+        plan: models,
+        paid: canUsePremiumModels ? premiumModels : [],
+      },
+      labels,
     );
 
-    if (canUsePremiumModels && premiumModels.length > 0) {
-      items.push(
-        { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
-        ...premiumModels.map((m) => ({ label: m, description: "PAID · metered at cost + 1¢/request" })),
-      );
-    } else if (premiumUnlock) {
-      // Premium is off — SAY SO, and name the step that turns it on. Silently
-      // omitting the group made the picker look like it was missing models the web
-      // app plainly offers. Picking this row opens the page that unlocks it rather
-      // than pinning anything.
-      items.push(
-        { label: "Premium — any OpenRouter model", kind: vscode.QuickPickItemKind.Separator },
-        { label: premiumUnlock.label, description: premiumUnlock.detail },
+    // One separator per funding tier, in the builder's cost order. `auto` and the BYO
+    // pool are routes rather than models, so they carry a glyph instead of a heading.
+    const GLYPH: Partial<Record<string, string>> = { auto: "$(sparkle) ", byo_pool: "$(layers) " };
+    const rows: Array<vscode.QuickPickItem & { selection?: ChatModelSelection; unlock?: boolean }> = [];
+    let tier: ModelCategory | undefined;
+    for (const item of items) {
+      if (item.category !== tier) {
+        tier = item.category;
+        if (tier !== "auto") rows.push({ label: modelCategoryLabel(tier, labels), kind: vscode.QuickPickItemKind.Separator });
+      }
+      rows.push({
+        label: `${GLYPH[item.key] ?? ""}${item.label}`,
+        description: modelCategoryLabel(item.category, labels),
+        detail: item.detail,
+        selection: item.selection,
+      });
+    }
+
+    // Premium is off — SAY SO, and name the step that turns it on. Silently omitting
+    // the group made the picker look like it was missing models the web app plainly
+    // offers. Picking this row opens the page that unlocks it rather than pinning
+    // anything.
+    if (premiumUnlock) {
+      rows.push(
+        { label: labels.categoryPaid, kind: vscode.QuickPickItemKind.Separator },
+        { label: premiumUnlock.label, detail: premiumUnlock.detail, unlock: true },
       );
     }
 
-    const pick = await vscode.window.showQuickPick(items, {
-      title: "Select BuilderForce model",
+    const pick = await vscode.window.showQuickPick(rows, {
+      title: vscode.l10n.t("Select BuilderForce model"),
       placeHolder: byo.providers.length > 0
-        ? "Your connected accounts are listed first — those turns are billed to your own key"
-        : "Pick a model for new turns",
+        ? vscode.l10n.t("Your own connected accounts are billed to your key — no plan credit used")
+        : vscode.l10n.t("Pick a model for new turns"),
       matchOnDescription: true,
       matchOnDetail: true,
     });
     if (pick === undefined) return;
-    // The unlock row is a call to action, not a model — send them to the page that
-    // grants the entitlement and leave the current pin untouched.
-    if (premiumUnlock && pick.label === premiumUnlock.label) {
+    if (pick.unlock) {
       void vscode.env.openExternal(
         vscode.Uri.parse(
           `${getWebBaseUrl()}${premiumInfo?.unlock === "upgrade" ? "/pricing?upgrade=pro" : "/pricing"}`,
@@ -1180,12 +1148,13 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       );
       return;
     }
-    if (pick.label === pool) setSelectedModelPool();
-    else setSelectedModel(pick.label === auto ? undefined : pick.label);
+    if (!pick.selection) return;
+    if (pick.selection.mode === "byo_pool") setSelectedModelPool();
+    else setSelectedModel(pick.selection.mode === "model" ? pick.selection.model : undefined);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {
-      const action = await vscode.window.showWarningMessage("Sign in to BuilderForce first.", "Sign In");
+      const action = await vscode.window.showWarningMessage(vscode.l10n.t("Sign in to BuilderForce first."), vscode.l10n.t("Sign In"));
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
     } else {
       vscode.window.showErrorMessage(`BuilderForce: ${message}`);

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AUTH_API_URL, getStoredWebToken } from '@/lib/auth';
+import { AUTH_API_URL, getStoredWebToken, signInHref } from '@/lib/auth';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 type Mode = 'device' | 'key';
@@ -38,7 +38,7 @@ function ActivateInner() {
     if (!token) {
       setPhase('redirecting');
       const back = mode === 'device' ? `/activate?code=${encodeURIComponent(code)}` : '/activate';
-      router.replace(`/login?next=${encodeURIComponent(back)}`);
+      router.replace(signInHref(back));
       return;
     }
     setPhase(mode === 'device' ? 'confirm' : 'loading');
@@ -182,16 +182,16 @@ export default function ActivatePage() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: { minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { maxWidth: 460, width: '100%', padding: 'clamp(20px, 5vw, 28px)', borderRadius: 12, border: '1px solid var(--border-subtle, #2a2f3a)', background: 'var(--bg-surface, #11151f)' },
-  h1: { margin: '0 0 12px', fontSize: 22, color: 'var(--text-primary, #f0f4ff)' },
-  muted: { color: 'var(--text-secondary, #9aa4b2)', lineHeight: 1.5, margin: '0 0 16px' },
-  code: { fontFamily: 'monospace', fontSize: 'clamp(20px, 6vw, 28px)', letterSpacing: 2, textAlign: 'center', padding: '12px 0', margin: '0 0 20px', color: 'var(--text-primary, #f0f4ff)', overflowWrap: 'anywhere' },
-  keyBox: { padding: '12px 14px', margin: '0 0 14px', borderRadius: 8, background: 'var(--bg-deep, #0b1220)', border: '1px solid var(--border-subtle, #2a2f3a)', overflowWrap: 'anywhere' },
-  keyText: { fontFamily: 'monospace', fontSize: 13, color: 'var(--text-primary, #f0f4ff)' },
+  card: { maxWidth: 460, width: '100%', padding: 'clamp(20px, 5vw, 28px)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' },
+  h1: { margin: '0 0 12px', fontSize: 'var(--font-size-page-title)', color: 'var(--text-primary, var(--text-primary))' },
+  muted: { color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 16px' },
+  code: { fontFamily: 'monospace', fontSize: 'clamp(20px, 6vw, 28px)', letterSpacing: 2, textAlign: 'center', padding: '12px 0', margin: '0 0 20px', color: 'var(--text-primary, var(--text-primary))', overflowWrap: 'anywhere' },
+  keyBox: { padding: '12px 14px', margin: '0 0 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', overflowWrap: 'anywhere' },
+  keyText: { fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary, var(--text-primary))' },
   row: { display: 'flex', gap: 12, flexWrap: 'wrap' },
-  primary: { padding: '10px 16px', minHeight: 44, borderRadius: 8, border: 'none', background: 'var(--accent, #ff6a3d)', color: '#fff', fontWeight: 600, cursor: 'pointer' },
-  secondary: { padding: '10px 16px', minHeight: 44, borderRadius: 8, border: '1px solid var(--border-subtle, #2a2f3a)', background: 'transparent', color: 'var(--text-primary, #f0f4ff)', cursor: 'pointer' },
-  ok: { color: 'var(--text-primary, #f0f4ff)', lineHeight: 1.5 },
-  err: { color: 'var(--error-text, #f87171)', lineHeight: 1.5, margin: '0 0 14px' },
-  fine: { color: 'var(--text-muted, #6b7280)', fontSize: 12, margin: '14px 0 0', lineHeight: 1.5 },
+  primary: { padding: '10px 16px', minHeight: 44, borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: 'pointer' },
+  secondary: { padding: '10px 16px', minHeight: 44, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-primary, var(--text-primary))', cursor: 'pointer' },
+  ok: { color: 'var(--text-primary, var(--text-primary))', lineHeight: 1.5 },
+  err: { color: 'var(--error-text, var(--error))', lineHeight: 1.5, margin: '0 0 14px' },
+  fine: { color: 'var(--text-muted)', fontSize: 'var(--font-size-eyebrow)', margin: '14px 0 0', lineHeight: 1.5 },
 };

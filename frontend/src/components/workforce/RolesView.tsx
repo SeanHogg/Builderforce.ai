@@ -8,6 +8,7 @@
  * Self-contained: fetches its own roles/templates/assignments and gates writes on
  * the manager permission.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -18,11 +19,11 @@ import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
 import { useConfirm } from '@/components/ConfirmProvider';
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 };
+const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: bg, color: fg,
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: bg, color: fg,
 });
-const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', fontSize: 13, outline: 'none' };
+const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none' };
 
 export function RolesView() {
   const t = useTranslations('workforceRoles');
@@ -148,14 +149,14 @@ export function RolesView() {
             {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
           </Select>
           {canManage && (
-            <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none' }}>
+            <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none' }}>
               {t('newRole')}
             </button>
           )}
         </div>
       </div>
 
-      {error && <div style={{ ...card, color: 'var(--coral-bright, #ef4444)', fontSize: 13, marginBottom: 12, padding: 12 }}>{error}</div>}
+      {error && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 12, padding: 12 }}>{error}</div>}
 
       {showNew && canManage && (
         <div style={{ ...card, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -163,10 +164,10 @@ export function RolesView() {
           <Select style={input} value={form.discipline} onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value as Discipline }))}>
             {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
           </Select>
-          <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
+          <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
             {creating ? t('creating') : t('addRole')}
           </button>
-          <button type="button" onClick={() => setShowNew(false)} style={{ fontSize: 13, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+          <button type="button" onClick={() => setShowNew(false)} style={{ fontSize: 13, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
             {tk('assignCancel')}
           </button>
         </div>
@@ -182,21 +183,21 @@ export function RolesView() {
             return (
               <div key={role.key} style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
+                  <span aria-hidden><Icon source={role.icon ?? 'person'} size={16} /></span>
                   <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-strong)' }}>{role.name}</span>
-                  {isStandard && <span style={chip('var(--surface-coral-soft, #eef2ff)', 'var(--accent, #2563eb)')}>{t('standard')}</span>}
+                  {isStandard && <span style={chip('var(--surface-coral-soft)', 'var(--accent)')}>{t('standard')}</span>}
                   {role.builtin
                     ? <span style={chip('var(--surface-2)', 'var(--text-muted)')}>{tk('builtin')}</span>
                     : <span style={chip('var(--surface-2)', 'var(--text-secondary)')}>{t('custom')}</span>}
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t(`discipline.${role.discipline}`)}</span>
                   <span style={{ flex: 1 }} />
                   {canManage && (
-                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)' }}>
+                    <button type="button" onClick={() => setAssigningRole(assigningRole === role.key ? null : role.key)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' }}>
                       {tk('assign')}
                     </button>
                   )}
                   {canManage && !role.builtin && (
-                    <button type="button" onClick={() => onDeleteRole(role)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                    <button type="button" onClick={() => onDeleteRole(role)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
                       {t('delete')}
                     </button>
                   )}
@@ -208,7 +209,7 @@ export function RolesView() {
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {roleAssignments.map((a) => (
                       <span key={a.id} style={{ ...chip('var(--surface-2)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
-                        <span aria-hidden>{a.assigneeKind === 'agent' ? '🤖' : a.assigneeKind === 'hire' ? '🤝' : '🧑'}</span>
+                        <span aria-hidden>{a.assigneeKind === 'agent' ? <Icon source="🤖" size="1em" /> : a.assigneeKind === 'hire' ? <Icon source="🤝" size="1em" /> : <Icon source="🧑" size="1em" />}</span>
                         {a.assigneeName ?? a.assigneeRef}
                         <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(a.assigneeKind)}</span>
                         {canManage && (

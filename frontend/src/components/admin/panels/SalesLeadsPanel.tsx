@@ -43,7 +43,7 @@ export default function SalesLeadsPanel() {
         onRefresh={reload}
         actions={
           <select className="admin-select" value={filter} onChange={(e) => setFilter(e.target.value as SalesLeadStatus | '')}
-            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}>
+            style={{ padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}>
             <option value="">{t('filterAll')}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
           </select>
@@ -82,7 +82,7 @@ export default function SalesLeadsPanel() {
                       className="admin-select"
                       value={lead.status}
                       onChange={(e) => setStatus(lead.id, e.target.value as SalesLeadStatus)}
-                      style={{ padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                      style={{ padding: '5px 8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
                     >
                       {STATUSES.map((s) => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
                     </select>

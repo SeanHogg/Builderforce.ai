@@ -1,7 +1,7 @@
 /**
  * Resolve a tenant's connected Google integration (Gmail / Drive) credential
  * blob from the shared per-tenant vault (`integration_credentials`) — the SAME
- * store github/jira/sentry/brave_search use. Returns the decrypted OAuth offline
+ * store github/jira/sentry/tavily use. Returns the decrypted OAuth offline
  * credentials, or null when nothing usable is connected. Never throws: a DB or
  * decrypt hiccup degrades to "not connected".
  */

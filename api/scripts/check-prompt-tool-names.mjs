@@ -49,7 +49,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-const sourceRoot = path.resolve('src');
+/**
+ * Roots scanned for TypeScript prompts.
+ *
+ * The FRONTEND is here for the same reason the SQL migrations are: the rule is about
+ * text that reaches a model, and text that reaches a model is not confined to this
+ * package. The Creation Canvas system prompt lives in
+ * `frontend/src/lib/creationCanvasAi.ts` and is compiled into every Canvas turn — and
+ * when this root was added it was naming four catalog ids (`creative.capabilities`,
+ * `creative.compose`, `sales.workspace_get`, `meetings.schedule`) that appear nowhere in
+ * the model's tool list, the fourth instance of this defect.
+ */
+const TS_ROOTS = [path.resolve('src'), path.resolve('..', 'frontend', 'src')].filter((dir) => fs.existsSync(dir));
 const CATALOG_FILE = path.join('src', 'application', 'llm', 'builtinMcpService.ts');
 
 const advertisedName = (tool) => `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
@@ -69,14 +80,16 @@ if (CATALOG.size === 0) {
 }
 
 const files = [];
+/** Skipped wholesale: build output and vendored code are not prompts anyone authored. */
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', '.turbo']);
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full);
+    if (entry.isDirectory()) { if (!SKIP_DIRS.has(entry.name)) walk(full); }
     else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) files.push(full);
   }
 }
-walk(sourceRoot);
+for (const root of TS_ROOTS) walk(root);
 
 const violations = [];
 for (const filePath of files) {
@@ -105,11 +118,33 @@ for (const filePath of files) {
     ts.forEachChild(node, collect);
   })(sourceFile);
 
+  /**
+   * Whether `text` names `id` as a WHOLE token.
+   *
+   * A plain `includes` matched `executions.submit` inside the column name
+   * `executions.submitted_by` and reported a SQL column as a mis-named tool. A false
+   * positive here is not harmless: the "fix" is to rewrite a correct string, and a
+   * checker that cries wolf is one people start overriding. So the id must not be
+   * flanked by a character that would make it part of a longer identifier.
+   */
+  function namesTool(text, id) {
+    const identifier = /[A-Za-z0-9_.]/;
+    let from = 0;
+    for (;;) {
+      const at = text.indexOf(id, from);
+      if (at < 0) return false;
+      const before = at > 0 ? text[at - 1] : '';
+      const after = text[at + id.length] ?? '';
+      if (!identifier.test(before) && !identifier.test(after)) return true;
+      from = at + 1;
+    }
+  }
+
   /** Check one string's TEXT (comments are excluded by construction — this is a literal). */
   function check(node, text) {
     if (!text.includes(' ')) return; // a bare identifier/constant, not prose for a model
     for (const id of CATALOG) {
-      if (!text.includes(id)) continue;
+      if (!namesTool(text, id)) continue;
       if (text.includes(advertisedName(id))) continue; // names both — fine
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
       violations.push(
@@ -258,6 +293,36 @@ for (const filePath of sqlFiles) {
       + 'let the prompt builder name the tool at reply time, against the list the model was '
       + 'actually given.',
     );
+  }
+}
+
+// ── External MCP clients we ship ─────────────────────────────────────────────
+// The same defect runs in the other direction for a client OUTSIDE this package.
+// `actions/dispatch-agent/dispatch.mjs` is a GitHub Action in its own runtime: it
+// cannot import `advertisedName`, so it hard-codes the advertised strings. A name
+// that no catalog tool advertises fails the same silent way — the server answers
+// "Unknown tool" and the CI job reports a Builderforce error nobody can trace
+// back to a rename here. So: every `builtin_*` literal in a shipped client must
+// be the advertised name of a real catalog tool.
+const CLIENT_FILES = [path.resolve('..', 'actions', 'dispatch-agent', 'dispatch.mjs')].filter((f) => fs.existsSync(f));
+
+for (const filePath of CLIENT_FILES) {
+  const rel = path.relative(path.resolve('..'), filePath).replace(/\\/g, '/');
+  const text = fs.readFileSync(filePath, 'utf8');
+  const seen = new Set();
+  for (const m of text.matchAll(/'(builtin_[a-z0-9_]+)'/g)) {
+    const name = m[1];
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (ADVERTISED.has(name)) continue;
+    violations.push(
+      `${rel} calls the tool '${name}', which no catalog tool advertises. `
+      + 'A shipped client that names a nonexistent tool fails at the server with '
+      + '"Unknown tool" and the caller cannot tell a rename from an outage.',
+    );
+  }
+  if (seen.size === 0) {
+    violations.push(`${rel}: no builtin_* tool literals found — this guard's parse is stale, not the client.`);
   }
 }
 

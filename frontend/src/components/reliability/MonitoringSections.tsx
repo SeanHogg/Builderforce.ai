@@ -14,6 +14,7 @@
  * theme-driven (never one-theme hex).
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -42,7 +43,7 @@ import {
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -229,7 +230,7 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
                 <div style={{ height: 120, background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {b.imageKey
                     ? <img src={brain.uploadUrl(b.imageKey)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: 32, opacity: 0.4 }}>🗺️</span>}
+                    : <span style={{ fontSize: 32, opacity: 0.4 }}><Icon source="🗺️" size="1em" /></span>}
                 </div>
                 <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>{b.name}</div>
@@ -422,7 +423,7 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
                 color: 'var(--text-muted)',
               }}
             >
-              <span style={{ fontSize: 40 }}>🖼️</span>
+              <span style={{ fontSize: 40 }}><Icon source="🖼️" size="1em" /></span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{uploading ? t('uploading') : t('uploadImage')}</span>
               <span style={{ fontSize: 12 }}>{t('dropImageHint')}</span>
             </button>
@@ -548,7 +549,7 @@ function MonitorPin({
           color: 'var(--text-primary)',
           background: 'var(--bg-base)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 6,
+          borderRadius: 'var(--radius-sm)',
           padding: '1px 6px',
           whiteSpace: 'nowrap',
           maxWidth: 140,

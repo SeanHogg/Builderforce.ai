@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { fetchProjects } from '@/lib/api';
@@ -42,7 +43,7 @@ export default function ProjectPageRedirect() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s ease-in-out infinite' }}>⚡</div>
+      <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s ease-in-out infinite' }}><Icon source="⚡" size="1em" /></div>
       <p>Opening this project on your canvas…</p>
     </div>
   );

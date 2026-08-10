@@ -11,14 +11,11 @@
  */
 
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { outboundFetchLog, tenants } from '../../infrastructure/database/schema';
+import { outboundFetchLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { resolveOutboundFetchesMonthly } from '../../domain/tenant/PlanLimits';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { utcMonthStart } from '../llm/tokenUsage';
+import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 
 /** Record one outbound fetch (best-effort; caller waitUntils it off the hot path). */
 export async function recordOutboundFetch(db: Db, tenantId: number, url: string | null): Promise<void> {
@@ -52,9 +49,7 @@ export async function dailyTenantOutboundFetches(
   return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
 }
 
-export type OutboundFetchCapResult =
-  | { allowed: true }
-  | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };
+export type OutboundFetchCapResult = MonthlyTenantCapResult;
 
 /**
  * Gate NEW outbound fetches against the tenant's monthly allowance. Self-contained
@@ -63,38 +58,11 @@ export type OutboundFetchCapResult =
  * metering hiccup must not block a legitimate fetch.
  */
 export async function enforceOutboundFetchCap(db: Db, tenantId: number, env?: Env): Promise<OutboundFetchCapResult> {
-  try {
-    const [tenantRow] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    const effectivePlan = resolveEffectivePlan({
-      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
-      billingStatus: (tenantRow?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: tenantRow?.trialEndsAt ?? null,
-    });
-    const limit = resolveOutboundFetchesMonthly({
-      effectivePlan,
-      tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
-    });
-    if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
-
-    // A superadmin OPERATOR is unlimited on EVERY meter — same rule, same source of
-    // truth as the token and cloud-run gates. Only consulted once the plan already
-    // caps the tenant, so unlimited tenants pay nothing for it.
-    if (await resolveSuperadminUnlimited(db, tenantId, undefined, env)) return { allowed: true };
-
-    const used = await sumTenantOutboundFetches(db, tenantId, utcMonthStart());
-    if (used >= limit) return { allowed: false, effectivePlan, used, limit };
-    return { allowed: true };
-  } catch {
-    return { allowed: true };
-  }
+  return enforceMonthlyTenantCap({
+    db,
+    tenantId,
+    env,
+    resolveLimit: resolveOutboundFetchesMonthly,
+    sumUsage: sumTenantOutboundFetches,
+  });
 }

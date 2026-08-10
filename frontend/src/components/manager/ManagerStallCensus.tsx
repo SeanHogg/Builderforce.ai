@@ -33,7 +33,7 @@ import { ticketHref } from '@/lib/ticketHref';
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
@@ -44,7 +44,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
   return (
     <div style={{
       background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-      borderRadius: 10, padding: '10px 12px', minWidth: 0,
+      borderRadius: 'var(--radius-lg)', padding: '10px 12px', minWidth: 0,
     }}>
       <div style={{ fontSize: '1.35rem', fontWeight: 700, color: tone ?? 'var(--text-primary)', lineHeight: 1.2 }}>
         {value}
@@ -119,12 +119,12 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
       <section style={panelStyle}>
         {header}
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--danger-text, #b91c1c)', fontSize: '0.85rem' }}>{error}</span>
+          <span style={{ color: 'var(--danger-text)', fontSize: '0.85rem' }}>{error}</span>
           <button
             type="button"
             onClick={() => void load()}
             style={{
-              padding: '4px 10px', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', cursor: 'pointer',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
             }}
           >
@@ -153,7 +153,7 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
         <Stat
           label={t('stat.stalled')}
           value={String(data.stalled)}
-          tone={data.stalled > 0 ? 'var(--warning-text, #b45309)' : undefined}
+          tone={data.stalled > 0 ? 'var(--warning-text)' : undefined}
         />
         <Stat label={t('stat.moving')} value={String(data.moving)} />
         <Stat label={t('stat.deepDiagnosed')} value={String(data.deepDiagnosed)} />
@@ -176,8 +176,8 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
               style={{
                 background: 'var(--bg-base)',
                 border: '1px solid var(--warning-border, var(--border-subtle))',
-                borderLeft: '3px solid var(--warning-text, #b45309)',
-                borderRadius: 10, padding: 12,
+                borderLeft: '3px solid var(--warning-text)',
+                borderRadius: 'var(--radius-lg)', padding: 12,
               }}
             >
               <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
@@ -200,7 +200,7 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
                 {f.createdTaskId != null && (
                   <Link
                     href={ticketHref(f.createdTaskId)}
-                    style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}
+                    style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent)' }}
                   >
                     {t('findings.openTicket', { key: f.createdTaskKey ?? `#${f.createdTaskId}` })}
                   </Link>

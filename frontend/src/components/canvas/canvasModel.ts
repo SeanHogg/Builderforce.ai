@@ -127,6 +127,14 @@ export function newBlockId(): string {
   return `b${seq}_${Date.now().toString(36)}`;
 }
 
+/**
+ * Sticky-note pigment. Literal on purpose, and the one thing in this file the
+ * design-scale ratchet exempts: the value a person picks here is WRITTEN INTO
+ * `block.color` and rendered back as-is, so it is the author's choice rather
+ * than the theme's — the same rule as `creation-canvas/authoredColors.ts`.
+ * Every one is a pale pigment, which is why the ink on a sticky is always
+ * `--ink-on-light` (a surface that is light in BOTH themes).
+ */
 export const STICKY_COLORS = ['#fde68a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fed7aa', '#ddd6fe'];
 
 /** Sensible default geometry + payload for a freshly-added block of `type`. */

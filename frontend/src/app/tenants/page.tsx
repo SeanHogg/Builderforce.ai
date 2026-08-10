@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -198,7 +199,7 @@ export default function TenantsPage() {
             </div>
           ) : tenants.length === 0 && !showCreate ? (
             <div className="text-center py-10">
-              <div className="text-4xl mb-4">🏢</div>
+              <div className="text-4xl mb-4"><Icon source="🏢" size="1em" /></div>
               <p className="text-gray-400 mb-2">No workspaces yet.</p>
               <p className="text-gray-500 text-sm mb-6">
                 Create a workspace to get started.

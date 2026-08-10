@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MambaAgentState, MambaStateSnapshot } from '@/lib/types';
@@ -116,23 +117,23 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
     >
       {/* Header */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 700 }}>🔬 {t('title')}</span>
+        <span style={{ fontWeight: 700 }}><Icon source="🔬" size="1em" /> {t('title')}</span>
         <button
           onClick={loadState}
           disabled={isLoading}
           style={{
-            marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 5,
+            marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 'var(--radius-sm)',
             background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
             color: 'var(--text-secondary)', cursor: 'pointer',
           }}
         >
-          {isLoading ? '⏳' : `🔄 ${t('refresh')}`}
+          {isLoading ? <Icon source="⏳" size="1em" /> : `${t('refresh')}`}
         </button>
         {state && (
           <button
             onClick={handleReset}
             style={{
-              fontSize: '0.7rem', padding: '2px 8px', borderRadius: 5,
+              fontSize: '0.7rem', padding: '2px 8px', borderRadius: 'var(--radius-sm)',
               background: 'var(--error-bg)', border: '1px solid var(--error-border)',
               color: 'var(--error-text)', cursor: 'pointer',
             }}
@@ -145,7 +146,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
         {!state && !isLoading && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 8 }}>🧬</div>
+            <div style={{ fontSize: '2rem', marginBottom: 8 }}><Icon source="🧬" size="1em" /></div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 4 }}>{t('noStateTitle')}</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               {t('noStateHint')}
@@ -164,7 +165,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                 { label: t('cardDim'), value: snap.dim },
               ].map(({ label, value }) => (
                 <div key={label} style={{
-                  background: 'var(--bg-elevated)', borderRadius: 6, padding: '8px 10px',
+                  background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '8px 10px',
                   border: '1px solid var(--border-subtle)',
                 }}>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
@@ -189,7 +190,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                       title={t('channelGroup', { index: i, value: v.toFixed(3) })}
                       style={{
                         flex: 1,
-                        borderRadius: 2,
+                        borderRadius: 'var(--radius-sm)',
                         background: isPos
                           ? `rgba(99,102,241,${alpha})`
                           : `rgba(239,68,68,${alpha})`,
@@ -215,7 +216,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {t('recentHistory', { count: state.history.length })}
                 </div>
-                <div style={{ background: 'var(--bg-surface)', borderRadius: 6, padding: '6px 8px', maxHeight: 100, overflowY: 'auto', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', maxHeight: 100, overflowY: 'auto', border: '1px solid var(--border-subtle)' }}>
                   {state.history.slice(-10).map((entry, i) => (
                     <div key={i} style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', padding: '2px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                       {entry.slice(0, 80)}{entry.length > 80 ? '…' : ''}
@@ -237,7 +238,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                 rows={3}
                 style={{
                   width: '100%', background: 'var(--bg-surface)', color: 'var(--text-primary)',
-                  border: '1px solid var(--border-subtle)', borderRadius: 5, padding: '6px 8px',
+                  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '6px 8px',
                   fontSize: '0.72rem', resize: 'vertical', outline: 'none', boxSizing: 'border-box',
                 }}
               />
@@ -246,12 +247,12 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                 disabled={isReplaying || !replayInput.trim()}
                 style={{
                   marginTop: 6, width: '100%', padding: '6px 0', fontSize: '0.75rem',
-                  fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: 'none',
+                  fontWeight: 600, borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: 'none',
                   background: isReplaying ? 'var(--bg-elevated)' : 'var(--coral-bright)',
-                  color: '#fff', opacity: isReplaying || !replayInput.trim() ? 0.5 : 1,
+                  color: 'var(--text-on-accent)', opacity: isReplaying || !replayInput.trim() ? 0.5 : 1,
                 }}
               >
-                {isReplaying ? `⏳ ${t('replaying')}` : `▶ ${t('replay')}`}
+                {isReplaying ? `${t('replaying')}` : `${t('replay')}`}
               </button>
             </div>
 
@@ -262,7 +263,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                   {t('replayOutput')}
                 </div>
                 <div style={{
-                  background: 'var(--bg-elevated)', borderRadius: 5, padding: '6px 8px',
+                  background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '6px 8px',
                   fontFamily: 'monospace', fontSize: '0.65rem', color: 'var(--success)',
                   maxHeight: 120, overflowY: 'auto', border: '1px solid var(--border-subtle)',
                 }}>

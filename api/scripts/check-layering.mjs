@@ -21,10 +21,10 @@
  * So the debt is frozen at its current size and pays down monotonically: each
  * route that gets touched can drop off the list, and nothing can be added.
  *
- * The rule: nothing under `src/presentation/` may import from
- * `src/infrastructure/`. Route modules should call an application service (or a
- * domain repository) instead. Middleware is held to the same rule — it is part of
- * the presentation layer.
+ * The rule: nothing under `src/presentation/` may take a runtime dependency on
+ * `src/infrastructure/`. Type-only imports are erased by TypeScript and therefore do
+ * not cross the runtime boundary. Route modules should call an application service
+ * (or a domain repository) instead. Middleware is held to the same rule.
  *
  * Run via `npm run check:layering` and wired into `npm test`.
  */
@@ -44,7 +44,7 @@ const UPDATE = process.argv.includes('--update');
  * An import specifier that resolves into `src/infrastructure/`, written either
  * relatively (`../../infrastructure/…`) or via a path alias.
  */
-const INFRA_IMPORT = /from\s+['"](?:(?:\.\.\/)+|@\/)infrastructure\//;
+const INFRA_IMPORT = /^\s*import\s+(?!type\b)[^;]*?\bfrom\s+['"](?:(?:\.\.\/)+|@\/)infrastructure\//m;
 
 function collect(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

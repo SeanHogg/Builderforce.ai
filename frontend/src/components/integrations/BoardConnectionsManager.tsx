@@ -40,19 +40,19 @@ const DEFAULT_BOARD_PROVIDER: string = BOARD_PROVIDERS.some(([id]) => id === 'ji
   : (BOARD_PROVIDERS[0]?.[0] ?? 'jira');
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 const inputStyle: React.CSSProperties = {
-  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 export function BoardConnectionsManager({ projectId, heading }: { projectId: number; heading?: string | null }) {
@@ -166,16 +166,16 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
                 <button type="button" style={btnSubtle} disabled={syncing === conn.id} onClick={() => syncNow(conn.id)}>
                   {syncing === conn.id ? t('syncing') : t('syncNow')}
                 </button>
-                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>{tc('delete')}</button>
+                <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(conn.id)}>{tc('delete')}</button>
               </div>
               {syncMsg[conn.id]?.error && (
                 <div
                   role="alert"
                   style={{
-                    fontSize: 12, color: 'var(--error-text, #dc2626)',
+                    fontSize: 12, color: 'var(--error-text)',
                     background: 'var(--error-bg, rgba(220,38,38,0.08))',
                     border: '1px solid var(--error-border, rgba(220,38,38,0.3))',
-                    borderRadius: 6, padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm)', padding: '6px 10px',
                   }}
                 >
                   {t('syncFailedPrefix', { message: syncMsg[conn.id].text })}
@@ -186,10 +186,10 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
           <Select value={provider} onChange={(e) => { setProvider(e.target.value); setCredentialId(''); }} style={inputStyle}>
             {BOARD_PROVIDERS.map(([id, m]) => <option key={id} value={id}>{m.label}</option>)}
           </Select>

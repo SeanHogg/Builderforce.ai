@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   creationKindForModality,
+  durableCreationGraph,
   creationObjectSearchText,
   creationSessionSearchStatus,
   isCreationEventWriteConflict,
@@ -8,15 +9,10 @@ import {
 } from './creationSessionRouteService';
 
 describe('creationKindForModality', () => {
-  it('loads every legacy IDE build into its matching Canvas object', () => {
-    expect(creationKindForModality('designer')).toBe('website');
-    expect(creationKindForModality('mobile')).toBe('prototype');
-    expect(creationKindForModality('webmobile')).toBe('prototype');
-    expect(creationKindForModality('video')).toBe('video');
-    expect(creationKindForModality('evermind')).toBe('evermind');
-    expect(creationKindForModality('llm')).toBe('evermind');
-    expect(creationKindForModality('finetune')).toBe('llm');
-    expect(creationKindForModality('voice')).toBe('voice');
+  it('keeps every IDE modality attached to the Builder workspace', () => {
+    for (const modality of ['designer', 'mobile', 'webmobile', 'video', 'evermind', 'llm', 'finetune', 'voice', 'unknown']) {
+      expect(creationKindForModality(modality)).toBe('build');
+    }
   });
 });
 
@@ -101,5 +97,66 @@ describe('validCreationGraph', () => {
     expect(validCreationGraph(objects, Array.from({ length: 4_001 }, () => ({
       id: crypto.randomUUID(), sourceObjectId: objects[0]!.id, targetObjectId: objects[1]!.id, kind: 'reference',
     })))).toMatch(/at most 4,000 connections/i);
+  });
+});
+
+describe('durableCreationGraph', () => {
+  it('rekeys claimed objects and preserves connection topology', () => {
+    const objects = [
+      { id: '00000000-0000-4000-8000-000000000001', kind: 'dataset' },
+      { id: '00000000-0000-4000-8000-000000000002', kind: 'chart' },
+    ];
+    const connections = [{
+      id: '00000000-0000-4000-8000-000000000003',
+      sourceObjectId: objects[0]!.id,
+      targetObjectId: objects[1]!.id,
+      kind: 'data',
+    }];
+    const ids = [
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+      '10000000-0000-4000-8000-000000000003',
+    ];
+
+    const durable = durableCreationGraph(objects, connections, () => ids.shift()!);
+
+    expect(durable.objects.map((object) => object.id)).toEqual([
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+    ]);
+    expect(durable.connections).toEqual([expect.objectContaining({
+      id: '10000000-0000-4000-8000-000000000003',
+      sourceObjectId: '10000000-0000-4000-8000-000000000001',
+      targetObjectId: '10000000-0000-4000-8000-000000000002',
+    })]);
+    expect(objects[0]!.id).toBe('00000000-0000-4000-8000-000000000001');
+  });
+
+  it('resolves an edge endpoint whose id differs only in case', () => {
+    // A `uuid` column is case-insensitive; a case-sensitive Map resolved this to
+    // `undefined` and violated the connection's NOT NULL instead of connecting.
+    const objects = [{ id: '00000000-0000-4000-8000-00000000000a', kind: 'dataset' }];
+    const connections = [{
+      id: '00000000-0000-4000-8000-00000000000b',
+      sourceObjectId: '00000000-0000-4000-8000-00000000000A',
+      targetObjectId: '00000000-0000-4000-8000-00000000000a',
+      kind: 'data',
+    }];
+    const ids = ['10000000-0000-4000-8000-00000000000a', '10000000-0000-4000-8000-00000000000b'];
+    const durable = durableCreationGraph(objects, connections, () => ids.shift()!);
+    expect(durable.connections[0]!.sourceObjectId).toBe('10000000-0000-4000-8000-00000000000a');
+    expect(durable.connections[0]!.targetObjectId).toBe('10000000-0000-4000-8000-00000000000a');
+  });
+});
+
+describe('validCreationGraph id uniqueness', () => {
+  it('rejects two objects whose ids differ only in case', () => {
+    // They are ONE row to Postgres. Accepting them produced a 500 on
+    // `creation_session_objects_pkey` for input the validator had passed.
+    const error = validCreationGraph([
+      { id: '00000000-0000-4000-8000-00000000000a', kind: 'dataset' },
+      { id: '00000000-0000-4000-8000-00000000000A', kind: 'chart' },
+    ], []);
+    expect(error).toMatch(/Duplicate object id/);
   });
 });

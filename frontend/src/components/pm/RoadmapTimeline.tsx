@@ -41,7 +41,7 @@ export function RoadmapTimeline() {
         <button
           type="button"
           onClick={() => setEditing(null)}
-          style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+          style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: 'pointer' }}
         >
           + {t('addItem')}
         </button>
@@ -58,7 +58,7 @@ export function RoadmapTimeline() {
           {ROADMAP_HORIZONS.map(({ key, label }) => {
             const items = data.filter((r) => (rstr(r, 'horizon') || 'now') === key);
             return (
-              <div key={key} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 14 }}>
+              <div key={key} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{label}</h4>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{items.length}</span>
@@ -70,7 +70,7 @@ export function RoadmapTimeline() {
                       key={String(r.id)}
                       type="button"
                       onClick={() => setEditing(r)}
-                      style={{ textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '10px 12px', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}
+                      style={{ textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '10px 12px', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                         <div style={{ fontWeight: 600, fontSize: '0.86rem' }}>{rstr(r, 'title')}</div>

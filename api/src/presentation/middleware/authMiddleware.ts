@@ -131,6 +131,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // …and a cloud agent replaying a route as itself publishes the agent it acts as, so a
   // write can credit the agent rather than the ref parked in `sub`.
   if (payload.agt) c.set('agentActorRef', payload.agt);
+  if (payload.src === 'vscode') c.set('clientSurface', 'vscode');
   updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 
@@ -142,6 +143,34 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // usually free.
   c.set('segmentId', await resolveSegment(db, payload.tid, { accountId: payload.acct, companyId: payload.co }));
 
+  await next();
+};
+
+/**
+ * Auth when there IS auth, and no failure when there is not.
+ *
+ * For a read whose answer is *narrower* without a workspace rather than
+ * forbidden — the team roster is the case this exists for: signed in it is your
+ * team, signed out it is the always-on seats, locked. One endpoint answering both
+ * is what lets the shell be the same surface for both visitors (PRD 21 §0);
+ * two endpoints would be two rosters, which §4.1 exists to prevent.
+ *
+ * Delegates to {@link authMiddleware} rather than re-deriving the token rules —
+ * revocation, session-version and segment resolution all still apply to a caller
+ * who DOES present a token. Only the rejection is swallowed, so a handler behind
+ * this must treat `tenantId` as possibly absent.
+ */
+export const optionalAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  try {
+    // `authMiddleware` does no work after its own `next()`, so handing it a no-op
+    // and continuing here runs its full contract exactly once.
+    await authMiddleware(c, async () => {});
+  } catch (err) {
+    // Anything that is not "you are not signed in" is a real failure and must
+    // keep its status — an expired token is still just an anonymous caller, but
+    // a database error is not.
+    if (!(err instanceof UnauthorizedError)) throw err;
+  }
   await next();
 };
 

@@ -36,7 +36,7 @@ import {
  */
 
 const CHIP: React.CSSProperties = {
-  padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+  padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600,
   border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',
 };
 
@@ -125,7 +125,7 @@ function AttendanceRow({
               aria-label={t('correctAria', { name: p.memberName })}
               onChange={(e) => void correct(e.target.value)}
               style={{
-                minHeight: 32, padding: '4px 8px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                minHeight: 32, padding: '4px 8px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 600,
                 background: 'var(--bg-base)', color: 'var(--text-primary)',
                 border: '1px solid var(--border-subtle)',
               }}
@@ -281,7 +281,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
 
       {error && (
         <div style={{
-          padding: '8px 12px', borderRadius: 8, fontSize: 13,
+          padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 13,
           background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)',
         }}>
           {error}
@@ -292,7 +292,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : sessions.length === 0 ? (
         <div style={{
-          padding: 20, borderRadius: 12, textAlign: 'center',
+          padding: 20, borderRadius: 'var(--radius-lg)', textAlign: 'center',
           background: 'var(--bg-deep)', border: '1px dashed var(--border-subtle)',
         }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('emptyTitle')}</div>
@@ -312,7 +312,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
                 style={{
                   display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
                   textAlign: 'left', cursor: 'pointer',
-                  padding: 12, borderRadius: 10,
+                  padding: 12, borderRadius: 'var(--radius-lg)',
                   background: 'var(--surface-card)', border: '1px solid var(--border-subtle)',
                 }}
               >
@@ -363,7 +363,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
               onClick={() => void loadMore()}
               disabled={loadingMore}
               style={{
-                alignSelf: 'center', minHeight: 40, padding: '8px 16px', borderRadius: 8,
+                alignSelf: 'center', minHeight: 40, padding: '8px 16px', borderRadius: 'var(--radius-md)',
                 fontSize: 13, fontWeight: 600, cursor: loadingMore ? 'default' : 'pointer',
                 background: 'var(--bg-deep)', color: 'var(--text-secondary)',
                 border: '1px solid var(--border-subtle)',

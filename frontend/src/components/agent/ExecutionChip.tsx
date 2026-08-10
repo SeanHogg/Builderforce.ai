@@ -46,7 +46,7 @@ export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunni
       style={{
         display: 'inline-flex',
         alignItems: 'stretch',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         overflow: 'hidden',
         border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
         background: selected ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',

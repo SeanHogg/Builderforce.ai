@@ -10,14 +10,14 @@ interface AgentHostWorkspaceContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  synced: 'var(--cyan-bright, #00e5cc)',
+  synced: 'var(--cyan-bright, var(--cyan-bright))',
   pending: 'var(--text-muted)',
-  error: 'var(--coral-bright, #f4726e)',
+  error: 'var(--coral-bright)',
 };
 
 function FileIcon({ path }: { path: string }) {
@@ -109,7 +109,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
               background: 'var(--bg-base)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
           >
@@ -238,7 +238,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 padding: '3px 8px',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-elevated)',
                 color: STATUS_COLORS[dir.status] ?? 'var(--text-muted)',
                 flexShrink: 0,
@@ -257,7 +257,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
                 background: 'var(--bg-elevated)',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 cursor: syncing === dir.id ? 'wait' : 'pointer',
                 flexShrink: 0,
               }}

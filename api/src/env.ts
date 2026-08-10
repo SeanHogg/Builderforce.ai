@@ -26,6 +26,9 @@ export interface Env {
    *  disable `POST /api/demo/session` and the nightly reseed; any other value (or
    *  unset) leaves it ON. Toggle via `wrangler secret put DEMO_ACCOUNTS_ENABLED`. */
   DEMO_ACCOUNTS_ENABLED?: string;
+  /** Operator-wide emergency halt for every autonomous agent run. The workspace
+   * switch remains tenant-owned; this is the platform incident-response fence. */
+  AGENT_EXECUTION_ENABLED?: string;
   /** Shared secret the deploy workflow sends (header `x-demo-reseed-secret`) to
    *  trigger `POST /api/demo/reseed` after each deploy. Unset = only a superadmin
    *  web token can reseed. Set via `wrangler secret put DEMO_RESEED_SECRET`. */
@@ -158,6 +161,11 @@ export interface Env {
    *  Set via `wrangler secret put FLUX_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   FLUX_API_KEY?: string;
 
+  /** Optional stock-image providers used by Canvas image search. */
+  UNSPLASH_ACCESS_KEY?: string;
+  PEXELS_API_KEY?: string;
+  PIXABAY_API_KEY?: string;
+
   // ---------------------------------------------------------------------------
   // Embeddings (`POST /v1/embeddings`)
   // ---------------------------------------------------------------------------
@@ -170,15 +178,23 @@ export interface Env {
    *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   VOYAGE_API_KEY?: string;
 
-  /** OPTIONAL operator-wide Brave Search API key — the floor under the cloud agent's
-   *  `web_search` tool. Search is metered per query, so the platform funds NO key: the
-   *  normal path is a tenant's own BYO key in `integration_credentials`
-   *  (provider `brave_search`), which always wins over this. Set this only if you are
-   *  self-hosting and want to fund search for every tenant. When neither is configured,
-   *  `web.search` is not advertised and the agent keeps fetch-only web access — no tool
-   *  that would certainly fail is ever handed to the model.
-   *  Set via `wrangler secret put BRAVE_SEARCH_API_KEY`. */
-  BRAVE_SEARCH_API_KEY?: string;
+  /** OPTIONAL origin of a SearXNG instance YOU run, e.g. `https://search.internal` or
+   *  `http://searxng:8080` — the MIDDLE tier of the search-backing precedence in
+   *  `webSearchCredential.ts`. A tenant's own BYO key (Tavily/Exa/Linkup, in
+   *  `integration_credentials`) wins over it; beneath it sits the keyless encyclopedic
+   *  vendor that needs nothing at all.
+   *
+   *  This is the recommended way to give every tenant and every logged-out visitor real
+   *  OPEN-WEB search: no vendor account, no per-query meter, and no third party learning
+   *  what your users research. The instance must enable `formats: [json]` in its
+   *  settings.yml, or it will answer API requests with a 403.
+   *
+   *  A PRIVATE address is expected and allowed here — this is operator configuration,
+   *  not an untrusted URL, so it is deliberately exempt from the egress policy that
+   *  guards model- and index-supplied URLs. Search works without it, just against a
+   *  narrower index, and the tool result says which it used.
+   *  Set via `wrangler secret put SEARXNG_URL` (or api/.env + `npm run secrets:from-env`). */
+  SEARXNG_URL?: string;
 
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
@@ -240,6 +256,15 @@ export interface Env {
    *  Bind in wrangler.toml:
    *    [[durable_objects.bindings]] name = "CEREMONY_ROOM" class_name = "CeremonyRoomDO" */
   CEREMONY_ROOM?: DurableObjectNamespace;
+
+  /** Durable Object namespace for a SHARED logged-out guest session — the free
+   *  chat a visitor can invite other people into. One instance per room
+   *  (`guestroom:<code>`); owns the room's COMBINED turn allowance, its bounded
+   *  transcript, and the relay for both presence and the camera meeting's WebRTC
+   *  signaling. Optional: when unset, guest chat still works solo (rooms return
+   *  503 and the invite affordance is hidden). Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "GUEST_ROOM" class_name = "GuestRoomDO" */
+  GUEST_ROOM?: DurableObjectNamespace;
 
   /** Durable Object namespace for the Architect / Digital-Transformation
    *  repo-analysis pipeline. One instance per analysis run (`idFromName(runId)`),
@@ -343,6 +368,16 @@ export interface Env {
   /** App URL used to build checkout success/cancel redirect URLs (e.g. "https://builderforce.ai") */
   APP_URL?: string;
 
+  /**
+   * Canonical public origin of THIS API, used to build addresses handed to third
+   * parties — a project's webhook ingress URL, and the gateway URL baked into a
+   * generated Worker. It cannot be derived from the request: the same worker is
+   * reachable as `api.builderforce.ai` AND as `builderforce.ai/gateway/*`, and a
+   * webhook URL pasted into Twilio's console must not depend on which one the
+   * user happened to be on when they copied it. Defaults to the api subdomain.
+   */
+  API_ORIGIN?: string;
+
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   /** Pro plan flat-rate prices */
@@ -439,6 +474,10 @@ export interface Env {
    *  Set via: wrangler secret put RESEND_API_KEY */
   RESEND_API_KEY?: string;
 
+  /** Static SendPulse API key used only when Resend exhausts its daily/monthly quota.
+   *  Set via: wrangler secret put SENDPULSE_API_KEY */
+  SENDPULSE_API_KEY?: string;
+
   /** From address for notification emails, e.g. "Builderforce <notifications@builderforce.ai>" */
   NOTIFICATION_EMAIL_FROM?: string;
 
@@ -470,6 +509,35 @@ export interface Env {
    *  CLOUDFLARE_TURN_API_TOKEN */
   CLOUDFLARE_TURN_KEY_ID?: string;
   CLOUDFLARE_TURN_API_TOKEN?: string;
+
+  /** Cloudflare for SaaS — custom domains on published sites.
+   *
+   *  A tenant's own hostname (`shop.example.com`) lives on a zone we do not
+   *  control, so serving it over HTTPS needs a certificate issued through
+   *  Cloudflare for SaaS custom hostnames. OWNERSHIP verification does not need
+   *  these (it resolves a TXT record over DNS-over-HTTPS); only the certificate
+   *  does. When either is unset the domain flow still runs and still verifies,
+   *  but parks at `pending_certificate` with that reason stated — see
+   *  application/ide/customDomain.ts.
+   *
+   *  `CLOUDFLARE_ZONE_ID` is the builderforce.ai zone id (dashboard → Overview).
+   *  The token needs the `Zone → SSL and Certificates → Edit` permission on that
+   *  zone: wrangler secret put CLOUDFLARE_SAAS_API_TOKEN */
+  CLOUDFLARE_ZONE_ID?: string;
+  CLOUDFLARE_SAAS_API_TOKEN?: string;
+
+  /** Salt for the one-way hash of a site visitor's IP (`site_records.ip_hash`,
+   *  daily visitor counting). Falls back to JWT_SECRET so the feature works
+   *  un-provisioned; set a dedicated value so rotating it cannot invalidate
+   *  sessions: wrangler secret put SITE_VISITOR_SALT */
+  SITE_VISITOR_SALT?: string;
+
+  /** Origin baked into marketing-email tracking links (open pixel, click
+   *  redirect, unsubscribe). MUST be stable forever — links already delivered
+   *  keep resolving against it. Defaults to `https://builderforce.ai/gateway`,
+   *  the same-origin gateway path corporate networks reliably allow. Override
+   *  only for a separate deployment: wrangler secret put CAMPAIGN_TRACKING_ORIGIN */
+  CAMPAIGN_TRACKING_ORIGIN?: string;
 }
 
 /**
@@ -483,6 +551,27 @@ export function resolveAppBaseUrl(env: { APP_URL?: string }): string {
     .split(',')[0]!
     .trim()
     .replace(/\/$/, '');
+}
+
+/**
+ * The canonical public origin of THIS API — the one to hand to a third party.
+ *
+ * Deliberately NOT derived from the incoming request. The worker answers on both
+ * `api.builderforce.ai` and `builderforce.ai/gateway/*`, so building a webhook
+ * URL from `c.req.url` would produce a different address depending on which host
+ * the user's browser happened to be on, and a URL already pasted into a provider
+ * console would keep working while the one shown in the UI quietly changed.
+ * Falls back to the api subdomain of the configured app origin.
+ */
+export function resolveApiOrigin(env: { API_ORIGIN?: string; APP_URL?: string }): string {
+  if (env.API_ORIGIN) return env.API_ORIGIN.split(',')[0]!.trim().replace(/\/$/, '');
+  const app = resolveAppBaseUrl(env);
+  try {
+    const url = new URL(app);
+    return url.hostname.startsWith('api.') ? url.origin : `${url.protocol}//api.${url.hostname.replace(/^www\./, '')}`;
+  } catch {
+    return 'https://api.builderforce.ai';
+  }
 }
 
 /** Variables injected into Hono context by the auth middleware. */
@@ -516,6 +605,8 @@ export interface Vars {
    * {@link requestActor} so the write is credited to the agent.
    */
   agentActorRef?: string;
+  /** Server-signed client surface from JwtPayload.src. */
+  clientSurface?: 'vscode';
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**

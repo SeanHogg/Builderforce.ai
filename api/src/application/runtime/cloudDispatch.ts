@@ -173,6 +173,21 @@ export function parseActAsRole(payload: string | null | undefined): string | und
   }
 }
 
+/** Reviewer-only role stamp. Unlike parseActAsRole this intentionally excludes
+ * producers: producer evidence is auto-attested from delivered work, while a
+ * reviewer must submit an explicit approve/changes-requested judgement. */
+export function parseReviewRole(payload: string | null | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { reviewRole?: unknown };
+    return typeof p.reviewRole === 'string' && p.reviewRole.trim()
+      ? p.reviewRole.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The LANE a role-attributed run serves, off its payload.
  *

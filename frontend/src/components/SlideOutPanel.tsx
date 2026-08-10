@@ -21,11 +21,69 @@ export interface SlideOutPanelTab {
   label: string;
 }
 
+/**
+ * The three widths, and only three (PRD 21 §2.4 / §3.4).
+ *
+ *   sheet (25%) — settings, profile, ⌘K, short forms
+ *   wide  (50%) — index + detail, e.g. Workforce's fourteen sub-views
+ *   full  (94%) — dashboards that need the room; the board is one Esc away
+ *
+ * A bespoke `min(560px, 96vw)` at a call site is what produced twenty distinct
+ * panel widths, so the named widths resolve to tokens and a raw CSS length is
+ * accepted only for the surfaces that predate this and have not been ported.
+ */
+export type PanelWidth = 'sheet' | 'wide' | 'full';
+
+const PANEL_WIDTH: Record<PanelWidth, string> = {
+  sheet: 'var(--panel-width-sheet)',
+  wide: 'var(--panel-width-wide)',
+  full: 'var(--panel-width-full)',
+};
+
+const WIDTH_ORDER: PanelWidth[] = ['sheet', 'wide', 'full'];
+
+const isNamedWidth = (width: PanelWidth | string): width is PanelWidth => width in PANEL_WIDTH;
+
+const resolveWidth = (width: PanelWidth | string): string =>
+  (isNamedWidth(width) ? PANEL_WIDTH[width] : width);
+
+/**
+ * The reader's own width choice, remembered per destination (PRD 21 §11.4.4).
+ *
+ * `panelWidth()` picking a default is a POLICY, and a policy cannot know that a
+ * Gantt wants 94% while a settings form does not — only the person reading it
+ * can. So the policy supplies the default and this supplies the final answer.
+ * Keyed per destination deliberately: somebody who widens Finance wants Finance
+ * wide every time and does not want Settings to follow it.
+ */
+const widthKey = (storageKey: string) => `bf-panel-width:${storageKey}`;
+
+function readStoredWidth(storageKey: string | undefined): PanelWidth | null {
+  if (!storageKey || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(widthKey(storageKey));
+    return raw && isNamedWidth(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface SlideOutPanelProps {
   open: boolean;
   onClose: () => void;
   /** Panel title (optional). */
   title?: React.ReactNode;
+  /**
+   * Where this panel sits — rendered above the title in mono, small, muted.
+   * A panel over a board has no page breadcrumb of its own, so it carries one.
+   */
+  crumb?: React.ReactNode;
+  /**
+   * The panel's INDEX COLUMN (§3.4). A destination's sub-views become a vertical
+   * list down the panel's left edge rather than a horizontal tab bar — fourteen
+   * items fit vertically and a tab bar cannot hold them.
+   */
+  index?: React.ReactNode;
   /** Optional tabs; when provided, activeTabId and onTabChange control which tab is active. */
   tabs?: SlideOutPanelTab[];
   activeTabId?: string;
@@ -34,8 +92,23 @@ export interface SlideOutPanelProps {
   headerActions?: React.ReactNode;
   /** Main content. */
   children: React.ReactNode;
-  /** Drawer width. Default min(560px, 96vw). */
-  width?: string;
+  /** One of the three named widths, or a raw CSS length for an unported surface. */
+  width?: PanelWidth | string;
+  /**
+   * Turns on the reader's width control and names where the choice is kept.
+   * Omit it and the panel keeps exactly the width the caller asked for — which
+   * is right for a short confirmation sheet, and wrong for a destination.
+   */
+  widthStorageKey?: string;
+  /**
+   * A CSS custom-property NAME (e.g. `--seat-security`) to tint this panel with.
+   *
+   * The panel's owner is a fact the panel already has and the reader does not:
+   * a rule along the header in the owning seat's hue is how "this is Security's
+   * page" is said without a sentence. A variable name rather than a colour so a
+   * call site cannot introduce a twelfth hue — `lib/seats.ts` owns the palette.
+   */
+  accentVar?: string;
   /** Which edge the drawer docks to. Default 'right'. Use 'left' when the Brain
    *  (which is right-docked) needs a companion work panel on the opposite side. */
   side?: 'left' | 'right';
@@ -57,16 +130,33 @@ export function SlideOutPanel({
   open,
   onClose,
   title,
+  crumb,
+  index,
   tabs,
   activeTabId,
   onTabChange,
   headerActions,
   children,
-  width = 'min(560px, 96vw)',
+  width = 'sheet',
+  widthStorageKey,
+  accentVar,
   side = 'right',
   zIndex = 9998,
 }: SlideOutPanelProps) {
   const tCommon = useTranslations('common');
+  // Seeded from the policy, overridden by the reader. Read in an effect rather
+  // than in the initialiser so the server and the first hydrated frame agree.
+  const [chosenWidth, setChosenWidth] = useState<PanelWidth | null>(null);
+  useEffect(() => { setChosenWidth(readStoredWidth(widthStorageKey)); }, [widthStorageKey]);
+
+  const chooseWidth = (next: PanelWidth) => {
+    setChosenWidth(next);
+    if (!widthStorageKey) return;
+    try { window.localStorage.setItem(widthKey(widthStorageKey), next); } catch { /* private mode */ }
+  };
+
+  const effectiveWidth = chosenWidth ?? width;
+  const showWidthControl = Boolean(widthStorageKey) && isNamedWidth(effectiveWidth);
   // Portal to <body> so the fixed drawer escapes ancestor stacking contexts
   // (e.g. the app `.shell` has `position: relative; z-index: 1`, which would
   // otherwise trap the drawer below the fixed footer regardless of its z-index).
@@ -74,6 +164,15 @@ export function SlideOutPanel({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // §2.5: "Closes on `Esc` and on scrim click." The scrim was always here; Esc
+  // was not, so a keyboard user could open a panel they could not dismiss.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, open]);
 
   if (!open || !mounted) return null;
 
@@ -96,7 +195,7 @@ export function SlideOutPanel({
           top: 0,
           ...(side === 'left' ? { left: 0 } : { right: 0 }),
           bottom: 0,
-          width,
+          width: resolveWidth(effectiveWidth),
           maxWidth: '100%',
           ...(side === 'left'
             ? { borderRight: '1px solid var(--border-subtle)', boxShadow: '8px 0 24px rgba(0,0,0,0.2)' }
@@ -115,6 +214,10 @@ export function SlideOutPanel({
               gap: 12,
               padding: '16px 20px',
               borderBottom: '1px solid var(--border-subtle)',
+              // The owning seat's hue as a rule along the top of the header —
+              // the one place a panel can say WHOSE page this is without
+              // spending a line of copy on it.
+              ...(accentVar ? { borderTop: `2px solid var(${accentVar})` } : null),
               flexShrink: 0,
               flexWrap: 'wrap',
             }}
@@ -130,7 +233,7 @@ export function SlideOutPanel({
                 alignItems: 'center',
                 justifyContent: 'center',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-base)',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
@@ -141,9 +244,32 @@ export function SlideOutPanel({
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            {title != null && (
-              <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-                {title}
+            {(title != null || crumb != null) && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {crumb != null && (
+                  <div className="ui-eyebrow" style={{ color: accentVar ? `var(${accentVar})` : 'var(--text-muted)' }}>{crumb}</div>
+                )}
+                {title != null && (
+                  <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>
+                )}
+              </div>
+            )}
+            {/* The reader's escape hatch — the thing a full-screen page used to
+                be. Widening never navigates and never remounts the stage. */}
+            {showWidthControl && (
+              <div className="ui-panel-width" role="group" aria-label={tCommon('panelWidth.label')}>
+                {WIDTH_ORDER.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => chooseWidth(option)}
+                    aria-pressed={effectiveWidth === option}
+                    aria-label={tCommon(`panelWidth.${option}`)}
+                    title={tCommon(`panelWidth.${option}`)}
+                  >
+                    <span aria-hidden="true" data-w={option} />
+                  </button>
+                ))}
               </div>
             )}
             {headerActions}
@@ -165,13 +291,13 @@ export function SlideOutPanel({
                 onClick={() => onTabChange?.(t.id)}
                 style={{
                   padding: '10px 16px',
-                  fontSize: '0.875rem',
+                  fontSize: 'var(--font-size-small)',
                   border: 'none',
                   background: 'none',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
-                  borderBottom: `2px solid ${activeTabId === t.id ? 'var(--coral-bright, #f4726e)' : 'transparent'}`,
-                  color: activeTabId === t.id ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
+                  borderBottom: `2px solid ${activeTabId === t.id ? 'var(--coral-bright)' : 'transparent'}`,
+                  color: activeTabId === t.id ? 'var(--coral-bright)' : 'var(--text-muted)',
                   fontWeight: activeTabId === t.id ? 600 : 400,
                 }}
               >
@@ -180,8 +306,28 @@ export function SlideOutPanel({
             ))}
           </div>
         )}
-        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {children}
+        {/* Index column beside the body, not above it — §3.4. Fourteen sub-views
+            fit down the left edge; a horizontal bar cannot hold them. */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, alignItems: 'stretch' }}>
+          {index != null && (
+            <div
+              style={{
+                flexShrink: 0,
+                overflowY: 'auto',
+                borderRight: '1px solid var(--border-subtle)',
+                background: 'var(--surface-sunken)',
+                padding: 'var(--space-3)',
+              }}
+            >
+              {index}
+            </div>
+          )}
+          {/* `.ui-panel-body` carries the size container (§3.4): a destination
+              in here measures the PANEL, not the viewport, which is the only
+              breakpoint that means anything inside a viewport-relative panel. */}
+          <div className="ui-panel-body">
+            {children}
+          </div>
         </div>
       </div>
     </>,

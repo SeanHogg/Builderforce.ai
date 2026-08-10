@@ -240,8 +240,8 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
         gate: swimlanes.gate,
         isTerminal: swimlanes.isTerminal,
         projectId: boards.projectId,
-        requirementCount: sql<number>`(SELECT count(*)::int FROM ${swimlaneRequirements} WHERE ${swimlaneRequirements.swimlaneId} = ${swimlanes.id})`,
-        agentCount: sql<number>`(SELECT count(*)::int FROM ${swimlaneAgentAssignments} WHERE ${swimlaneAgentAssignments.swimlaneId} = ${swimlanes.id})`,
+        requirementCount: sql<number>`(SELECT count(*)::int FROM ${swimlaneRequirements} WHERE ${swimlaneRequirements.swimlaneId} = ${swimlanes}.id)`,
+        agentCount: sql<number>`(SELECT count(*)::int FROM ${swimlaneAgentAssignments} WHERE ${swimlaneAgentAssignments.swimlaneId} = ${swimlanes}.id)`,
       })
       .from(swimlanes)
       .innerJoin(boards, eq(boards.id, swimlanes.boardId))

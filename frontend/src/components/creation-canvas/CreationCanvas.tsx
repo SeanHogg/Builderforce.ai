@@ -1,81 +1,262 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
+import dynamic from 'next/dynamic';
 import {
   addEdge,
   Background,
   BackgroundVariant,
-  ControlButton,
-  Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
   type Connection,
   type Edge,
+  type Node,
   type NodeMouseHandler,
   type NodeTypes,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { CanvasOutlinePanel } from './CanvasOutlinePanel';
+import { CanvasFilesPanel } from './CanvasFilesPanel';
+import { CanvasDrivePanel } from './CanvasDrivePanel';
+import { CanvasHostActions } from './CanvasHostActions';
+import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
+import { BrainDock } from './BrainDock';
+import { BrainActivityIndicator } from './BrainActivityView';
+import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockMode, type BrainDockPreferences } from './brainDockPreferences';
+import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
+import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
+import { AUTHORED_DRAWING_STROKE, AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
-import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
-import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
+
+/**
+ * Which guided tour this board offers, and at which revision.
+ *
+ * Exported because the tour's "have I already seen this?" history is keyed by
+ * exactly this pair — so a test (or any other caller) that needs the
+ * returning-visitor state has to write the SAME key. Typed inline in two places
+ * it drifted the moment the version was bumped, and the failure mode is silent:
+ * the seed stops matching, the welcome dialog opens over the board again, and
+ * whatever the test was actually measuring is measured through an overlay.
+ */
+export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
+import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
+import { useGuestRoom } from '@/lib/useGuestRoom';
+import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
+import {
+  createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
+  getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
+} from '@/lib/guestRoomApi';
+import { GuestAiUnavailableError, runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
-import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
-import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
-import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
-import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
+import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
+import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
+import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
+import { isAwaitingApprovalExecution, type LlmError } from '@/lib/builderforceApi';
+import { ApiRequestError } from '@/lib/apiClient';
+import { resolveCanvasImage, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
+import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
-import { updateAgent } from '@/lib/api';
+import { createCloudAgent, updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
+import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
-import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
-import { downloadJson, downloadText, toCsv } from '@/lib/download';
-import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
+import { appendCanvasVideoSource, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
+import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { parseCSV } from '@/lib/importHelpers';
+import {
+  MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
+  profileTabular, queryTabular, tabularFromObject,
+  type TabularHighlightRule, type TabularQuery, type TabularSource,
+} from '@/lib/canvasTabularData';
+import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
+import { useCoarsePointer } from '@/lib/useCoarsePointer';
+import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
+import { useComposerSpace } from './useComposerSpace';
+import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
+import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
+import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
+import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
+import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { Icon } from '@/components/ui/Icon';
+import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
-import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
-import { VoiceOutput } from '@/components/ide/VoiceOutput';
+import { VoiceOutput } from '@/components/builder/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
-import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
+import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { useLlmModels } from '@/lib/useLlmModels';
-import { ModelSelectionPicker, type ChatModelOptions, type ChatModelSelection } from '@/components/ModelSelectionPicker';
+import { SectionTour, type SectionTourStep } from '@/components/onboarding/SectionTour';
+import { useSectionTour } from '@/components/onboarding/useSectionTour';
+import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
+import { useChatModelOptions } from '@/lib/useLlmModels';
+import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
+import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from '@/components/PromptUseCasePicker';
+import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
+import { TwilioCanvasSetup } from './TwilioCanvasSetup';
+import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
+import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
+import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
+import { EXPORT_EXTENSION, EXPORT_MIME, SERVER_RENDERED_ACTIONS, defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
+import {
+  PITCH_COMPETITIONS, PITCH_MAX_SCORE, formatPitchDuration, isPitchObjectKind, pitchApplicationAnswers,
+  pitchApplicationReadiness, pitchBeats, pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage,
+  pitchQaItems, pitchReadiness, pitchRuntimeSeconds, pitchSpokenSeconds, pitchTimingTone, type PitchLabelled,
+} from '@/lib/pitchCompetition';
+import { markdownHtmlDocument, printCanvasObject } from '@/lib/printDocument';
+import { canvasObjectSvg } from '@/lib/renderedSvg';
+import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActions';
+import { listEvermindModels } from '@/lib/studioModelsApi';
+import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
+import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
+import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
+import { deleteIdeProject, listIdeProjects } from '@/lib/api';
+import type { IdeProject } from '@/lib/types';
+import { CanvasBuildPanel } from './CanvasBuildPanel';
+import { gamePayloadFrom } from '@/lib/gameTargets';
+import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
+import type { ProjectModality } from '@/lib/modality';
+import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseLms';
+import { executeModelComparison } from '@/lib/modelComparison';
+import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
+import { signInHref } from '@/lib/auth';
+import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
+
+const Canvas3DView = dynamic(
+  () => import('@/components/canvas/Canvas3DView')
+    .then((module) => module.Canvas3DView as ComponentType<Canvas3DViewProps<CreationFlowNode>>),
+  { ssr: false },
+);
+const VoiceConfigPanel = dynamic(
+  () => import('@/components/builder/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
+  { ssr: false },
+);
+const AITrainingPanel = dynamic(
+  () => import('@/components/AITrainingPanel').then((module) => module.AITrainingPanel),
+  { ssr: false },
+);
+const CanvasGamePanel = dynamic(
+  () => import('./CanvasGamePanel').then((module) => module.CanvasGamePanel),
+  { ssr: false },
+);
 
 const DND_MIME = 'application/x-builderforce-creation-object';
+const COURSE_AUTHORING_CONTRACT = '{ version, language, audience, description, estimatedMinutes, passingScore, completedLessonIds: [], modules: [{ id, title, description, lessons: [{ id, title, objective, content, activity, durationMinutes }], assessment: { question, choices, answer, explanation } }] }';
+const COURSE_AUTHORING_SCHEMA = {
+  type: 'object',
+  required: ['version', 'language', 'audience', 'description', 'estimatedMinutes', 'passingScore', 'completedLessonIds', 'modules'],
+  properties: {
+    version: { type: 'string' }, language: { type: 'string' }, audience: { type: 'string' }, description: { type: 'string' },
+    estimatedMinutes: { type: 'number' }, passingScore: { type: 'number' }, completedLessonIds: { type: 'array', items: { type: 'string' } },
+    modules: {
+      type: 'array', minItems: 1, items: {
+        type: 'object', required: ['id', 'title', 'description', 'lessons', 'assessment'],
+        properties: {
+          id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' },
+          lessons: {
+            type: 'array', minItems: 1, items: {
+              type: 'object', required: ['id', 'title', 'objective', 'content', 'activity', 'durationMinutes'],
+              properties: { id: { type: 'string' }, title: { type: 'string' }, objective: { type: 'string' }, content: { type: 'string' }, activity: { type: 'string' }, durationMinutes: { type: 'number' } },
+            },
+          },
+          assessment: {
+            type: 'object', required: ['question', 'choices', 'answer', 'explanation'],
+            properties: { question: { type: 'string' }, choices: { type: 'array', items: { type: 'string' } }, answer: { type: 'number' }, explanation: { type: 'string' } },
+          },
+        },
+      },
+    },
+  },
+} as const;
+const GUIDED_TOUR_AUTHORING_SCHEMA = {
+  type: 'object',
+  required: ['version', 'minimumVisits', 'offerTitle', 'offerBody', 'startLabel', 'cancelLabel', 'blurBackground', 'escapeHatch', 'steps'],
+  properties: {
+    version: { type: 'number' }, minimumVisits: { type: 'number' }, offerTitle: { type: 'string' }, offerBody: { type: 'string' },
+    startLabel: { type: 'string' }, cancelLabel: { type: 'string' }, blurBackground: { type: 'boolean' }, escapeHatch: { type: 'boolean', const: true },
+    steps: { type: 'array', minItems: 1, items: { type: 'object', required: ['id', 'title', 'body', 'targetObjectId'], properties: { id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, targetObjectId: { type: 'string', description: 'Canvas object id to spotlight; use an empty string until a target exists.' } } } },
+  },
+} as const;
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
+const PALETTE_OPEN_STORAGE_KEY = 'builderforce:create:palette-open';
 const INSPECTOR_WIDTH_STORAGE_KEY = 'builderforce:create:inspector-width';
 const INSPECTOR_DEFAULT_WIDTH = 270;
 const INSPECTOR_MIN_WIDTH = 270;
 const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
-const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'generate', 'train', 'start', 'compare']);
-const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
-  Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
+const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare', 'build']);
+const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
+  website: ['publish'], video: ['generate'], build: ['open'],
+  // `build` compiles the authored steps into a real workflow definition; `run`
+  // executes one. Run builds first when needed, so Brain can call either.
+  workflow: ['build', 'run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
+  mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
+  evermind: ['train', 'evaluate', 'publish'],
+  image: ['generate', 'preview', 'export', 'convert-to-drawio'], drawing: ['convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
+  comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
+  resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
 };
-function MinimapIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
-  </svg>;
+const WEBSITE_SECTION_SCHEMA = {
+  type: 'object', required: ['id', 'kind'], additionalProperties: false,
+  properties: {
+    id: { type: 'string' }, kind: { type: 'string', enum: ['hero', 'features', 'content', 'stats', 'testimonial', 'cta'] },
+    eyebrow: { type: 'string' }, heading: { type: 'string' }, body: { type: 'string' }, cta: { type: 'string' }, secondaryCta: { type: 'string' },
+    quote: { type: 'string' }, author: { type: 'string' },
+    items: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, body: { type: 'string' }, value: { type: 'string' }, label: { type: 'string' } } } },
+  },
+};
+const WEBSITE_PAGES_SCHEMA = {
+  type: 'array', minItems: 1, maxItems: 8, items: {
+    type: 'object', required: ['id', 'name', 'path', 'sections'], additionalProperties: false,
+    properties: { id: { type: 'string' }, name: { type: 'string' }, path: { type: 'string' }, sections: { type: 'array', minItems: 2, maxItems: 12, items: WEBSITE_SECTION_SCHEMA } },
+  },
+};
+const WEBSITE_THEME_SCHEMA = {
+  type: 'object', required: ['style'], additionalProperties: false,
+  properties: { style: { type: 'string', enum: ['editorial', 'bold', 'minimal', 'soft', 'technical'] }, background: { type: 'string' }, foreground: { type: 'string' }, accent: { type: 'string' } },
+};
+const CREATIVE_GENERATOR_KINDS = new Set<CreationObjectKind>(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
+const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputs])) as Partial<Record<CreationObjectKind, readonly string[]>>;
+
+/** Serialize one trace arg/result for the diagnostics report. A trace payload can
+ *  hold a cyclic React value or a very large tool result, and the report that
+ *  explains a failure must never be the thing that throws while producing it. */
+function safeTraceJson(value: unknown): string {
+  try {
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    return text === undefined ? '(unserializable)' : text.slice(0, 400);
+  } catch {
+    return '(unserializable)';
+  }
 }
+
+/** True only when an advertised capability has a real Canvas-side adapter. */
+export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: string): boolean {
+  return action === 'inspect' || action === 'edit' || CONNECTED_CANVAS_ACTIONS[kind]?.includes(action) === true;
+}
+const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
+  Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Pitch: '◈', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
+};
 export type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
   | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
@@ -104,7 +285,24 @@ export function canvasChangesCanAutoApply(changes: readonly ProposedCanvasChange
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
-type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number };
+
+/** A follow-up about the selected object is an edit unless the user clearly asks
+ * for another object. This is also enforced at the tool boundary so a model that
+ * ignores the prompt cannot silently duplicate a chart while claiming an update. */
+export function duplicateAddUpdateTarget(
+  prompt: string,
+  kind: CreationObjectKind,
+  nodes: CreationFlowNode[],
+  selectedIds: string[],
+): CreationFlowNode | undefined {
+  const selected = nodes.find((node) => selectedIds.includes(node.id) && node.data.kind === kind && node.data.kind !== 'chat');
+  if (!selected) return undefined;
+  const escapedKind = kind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('-', '[ -]');
+  const explicitlyCreatesObject = new RegExp(`\\b(?:create|add|insert|duplicate|copy)\\s+(?:(?:a|an|another|new|additional|second|one)\\s+)?(?:analytical\\s+)?${escapedKind}\\b`, 'i').test(prompt)
+    || /\b(?:another|new|additional|second)\s+(?:object|visual|widget|version)\b/i.test(prompt);
+  return explicitlyCreatesObject ? undefined : selected;
+}
+type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number; metadata?: CreationTimelineMessage['metadata'] };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
 
@@ -146,38 +344,100 @@ export function associateBrainWithArtifacts(current: Edge[], brainId: string, ar
   return next;
 }
 
+export function scoreAgentTestResponse(response: string, expected: string): { passed: boolean | null; matched: string[]; missing: string[] } {
+  const criteria = expected.split(/[\n,;]+/).map((item) => item.replace(/^[-*\d.)\s]+/, '').trim()).filter(Boolean).slice(0, 20);
+  if (!criteria.length) return { passed: null, matched: [], missing: [] };
+  const haystack = response.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  const matches = (criterion: string) => {
+    const words = criterion.toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => word.length > 2) ?? [];
+    return words.length > 0 && words.filter((word) => haystack.includes(word)).length >= Math.ceil(words.length * 0.6);
+  };
+  const matched = criteria.filter(matches);
+  const missing = criteria.filter((criterion) => !matches(criterion));
+  return { passed: missing.length === 0, matched, missing };
+}
+
 function safeDownloadName(value: string): string {
   return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'creation';
 }
 
-function artifactMarkdown(data: CreationNodeData): string {
-  if (data.kind === 'chat' && Array.isArray(data.messages)) {
-    const transcript = data.messages.flatMap((value) => {
-      if (!value || typeof value !== 'object') return [];
-      const message = value as Record<string, unknown>;
-      if (typeof message.content !== 'string' || !message.content.trim()) return [];
-      const speaker = message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Brain' : 'System';
-      return [`## ${speaker}\n\n${message.content}`];
-    });
-    if (transcript.length) return `# ${data.title}\n\n${transcript.join('\n\n')}`;
-  }
-  const authored = [data.markdown, data.aiResponse, data.content, data.subtitle].find((value) => typeof value === 'string' && value.trim());
-  return typeof authored === 'string' ? authored : `# ${data.title}\n\n${data.status ? `Status: ${data.status}\n` : ''}`;
+/** Objects whose body is authored prose or an outline, and so get a writable
+ * editor rather than a read-only "live object" note. */
+const DOCUMENT_EDITOR_KINDS = new Set<CreationObjectKind>(['document', 'prd', 'knowledge', 'note', 'report', 'slides']);
+
+/**
+ * The rows an object holds, in the positional shape BOTH the CSV writer and the
+ * .xlsx writer index by.
+ *
+ * One derivation — `tabularFromObject`, the same one the sheet card renders from
+ * — so an exported file can never disagree with what is on screen. This used to
+ * re-read `data.rows`/`data.columns` by hand, which is why a dataset carrying
+ * `sampleRows` rendered on the card and then exported as "no rows".
+ */
+function artifactSheet(data: CreationNodeData): { columns: string[]; rows: Array<Array<string | number | null>> } | null {
+  const source = tabularFromObject(data as Record<string, unknown>);
+  if (!source.columns.length) return null;
+  const rows = source.rows.map((row) => source.columns.map((column) => {
+    const value = row[column];
+    if (value == null) return null;
+    return typeof value === 'string' || typeof value === 'number' ? value : String(value);
+  }));
+  return { columns: source.columns, rows };
 }
 
-function artifactCsv(data: CreationNodeData): string | null {
-  const rawRows = Array.isArray(data.rows) ? data.rows : [];
-  const rawColumns = Array.isArray(data.columns) ? data.columns : [];
-  const columns = rawColumns.map((column) => typeof column === 'string' ? column : String((column as { name?: unknown; key?: unknown })?.name ?? (column as { key?: unknown })?.key ?? 'Column'));
-  if (!columns.length && rawRows[0] && typeof rawRows[0] === 'object' && !Array.isArray(rawRows[0])) columns.push(...Object.keys(rawRows[0] as Record<string, unknown>));
-  if (!columns.length) return null;
-  const rows = rawRows.map((row) => Array.isArray(row)
-    ? row.map((value) => value == null || ['string', 'number'].includes(typeof value) ? value as string | number | null : JSON.stringify(value))
-    : columns.map((column) => {
-      const value = row && typeof row === 'object' ? (row as Record<string, unknown>)[column] : '';
-      return value == null || ['string', 'number'].includes(typeof value) ? value as string | number | null : JSON.stringify(value);
-    }));
-  return toCsv(columns, rows);
+/** Horizontal gap between objects created by one multi-file drop, so a folder
+ * dropped at once lands as a readable row rather than a single stack. */
+const IMPORT_COLUMN_GAP = 360;
+/** Vertical gap for the EXTRA objects one file yields — a workbook's second and
+ * third sheets stack under the card that stood in for the file. */
+const IMPORT_ROW_GAP = 300;
+
+/**
+ * Let the browser paint before the next parse takes the main thread back.
+ *
+ * `officeFormats`' readers are synchronous CPU inside an async signature, so
+ * committing a node to React state and immediately starting the next read means
+ * the commit never reaches the screen. One frame, then a macrotask, is the pair
+ * that reliably gets a paint out of both engines.
+ */
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'undefined') { setTimeout(resolve, 0); return; }
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+/** Files read from a single drop. Past this the board stops being legible and
+ * the parse cost stops being worth it, so the rest are reported, not silently
+ * discarded. */
+const MAX_DROPPED_FILES = 12;
+
+/** Whether a drag carries files from outside the browser, as opposed to an
+ * object being dragged off the palette. */
+function dragCarriesFiles(event: React.DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
+
+function drawioAssetFromNode(node: CreationFlowNode): DrawioImageAsset | null {
+  const data = node.data;
+  const direct = [data.outputUrl, data.thumbnailUrl].find((value) => typeof value === 'string' && value.startsWith('data:image/'));
+  if (typeof direct === 'string') {
+    return {
+      name: typeof data.fileName === 'string' ? data.fileName : data.title,
+      dataUrl: direct,
+      ...(typeof data.imageWidth === 'number' ? { width: data.imageWidth } : {}),
+      ...(typeof data.imageHeight === 'number' ? { height: data.imageHeight } : {}),
+    };
+  }
+  if (data.kind !== 'drawing' || !Array.isArray(data.points)) return null;
+  const points = data.points.flatMap((point) => {
+    if (!point || typeof point !== 'object') return [];
+    const { x, y } = point as { x?: unknown; y?: unknown };
+    return typeof x === 'number' && typeof y === 'number' ? [{ x, y }] : [];
+  });
+  const width = typeof data.drawingWidth === 'number' ? data.drawingWidth : 640;
+  const height = typeof data.drawingHeight === 'number' ? data.drawingHeight : 420;
+  const url = drawingDataUrl(points, width, height, typeof data.stroke === 'string' ? data.stroke : 'var(--indigo-bright)', typeof data.strokeWidth === 'number' ? data.strokeWidth : 3);
+  return url ? { name: `${data.title}.svg`, dataUrl: url, width, height } : null;
 }
 
 const SEED = {
@@ -192,10 +452,13 @@ const INITIAL_NODES: CreationFlowNode[] = [
   { id: SEED.workflow, type: 'creation', position: { x: 80, y: 55 }, data: { kind: 'workflow', title: 'Fall campaign workflow', status: 'Ready' } },
   { id: SEED.website, type: 'creation', position: { x: 610, y: 45 }, data: { kind: 'website', title: 'Campaign landing page', status: 'Draft' } },
   { id: SEED.dashboard, type: 'creation', position: { x: 1140, y: 55 }, data: { kind: 'dashboard', title: 'Campaign forecast' } },
+  // The Brain Object is 390px wide once the conversation is placed INSIDE it, so
+  // the row beside it starts clear of that — a seeded board that reads well docked
+  // and then overlaps itself the moment Brain goes inline is the first impression.
   { id: SEED.chat, type: 'creation', position: { x: 80, y: 380 }, data: { kind: 'chat', title: 'Brain' } },
-  { id: SEED.sarah, type: 'creation', position: { x: 365, y: 455 }, data: { kind: 'staff', title: 'Sarah', role: 'Marketing', focus: 'Defining audience segments and writing email copy.', accent: '#e94b9b' } },
-  { id: SEED.jordan, type: 'creation', position: { x: 635, y: 455 }, data: { kind: 'staff', title: 'Jordan', role: 'Design', focus: 'Refining hero section and mobile layout.', accent: '#ff9827' } },
-  { id: SEED.agent, type: 'creation', position: { x: 930, y: 455 }, data: { kind: 'agent', title: 'Campaign Strategist', status: 'Draft', model: 'gpt-4o', subtitle: 'Defines strategy, messaging, and audience for high-impact campaigns.' } },
+  { id: SEED.sarah, type: 'creation', position: { x: 520, y: 455 }, data: { kind: 'staff', title: 'Sarah', role: 'Marketing', focus: 'Defining audience segments and writing email copy.', accent: 'var(--canvas-obj-evermind)' } },
+  { id: SEED.jordan, type: 'creation', position: { x: 800, y: 455 }, data: { kind: 'staff', title: 'Jordan', role: 'Design', focus: 'Refining hero section and mobile layout.', accent: 'var(--canvas-obj-staff)' } },
+  { id: SEED.agent, type: 'creation', position: { x: 1080, y: 455 }, data: { kind: 'agent', title: 'Campaign Strategist', status: 'Draft', model: 'gpt-4o', subtitle: 'Defines strategy, messaging, and audience for high-impact campaigns.' } },
 ];
 
 const INITIAL_EDGES: Edge[] = [
@@ -244,11 +507,80 @@ function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: strin
   return { nodes, edges };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
+/** Canonical project state rendered over an attached Evermind node. Kept outside the
+ * persisted canvas graph so a 20-second live refresh never creates canvas revisions. */
+export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: ProjectEvermindContributions): Partial<CreationNodeData> {
+  const measuredLoss = activity.training.find((point) => point.loss > 0)?.loss;
+  return {
+    title: head.name || 'Project Evermind',
+    status: head.seeded ? `${head.mode === 'connected' ? 'Learning' : 'Frozen'} · v${head.version}` : 'Ready to seed',
+    evermindVersion: head.version,
+    evermindSeeded: head.seeded,
+    contributions: activity.contributions,
+    pendingContributions: activity.pending,
+    recentLearnings: activity.recent,
+    trainingLoss: measuredLoss,
+    learningMode: activity.mode,
+    lastLearnedAt: activity.lastLearnedAt,
+    quarantinedAt: activity.quarantinedAt ?? head.quarantinedAt,
+    quarantineReason: activity.quarantineReason ?? head.quarantineReason,
+    evalPoint: activity.eval,
+    inferenceEnabled: activity.inferenceEnabled,
+    teacherModel: activity.teacherModel || undefined,
+    evermindLoading: false,
+  };
+}
+
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
+  /**
+   * A shipped pack's name and blurb are product copy, so they come from the
+   * catalogs; the English in `creationTemplates.ts` is the source string and the
+   * last-resort fallback while a new pack's translations land.
+   */
+  const templateText = useCallback((template: CreationTemplate, field: 'name' | 'description') => {
+    const key = `template.${template.id}.${field}`;
+    return t.has(key) ? t(key) : template[field];
+  }, [t]);
+  const templateCategoryLabel = useCallback((category: CreationTemplate['category']) => (
+    t(category === 'Object pack' ? 'templateCategoryObjectPack' : 'templateCategoryMarketplace')
+  ), [t]);
+  /** Chrome shared with every other spatial canvas lives in its own namespace. */
+  const tCommands = useTranslations('canvasCommands');
+  const tFiles = useTranslations('creationCanvas.files');
+  const tDrive = useTranslations('creationCanvas.drive');
+  const tImport = useTranslations('creationCanvas.import');
+  /** The import engine is a plain module, so it is handed the catalog rather
+   * than reaching for one — every string it produces stays translated. */
+  const importLabel = useCallback<ImportTranslator>((key, values) => tImport(key as never, values as never), [tImport]);
+  /**
+   * The one place a failed AI turn becomes words. Known failures the visitor can
+   * act on are said in their own language; anything else keeps the underlying
+   * message, which is what makes a real error debuggable. Every turn site routes
+   * through here so the guest path can never regress to a raw English throw.
+   */
+  const describeTurnError = useCallback((error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => {
+    if (error instanceof GuestAiUnavailableError) return t('noticeGuestAiUnavailable');
+    // A guest who has spent their free turns: the gateway sends `guest_limit_reached`
+    // with the cap on the body (GUEST_CHAT_LIMITS), and its own English prose. Say it
+    // in the visitor's language and point at the way forward instead of the wall.
+    const code = (error as LlmError | undefined)?.code;
+    if (code === 'guest_limit_reached') {
+      const limit = Number((error as LlmError).body?.limit);
+      return (error as LlmError).body?.reason === 'ip'
+        ? t('noticeGuestLimitDevice')
+        : t('noticeGuestLimitReached', { limit: Number.isFinite(limit) ? limit : 0 });
+    }
+    return error instanceof Error && error.message ? error.message : t(fallbackKey);
+  }, [t]);
   const confirm = useConfirm();
+  const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
   const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
+  const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
+  /** A file is being dragged over the board from outside the browser. */
+  const [fileDragging, setFileDragging] = useState(false);
+  const fileDragDepth = useRef(0);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -257,6 +589,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
+  /**
+   * The 3D reading of this canvas. It replaces the flat board rather than
+   * floating over it — two live views of the same objects would compete for the
+   * same pointer, and the point of the mode is to read depth without distraction.
+   */
+  const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
+  const threeD = useCanvasThreeD(comparisonModelIds.length >= 2);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -270,38 +609,188 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const allowed = new Set(CREATION_PALETTE_GROUPS.map((group) => group.group));
       setCollapsedPaletteGroups(new Set(Array.isArray(saved) ? saved.filter((group): group is CreationObjectGroup => typeof group === 'string' && allowed.has(group as CreationObjectGroup)) : []));
     } catch { setCollapsedPaletteGroups(new Set()); }
+    try {
+      const savedOpen = localStorage.getItem(PALETTE_OPEN_STORAGE_KEY);
+      setPaletteOpen(savedOpen === '1' || (savedOpen == null && window.innerWidth > 760));
+    } catch { setPaletteOpen(window.innerWidth > 760); }
     setPalettePreferencesReady(true);
   }, []);
-  const [presentMode, setPresentMode] = useState(initialPresent);
+  /**
+   * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
+   *
+   * Both used to be `useState` here, which meant leaving the board ended the
+   * presentation and dropped whoever you were following — so "let me show you
+   * the delivery numbers" was a way to END the thing you were doing. They live on
+   * the live session, which outlives every navigation; the local fallbacks below
+   * keep the board working on surfaces with no session provider (the embed tree,
+   * and the tests, which mount the canvas bare).
+   */
+  /**
+   * The action journal for THIS board — see `canvasActionJournal`. A ref rather
+   * than state: recording an action must never re-render the canvas, or the act
+   * of observing the board would change what is being observed.
+   */
+  const journal = useRef(createCanvasJournal());
+
+  const liveSession = useOptionalLiveSession();
+  const [localPresentMode, setLocalPresentMode] = useState(initialPresent);
+  const presentMode = liveSession ? liveSession.presentMode : localPresentMode;
+  // A ref, because the functional-updater form (`setPresentMode(v => !v)`) has to
+  // read the CURRENT value, and the shell's value does not live in this closure.
+  const presentModeRef = useRef(presentMode);
+  presentModeRef.current = presentMode;
+  const setPresentMode = useCallback((value: boolean | ((current: boolean) => boolean)) => {
+    const next = typeof value === 'function' ? value(presentModeRef.current) : value;
+    if (liveSession) liveSession.setPresentMode(next);
+    else setLocalPresentMode(next);
+  }, [liveSession]);
   const [drawingMode, setDrawingMode] = useState(false);
+  // Pan is the default in both pointer worlds, so a board behaves on first touch the way
+  // it always has on first click. The toggle exists because a one-finger drag can only
+  // do one of the two things — see `canvasPointerMode.ts`.
+  const [canvasGesture, setCanvasGesture] = useState<CanvasGesture>('pan');
   const [showHidden, setShowHidden] = useState(false);
-  const [followingUserId, setFollowingUserId] = useState<string | null>(null);
+  const [localFollowingUserId, setLocalFollowingUserId] = useState<string | null>(null);
+  const followingUserId = liveSession ? liveSession.followingUserId : localFollowingUserId;
+  const followingRef = useRef(followingUserId);
+  followingRef.current = followingUserId;
+  const setFollowingUserId = useCallback((value: string | null | ((current: string | null) => string | null)) => {
+    const next = typeof value === 'function' ? value(followingRef.current) : value;
+    if (liveSession) liveSession.setFollowing(next);
+    else setLocalFollowingUserId(next);
+  }, [liveSession]);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
+  const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
+  // The Builder object whose workspace is open on top of the board.
+  const [buildFocus, setBuildFocus] = useState<{ nodeId: string; storageProjectId: number } | null>(null);
+  /** The game object whose ship-to-device panel is open, by node id. */
+  const [gameFocus, setGameFocus] = useState<string | null>(null);
+  const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
+  const [twilioPromptSelected, setTwilioPromptSelected] = useState(false);
   const [thinking, setThinking] = useState(false);
+  // When the in-flight turn began. Shared with every Brain surface (dock strip,
+  // transcript, board anchor) so they narrate the same phase at the same instant.
+  const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
+  const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
-  const llmModels = useLlmModels();
-  const canvasModelOptions = useMemo<ChatModelOptions>(() => ({
-    configured: llmModels.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
-    byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
-    free: llmModels.freeModels,
-    plan: llmModels.models,
-    paid: llmModels.premiumModels.map((model) => model.id),
-  }), [llmModels]);
-  const [tourStep, setTourStep] = useState(0);
+  const { options: canvasModelOptions, canChooseModel } = useChatModelOptions();
   const [notice, setNotice] = useState('Session saved');
+
+  /**
+   * SHARED FREE SESSION (no account).
+   *
+   * An account-less canvas used to be strictly single-player: "Share" opened a
+   * sign-up gate, which answers a question nobody asked — they wanted to show
+   * someone the board, not to file paperwork. So a local canvas can now open the
+   * same guest ROOM the free Brain chat uses: an invite link, a roster, a combined
+   * turn allowance, and (on the chat surface) a camera meeting.
+   *
+   * The board syncs through the room as ONE serialized snapshot, last-writer-wins
+   * on the existing save debounce. That is deliberately not a CRDT: this is a
+   * short-lived ≤8-person free session, and an operational-transform stack has
+   * failure modes far worse than "whoever moved a card most recently won".
+   * localStorage stays the local cache, so a dropped connection still leaves the
+   * board on the device that was editing it.
+   */
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [roomBusy, setRoomBusy] = useState(false);
+  const guestName = useRef('');
+  useEffect(() => {
+    if (persistence !== 'local') return;
+    setRoomCode(getActiveGuestRoom());
+    guestName.current = getGuestDisplayName();
+  }, [persistence]);
+  const room = useGuestRoom(persistence === 'local' ? roomCode : null, { name: guestName.current });
+  const inRoom = persistence === 'local' && !!roomCode;
+  /** Read inside callbacks that must not re-create when the room changes. */
+  const roomCodeRef = useRef<string | null>(null);
+  roomCodeRef.current = inRoom ? roomCode : null;
+  /** The snapshot most recently exchanged with the room — suppresses echo. */
+  const lastRoomSnapshot = useRef<string>('');
+  /**
+   * False until this device has read the room's board (or learned it has none).
+   *
+   * An invitee mounts on the DEFAULT starter board and the save debounce fires
+   * ~300ms later — before the first pull can land. Without this gate that empty
+   * starter board would be pushed over the host's real one, and joining a shared
+   * canvas would wipe it. Pushes are held until the pull settles.
+   */
+  const roomHydrated = useRef(false);
+  const announceCanvas = room.announceCanvas;
+
+  /**
+   * The ONE write for an account-less canvas: this device, and — when the session
+   * is shared — the room everybody else is reading. Called by every local save
+   * path, so a shared board can never be updated by one of them and missed by
+   * another.
+   */
+  const persistSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
+    writeLocalCreationSession(sessionId, snapshot);
+    const code = roomCodeRef.current;
+    if (!code || !roomHydrated.current) return;
+    const serialized = JSON.stringify(snapshot);
+    // Don't push back what we just pulled — that is how two peers get into a
+    // permanent round-trip over a board neither of them is touching.
+    if (serialized === lastRoomSnapshot.current) return;
+    lastRoomSnapshot.current = serialized;
+    void pushGuestRoomCanvas(code, serialized).then((stored) => {
+      if (stored) announceCanvas();
+      // A board too big for the room's slot must say so out loud: everyone here
+      // would otherwise keep editing while late joiners load a stale board.
+      else setNotice(t('sharedBoardTooLarge'));
+    });
+  }, [sessionId, announceCanvas, t]);
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
+  const [joinedCollaborator, setJoinedCollaborator] = useState<CreationSessionDetail['members'][number] | null>(null);
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const localizedTourDefaults = useCallback((): Partial<CreationNodeData> => {
+    const base = defaultCanvasTourDesign();
+    const tour: CanvasTourDesign = {
+      ...base,
+      offerTitle: t('tourBuilder.defaultOfferTitle'),
+      offerBody: t('tourBuilder.defaultOfferBody'),
+      startLabel: t('tourBuilder.defaultStartLabel'),
+      cancelLabel: t('tourBuilder.defaultCancelLabel'),
+      steps: [
+        { ...base.steps[0]!, title: t('tourBuilder.defaultStep1Title'), body: t('tourBuilder.defaultStep1Body') },
+        { ...base.steps[1]!, title: t('tourBuilder.defaultStep2Title'), body: t('tourBuilder.defaultStep2Body') },
+      ],
+    };
+    return { title: t('tourBuilder.defaultObjectTitle'), status: t('tourBuilder.draftSteps', { count: tour.steps.length }), tour };
+  }, [t]);
+  const tourSteps = useMemo<SectionTourStep[]>(() => Array.from({ length: 6 }, (_, index) => ({
+    title: t(`tourTitle${index + 1}` as 'tourTitle1'),
+    body: t(`tourBody${index + 1}` as 'tourBody1'),
+    target: [
+      '[data-tour="creation-brain-dock"]',
+      '[data-tour="creation-object-palette"]',
+      '[data-tour="creation-board"]',
+      '[data-tour="creation-board"]',
+      '[data-tour="creation-collaborators"]',
+      '[data-tour="creation-share"]',
+    ][index],
+  })), [t]);
+  const sectionTour = useSectionTour({
+    ...CREATION_CANVAS_TOUR,
+    audienceId: currentUserId || (persistence === 'local' ? 'guest' : null),
+    activity: { sessionId, clientSurface: canvasSurface() },
+  });
+  const prepareTourStep = useCallback((step: number) => {
+    setMoreOpen(false);
+    setShareOpen(false);
+    if (step === 1) setPaletteOpen(true);
+  }, []);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
@@ -309,10 +798,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
+  const nativeFullscreenRef = useRef(false);
+  // ONE Brain surface: which side it is parked on, how wide, and whether the user
+  // wants the step list. Read from storage after mount so SSR stays deterministic.
+  const [brainDock, setBrainDock] = useState(DEFAULT_BRAIN_DOCK_PREFERENCES);
+  const [inspectorFocus, setInspectorFocus] = useState<'knowledge' | 'test' | 'evaluation' | 'delivery' | null>(null);
+  const [outcomeMetricsOpen, setOutcomeMetricsOpen] = useState(false);
+  const [outcomeMetrics, setOutcomeMetrics] = useState<CreationOutcomeMetrics | null>(null);
+  const [outcomeMetricsLoading, setOutcomeMetricsLoading] = useState(false);
+  const [outcomeMetricsError, setOutcomeMetricsError] = useState<string | null>(null);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
-  const [autoApply, setAutoApply] = useState(false);
+  const [autoApply, setAutoApply] = useState(true);
   const [autoApplyPending, setAutoApplyPending] = useState(false);
+  /** Conversation vs execution for this session (0409). Hydrated from the loaded
+   *  session below; `setSessionMode` is the writer that also persists it. */
+  const [sessionMode, setSessionMode_] = useState<ChatMode>(NEW_CHAT_MODE);
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
   const [lockBlocked, setLockBlocked] = useState(false);
@@ -324,25 +830,37 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [datasetRowLimit, setDatasetRowLimit] = useState(500);
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
+  const isComposingPrompt = prompt.trim().length > 0;
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
-    trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: 'web', action } });
+    trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
   }, [sessionId]);
   useEffect(() => {
     if (!palettePreferencesReady) return;
-    try { localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups])); } catch { /* storage can be unavailable in hardened contexts */ }
-  }, [collapsedPaletteGroups, palettePreferencesReady]);
+    try {
+      localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups]));
+      localStorage.setItem(PALETTE_OPEN_STORAGE_KEY, paletteOpen ? '1' : '0');
+    } catch { /* storage can be unavailable in hardened contexts */ }
+  }, [collapsedPaletteGroups, paletteOpen, palettePreferencesReady]);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydrated = useRef(false);
   const revision = useRef(1);
   const lastSavedGraph = useRef('');
+  const sessionOpenCorrelation = useRef(crypto.randomUUID());
   const currentGraph = useRef('');
   const saveInFlight = useRef(false);
+  const activePresenceInitialized = useRef(false);
+  const activeMemberIds = useRef<Set<string>>(new Set());
   const pendingSave = useRef<{ serialized: string; key: string } | null>(null);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const pendingViewport = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const flowWrapRef = useRef<HTMLDivElement | null>(null);
+  // The prompt's real height, published to the board as `--composer-space` — the
+  // band every bottom-anchored panel and the phone command rail sit above. It
+  // was a hardcoded 112px, which the execution chip alone overran.
+  const composerDockRef = useComposerSpace(flowWrapRef);
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
   const undoStack = useRef<string[]>([]);
@@ -351,9 +869,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const historyApplying = useRef(false);
   const drawingPoints = useRef<Array<{ x: number; y: number }>>([]);
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
-  const composerFormRef = useRef<HTMLFormElement | null>(null);
   const initialPromptSubmitted = useRef(false);
-  const autoApplyRef = useRef(false);
+  const initialBuildOpened = useRef(false);
+  const modelComparisonStarted = useRef(false);
+  const autoApplyRef = useRef(true);
   const mobileViewportFitted = useRef(false);
 
   useEffect(() => {
@@ -362,11 +881,93 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAutoApply(enabled);
   }, []);
 
+  useEffect(() => { setBrainDock(readBrainDockPreferences()); }, []);
+
+  /**
+   * Persist AND report the layout the user chose. The signal is what lets the
+   * shipped default become the layout people actually prefer instead of a guess.
+   * A resize drag passes persist=false so the board reflows live without writing
+   * storage — and firing a preference signal — on every pointer move.
+   */
+  const updateBrainDock = useCallback((patch: Partial<BrainDockPreferences>, persist = true) => {
+    setBrainDock((current) => {
+      const next = { ...current, ...patch };
+      if (persist) {
+        writeBrainDockPreferences(next);
+        trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: canvasSurface(), ...next } });
+      }
+      return next;
+    });
+  }, [sessionId]);
+
+  /**
+   * Fill the screen with the board, natively where the browser offers it and by
+   * taking over the viewport where it does not.
+   *
+   * iOS Safari exposes no element Fullscreen API at all, so the button used to
+   * report "full screen unavailable" on the one class of device where handing the
+   * whole screen to the canvas is worth the most. The CSS fallback (see
+   * `[data-fullscreen]` in the stylesheet) pins the shell over the app chrome and
+   * the mobile bottom bar, which is the same result the native call would give.
+   */
+  const toggleFullscreen = useCallback(() => {
+    const shell = shellRef.current;
+    if (typeof document === 'undefined' || !shell) return;
+    if (document.fullscreenElement) { void document.exitFullscreen?.().catch(() => undefined); return; }
+    if (fullscreen) { setFullscreen(false); return; }
+    const request = document.fullscreenEnabled ? shell.requestFullscreen?.() : undefined;
+    if (request) void request.catch(() => setFullscreen(true));
+    else setFullscreen(true);
+  }, [fullscreen]);
+
+  useEffect(() => {
+    // Only the native path owns the flag while IT is what is on screen. Without
+    // this guard a `fullscreenchange` fired by anything else on the page (a video,
+    // say) would silently drop the canvas out of the CSS fallback.
+    const sync = () => {
+      const native = !!document.fullscreenElement && document.fullscreenElement === shellRef.current;
+      if (!native && !nativeFullscreenRef.current) return;
+      nativeFullscreenRef.current = native;
+      setFullscreen(native);
+    };
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  // Escape leaves the CSS fallback, the way it leaves native full screen — the
+  // browser handles that key itself only when the browser put us there.
+  useEffect(() => {
+    if (!fullscreen || nativeFullscreenRef.current) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setFullscreen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
+
   const setAutoApplyMode = useCallback((enabled: boolean) => {
     autoApplyRef.current = enabled;
     setAutoApply(enabled);
     setBrainAutoApprove(enabled);
   }, []);
+
+  /**
+   * Session MODE (migration 0409) — `chat` (author on the board and answer) or `work`
+   * (leave a tracked, dispatched ticket behind). Persisted on the SESSION rather than
+   * in this browser, so a mode a collaborator armed is the mode everyone's next turn
+   * runs in. A local (unsaved) canvas has nowhere to persist it, so it keeps the value
+   * in state only — the same degradation the rest of the local canvas accepts.
+   */
+  const setSessionMode = useCallback((next: ChatMode) => {
+    setSessionMode_(next);
+    if (persistence !== 'server') {
+      // No server row to hold it, so the local snapshot does — otherwise the mode
+      // reset on every reload of a guest canvas.
+      const prior = readLocalCreationSession(sessionId);
+      if (prior) writeLocalCreationSession(sessionId, { ...prior, mode: next, updatedAt: new Date().toISOString() });
+      return;
+    }
+    void creationSessionsApi.update(sessionId, { mode: next })
+      .catch(() => setNotice(t('modeSaveFailed')));
+  }, [persistence, sessionId, t]);
 
   const memoryStorageKey = useMemo(() => {
     const chat = nodes.find((node) => node.data.kind === 'chat');
@@ -390,13 +991,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     window.requestAnimationFrame(() => paletteSearchRef.current?.focus());
   }, []);
 
-  const tourStorageKey = `builderforce:create-tour-complete:${currentUserId || (persistence === 'local' ? 'guest' : 'pending')}`;
-
   useEffect(() => {
-    if (persistence === 'server' && !currentUserId) return;
-    if (localStorage.getItem(tourStorageKey) !== '1') setTourStep(1);
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
-  }, [currentUserId, persistence, tourStorageKey]);
+  }, []);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -415,7 +1012,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!shareOpen || persistence !== 'server' || sessionRole !== 'owner') return;
     void creationSessionsApi.invitations.list(sessionId)
       .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
-      .catch((error) => setNotice(error instanceof Error ? error.message : 'Invitations could not be loaded'));
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeInvitationsFailed')));
   }, [persistence, sessionId, sessionRole, shareOpen]);
 
   useEffect(() => {
@@ -426,16 +1023,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setTitle(saved.title);
           setNodes(saved.nodes);
           setEdges(saved.edges);
-          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, createdAt: message.createdAt })));
+          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, metadata: message.metadata ?? {}, createdAt: message.createdAt })));
+          // The mode a guest armed in the homepage composer, carried across the
+          // hand-off — a local canvas has no server row, so the snapshot IS the store.
+          setSessionMode_(normalizeChatMode(saved.mode));
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         hydrated.current = true;
-        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', persistence: 'local' } });
+        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), persistence: 'local' } });
         return;
       }
+      const openedAt = performance.now();
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'started' }).catch(() => undefined);
       void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
         const { nodes: loadedNodes, edges: loadedEdges } = flowFromSession(detail);
         setTitle(detail.session.title);
+        // Mode is a property of the SESSION (0409), so a collaborator opening this
+        // board inherits the mode it is actually running in rather than the default.
+        setSessionMode_(normalizeChatMode(detail.session.mode));
         setBranchParentId(detail.session.branchParentSessionId ?? null);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
@@ -460,11 +1065,140 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
         currentGraph.current = lastSavedGraph.current;
         hydrated.current = true;
-        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
-        setNotice('Session saved');
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load session')).finally(() => setLoadingSession(false));
+        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
+        setNotice(t('noticeSessionSaved'));
+      }).catch((error) => {
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
+        setNotice(error instanceof Error ? error.message : t('noticeLoadSessionFailed'));
+      }).finally(() => setLoadingSession(false));
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
+
+  /**
+   * Adopt the room's board. Used for the first load in a shared session and for
+   * every peer edit after it.
+   *
+   * Setting `lastSavedGraph`/`lastRoomSnapshot` BEFORE the state lands is the
+   * whole trick: both save debounces compare against them and bail, so applying a
+   * peer's board cannot be mistaken for a local edit and pushed straight back —
+   * which is how a two-person session turns into an infinite sync loop.
+   */
+  const applyRoomSnapshot = useCallback((serialized: string) => {
+    let snapshot: LocalCreationSnapshot;
+    try {
+      snapshot = JSON.parse(serialized) as LocalCreationSnapshot;
+    } catch {
+      return; // a corrupt board is not worth wiping a good local one for
+    }
+    if (!Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return;
+    lastRoomSnapshot.current = serialized;
+    lastSavedGraph.current = JSON.stringify({ nodes: snapshot.nodes, edges: snapshot.edges });
+    setTitle(snapshot.title);
+    setNodes(snapshot.nodes);
+    setEdges(snapshot.edges);
+    setTimeline((snapshot.timeline ?? []).map((message) => ({
+      clientMessageId: message.clientMessageId,
+      messageRole: message.role,
+      body: message.body,
+      metadata: message.metadata ?? {},
+      createdAt: message.createdAt,
+    })));
+    // The viewport is personal — following someone else's pan mid-edit is
+    // disorienting, and each participant keeps their own place on the board.
+    writeLocalCreationSession(sessionId, snapshot);
+  }, [sessionId, setEdges, setNodes]);
+
+  // Pull the shared board: once on entering a room (this is how a LATE joiner
+  // sees anything at all) and again whenever a peer announces a new one.
+  useEffect(() => {
+    if (persistence !== 'local' || !roomCode) { roomHydrated.current = false; return; }
+    let cancelled = false;
+    void fetchGuestRoomCanvas(roomCode).then((serialized) => {
+      if (cancelled) return;
+      // A room with no board yet (the host is mid-create) means THIS device's
+      // board becomes the shared one — so open the gate either way.
+      if (serialized) { applyRoomSnapshot(serialized); hydrated.current = true; }
+      roomHydrated.current = true;
+    });
+    return () => { cancelled = true; };
+  }, [persistence, roomCode, room.canvasVersion, applyRoomSnapshot]);
+
+  /**
+   * Turn this private board into a shared session. The board comes WITH it —
+   * "invite people to this canvas" that starts them on an empty one would be a
+   * different (and worse) feature.
+   */
+  const startSharedSession = useCallback(async () => {
+    setRoomBusy(true);
+    const name = guestName.current.trim() || t('sharedDefaultHostName');
+    setGuestDisplayName(name);
+    guestName.current = name;
+    const state = await createGuestRoom(name, title, 'canvas');
+    if (typeof state === 'string') {
+      setNotice(state === 'unavailable' ? t('sharedUnavailable') : t('sharedEnded'));
+      setRoomBusy(false);
+      return;
+    }
+    const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
+    const serialized = JSON.stringify(snapshot);
+    lastRoomSnapshot.current = serialized;
+    // The host's board IS the room's board — no pull to wait for.
+    roomHydrated.current = true;
+    const stored = await pushGuestRoomCanvas(state.code, serialized);
+    setRoomCode(state.code);
+    setRoomBusy(false);
+    setNotice(stored ? t('sharedStarted') : t('sharedBoardTooLarge'));
+  }, [edges, nodes, sessionId, t, timeline, title, viewportRef]);
+
+  /** Stop sharing on THIS device. The board stays here; the room runs on for anyone else. */
+  const leaveSharedSession = useCallback(async () => {
+    const code = roomCodeRef.current;
+    setRoomCode(null);
+    lastRoomSnapshot.current = '';
+    if (code) await leaveGuestRoom(code);
+    setNotice(t('sharedLeft'));
+  }, [t]);
+
+  const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
+    const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'
+      ? /^evermind:(\d+)$/.exec(node.data.resourceId)
+      : null;
+    return match ? [{ nodeId: node.id, projectId: Number(match[1]) }] : [];
+  }).sort((a, b) => a.nodeId.localeCompare(b.nodeId))), [nodes]);
+
+  useEffect(() => {
+    if (persistence !== 'server' || evermindBindingKey === '[]') {
+      setEvermindLiveByNodeId({});
+      return;
+    }
+    let stopped = false;
+    const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
+    const sync = async () => {
+      const byProject = new Map<number, Promise<[ProjectEvermindHead, ProjectEvermindContributions]>>();
+      for (const binding of bindings) {
+        if (!byProject.has(binding.projectId)) byProject.set(binding.projectId, Promise.all([getProjectEvermindHead(binding.projectId), getProjectEvermindContributions(binding.projectId)]));
+      }
+      const settled = await Promise.all(bindings.map(async (binding) => {
+        try {
+          const [head, activity] = await byProject.get(binding.projectId)!;
+          return [binding.nodeId, projectEvermindNodePatch(head, activity)] as const;
+        } catch { return null; }
+      }));
+      if (stopped) return;
+      const activeNodeIds = new Set(bindings.map((binding) => binding.nodeId));
+      setEvermindLiveByNodeId((current) => {
+        const next = Object.fromEntries(Object.entries(current).filter(([nodeId]) => activeNodeIds.has(nodeId)));
+        for (const entry of settled) {
+          if (entry) next[entry[0]] = entry[1];
+        }
+        return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+      });
+    };
+    void sync();
+    const interval = window.setInterval(() => void sync(), 20_000);
+    return () => { stopped = true; window.clearInterval(interval); };
+  }, [evermindBindingKey, persistence]);
 
   useEffect(() => { currentGraph.current = JSON.stringify({ nodes, edges }); }, [edges, nodes]);
 
@@ -477,7 +1211,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const handle = window.setTimeout(() => {
       if (!flowRef.current) return;
       mobileViewportFitted.current = true;
-      void flowRef.current.fitView({ padding: 0.18, maxZoom: 0.72, duration: 280 });
+      // A full desktop graph can otherwise shrink to an illegible thumbnail on
+      // a phone. Keep objects readable and let the user pan to off-screen work.
+      void flowRef.current.fitView({ padding: 0.18, minZoom: 0.62, maxZoom: 0.82, duration: 280 });
     }, 80);
     return () => window.clearTimeout(handle);
   }, [loadingSession, nodes]);
@@ -489,19 +1225,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [initialFocusId, nodes]);
 
   useEffect(() => {
+    if (!initialBuildOpen || initialBuildOpened.current || !initialFocusId) return;
+    const target = nodes.find((node) => node.id === initialFocusId && node.data.kind === 'build');
+    const binding = target ? canvasBuildBinding(target.data) : null;
+    if (!target || !binding) return;
+    initialBuildOpened.current = true;
+    setBuildFocus({ nodeId: target.id, storageProjectId: binding.storageProjectId });
+  }, [initialBuildOpen, initialFocusId, nodes]);
+
+  useEffect(() => {
     if (!hydrated.current || !canEdit) return;
     const handle = window.setTimeout(() => {
       const serialized = JSON.stringify({ nodes, edges });
       if (serialized === lastSavedGraph.current) return;
       if (persistence === 'local') {
-        const prior = readLocalCreationSession(sessionId);
-        const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-        localStorage.setItem(storageKey, JSON.stringify(snapshot));
+        const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
+        persistSnapshot(snapshot);
         lastSavedGraph.current = serialized;
-        setNotice('Saved on this device');
+        setNotice(t('noticeSavedOnDevice'));
         return;
       }
-      setNotice('Saving changes…');
+      setNotice(t('noticeSavingChanges'));
       saveInFlight.current = true;
       const graph = creationGraphFromSnapshot({ nodes, edges });
       if (!pendingSave.current || pendingSave.current.serialized !== serialized) pendingSave.current = { serialized, key: crypto.randomUUID() };
@@ -511,7 +1255,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = serialized;
         setPersistedObjectIds(new Set(graph.objects.map((object) => object.id)));
         if (pendingSave.current?.key === saveAttempt.key) pendingSave.current = null;
-        setNotice('Session saved');
+        setNotice(t('noticeSessionSaved'));
       }).catch(async (error) => {
         if (error instanceof Error && error.message === 'Session changed') {
           try {
@@ -524,11 +1268,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             setEdges(merged.edges);
             setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
             pendingSave.current = null;
-            setNotice('Concurrent changes merged; saving again…');
+            setNotice(t('noticeConcurrentMerged'));
             return;
           } catch { /* Fall through to the original conflict message. */ }
         }
-        setNotice(error instanceof Error ? error.message : 'Save failed');
+        setNotice(error instanceof Error ? error.message : t('noticeSaveFailed'));
       })
         .finally(() => { saveInFlight.current = false; });
     }, 300);
@@ -539,8 +1283,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence !== 'local' || !hydrated.current) return;
     const handle = window.setTimeout(() => {
       const prior = readLocalCreationSession(sessionId); if (!prior) return;
-      const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-      localStorage.setItem(storageKey, JSON.stringify(snapshot));
+      const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+      persistSnapshot(snapshot);
     }, 150);
     return () => window.clearTimeout(handle);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
@@ -550,8 +1294,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let stopped = false;
     const reconcile = async () => {
       try {
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: thinking, followingUserId });
+        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
         if (stopped) return;
+        const nextActiveIds = new Set(presence.members.map((member) => member.userId));
+        if (activePresenceInitialized.current) {
+          const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIds.current.has(member.userId));
+          if (joined) setJoinedCollaborator(joined);
+        } else activePresenceInitialized.current = true;
+        activeMemberIds.current = nextActiveIds;
         setMembers(presence.members);
         const followed = presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
         if (followed?.viewport) void flowRef.current?.setViewport({ x: Number(followed.viewport.x), y: Number(followed.viewport.y), zoom: Number(followed.viewport.zoom) }, { duration: 350 });
@@ -570,13 +1320,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         revision.current = remoteRevision;
         lastSavedGraph.current = JSON.stringify(remote);
         currentGraph.current = lastSavedGraph.current;
-        setNotice('Updated by a collaborator');
+        setNotice(t('noticeUpdatedByCollaborator'));
       } catch { /* Presence and polling are best-effort; local edits continue. */ }
     };
     void reconcile();
     const timer = window.setInterval(() => void reconcile(), 8_000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [followingUserId, persistence, selectedIds, sessionId, setEdges, setNodes, thinking]);
+  }, [currentUserId, followingUserId, isComposingPrompt, persistence, selectedIds, sessionId, setEdges, setNodes]);
+
+  useEffect(() => {
+    if (!joinedCollaborator) return;
+    const timer = window.setTimeout(() => setJoinedCollaborator(null), 4_500);
+    return () => window.clearTimeout(timer);
+  }, [joinedCollaborator]);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -603,7 +1359,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         revision.current = detail.session.canvasRevision ?? detail.session.revision ?? remoteRevision;
         lastSavedGraph.current = JSON.stringify(remote);
         currentGraph.current = lastSavedGraph.current;
-        setNotice('Updated live by a collaborator');
+        setNotice(t('noticeUpdatedLive'));
       } catch { /* The presence reconciliation remains a durable fallback. */ }
     };
     const connect = () => {
@@ -658,7 +1414,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (resolvedScopeMode === 'frame' && selectedNode?.data.kind === 'frame') {
       const { width, height } = canvasNodeDimensions(selectedNode);
       nodes.forEach((node) => {
-        if (node.id !== selectedNode.id && node.position.x >= selectedNode.position.x && node.position.y >= selectedNode.position.y && node.position.x <= selectedNode.position.x + width && node.position.y <= selectedNode.position.y + height) selected.add(node.id);
+        if (node.id === selectedNode.id) return;
+        const withinX = node.position.x >= selectedNode.position.x
+          && node.position.x <= selectedNode.position.x + width;
+        const withinY = node.position.y >= selectedNode.position.y
+          && node.position.y <= selectedNode.position.y + height;
+        if (withinX && withinY) selected.add(node.id);
       });
     }
     return selected;
@@ -669,13 +1430,65 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects`
           : selectedNode ? `Selected: ${selectedNode.data.title}` : t('entireCanvas');
   const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
+
+  /**
+   * WHAT THE PERSON WAS LOOKING AT WHEN THEY ASKED.
+   *
+   * Scope and selection decide how much of the board a Brain turn can see, and
+   * the reported failure — "I don't see that file anywhere on the canvas", said
+   * about a file that was on the canvas — happened because the turn ran against
+   * ONE selected object. Neither the scope nor the selection that produced an
+   * answer was recorded anywhere, so the report could not show the reader the
+   * one fact that explained it. Recorded on CHANGE rather than per render, so
+   * the journal reads as a sequence of decisions rather than a render log.
+   */
+  const scopeSignature = `${resolvedScopeMode}:${scopedNodeIds.size}/${nodes.length}`;
+  const lastScopeSignature = useRef(scopeSignature);
+  useEffect(() => {
+    if (lastScopeSignature.current === scopeSignature) return;
+    lastScopeSignature.current = scopeSignature;
+    journal.current.record({
+      kind: 'user',
+      label: 'scope.change',
+      detail: `${resolvedScopeMode} · ${scopedNodeIds.size} of ${nodes.length} object(s) visible to Brain`,
+    });
+  }, [nodes.length, resolvedScopeMode, scopeSignature, scopedNodeIds.size]);
+
+  /**
+   * The board is the source of truth for WHO IS ON IT; the shell is the source of
+   * truth for who is on the CALL. Publishing the roster upward is what lets the
+   * live bar show one set of people instead of the board and the room each
+   * keeping their own — and it is why a teammate who navigates away from the
+   * board does not vanish from the call.
+   */
+  const publishPresence = liveSession?.publishPresence;
+  useEffect(() => {
+    if (!publishPresence) return;
+    publishPresence(members.map((member) => ({ userId: member.userId, displayName: member.displayName })), currentUserId);
+  }, [currentUserId, members, publishPresence]);
+
+  /**
+   * Which canonical projects this board references — read by the stage to decide
+   * whether to show "viewing a canvas outside the current project" after a scope
+   * change, per `canvasScopePolicy`. Published rather than recomputed there so
+   * the project reference is read out of the board by the one module that already
+   * knows how (`canvasProjectRef`).
+   */
+  const activeCanvas = useOptionalActiveCanvas();
+  const publishProjectIds = activeCanvas?.publishProjectIds;
+  const boardProjectIds = useMemo(
+    () => [...new Set(canvasProjectNodes(nodes).flatMap((node) => { const id = canvasProjectId(node.data); return id == null ? [] : [id]; }))],
+    [nodes],
+  );
+  useEffect(() => {
+    publishProjectIds?.(sessionId, boardProjectIds);
+  }, [boardProjectIds, publishProjectIds, sessionId]);
   const scopedEdges = useMemo(() => edges.filter((edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target)), [edges, scopedNodeIds]);
   const evermindProjectId = useMemo(() => {
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
     for (const node of candidates) {
       if (node.data.kind === 'project') {
-        const canonical = node.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-        const numeric = canonical ? Number(canonical) : Number(node.data.projectId);
+        const numeric = canvasProjectId(node.data) ?? Number(node.data.projectId);
         if (Number.isInteger(numeric) && numeric > 0) return numeric;
       }
       const source = Number(node.data.sourceProjectId);
@@ -684,45 +1497,55 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return null;
   }, [nodes, scopedNodeIds, scopedNodes]);
 
+  /** One writer for an object's content, wherever the edit was made — the
+   * inspector, a cell edited on the card itself, or the Files library. */
+  /**
+   * Whether a direct edit made ON a card can land at all.
+   *
+   * One gate, read by both the writer and the cards: `updateNodeData` enforces
+   * it, and the cards use it to decide whether an editing control exists. A
+   * viewer on a shared board, or an editor whose lock has gone, gets no Edit
+   * button rather than one that silently does nothing.
+   */
+  const cardsEditable = canEdit && !lockBlocked;
+  const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
+    if (!cardsEditable) return;
+    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
+    setNotice(t('noticeSavingChanges'));
+  }, [cardsEditable, setNodes]);
+
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
-    if (!selectedId || !canEdit || lockBlocked) return;
-    setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...patch } } : node));
-    setNotice('Saving changes…');
-  }, [canEdit, lockBlocked, selectedId, setNodes]);
+    if (!selectedId) return;
+    updateNodeData(selectedId, patch);
+  }, [selectedId, updateNodeData]);
 
   const updateWebsiteViewport = useCallback((viewport: 'desktop' | 'tablet' | 'mobile') => {
     if (!selectedId || !canEdit || lockBlocked) return;
     const preset = viewport === 'mobile' ? { width: 340, height: 620 } : viewport === 'tablet' ? { width: 520, height: 560 } : { width: 720, height: 460 };
     setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
-    setNotice(`Website viewport changed to ${viewport}`);
+    setNotice(t('noticeViewportChanged', { viewport }));
   }, [canEdit, lockBlocked, selectedId, setNodes]);
 
-  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean }, clientMessageId = crypto.randomUUID()) => {
-    const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, createdAt: new Date().toISOString() };
+  // `clientMessageId` is annotated rather than inferred from the default:
+  // `crypto.randomUUID()` is typed as the template literal `${string}-${string}…`
+  // in the DOM lib, which would narrow the PARAMETER to that shape and reject
+  // the ids callers legitimately pass through (a resumed message's own id).
+  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata: CreationTimelineMessage['metadata'] = {}, clientMessageId: string = crypto.randomUUID()) => {
+    const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, metadata, createdAt: new Date().toISOString() };
     setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
     if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
       setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
-    }).catch((error) => setNotice(error instanceof Error ? `Conversation save failed: ${error.message}` : 'Conversation save failed'));
+    }).catch((error) => setNotice(error instanceof Error ? t('noticeConversationSaveFailedReason', { reason: error.message }) : t('noticeConversationSaveFailed')));
     return clientMessageId;
   }, [persistence, sessionId]);
 
-  const startVoiceInput = useCallback(() => {
-    const browserWindow = window as unknown as { SpeechRecognition?: new () => BrowserSpeechRecognition; webkitSpeechRecognition?: new () => BrowserSpeechRecognition };
-    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
-    if (!Recognition) { setNotice('Voice input is not supported by this browser'); return; }
-    const recognition = new Recognition();
-    recognition.lang = navigator.language || 'en-US'; recognition.interimResults = false;
-    setNotice('Listening…');
-    recognition.onresult = (event) => { const transcript = event.results[0]?.[0]?.transcript?.trim(); if (transcript) setPrompt((current) => current ? `${current} ${transcript}` : transcript); };
-    recognition.onerror = () => setNotice('Voice input could not be captured');
-    recognition.onend = () => setNotice('Voice input ready');
-    recognition.start();
-  }, []);
-
+  // The Brain Object mirrors the live turn — messages, trace, and the run state that
+  // drives its activity bar — so a working Brain reads as working on the board too,
+  // not only inside the dock (which the user may have closed).
   useEffect(() => {
     const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
-    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, ...(brainTrace.length ? { trace: brainTrace } : {}), aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
-  }, [brainTrace, setNodes, timeline]);
+    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, ...(brainTrace.length ? { trace: brainTrace } : {}), brainRunning: thinking, brainRunStartedAt, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
+  }, [brainRunStartedAt, brainTrace, setNodes, thinking, timeline]);
 
   useEffect(() => {
     if (!shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds)) { setLockBlocked(false); return; }
@@ -733,7 +1556,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         await creationSessionsApi.lock(sessionId, lockedObjectId, action);
         if (!stopped) setLockBlocked(false);
       } catch (error) {
-        if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : 'This object is being edited by another collaborator'); }
+        if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : t('noticeObjectLocked')); }
       }
     };
     void acquire('acquire');
@@ -745,26 +1568,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
   }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId]);
 
+  /** Filling an existing Dataset object from a file reads it through the same
+   * engine as a drop, so a workbook picked here loads exactly as one dropped on
+   * the board rather than failing on a format only this path never learned. */
   const importDataset = useCallback(async (file: File) => {
     if (!selectedId) return;
     try {
-      const text = await file.text();
-      const delimiter = file.name.toLowerCase().endsWith('.tsv') ? '\t' : ',';
-      const allLines = text.split(/\r?\n/).filter((line) => line.trim());
-      const parsed = delimiter === ',' ? parseCSV(text) : {
-        headers: (allLines[0] ?? '').split('\t').map((value) => value.trim()),
-        rows: allLines.slice(1).map((line) => Object.fromEntries((allLines[0] ?? '').split('\t').map((column, index) => [column.trim(), line.split('\t')[index]?.trim() ?? '']))),
-      };
-      if (parsed.rows.length > datasetRowLimit) throw new Error(`This plan supports up to ${datasetRowLimit.toLocaleString()} dataset rows per Canvas import.`);
-      const columns = parsed.headers.filter(Boolean).slice(0, 24);
-      if (!columns.length) throw new Error('No columns found');
-      const rows = parsed.rows.map((row) => Object.fromEntries(columns.map((column) => [column, row[column] ?? ''])));
-      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, title: file.name, columns, rows, sampleRows: rows.slice(0, 25), rowCount: rows.length, status: 'Imported', subtitle: `${rows.length} preview rows loaded` } } : node));
-      setNotice(`${file.name} imported`);
+      const [imported] = (await importCanvasFile(file, importLabel)).objects;
+      const columns = Array.isArray(imported?.data.columns) ? imported.data.columns as string[] : [];
+      const rows = Array.isArray(imported?.data.rows) ? imported.data.rows as TabularSource['rows'] : [];
+      if (!columns.length) throw new Error(t('datasetNoColumns'));
+      if (rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: datasetRowLimit.toLocaleString() }));
+      const { title: _title, ...fields } = imported!.data;
+      // Adopt the imported file's name, but only over the palette's placeholder.
+      // A card the user has already named is theirs and survives the import;
+      // one that still says "Imported dataset.csv" after importing revenue.csv is
+      // simply wrong, and every artifact derived from it — "… visualization",
+      // the map, the chart — inherits that wrong name.
+      const placeholder = createDefaultCreationData('dataset').title;
+      setNodes((current) => current.map((node) => (node.id === selectedId
+        ? { ...node, data: { ...node.data, ...fields, ...(node.data.title === placeholder ? { title: file.name } : {}) } }
+        : node)));
+      setNotice(t('datasetImported', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length }));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Dataset import failed');
+      setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
     }
-  }, [datasetRowLimit, selectedId, setNodes]);
+  }, [datasetRowLimit, importLabel, selectedId, setNodes, t]);
 
   useEffect(() => {
     if (!hydrated.current || historyApplying.current) return;
@@ -772,6 +1601,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const handle = window.setTimeout(() => {
       if (historyBaseline.current == null) historyBaseline.current = next;
       else if (historyBaseline.current !== next) {
+        // Every board mutation — palette, drag, delete, inspector edit, an AI
+        // proposal being applied, an undo — settles HERE, so this is the one
+        // place that can record what the person did without a dozen handlers
+        // each remembering to. See `describeGraphChange`.
+        try {
+          const change = describeGraphChange(
+            JSON.parse(historyBaseline.current) as { nodes: CreationFlowNode[]; edges: Edge[] },
+            { nodes, edges },
+          );
+          if (change) journal.current.record({ kind: 'user', label: change.label, detail: change.detail });
+        } catch { /* the journal must never be able to break the history stack */ }
         undoStack.current = [...undoStack.current.slice(-49), historyBaseline.current];
         historyBaseline.current = next;
         redoStack.current = [];
@@ -789,19 +1629,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [setEdges, setNodes]);
 
   const undo = useCallback(() => {
-    const prior = undoStack.current.pop(); if (!prior) { setNotice('Nothing to undo'); return; }
-    redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice('Canvas change undone');
+    const prior = undoStack.current.pop(); if (!prior) { journal.current.record({ kind: 'user', label: 'undo', ok: false, detail: 'nothing to undo' }); setNotice(t('noticeNothingToUndo')); return; }
+    journal.current.record({ kind: 'user', label: 'undo' });
+    redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice(t('noticeChangeUndone'));
   }, [edges, nodes, restoreGraphState]);
   const redo = useCallback(() => {
-    const next = redoStack.current.pop(); if (!next) { setNotice('Nothing to redo'); return; }
-    undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice('Canvas change redone');
+    const next = redoStack.current.pop(); if (!next) { journal.current.record({ kind: 'user', label: 'redo', ok: false, detail: 'nothing to redo' }); setNotice(t('noticeNothingToRedo')); return; }
+    journal.current.record({ kind: 'user', label: 'redo' });
+    undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
   }, [edges, nodes, restoreGraphState]);
 
   const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
   const duplicateSelection = useCallback(() => {
     if (!canEdit) return;
     const ids = new Set(selectionIds());
-    if (!ids.size) { setNotice('Select one or more objects to duplicate'); return; }
+    if (!ids.size) { setNotice(t('noticeSelectToDuplicate')); return; }
     const idMap = new Map<string, string>();
     const copies = nodes.filter((node) => ids.has(node.id)).map((node) => {
       const id = crypto.randomUUID(); idMap.set(node.id, id);
@@ -811,17 +1653,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...copies]);
     setEdges((current) => [...current, ...copiedEdges]);
     const nextIds = copies.map((node) => node.id); setSelectedIds(nextIds); setSelectedId(nextIds.length === 1 ? nextIds[0] : null);
-    setNotice(`${copies.length} object${copies.length === 1 ? '' : 's'} duplicated`);
+    setNotice(t('noticeObjectsDuplicated', { count: copies.length }));
   }, [canEdit, edges, nodes, selectionIds, setEdges, setNodes]);
 
   const copySelection = useCallback(() => {
     const ids = new Set(selectionIds());
-    if (!ids.size) { setNotice('Select one or more objects to copy'); return; }
+    if (!ids.size) { setNotice(t('noticeSelectToCopy')); return; }
     canvasClipboard.current = {
       nodes: nodes.filter((node) => ids.has(node.id)).map((node) => ({ ...node, data: { ...node.data } })),
       edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge })),
     };
-    setNotice(`${ids.size} object${ids.size === 1 ? '' : 's'} copied`);
+    setNotice(t('noticeObjectsCopied', { count: ids.size }));
   }, [edges, nodes, selectionIds]);
 
   const pasteSelection = useCallback(() => {
@@ -833,35 +1675,41 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     });
     const pastedEdges = canvasClipboard.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...pasted]); setEdges((current) => [...current, ...pastedEdges]);
-    const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(`${ids.length} object${ids.length === 1 ? '' : 's'} pasted`);
+    const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(t('noticeObjectsPasted', { count: ids.length }));
   }, [canEdit, setEdges, setNodes]);
 
   const alignSelection = useCallback(() => {
     const ids = new Set(selectionIds());
-    if (!canEdit || ids.size < 2) { setNotice('Select at least two objects to align'); return; }
-    const left = Math.min(...nodes.filter((node) => ids.has(node.id)).map((node) => node.position.x));
-    setNodes((current) => current.map((node) => ids.has(node.id) && node.data.placementLocked !== true ? { ...node, position: { ...node.position, x: left } } : node));
-    setNotice(`${ids.size} objects aligned left`);
-  }, [canEdit, nodes, selectionIds, setNodes]);
+    if (!canEdit || ids.size < 2) { setNotice(t('alignNeedsTwo')); return; }
+    // Left-aligning ALONE piles a selected row of objects onto one another, which
+    // is what "align" used to do here; the shared primitive spaces the column too.
+    const placements = alignCanvasNodesLeft(nodes, ids);
+    if (!placements.size) { setNotice(t('alignNeedsTwo')); return; }
+    setNodes((current) => current.map((node) => {
+      const placement = placements.get(node.id);
+      return placement ? { ...node, position: placement } : node;
+    }));
+    setNotice(t('objectsAligned', { count: placements.size }));
+  }, [canEdit, nodes, selectionIds, setNodes, t]);
 
   const frameSelection = useCallback(() => {
     const ids = new Set(selectionIds());
     const chosen = nodes.filter((node) => ids.has(node.id));
-    if (!canEdit || chosen.length < 2) { setNotice('Select at least two objects to create a frame'); return; }
+    if (!canEdit || chosen.length < 2) { setNotice(t('noticeSelectTwoForFrame')); return; }
     const left = Math.min(...chosen.map((node) => node.position.x)) - 40;
     const top = Math.min(...chosen.map((node) => node.position.y)) - 70;
     const right = Math.max(...chosen.map((node) => node.position.x + canvasNodeDimensions(node).width)) + 40;
     const bottom = Math.max(...chosen.map((node) => node.position.y + canvasNodeDimensions(node).height)) + 40;
     const frame = newNode('frame', { x: left, y: top }); frame.style = { width: right - left, height: bottom - top }; frame.zIndex = -1;
     frame.data = { ...frame.data, title: 'Grouped objects', framePurpose: 'Organize this related work' };
-    setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(`${chosen.length} objects framed`);
+    setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(t('noticeObjectsFramed', { count: chosen.length }));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
   const togglePlacementLock = useCallback(() => {
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
-    const shouldLock = nodes.some((node) => ids.has(node.id) && node.data.placementLocked !== true);
+    const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, draggable: !shouldLock, data: { ...node.data, placementLocked: shouldLock } } : node));
-    setNotice(shouldLock ? 'Object placement locked' : 'Object placement unlocked');
+    setNotice(shouldLock ? 'Object placement locked' : t('noticePlacementUnlocked'));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
   const toggleHidden = useCallback(() => {
@@ -869,13 +1717,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const shouldHide = nodes.some((node) => ids.has(node.id) && node.data.placementHidden !== true);
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, hidden: shouldHide, data: { ...node.data, placementHidden: shouldHide } } : node));
     if (shouldHide) { setSelectedId(null); setSelectedIds([]); }
-    setNotice(shouldHide ? 'Objects hidden from the canvas' : 'Objects shown on the canvas');
+    setNotice(shouldHide ? 'Objects hidden from the canvas' : t('noticeObjectsShown'));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
+  /**
+   * The commands the 3D scene publishes while it is on screen, and `null` in the
+   * flat view. Everything the canvas can do to its own camera — focus, zoom, fit
+   * — routes through this so there is ONE action per command that means the right
+   * thing in whichever view is live, rather than a control that quietly dies in
+   * the other one.
+   */
+  const threeDControls = useCanvas3DControls();
   const focusSelection = useCallback(() => {
     const ids = selectionIds(); if (!ids.length) return;
+    if (threeDControls) { threeDControls.focusObjects(ids); return; }
     void flowRef.current?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.28, duration: 350 });
-  }, [selectionIds]);
+  }, [selectionIds, threeDControls]);
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
@@ -892,7 +1749,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (event.key === 'Escape') { setSelectedId(null); setSelectedIds([]); setNodes((current) => current.map((node) => ({ ...node, selected: false }))); return; }
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && ids.size && canEdit) {
         event.preventDefault(); const step = event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
-        setNodes((current) => current.map((node) => ids.has(node.id) && node.data.placementLocked !== true ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } } : node));
+        setNodes((current) => current.map((node) => ids.has(node.id) && canvasPlacementUnlocked(node) ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } } : node));
       }
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
@@ -900,36 +1757,139 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const visualizeDataset = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
-    const columns = Array.isArray(selectedNode.data.columns) ? selectedNode.data.columns.map(String) : [];
-    const rows = Array.isArray(selectedNode.data.rows) ? selectedNode.data.rows as Array<Record<string, unknown>> : [];
-    if (!columns.length || !rows.length) { setNotice('Import data before visualizing it'); return; }
-    const numeric = columns.find((column) => rows.some((row) => Number.isFinite(Number(row[column]))));
-    const category = columns.find((column) => column !== numeric) ?? columns[0]!;
-    let labels: string[];
-    let values: number[];
-    if (numeric) {
-      labels = rows.slice(0, 6).map((row, index) => String(row[category] ?? `Row ${index + 1}`));
-      values = rows.slice(0, 6).map((row) => Number(row[numeric]) || 0);
-    } else {
-      const counts = new Map<string, number>();
-      rows.forEach((row) => { const key = String(row[category] ?? 'Unknown'); counts.set(key, (counts.get(key) ?? 0) + 1); });
-      const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-      labels = entries.map(([label]) => label); values = entries.map(([, value]) => value);
-    }
+    const source = tabularFromObject(selectedNode.data as Record<string, unknown>);
+    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeVisualizing')); return; }
+    // Group by the most informative low-cardinality column and total the first
+    // numeric measure, rather than charting the first six rows verbatim.
+    const profile = profileTabular(source);
+    const groupable = (column: { distinct: number }) => {
+      const distinct = column.distinct;
+      if (distinct < 2) return false;
+      return distinct < 25;
+    };
+    const category = profile.find((column) => column.type !== 'number' && groupable(column))
+      ?? profile.find(groupable)
+      ?? profile[0]!;
+    const measure = profile.find((column) => column.type === 'number' && column.name !== category.name);
+    const result = queryTabular(source, {
+      groupBy: category.name,
+      aggregate: measure ? [{ op: 'sum', column: measure.name, label: measure.name }] : [{ op: 'count', label: 'count' }],
+      sort: { column: measure ? measure.name : 'count', direction: 'desc' },
+      limit: 8,
+    });
+    const valueKey = measure ? measure.name : 'count';
     const dashboard = newNode('dashboard', { x: selectedNode.position.x + 440, y: selectedNode.position.y });
-    dashboard.data = { ...dashboard.data, title: `${selectedNode.data.title} visualization`, status: 'Live', chartLabels: labels, chartValues: values, subtitle: numeric ? `${numeric} by ${category}` : `Count by ${category}` };
+    dashboard.data = {
+      ...dashboard.data,
+      title: t('datasetVisualizationTitle', { name: selectedNode.data.title }),
+      status: t('statusLive'),
+      chartTitle: measure ? t('chartTitleMeasureBy', { measure: measure.name, category: category.name }) : t('chartTitleCountBy', { category: category.name }),
+      xAxisLabel: category.name,
+      yAxisLabel: measure ? measure.name : t('chartCountAxis'),
+      chartLabels: (result.groups ?? []).map((group) => group.key),
+      chartValues: (result.groups ?? []).map((group) => Number(group[valueKey] ?? group.count)),
+      kpis: [
+        { label: t('kpiTotalRows'), value: result.totalRows.toLocaleString() },
+        { label: t('kpiGroups', { category: category.name }), value: String(result.groups?.length ?? 0) },
+      ],
+      sourceDatasetId: selectedNode.id,
+      subtitle: measure ? t('chartTitleMeasureBy', { measure: measure.name, category: category.name }) : t('chartTitleCountBy', { category: category.name }),
+    };
     setNodes((current) => [...current, dashboard]);
-    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: 'visualizes', animated: true }]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: t('edgeVisualizes'), animated: true, data: { connectionKind: 'data' } }]);
     setSelectedId(dashboard.id);
-    setNotice('Dashboard visualization added');
-  }, [selectedNode, setEdges, setNodes]);
+    setNotice(t('datasetVisualizationAdded'));
+  }, [selectedNode, setEdges, setNodes, t]);
+
+  /**
+   * "Plot on a map" — the direct counterpart to {@link visualizeDataset}.
+   *
+   * A dataset whose rows ALREADY carry coordinates (an uploaded geocoded CSV, or one the
+   * Brain has written lat/lng back onto) needed a Brain turn to become a map, because the
+   * only path to `materializeAs: 'map'` was `canvas_query_dataset`. The detection was
+   * already here — `detectGeoColumns` runs over the imported rows — so the UI was
+   * withholding something it could see. This spends no tokens and makes no network call.
+   */
+  const plotDataset = useCallback(() => {
+    if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
+    const source = tabularFromObject(selectedNode.data as Record<string, unknown>);
+    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforePlotting')); return; }
+    const geoColumns = detectGeoColumns(source);
+    const points = mapPointsFromRows(source, geoColumns, MAX_MATERIALIZED_ROWS);
+    if (!points.length) {
+      // Name the columns actually looked at: "cannot plot" is not actionable, and the
+      // usual cause is a coordinate column this dataset spells differently.
+      setNotice(geoColumns.latitude && geoColumns.longitude
+        ? t('datasetPlotNoCoordinates', { latitude: geoColumns.latitude, longitude: geoColumns.longitude })
+        : t('datasetPlotNoGeoColumns', { columns: source.columns.join(', ') }));
+      return;
+    }
+    const map = newNode('map', { x: selectedNode.position.x + 440, y: selectedNode.position.y });
+    map.style = { width: 420, height: 380 };
+    map.data = {
+      ...map.data,
+      ...mapObjectFields({
+        title: t('datasetMapTitle', { name: selectedNode.data.title }),
+        status: t('datasetPlottedCount', { count: points.length }),
+        summary: t('datasetPlotSummary', { plotted: points.length, total: source.rows.length, name: selectedNode.data.title }),
+        points,
+        columns: geoColumns,
+        sourceDatasetId: selectedNode.id,
+      }),
+    };
+    setNodes((current) => [...current, map]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: map.id, type: 'smoothstep', label: t('edgePlots'), animated: true, data: { connectionKind: 'data' } }]);
+    setSelectedId(map.id);
+    setNotice(t('datasetMapAdded'));
+  }, [selectedNode, setEdges, setNodes, t]);
+
+  const profileDataset = useCallback((nodeId: string) => {
+    const target = nodes.find((node) => node.id === nodeId);
+    if (!target) return;
+    const source = tabularFromObject(target.data as Record<string, unknown>);
+    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeProfiling')); return; }
+    const profile = profileTabular(source);
+    setNodes((current) => current.map((node) => node.id === nodeId
+      ? { ...node, data: { ...node.data, profile, rowCount: source.rows.length, columns: source.columns, summary: t('datasetProfileSummary', { rows: source.rows.length.toLocaleString(), columns: source.columns.length, complete: profile.filter((column) => !column.empty).length }) } }
+      : node));
+    setNotice(t('datasetProfiled', { columns: profile.length }));
+  }, [nodes, setNodes, t]);
+
+  // What a primary drag on empty board does, and how forgiving the board is about a
+  // pointer that wanders. `panAndSelectConflict` is the invariant `canvasInteractionProps`
+  // guarantees, not a React Flow prop, so it is dropped before the rest is spread.
+  const coarsePointer = useCoarsePointer();
+  const { panAndSelectConflict: _panAndSelectConflict, ...interactionProps } = useMemo(
+    () => canvasInteractionProps({ gesture: canvasGesture, pointer: coarsePointer ? 'coarse' : 'fine', drawing: drawingMode }),
+    [canvasGesture, coarsePointer, drawingMode],
+  );
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
-    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: 'web', connectionKind } });
-  }, [connectionKind, sessionId, setEdges]);
+    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: canvasSurface(), connectionKind } });
+    const source = nodes.find((node) => node.id === connection.source);
+    const target = nodes.find((node) => node.id === connection.target);
+    if (persistence === 'server' && source && target && source.data.kind !== 'chat' && target.data.kind !== 'chat') {
+      const correlationId = crypto.randomUUID();
+      const metadata = { sourceKind: source.data.kind, targetKind: target.data.kind, connectionKind };
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'started', artifactId: source.id, metadata }).catch(() => undefined);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'reused', artifactId: source.id, metricKey: 'outputs_reused', metricValue: 1, unit: 'count', metadata }).catch(() => undefined);
+    }
+  }, [connectionKind, nodes, persistence, sessionId, setEdges]);
 
-  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => { setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]); }, []);
+  /** Selecting the Brain Object reveals the dock instead of a second transcript. */
+  const openBrainDock = useCallback(() => setBrainDock((current) => {
+    if (current.open) return current;
+    const next = { ...current, open: true };
+    writeBrainDockPreferences(next);
+    return next;
+  }), []);
+
+  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => {
+    setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
+    setInspectorFocus(null); setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]);
+    if (node.data.kind === 'chat') openBrainDock();
+  }, [openBrainDock]);
   // XYFlow subscribes to this callback through its Zustand store. An inline
   // callback is a new subscription every render; immediately writing a fresh
   // `[]` back to React from that subscription can create an update-depth loop
@@ -963,44 +1923,219 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const minX = Math.min(...xs); const minY = Math.min(...ys); const width = Math.max(40, Math.max(...xs) - minX); const height = Math.max(40, Math.max(...ys) - minY);
     const node = newNode('drawing', { x: minX - 8, y: minY - 8 });
     node.style = { width: width + 16, height: height + 58 };
-    node.data = { ...node.data, title: 'Canvas sketch', points: points.map((point) => ({ x: point.x - minX + 8, y: point.y - minY + 8 })), drawingWidth: width + 16, drawingHeight: height + 16, stroke: '#5b5ce2', strokeWidth: 3 };
-    setNodes((current) => [...current, node]); setSelectedId(node.id); setDrawingMode(false); setNotice('Sketch added');
+    node.data = { ...node.data, title: 'Canvas sketch', points: points.map((point) => ({ x: point.x - minX + 8, y: point.y - minY + 8 })), drawingWidth: width + 16, drawingHeight: height + 16, stroke: 'var(--indigo-bright)', strokeWidth: 3 };
+    setNodes((current) => [...current, node]); setSelectedId(node.id); setDrawingMode(false); setNotice(t('noticeSketchAdded'));
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }, [drawingMode, setNodes]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     if (persistence !== 'local' || !hydrated.current) return;
-    const prior = readLocalCreationSession(sessionId);
-    const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), nodes, edges, viewport, updatedAt: new Date().toISOString() };
-    localStorage.setItem(storageKey, JSON.stringify(snapshot));
+    const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport });
+    persistSnapshot(snapshot);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
 
-  const addAtCenter = useCallback((kind: CreationObjectKind) => {
-    if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
+  /** Place a new object at the middle of the viewport. `data` lets a caller that
+   *  already HAS the object's content (an editor capture) seed it in one step
+   *  rather than adding an empty object and patching it afterwards. */
+  const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const node = newNode(kind, position);
+    if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     if (kind === 'chat') node.data = { ...node.data, messages: timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt })) };
+    if (data) node.data = { ...node.data, ...data };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
-    setNotice(`${node.data.title} added`);
-    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [kind] } });
-  }, [canEdit, sessionId, setNodes, timeline]);
+    setNotice(t('objectAdded', { title: node.data.title }));
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
+  }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
+
+  // The shell recorder writes through the canonical Builder workspace store, then
+  // announces the durable artifact to the board that started it. Hidden cached
+  // boards hear the same event but ignore a different session id.
+  useEffect(() => {
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string; projectId: number; path: string; mimeType: string }>).detail;
+      if (!detail || detail.sessionId !== sessionId) return;
+      addAtCenter('video', {
+        title: t('recordingTitle'),
+        status: t('recordingStatus'),
+        projectId: detail.projectId,
+        resourceId: `workspace:${detail.projectId}:${detail.path}`,
+        outputFileName: detail.path.split('/').pop(),
+        outputMimeType: detail.mimeType,
+      });
+    };
+    window.addEventListener('builderforce:media-recording-saved', onSaved);
+    return () => window.removeEventListener('builderforce:media-recording-saved', onSaved);
+  }, [addAtCenter, sessionId, t]);
+
+  /**
+   * Seat a teammate on this board (PRD 21 §3.3).
+   *
+   * "Drag a teammate onto the board → it joins the session, takes a seat,
+   * appears in presence, and can be addressed in the composer." All three
+   * happen here rather than at each entry point, which is what lets the drag and
+   * the keyboard route be genuinely the same action instead of two code paths
+   * that agree today.
+   *
+   * `point` is where a drag landed; the keyboard route has no pointer, so it
+   * seats at the viewport centre exactly as the object palette's click does.
+   */
+  const seatTeammate = useCallback((teammate: TeammatePayload, point?: { x: number; y: number }) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const data: Partial<CreationNodeData> = {
+      title: teammate.name,
+      status: t('teammateSeated'),
+      subtitle: teammate.role ?? undefined,
+      agentName: teammate.name,
+      agentRef: teammate.ref,
+    };
+    if (!point) { addAtCenter('agent', data); }
+    else {
+      const node = newNode('agent', point);
+      node.data = { ...node.data, ...data };
+      setNodes((current) => [...current, node]);
+      setSelectedId(node.id); setSelectedIds([node.id]);
+      setNotice(t('objectAdded', { title: teammate.name }));
+    }
+    // Addressable immediately: the composer is seeded with the mention rather
+    // than leaving the person to retype a name they just dragged in.
+    setPrompt((current) => (current.includes(`@${teammate.name}`) ? current : `${current ? `${current.trimEnd()} ` : ''}@${teammate.name} `));
+  }, [addAtCenter, canEdit, setNodes, t]);
+
+  // The keyboard half of §3.3. Only the board actually on the stage answers —
+  // hidden cached boards hear the same event and must not quietly seat someone
+  // on a canvas nobody is looking at.
+  useEffect(() => {
+    if (!stageActive) return undefined;
+    const onJoin = (event: Event) => {
+      const detail = (event as CustomEvent<TeammatePayload>).detail;
+      if (detail) seatTeammate(detail);
+    };
+    window.addEventListener(TEAMMATE_JOIN_EVENT, onJoin);
+    return () => window.removeEventListener(TEAMMATE_JOIN_EVENT, onJoin);
+  }, [seatTeammate, stageActive]);
+
+  /** Place an object the EDITOR captured (active file, selection, problems, …). */
+  const addHostCapture = useCallback((capture: CanvasHostCapture) => {
+    addAtCenter(capture.kind, { title: capture.title, ...capture.content } as Partial<CreationNodeData>);
+  }, [addAtCenter]);
+
+  /**
+   * Files arriving from anywhere — dropped from the desktop, attached in the
+   * composer — become the objects they actually are: a Word file opens as a
+   * document with pages, a workbook as a sheet per tab, a deck as slides, a
+   * data export as a queryable Dataset. The board is the creative starting
+   * space, so the drop also puts the first question in the composer and opens
+   * Brain: a file that lands here starts a conversation, it does not just sit
+   * there as an icon.
+   */
+  const addFilesToCanvas = useCallback(async (files: File[], origin?: { x: number; y: number }, source = 'canvas_drop') => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    if (!files.length) return;
+    const start = origin ?? flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
+    const accepted = files.slice(0, MAX_DROPPED_FILES);
+
+    /**
+     * Every dropped file gets a card BEFORE anything is read.
+     *
+     * The readers are synchronous CPU wearing an async signature, so a 40MB PDF
+     * seizes the main thread for seconds. Creating the nodes only after the parse
+     * meant the drop overlay vanished on release and the canvas then showed
+     * nothing at all until the last of twelve files finished — indistinguishable
+     * from a drop that failed. The card is the receipt.
+     */
+    const stubs = accepted.map((file, index) => {
+      const node = newNode('file', { x: start.x + index * IMPORT_COLUMN_GAP, y: start.y });
+      node.data = {
+        ...node.data,
+        title: file.name,
+        fileName: file.name,
+        fileSize: file.size,
+        status: importLabel('statusImporting'),
+        importPending: true,
+      } as CreationNodeData;
+      return node;
+    });
+    setNodes((current) => [...current, ...stubs]);
+    setSelectedId(stubs[0]!.id);
+    setSelectedIds(stubs.map((node) => node.id));
+    openBrainDock();
+    await nextPaint();
+
+    const notices: string[] = [];
+    const objectKinds: string[] = [];
+    let suggestion = '';
+    for (const [index, file] of accepted.entries()) {
+      const stub = stubs[index]!;
+      // Dropping four files and getting four cards is the moment a person stops
+      // being able to explain what happened — so the journal records each one,
+      // with the kind it BECAME. "guide.htm → attachment" is the single line that
+      // explains why the agent could not read it.
+      const importDone = journal.current.begin('user', 'file.import', `${file.name} · ${Math.max(1, Math.round(file.size / 1024))}KB`);
+      try {
+        const imported = await importCanvasFile(file, importLabel);
+        const [first, ...rest] = imported.objects;
+        if (!first) throw new Error('The file produced no object');
+        importDone({ ok: true, detail: `→ ${imported.objects.map((object) => object.kind).join(', ')}` });
+        // The stub BECOMES the artifact — same id, same position — so the card a
+        // person is already looking at fills in rather than being replaced by a
+        // second one somewhere else on the board.
+        const resolved = newNode(first.kind, stub.position);
+        // A workbook yields one object per sheet; the extras stack under the
+        // card that stood in for the file.
+        const extras = rest.map((object, offset) => {
+          const node = newNode(object.kind, { x: stub.position.x, y: stub.position.y + (offset + 1) * IMPORT_ROW_GAP });
+          node.data = { ...node.data, ...object.data } as CreationNodeData;
+          return node;
+        });
+        setNodes((current) => [
+          ...current.map((node) => node.id === stub.id
+            ? { ...node, data: { ...resolved.data, ...first.data, importPending: false } as CreationNodeData }
+            : node),
+          ...extras,
+        ]);
+        objectKinds.push(first.kind, ...rest.map((object) => object.kind));
+        notices.push(imported.notice);
+        if (!suggestion) suggestion = imported.suggestedPrompt;
+      } catch (error) {
+        importDone({ ok: false, detail: `unreadable — ${error instanceof Error ? error.message : 'import failed'}` });
+        setNodes((current) => current.map((node) => node.id === stub.id
+          ? { ...node, data: { ...node.data, status: importLabel('statusUnreadable'), importPending: false } as CreationNodeData }
+          : node));
+        notices.push(importLabel('failed', { name: file.name }));
+      }
+      // Each file's result paints before the next one takes the thread back.
+      await nextPaint();
+    }
+    if (files.length > MAX_DROPPED_FILES) notices.push(importLabel('tooManyFiles', { limit: MAX_DROPPED_FILES }));
+    setNotice(notices.join(' · '));
+    // Never overwrite something the person is part-way through typing.
+    if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds, source } });
+  }, [canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
+
+  const attachCanvasArtifact = useCallback(
+    (file: File) => addFilesToCanvas([file], undefined, 'composer_attachment'),
+    [addFilesToCanvas],
+  );
 
   const applyTemplate = useCallback((template: CreationTemplate) => {
     if (!canEdit) return;
     const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
-    const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); if (item.title) node.data = { ...node.data, title: item.title }; return node; });
+    const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); node.data = { ...node.data, ...(item.data ?? {}), ...(item.title ? { title: item.title } : {}) }; return node; });
     const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));
-    setNodes((current) => [...current, ...created]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(`${template.name} added from Marketplace`);
-    trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: 'web', templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
+    setNodes((current) => [...current, ...created]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: templateText(template, 'name') }));
+    trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: canvasSurface(), templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: created.map(({ id }) => ({ id })), padding: .2, duration: 400 }), 0);
-  }, [canEdit, sessionId, setEdges, setNodes]);
+  }, [canEdit, sessionId, setEdges, setNodes, t, templateText]);
 
   const addFramePreset = useCallback((preset: FramePreset) => {
     if (!canEdit) return;
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
     const node = newNode('frame', position); node.data = { ...preset.data, title: preset.name };
-    setNodes((current) => [...current, node]); setSelectedId(node.id); setTemplateOpen(false); setNotice(`${preset.name} frame added`);
+    setNodes((current) => [...current, node]); setSelectedId(node.id); setTemplateOpen(false); setNotice(t('noticeFramePresetAdded', { name: preset.name }));
   }, [canEdit, setNodes]);
 
   const saveFramePreset = useCallback(() => {
@@ -1009,38 +2144,38 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence === 'server') {
       const graph = creationGraphFromSnapshot({ nodes: [{ ...selectedNode, id: crypto.randomUUID(), position: { x: 80, y: 80 } }], edges: [] });
       void creationSessionsApi.templates.create({ name: preset.name, description: 'Reusable Canvas frame', category: 'Frame', visibility: 'private', graph }).then(() => {
-        setNotice('Reusable frame saved to your account template library');
+        setNotice(t('noticeFrameSavedAccount'));
         return creationSessionsApi.templates.list();
-      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not save template'));
+      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveTemplateFailed')));
       return;
     }
     setFramePresets((current) => { const next = [...current.filter((item) => item.name !== preset.name), preset].slice(-20); localStorage.setItem('builderforce:create-frame-presets', JSON.stringify(next)); return next; });
-    setNotice('Reusable frame saved to your template library');
+    setNotice(t('noticeFrameSavedLibrary'));
   }, [persistence, selectedNode]);
 
   const applyServerTemplate = useCallback((template: ServerCreationTemplate) => {
     if (persistence !== 'server' || !canEdit) return;
-    setNotice(`Adding ${template.name}…`);
+    setNotice(t('noticeAddingTemplate', { name: template.name }));
     void creationSessionsApi.templates.apply(sessionId, template.id, revision.current).then(async (result) => {
       revision.current = result.revision;
       const detail = await creationSessionsApi.get(sessionId);
       const flow = flowFromSession(detail);
-      setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(`${template.name} added`);
+      setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(t('noticeTemplateAdded', { name: template.name }));
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not apply template'));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeTemplateFailed')));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createBranch = useCallback(() => {
     if (persistence !== 'server') { requireAccount('branch', 'Create an account to branch this canvas', 'Branches need durable version history so you can compare and merge safely without losing your local work.'); return; }
-    setNotice('Creating an independent branch…');
+    setNotice(t('noticeCreatingBranch'));
     void creationSessionsApi.branch(sessionId, `${title} — branch`).then(async ({ session }) => {
-      window.location.href = `/create/${session.id}`;
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create branch'));
+      canvasNavigate(`/create/${session.id}`);
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCreateBranchFailed')));
   }, [persistence, requireAccount, sessionId, title]);
 
   const prepareMerge = useCallback(() => {
     if (!branchParentId || persistence !== 'server') return;
-    setNotice('Comparing branch with its parent…');
+    setNotice(t('noticeComparingBranch'));
     void creationSessionsApi.get(branchParentId).then((detail) => {
       const parent = flowFromSession(detail);
       const unused = new Set(parent.nodes.map((node) => node.id));
@@ -1050,8 +2185,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { key: `${source.data.kind}:${source.data.resourceId || source.data.title}:${index}`, source, target, choice: 'branch' };
       });
       setMergeReview({ parentId: branchParentId, parentRevision: detail.session.canvasRevision, parentNodes: parent.nodes, parentEdges: parent.edges, items });
-      setNotice(`${items.length} object decisions ready for review`);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare branch'));
+      setNotice(t('noticeDecisionsReady', { count: items.length }));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareBranchFailed')));
   }, [branchParentId, nodes, persistence]);
 
   const applyMerge = useCallback(() => {
@@ -1067,19 +2202,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const parentOnly = new Set(merged.filter((node) => !consumedTargets.has(node.id)).map((node) => node.id));
     const retainedEdges = mergeReview.parentEdges.filter((edge) => parentOnly.has(edge.source) || parentOnly.has(edge.target));
     const graph = creationGraphFromSnapshot({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
-    setNotice('Applying reviewed merge…');
-    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { window.location.href = `/create/${mergeReview.parentId}`; }).catch((error) => setNotice(error instanceof Error ? error.message : 'Merge could not be applied'));
+    setNotice(t('noticeApplyingMerge'));
+    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { canvasNavigate(`/create/${mergeReview.parentId}`); }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeMergeFailed')));
   }, [edges, mergeReview]);
 
   const expandProject = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : nodes.find((node) => node.data.kind === 'project');
     if (!project) {
-      setNotice('Add or select a project first');
+      setNotice(t('noticeAddOrSelectProject'));
       return;
     }
-    const projectId = project.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
-    if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
-      setNotice('Loading project relationships…');
+    const projectId = canvasProjectId(project.data);
+    if (persistence === 'server' && projectId != null) {
+      setNotice(t('noticeLoadingRelationships'));
       const lens = ['delivery', 'metrics', 'customer-feedback'].includes(String(project.data.projectLens))
         ? project.data.projectLens as 'delivery' | 'metrics' | 'customer-feedback'
         : 'everything';
@@ -1119,9 +2254,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const additions = related.filter((node) => node.data.resourceId ? !knownResources.has(node.data.resourceId) : !knownNative.has(String(node.data.expansionKey || `${node.data.kind}:${node.data.title}`)));
         setNodes((current) => [...current, ...additions]);
         setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: project.id, target: node.id, type: 'smoothstep', label: node.data.kind }))]);
-        setNotice(additions.length ? `${additions.length} related project items added` : 'This project lens is already expanded');
-        trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: 'web', projectId } });
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not expand project'));
+        setNotice(additions.length ? `${additions.length} related project items added` : t('noticeLensAlreadyExpanded'));
+        trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId } });
+      }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExpandProjectFailed')));
       return;
     }
     const related: CreationFlowNode[] = [
@@ -1133,19 +2268,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const additions = related.filter((candidate) => !nodes.some((node) => node.data.kind === candidate.data.kind && node.data.title === candidate.data.title));
     setNodes((current) => [...current, ...additions]);
     setEdges((current) => [...current, ...additions.map((candidate) => ({ id: crypto.randomUUID(), source: project.id, target: candidate.id, type: 'smoothstep' }))]);
-    setNotice('Project relationships added to canvas');
-    trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: 'web', projectId: Number.isInteger(projectId) ? projectId : undefined } });
+    setNotice(t('noticeRelationshipsAdded'));
+    trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId: Number.isInteger(projectId) ? projectId : undefined } });
   }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
 
   const compareProjects = useCallback(() => {
     if (persistence !== 'server') { requireAccount('compare', 'Create an account to compare projects', 'Project comparisons use live tenant projects, delivery metrics, feature evidence, and saved source references.'); return; }
-    const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || '')).slice(0, 6);
-    if (projectNodes.length < 2) { setNotice('Add at least two saved projects to compare'); return; }
-    setNotice('Loading fresh project evidence…');
+    const projectNodes = canvasProjectNodes(nodes).slice(0, 6);
+    if (projectNodes.length < 2) { setNotice(t('noticeNeedTwoProjects')); return; }
+    setNotice(t('noticeLoadingEvidence'));
     void fetchProjects().then(async (available) => {
       const byId = new Map(available.map((project) => [project.id, project]));
       const evidence = await Promise.all(projectNodes.map(async (node) => {
-        const projectId = Number(node.data.resourceId!.slice('project:'.length));
+        const projectId = canvasProjectId(node.data)!;
         const project = byId.get(projectId);
         if (!project) throw new Error(`Project ${projectId} is no longer accessible`);
         const [velocity, tasks, quality] = await Promise.all([
@@ -1182,26 +2317,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ]),
       };
       setNodes((current) => [...current.map((node) => {
-        const projectId = node.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-        const project = projectId ? evidence.find((candidate) => candidate.projectId === Number(projectId)) : null;
+        const projectId = canvasProjectId(node.data);
+        const project = projectId ? evidence.find((candidate) => candidate.projectId === projectId) : null;
         return project ? { ...node, data: { ...node.data, ...project, qualityUpdatedAt: comparison.data.fetchedAt } } : node;
       }), comparison]);
       setEdges((current) => [...current, ...projectNodes.map((project) => ({ id: crypto.randomUUID(), source: project.id, target: comparison.id, label: 'compared in', type: 'smoothstep', animated: true }))]);
       setSelectedId(comparison.id);
-      setNotice('Evidence-backed project comparison added');
-      trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: 'web', projectCount: projectNodes.length } });
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare projects'));
+      setNotice(t('noticeComparisonAdded'));
+      trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: canvasSurface(), projectCount: projectNodes.length } });
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareProjectsFailed')));
   }, [nodes, persistence, requireAccount, setEdges, setNodes]);
 
   const loadProjectQuality = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : null;
-    const projectId = project?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-    if (!project || !projectId) {
+    const projectId = project ? canvasProjectId(project.data) : null;
+    if (!project || projectId == null) {
       if (persistence === 'local') requireAccount('diagnostics', 'Create an account to load project quality', 'Quality diagnostics are saved against a canonical project and include current results, gaps, and remediation recommendations.');
-      else setNotice('Attach a saved project before loading quality diagnostics');
+      else setNotice(t('noticeAttachForQuality'));
       return;
     }
-    setNotice('Loading project quality diagnostics…');
+    const validationCorrelationId = crypto.randomUUID();
+    const validationStartedAt = performance.now();
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'started', projectId: Number(projectId), artifactId: project.id }).catch(() => undefined);
+    setNotice(t('noticeLoadingQuality'));
     void toolsApi.projectScore(Number(projectId)).then((quality) => {
       const diagnostics = quality.diagnostics.map((diagnostic) => ({
         toolId: diagnostic.toolId, name: diagnostic.name, icon: diagnostic.icon,
@@ -1224,8 +2362,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : [...current.map((node) => node.id === project.id ? { ...node, data: { ...node.data, ...qualityData } } : node), qualityNode]);
       if (!existing) setEdges((current) => [...current, { id: crypto.randomUUID(), source: project.id, target: qualityNode.id, label: 'quality evidence', type: 'smoothstep', animated: true }]);
       setSelectedId(qualityNode.id);
-      setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : 'Quality card added — run a diagnostic to establish a score');
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load project quality'));
+      setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : t('noticeQualityCardAdded'));
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'validated', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt, metricKey: 'validation_pass', metricValue: Number(quality.result.score ?? 0) >= 70 ? 1 : 0, unit: 'boolean', metadata: { score: quality.result.score, diagnosticCount: diagnostics.length } }).catch(() => undefined);
+    }).catch((error) => {
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'failed', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt }).catch(() => undefined);
+      setNotice(error instanceof Error ? error.message : t('noticeLoadQualityFailed'));
+    });
   }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
   const deliverMockup = useCallback(() => {
@@ -1239,7 +2381,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const agent = configuredAgentRef == null
       ? nodes.find((node) => node.data.kind === 'agent')
       : nodes.find((node) => node.data.kind === 'agent' && (node.data.resourceId || node.id) === configuredAgentRef);
-    const projectId = project?.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
+    const projectId = (project ? canvasProjectId(project.data) : null) ?? NaN;
     const addTaskNode = (resourceId: string, status: string, detail: Partial<CreationNodeData> = {}) => {
       const taskId = crypto.randomUUID();
       const task: CreationFlowNode = {
@@ -1252,7 +2394,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return taskId;
     };
     if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
-      setNotice('Creating delivery task…');
+      const deliveryCorrelationId = crypto.randomUUID();
+      const deliveryStartedAt = performance.now();
+      const deliverable: CreationDeliverable = { id: deliveryCorrelationId, action: 'deliver', artifactKind: 'project-task', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-tasks', resourceRef: `project:${projectId}` };
+      setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivering…', deliverables: withCreationDeliverable(node.data, deliverable) } } : node));
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'started', projectId, artifactId: selectedNode.id, metadata: { kind: selectedNode.data.kind } }).catch(() => undefined);
+      setNotice(t('noticeCreatingDelivery'));
       const agentRef = agent?.data.resourceId?.startsWith('agent:') ? agent.data.resourceId.slice('agent:'.length) : undefined;
       void tasksApi.create({
         projectId,
@@ -1261,42 +2408,51 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         priority: 'high',
         ...(agentRef ? { assignedAgentRef: agentRef } : {}),
       }).then(async (created) => {
+        const delivered: CreationDeliverable = { ...deliverable, status: 'delivered', completedAt: new Date().toISOString(), resourceRef: `task:${created.id}`, validation: { status: 'passed', detail: `Task ${created.key || created.id} created in ${project?.data.title || `project ${projectId}`}` }, metadata: { projectId, taskId: created.id, agentRef: agentRef || null } };
+        setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivered', deliverables: withCreationDeliverable(node.data, delivered) } } : node));
         const canvasTaskId = addTaskNode(`task:${created.id}`, created.status || (agentRef ? 'Assigned' : 'Ready'), { taskKey: created.key, priority: created.priority, content: created.description || undefined, agentRef: created.assignedAgentRef || undefined });
-        trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
+        trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [selectedNode.data.kind], projectId } });
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'succeeded', projectId, artifactId: selectedNode.id, durationMs: performance.now() - deliveryStartedAt, metricKey: 'delivered_outcomes', metricValue: 1, unit: 'count', metadata: { taskId: created.id, agentAssigned: !!agentRef } }).catch(() => undefined);
         if (agentRef) {
-          trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
+          trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: canvasSurface(), projectId } });
           let execution;
           try {
             execution = await runtimeApi.submitExecution({ taskId: created.id, sessionId });
           } catch (error) {
             setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status: 'Agent start failed' } } : node));
-            setNotice(`Delivery task ${created.id} was created, but the agent could not start: ${error instanceof Error ? error.message : 'runtime unavailable'}`);
+            setNotice(t('noticeDeliveryAgentFailed', { id: created.id, reason: error instanceof Error ? error.message : t('runtimeUnavailable') }));
             return;
           }
           if (isAwaitingApprovalExecution(execution)) {
             setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status: 'Awaiting approval' } } : node));
-            setNotice('Delivery task created; agent run is awaiting approval');
+            setNotice(t('noticeDeliveryAwaitingApproval'));
           } else {
-            setNotice('Delivery task created and agent started');
+            setNotice(t('noticeDeliveryStarted'));
             const follow = async (remaining = 80) => {
               try {
                 const live = await runtimeApi.get(execution.id);
                 const status = String(live.status || 'running').replaceAll('_', ' ');
                 setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status, executionId: execution.id, executionUpdatedAt: new Date().toISOString() } } : node));
                 if (!['completed', 'failed', 'cancelled', 'canceled'].includes(String(live.status)) && remaining > 0) window.setTimeout(() => void follow(remaining - 1), 3_000);
-                else setNotice(`Agent delivery ${status}`);
+                else setNotice(t('noticeAgentDelivery', { status }));
               } catch { if (remaining > 0) window.setTimeout(() => void follow(remaining - 1), 5_000); }
             };
             void follow();
           }
         } else {
-          setNotice('Mockup delivered to the project as a task');
+          setNotice(t('noticeMockupDelivered'));
         }
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create delivery task'));
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : 'Could not create delivery task';
+        const failed: CreationDeliverable = { ...deliverable, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+        setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivery failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'failed', projectId, artifactId: selectedNode.id, durationMs: performance.now() - deliveryStartedAt }).catch(() => undefined);
+        setNotice(message);
+      });
       return;
     }
     addTaskNode(`draft-task:${crypto.randomUUID()}`, 'Draft');
-    setNotice('Add a real project to deliver this task');
+    setNotice(t('noticeNeedProjectForDelivery'));
   }, [nodes, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes]);
 
   const expandMockupSet = useCallback(() => {
@@ -1307,37 +2463,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const additions = labels.map((label, index): CreationFlowNode => ({ id: crypto.randomUUID(), type: 'creation', position: { x: selectedNode.position.x + 440 + (index % 2) * 330, y: selectedNode.position.y - 180 + Math.floor(index / 2) * 220 }, data: { kind: 'mockup', title: label, status: 'Ready for review', subtitle: `High-fidelity concept ${index + 1} of ${labels.length}.` } }));
     setNodes((current) => [...current, ...additions]);
     setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: selectedNode.id, target: node.id, type: 'smoothstep', label: 'contains', animated: true }))]);
-    setNotice(`${additions.length} mockups expanded on the canvas`);
+    setNotice(t('noticeMockupsExpanded', { count: additions.length }));
   }, [selectedNode, setEdges, setNodes]);
 
   const attachEvermindProject = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
-    const project = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
-    if (!project) { setNotice('Add a saved project to the canvas first'); return; }
-    const projectId = Number(project.data.resourceId!.slice('project:'.length));
-    updateSelected({ resourceId: `evermind:${projectId}`, projectId, status: 'Loading…' });
+    const evermindNodeId = selectedNode.id;
+    const project = canvasProjectNodes(nodes)[0];
+    if (!project) { setNotice(t('noticeNeedSavedProject')); return; }
+    const projectId = canvasProjectId(project.data)!;
+    setNodes((current) => current.map((node) => node.id === evermindNodeId ? { ...node, data: { ...node.data, resourceId: `evermind:${projectId}`, projectId, status: 'Syncing project…' } } : node));
     setEdges((current) => current.some((edge) => edge.source === project.id && edge.target === selectedNode.id) ? current : [...current, { id: crypto.randomUUID(), source: project.id, target: selectedNode.id, label: 'owns model', type: 'smoothstep' }]);
     void Promise.all([getProjectEvermindHead(projectId), getProjectEvermindContributions(projectId)]).then(([head, activity]) => {
-      updateSelected({
-        title: head.name || selectedNode.data.title,
-        status: head.seeded ? `v${head.version} · ${head.mode}` : 'Ready to seed',
-        evermindVersion: head.version,
-        evermindSeeded: head.seeded,
-        contributions: head.contributions,
-        pendingContributions: activity.pending,
-        recentLearnings: activity.recent,
-        trainingLoss: activity.training[0]?.loss,
-        learningMode: head.mode,
-        lastLearnedAt: head.lastLearnedAt,
-        quarantinedAt: head.quarantinedAt,
-        quarantineReason: head.quarantineReason,
-        evalPoint: activity.eval,
-        inferenceEnabled: head.inferenceEnabled,
-        teacherModel: head.teacherModel || undefined,
-      });
-      setNotice('Evermind attached to project');
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load Evermind'));
-  }, [nodes, selectedNode, setEdges, updateSelected]);
+      setEvermindLiveByNodeId((current) => ({ ...current, [evermindNodeId]: projectEvermindNodePatch(head, activity) }));
+      setNotice(t('noticeEvermindAttached'));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadEvermindFailed')));
+  }, [nodes, selectedNode, setEdges, setNodes]);
 
   const expandEvermindPipeline = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
@@ -1346,7 +2487,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const start = existing.find((node) => node.data.pipelineStep === 1) ?? existing[0]!;
       setSelectedId(start.id); setSelectedIds([start.id]);
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...existing].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
-      setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
+      setNotice(t('noticeDatasetStepOne'));
       return;
     }
     const specs: Array<{ kind: CreationObjectKind; title: string; status: string; x: number; y: number; step: number; instruction: string; detail?: Partial<CreationNodeData> }> = [
@@ -1373,14 +2514,59 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
     setSelectedId(dataset!.id); setSelectedIds([dataset!.id]);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
-    setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
+    setNotice(t('noticeDatasetStepOne'));
+  }, [nodes, selectedNode, setEdges, setNodes]);
+
+  const openEvermindTraining = useCallback(() => {
+    if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
+    expandEvermindPipeline();
+    const attached = selectedNode.data.resourceId?.match(/^evermind:(\d+)$/)?.[1];
+    const projectNode = canvasProjectNodes(nodes)[0];
+    const projectId = attached ? Number(attached) : projectNode ? canvasProjectId(projectNode.data) : null;
+    if (persistence === 'server' && !projectId) {
+      setNotice(t('noticeNeedProjectForTraining'));
+      return;
+    }
+    setTrainingFocus({ nodeId: selectedNode.id, projectId: projectId ?? `local-${sessionId}`, localOnly: persistence === 'local' });
+    setNotice(persistence === 'local' ? 'Local-only adapter studio opened' : t('noticeAdapterStudioOpened'));
+  }, [expandEvermindPipeline, nodes, persistence, selectedNode, sessionId]);
+
+  const evaluateEvermind = useCallback((nodeId?: string) => {
+    const target = nodes.find((node) => node.id === nodeId && node.data.kind === 'evermind')
+      ?? (selectedNode?.data.kind === 'evermind' ? selectedNode : null);
+    if (!target) return;
+    const jobId = typeof target.data.trainingJobId === 'string' ? target.data.trainingJobId : '';
+    if (!jobId) { setNotice(t('noticeTrainBeforeEval')); return; }
+    setNotice(t('noticeEvaluatingAdapter'));
+    void evaluateModel(jobId).then((result) => {
+      const existing = nodes.find((node) => node.data.kind === 'evaluation' && node.data.modelEvaluationFor === target.id);
+      const evaluation = existing ?? newNode('evaluation', { x: target.position.x + 560, y: target.position.y });
+      evaluation.data = {
+        ...evaluation.data,
+        title: `${target.data.title} evaluation`,
+        status: 'Evaluated',
+        modelEvaluationFor: target.id,
+        verdict: result.score >= .8 ? 'Passed' : result.score >= .6 ? 'Review required' : 'Failed',
+        score: result.score,
+        content: result.details,
+        results: [
+          { label: 'Overall', value: result.score },
+          { label: 'Code correctness', value: result.code_correctness ?? 0 },
+          { label: 'Reasoning quality', value: result.reasoning_quality ?? 0 },
+          { label: 'Hallucination rate', value: result.hallucination_rate ?? 0 },
+        ],
+      };
+      setNodes((current) => existing ? current.map((node) => node.id === existing.id ? evaluation : node) : [...current, evaluation]);
+      setEdges((current) => current.some((edge) => edge.source === target.id && edge.target === evaluation.id) ? current : [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluated by', animated: true }]);
+      setNotice(t('noticeEvermindEvalComplete', { score: (result.score * 100).toFixed(0) }));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeEvermindEvalFailed')));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
   const startStandup = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'standup') return;
     if (persistence === 'local') { requireAccount('start', 'Create an account to start a collaborative stand-up', 'A live stand-up needs durable participants, shared activity, follow-up tasks, and tenant permissions.'); return; }
     const people = nodes.filter((node) => node.data.kind === 'staff' || node.data.kind === 'agent').slice(0, 25);
-    if (!people.length) { setNotice('Add staff members or agents to the canvas first'); return; }
+    if (!people.length) { setNotice(t('noticeNeedPeopleOnCanvas')); return; }
     const participants = people.map((node) => ({
       kind: node.data.kind === 'agent' ? 'agent' : 'human',
       ref: node.data.resourceId?.split(':').slice(1).join(':') || node.id,
@@ -1391,40 +2577,265 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: resourceId ? 'Live' : 'Draft', participants, resourceId: resourceId || node.data.resourceId, summary: `${participants.length} participants gathered. Brain will ask each person for progress, blockers, and next actions, then create follow-up work on this canvas.` } } : node));
       setEdges((current) => [...current, ...people.filter((person) => !current.some((edge) => edge.source === person.id && edge.target === selectedNode.id)).map((person) => ({ id: crypto.randomUUID(), source: person.id, target: selectedNode.id, label: 'joins', type: 'smoothstep' }))]);
     };
-    const project = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
-    const projectId = project ? Number(project.data.resourceId!.slice('project:'.length)) : null;
+    const project = canvasProjectNodes(nodes)[0];
+    const projectId = project ? canvasProjectId(project.data) : null;
     if (persistence === 'server' && projectId) {
-      setNotice('Starting canonical stand-up…');
+      setNotice(t('noticeStartingStandup'));
       void ceremonySessionsApi.start(projectId, 'standup', participants.map(({ kind, ref, name }) => ({ kind, ref, name }))).then((result) => {
         const ceremonyId = result.session?.id;
         applyStandup(ceremonyId ? `ceremony:${ceremonyId}` : undefined);
-        setNotice(ceremonyId ? 'Live stand-up started' : 'Stand-up frame prepared');
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not start stand-up'));
+        setNotice(ceremonyId ? 'Live stand-up started' : t('noticeStandupFramePrepared'));
+      }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeStartStandupFailed')));
       return;
     }
     applyStandup();
-    setNotice('Add a project to start a live stand-up');
+    setNotice(t('noticeNeedProjectForStandup'));
   }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
+    fileDragDepth.current = 0;
+    setFileDragging(false);
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const point = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    // A file dragged in from the desktop lands where it was dropped and becomes
+    // a real object; a palette drag still carries only an object kind.
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length) { void addFilesToCanvas(files, point); return; }
+    // A teammate dragged off the footer roster joins the session HERE (PRD 21
+    // §3.3). Same payload the keyboard route carries, same seating helper — a
+    // drag is one way in, never the only one.
+    const teammate = teammateFromDrag(event.dataTransfer);
+    if (teammate) { seatTeammate(teammate, point); return; }
     const kind = event.dataTransfer.getData(DND_MIME) as CreationObjectKind;
-    if (!kind || !flowRef.current) return;
-    const node = newNode(kind, flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    // A link dragged from a browser tab or another app carries no object kind —
+    // it lands as a live Web page panel, which is what a dropped URL means.
+    if (!kind && point) {
+      const dropped = normalizeWebPageUrl(event.dataTransfer.getData('text/uri-list').split('\n')[0] || event.dataTransfer.getData('text/plain'));
+      if (dropped) {
+        const page = newNode('browser', point);
+        page.data = { ...page.data, title: webPageHost(dropped), url: dropped, status: '' };
+        setNodes((current) => [...current, page]);
+        setSelectedId(page.id); setSelectedIds([page.id]);
+        return;
+      }
+    }
+    if (!kind || !point) return;
+    const node = newNode(kind, point);
+    if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
-  }, [canEdit, setNodes]);
+  }, [addFilesToCanvas, canEdit, localizedTourDefaults, setNodes, t]);
+
+  /** Convert an uploaded image/freehand drawing into a real, portable draw.io
+   * file, or append it as a new editable cell to an existing one. The diagram
+   * remains a normal canvas object, so the existing session graph persistence,
+   * history, Files panel, collaboration, and account ownership all apply. */
+  const convertObjectToDrawio = useCallback((sourceId: string, requestedDiagramId?: string): { ok: boolean; diagramId?: string; error?: string } => {
+    if (!canEdit) return { ok: false, error: t('roleCannotEdit') };
+    const source = nodes.find((node) => node.id === sourceId);
+    if (!source) return { ok: false, error: t('drawioSourceMissing') };
+    const asset = drawioAssetFromNode(source);
+    if (!asset) return { ok: false, error: t('drawioPreviewRequired') };
+    const drawioDiagrams = nodes.filter((node) => node.data.kind === 'diagram' && canvasDiagram(node.data)?.format === 'drawio');
+    const target = requestedDiagramId && requestedDiagramId !== '__new__'
+      ? drawioDiagrams.find((node) => node.id === requestedDiagramId)
+      : requestedDiagramId === '__new__' ? undefined : drawioDiagrams.length === 1 ? drawioDiagrams[0] : undefined;
+    if (target) {
+      const current = canvasDiagram(target.data)?.source ?? '';
+      const updated = appendImageToDrawioCanvas(current, asset);
+      if (!updated) return { ok: false, error: t('drawioAppendFailed') };
+      setNodes((items) => items.map((node) => node.id === target.id ? { ...node, data: {
+        ...node.data, diagram: updated, diagramXml: updated, content: updated,
+        status: t('drawioUpdatedStatus'),
+        sourceImageIds: [...new Set([...(Array.isArray(node.data.sourceImageIds) ? node.data.sourceImageIds.map(String) : []), source.id])],
+      } } : node));
+      setEdges((items) => items.some((edge) => edge.source === source.id && edge.target === target.id) ? items : [...items, { id: crypto.randomUUID(), source: source.id, target: target.id, type: 'smoothstep', label: t('drawioAddedToEdge'), data: { connectionKind: 'reference' } }]);
+      setSelectedId(target.id); setSelectedIds([target.id]); setNotice(t('drawioImageAdded', { name: source.data.title, diagram: target.data.title }));
+      return { ok: true, diagramId: target.id };
+    }
+    const diagram = newNode('diagram', { x: source.position.x + 430, y: source.position.y });
+    const xml = createDrawioImageCanvas(asset);
+    diagram.data = {
+      ...diagram.data, title: t('drawioTitle', { name: source.data.title }), status: t('drawioCreatedStatus'),
+      fileName: `${safeDownloadName(source.data.title)}.drawio`, mimeType: 'application/vnd.jgraph.mxfile',
+      diagramFormat: 'drawio', diagram: xml, diagramXml: xml, content: xml, sourceImageIds: [source.id],
+    };
+    setNodes((items) => [...items, diagram]);
+    setEdges((items) => [...items, { id: crypto.randomUUID(), source: source.id, target: diagram.id, type: 'smoothstep', label: t('drawioConvertedEdge'), data: { connectionKind: 'reference' } }]);
+    setSelectedId(diagram.id); setSelectedIds([diagram.id]); setNotice(t('drawioCreated', { name: diagram.data.title }));
+    return { ok: true, diagramId: diagram.id };
+  }, [canEdit, nodes, setEdges, setNodes, t]);
+
+  /** Drag events fire again for every child element the pointer crosses, so the
+   * overlay is held by a depth count rather than by the last event seen. */
+  const onCanvasDragEnter = useCallback((event: React.DragEvent) => {
+    if (!dragCarriesFiles(event)) return;
+    fileDragDepth.current += 1;
+    setFileDragging(true);
+  }, []);
+  const onCanvasDragLeave = useCallback((event: React.DragEvent) => {
+    if (!dragCarriesFiles(event)) return;
+    fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+    if (!fileDragDepth.current) setFileDragging(false);
+  }, []);
 
   const canvasActions = useMemo<BrainAction[]>(() => [{
+    name: 'canvas_prepare_executive_use_case',
+    description: 'Prepare one of the 48 migrated executive use cases for execution on this Canvas. Call this first when the prompt contains a legacy dotted use-case id. It returns the exact operation, completion condition, permitted existing Canvas outputs, and live evidence from the already-owning Builderforce domains. It never creates schema or mutates canonical domain data.',
+    parameters: {
+      type: 'object', required: ['useCaseId'], additionalProperties: false,
+      properties: {
+        useCaseId: { type: 'string', enum: C_SUITE_CANVAS_USE_CASES.map((item) => item.id) },
+        days: { type: 'number', minimum: 1, maximum: 365 },
+        limit: { type: 'number', minimum: 1, maximum: 100 },
+      },
+    },
+    run: async (raw: unknown) => {
+      const args = raw as { useCaseId?: unknown; days?: unknown; limit?: unknown };
+      const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === args.useCaseId);
+      const workflow = useCase ? cSuiteCanvasWorkflow(useCase) : null;
+      const owner = useCase ? cSuiteCanvasOwner(useCase) : null;
+      if (!useCase || !workflow || !owner) return { error: 'Unknown executive Canvas use case.' };
+      const contract = {
+        id: useCase.id,
+        label: useCase.label,
+        stages: owner.stages,
+        operation: workflow.operation,
+        evidence: workflow.evidence,
+        domains: owner.domains,
+        entityTerms: workflow.entityTerms,
+        allowedOutputs: workflow.outputs,
+        completion: workflow.completion,
+        confirmTarget: workflow.confirmTarget === true,
+        noNewTables: true,
+      };
+      if (workflow.evidence === 'web') return {
+        contract,
+        evidenceStatus: 'research_required',
+        next: 'Use builtin_web_search and builtin_web_fetch, preserve source URLs in a dataset, then author only the allowed Canvas outputs.',
+      };
+      if (workflow.evidence === 'canvas') return {
+        contract,
+        evidenceStatus: 'canvas_snapshot_available',
+        next: workflow.confirmTarget
+          ? 'Read the selected target in full with canvas_read_object before changing it; preserve every field outside the requested change.'
+          : 'Use the current Canvas snapshot and canvas_read_object/canvas_read_snapshot when more detail is needed.',
+      };
+      if (persistence !== 'server') return {
+        contract,
+        evidenceStatus: 'saved_session_required',
+        error: 'This use case requires live tenant-scoped Builderforce domain data. Save or claim the Creation Canvas before executing it.',
+      };
+      const days = Math.max(1, Math.min(365, Math.floor(Number(args.days) || 30)));
+      const limit = Math.max(1, Math.min(100, Math.floor(Number(args.limit) || 50)));
+      const normalizedTerms = workflow.entityTerms.map((term) => term.toLocaleLowerCase().replaceAll('-', '_'));
+      const domains = await Promise.all(owner.domains.map(async (domain) => {
+        const [summary, entities, items, metrics] = await Promise.all([
+          getDomainSummary(domain), getScopeEntities(domain), getDomainItems(domain, { limit }), getDomainMetrics(domain, days),
+        ]);
+        const matches = entities.filter((entity) => {
+          const name = entity.name.toLocaleLowerCase();
+          return entity.readable && normalizedTerms.some((term) => name.includes(term) || term.includes(name));
+        }).sort((left, right) => right.count - left.count).slice(0, 4);
+        const entityEvidence = await Promise.all(matches.map(async (entity) => {
+          try {
+            const page = await getEntityRows(domain, entity.name, { limit: Math.min(limit, 50) });
+            return { entity, rows: page.rows, total: page.total };
+          } catch (error) {
+            return { entity, rows: [], total: entity.count, error: error instanceof Error ? error.message : 'Entity rows unavailable' };
+          }
+        }));
+        return { domain, summary, matchedEntities: entityEvidence, items, metrics };
+      }));
+      return {
+        contract,
+        evidenceStatus: domains.some((domain) => domain.summary.itemCount > 0 || domain.metrics.length > 0 || domain.matchedEntities.some((entity) => entity.total > 0)) ? 'available' : 'empty',
+        domains,
+        instruction: 'Create or update an allowed Canvas output only from these rows, metrics and registered objects. State missing evidence inside the artifact; never fill it with example values.',
+      };
+    },
+  }, {
+    name: 'canvas_read_domain',
+    description: 'Read real, tenant-scoped Builderforce domain data for an executive Canvas request. Use this before authoring a C-suite dashboard, report, chart, table, KPI, forecast, register, company view, or risk rollup. Returns the domain summary, registered entity catalog with row counts, recent objects, metric series, and—when entity is supplied—the selected entity rows. Never invent a value when this result has no supporting row or metric.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        domain: { type: 'string', enum: [...DOMAINS], description: 'Builderforce owner domain. Marketing maps to growth; agile maps to delivery; CRM maps to revenue; operations maps to people; product/company maps to investor or delivery according to the requested record.' },
+        entity: { type: 'string', description: 'Optional entity name returned by the domain catalog, for example expenses, validation_dashboards, or people_employees.' },
+        days: { type: 'number', minimum: 1, maximum: 365, description: 'Metric lookback window. Defaults to 30.' },
+        limit: { type: 'number', minimum: 1, maximum: 200, description: 'Maximum recent objects or entity rows. Defaults to 50.' },
+      },
+      required: ['domain'],
+    },
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') return { error: 'Executive domain data requires a saved, authenticated Creation Canvas session.' };
+      const args = raw as { domain?: unknown; entity?: unknown; days?: unknown; limit?: unknown };
+      const domain = typeof args.domain === 'string' && isDomain(args.domain) ? args.domain : null;
+      if (!domain) return { error: `Choose a supported domain: ${DOMAINS.join(', ')}` };
+      const days = Math.max(1, Math.min(365, Math.floor(Number(args.days) || 30)));
+      const limit = Math.max(1, Math.min(200, Math.floor(Number(args.limit) || 50)));
+      const [summary, entities, items, metrics] = await Promise.all([
+        getDomainSummary(domain), getScopeEntities(domain), getDomainItems(domain, { limit }), getDomainMetrics(domain, days),
+      ]);
+      const entity = typeof args.entity === 'string' ? args.entity.trim() : '';
+      if (!entity) return { domain, summary, entities, items, metrics };
+      const descriptor = entities.find((candidate) => candidate.name === entity);
+      if (!descriptor) return { error: `Entity '${entity}' is not owned by ${domain}.`, domain, summary, entities, items, metrics };
+      if (!descriptor.readable) return { error: `Entity '${entity}' is intentionally not available through the generic tenant reader.`, domain, summary, entity: descriptor, items, metrics };
+      const page = await getEntityRows(domain, entity, { limit });
+      return { domain, summary, entity: descriptor, rows: page.rows, total: page.total, items, metrics };
+    },
+  }, {
     name: 'canvas_read_snapshot',
-    description: 'Read every object and relationship currently visible on the creation canvas.',
+    // This tool PROMISED "every object" and delivered the scoped subset, which is
+    // how the one escape hatch from a partial view became a second confirmation
+    // of it: the model checked, was told the board held one object, and reported
+    // a file missing that was sitting right there. Asking to read everything is
+    // an explicit request to leave the scope, so it now does.
+    description: 'Read every object and relationship on the creation canvas — the WHOLE board, regardless of what the user has selected. Use this whenever you are about to say something is not on the canvas.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => ({
       scope: resolvedScopeMode,
-      objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
-      connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
+      scopeNote: scopeNote('canvas', nodes.length, nodes.length),
+      objects: nodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }),
+      connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
+  }, {
+    // The lookup the scope note points at. Named rather than positional because
+    // the reported failure was a NAME miss (`.htm` vs `.html`), and a model that
+    // has to guess an object id to check whether an object exists will not check.
+    name: 'canvas_read_object',
+    description: 'Read one object on this canvas in full by id, title, or file name — including objects outside the current selection. Use this before telling the user that a file or object is not on the canvas: matching tolerates a wrong extension and a partial name.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'Exact object id from boardInventory.' },
+        name: { type: 'string', description: 'Title or file name the user referred to, e.g. "Sales-Discovery-Guide.htm".' },
+      },
+    },
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; name?: string };
+      const inventory = boardInventory(nodes, scopedNodeIds);
+      const match = args.objectId
+        ? inventory.find((entry) => entry.id === args.objectId) ?? null
+        : findInInventory(inventory, args.name ?? '');
+      if (!match) {
+        // An honest miss carries the inventory, so the next sentence the model
+        // writes is grounded in what IS there rather than in what it expected.
+        return { found: false, boardInventory: inventory, message: 'No object on this board matches that id or name. The full inventory is included — do not ask the user to upload something listed in it.' };
+      }
+      const node = nodes.find((candidate) => candidate.id === match.id);
+      if (!node) return { found: false, boardInventory: inventory };
+      const definition = creationObjectDefinition(node.data.kind);
+      return {
+        found: true,
+        object: { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions },
+        connections: edges
+          .filter((edge) => edge.source === node.id || edge.target === node.id)
+          .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
+      };
+    },
   }, {
     name: 'canvas_read_project_prds',
     description: 'Read the complete canonical PRDs and version history for every ticket in a project. Always use this before synthesizing, consolidating, or explaining project requirements; canvas selection does not limit this project-wide read.',
@@ -1432,13 +2843,53 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: async (raw: unknown) => {
       if (persistence !== 'server') return { error: 'Canonical project PRDs require a saved session' };
       const requested = Number((raw as { projectId?: unknown })?.projectId);
-      const available = nodes.flatMap((node) => {
-        const match = node.data.kind === 'project' ? node.data.resourceId?.match(/^project:(\d+)$/) : null;
-        return match ? [Number(match[1])] : [];
-      });
+      const available = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data)!);
       const projectId = Number.isInteger(requested) && requested > 0 ? requested : available.length === 1 ? available[0]! : NaN;
       if (!Number.isInteger(projectId) || projectId <= 0) return { error: available.length ? 'Specify which canvas project to read' : 'Add a canonical project to the canvas first' };
       return creationSessionsApi.projectPrdContext(sessionId, projectId);
+    },
+  }, {
+    // The canvas snapshot caps every string field, so a twenty-page document
+    // dropped on the board reaches Brain as its first two thousand characters.
+    // This is the document counterpart of canvas_query_dataset: the full body,
+    // by page, so "summarise this" reads the file rather than its opening.
+    name: 'canvas_read_document',
+    description: 'Read the full written body of any object on this canvas that carries one — a Document, PRD, Knowledge page, Report, Note, or an imported Word or PDF file — one page at a time. The canvas snapshot truncates long bodies, so ALWAYS use this before summarizing, reviewing, rewriting, quoting, or answering questions about a document; never answer from the truncated snapshot text.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'Object id of the document. Omit when the canvas holds exactly one document-like object.' },
+        page: { type: 'number', description: 'One-based page to read. Omit for the first page.' },
+        pages: { type: 'number', description: 'How many consecutive pages to return, up to 6. Defaults to 3.' },
+      },
+    },
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; page?: number; pages?: number };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const candidates = [...nodes, ...stagedNodes].filter((node) => canvasDocument(node.data));
+      const target = args.objectId ? candidates.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
+      if (!target) {
+        return { error: candidates.length
+          ? `Specify which document to read. Documents on this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No document with a written body is on this canvas.' };
+      }
+      const document = canvasDocument(target.data)!;
+      const span = Math.max(1, Math.min(Math.round(Number(args.pages) || 3), 6));
+      const first = Math.max(1, Math.min(Math.round(Number(args.page) || 1), document.pages.length));
+      const returned = document.pages.slice(first - 1, first - 1 + span);
+      return {
+        objectId: target.id,
+        title: target.data.title,
+        ...(typeof target.data.fileName === 'string' ? { fileName: target.data.fileName } : {}),
+        ...(typeof target.data.sourceFormat === 'string' ? { sourceFormat: target.data.sourceFormat } : {}),
+        totalPages: document.pages.length,
+        wordCount: document.wordCount,
+        outline: document.headings,
+        firstPage: first,
+        pages: returned.map((body, index) => ({ page: first + index, body })),
+        hasMore: first - 1 + returned.length < document.pages.length,
+        readFromSource: true,
+      };
     },
   }, {
     name: 'canvas_create_project_prd',
@@ -1457,7 +2908,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (persistence !== 'server') return { error: 'Create an account and save the session before creating a canonical project PRD' };
       const args = raw as { projectId?: unknown; title?: unknown; markdown?: unknown; status?: unknown };
       const requested = Number(args.projectId);
-      const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(String(node.data.resourceId || '')));
+      const projectNodes = canvasProjectNodes(nodes);
       const project = Number.isInteger(requested) && requested > 0
         ? projectNodes.find((node) => node.data.resourceId === `project:${requested}`)
         : projectNodes.length === 1 ? projectNodes[0] : undefined;
@@ -1465,7 +2916,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const title = typeof args.title === 'string' ? args.title.trim().slice(0, 160) : '';
       const markdown = typeof args.markdown === 'string' ? args.markdown.trim() : '';
       if (!title || !markdown) return { error: 'A project PRD requires a title and complete Markdown content' };
-      const projectId = Number(project.data.resourceId!.slice('project:'.length));
+      const projectId = canvasProjectId(project.data)!;
       const node = newNode('prd', { x: project.position.x + 390, y: project.position.y });
       node.data = {
         ...node.data, title, markdown, content: markdown,
@@ -1477,14 +2928,508 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, projectId, object: { id: node.id, kind: 'prd', title }, persistence: 'canonical-after-review' };
     },
   }, {
+    name: 'canvas_query_dataset',
+    description: 'Compute real values from a Dataset, Table, or Spreadsheet object on this canvas, and optionally build the resulting Table, Chart, Dashboard, or KPI. This runs over every imported row, not the sample in the snapshot. Use it for any counting, totalling, ranking, comparison, success/failure split, or visualization of uploaded data. Never estimate, sample, or invent numbers when this tool can compute them.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        datasetId: { type: 'string', description: 'Object id of the dataset. Omit when the canvas holds exactly one tabular object.' },
+        select: { type: 'array', items: { type: 'string' }, description: 'Columns to return. Omit for every column.' },
+        filter: {
+          type: 'array', description: 'Row conditions applied before grouping.',
+          items: { type: 'object', required: ['column'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: { description: 'Comparison value, or an array for in/notIn.' } } },
+        },
+        filterMatch: { type: 'string', enum: ['all', 'any'], description: 'Whether every filter must match, or any one of them. Defaults to all.' },
+        derive: {
+          type: 'array',
+          description: 'Computed columns evaluated before filtering and grouping. Use this to classify rows, for example a Status column that is "Success" when a count column equals 1 and "Failure" otherwise.',
+          items: { type: 'object', required: ['name', 'when', 'then'], additionalProperties: false, properties: {
+            name: { type: 'string' },
+            when: { type: 'array', items: { type: 'object', required: ['column'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {} } } },
+            match: { type: 'string', enum: ['all', 'any'] },
+            then: { type: 'string' }, otherwise: { type: 'string' },
+          } },
+        },
+        groupBy: { type: 'string', description: 'Column or derived column to group by. Returns one row per distinct value with real counts.' },
+        aggregate: { type: 'array', items: { type: 'object', required: ['op'], additionalProperties: false, properties: { op: { type: 'string', enum: [...TABULAR_AGGREGATE_OPERATORS] }, column: { type: 'string' }, label: { type: 'string' } } } },
+        sort: { type: 'object', additionalProperties: false, properties: { column: { type: 'string' }, direction: { type: 'string', enum: ['asc', 'desc'] } } },
+        limit: { type: 'number' },
+        materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi', 'map'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown, "chart" or "dashboard" for a grouped visualization, and "map" to plot rows geographically — "map" requires latitude and longitude columns, which geo.geocode can add to a dataset of place names.' },
+        title: { type: 'string', description: 'Title for the materialized object.' },
+        mapValueColumn: { type: 'string', description: 'For materializeAs "map": the numeric column that sizes each marker.' },
+        mapRegionName: { type: 'string', description: 'For materializeAs "map": the enclosing region shown on the card, e.g. "Michigan".' },
+        mapRegion: { type: 'array', items: { type: 'number' }, description: 'For materializeAs "map": [south, north, west, east] to fit the viewport to, exactly as geo.geocode returns in boundingBox. Omit to fit the plotted points.' },
+        mapOutline: { description: 'For materializeAs "map": a boundary to draw behind the points — pass geo.geocode\'s outline value for the enclosing region straight through.' },
+        mapAttribution: { type: 'string', description: 'For materializeAs "map": the geocoder attribution string to print under the map.' },
+        highlight: {
+          type: 'array', description: 'Row colouring for a materialized table. The first matching rule wins.',
+          items: { type: 'object', required: ['column', 'tone'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {}, tone: { type: 'string', enum: ['success', 'warning', 'danger', 'info'] } } },
+        },
+      },
+    },
+    mutates: (raw: unknown) => (raw as { materializeAs?: unknown })?.materializeAs != null && (raw as { materializeAs?: unknown }).materializeAs !== 'none',
+    run: (raw: unknown) => {
+      const args = raw as TabularQuery & {
+        datasetId?: string; materializeAs?: string; title?: string; highlight?: TabularHighlightRule[];
+        mapValueColumn?: string; mapRegionName?: string; mapRegion?: unknown; mapOutline?: unknown; mapAttribution?: string;
+      };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const candidates = [...nodes, ...stagedNodes].filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
+      const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
+      if (!target) {
+        return { error: candidates.length
+          ? `Specify which dataset to query. Tabular objects on this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No dataset with imported rows is on this canvas. Ask the user to attach a CSV, TSV, or JSON file, or import one from the Dataset inspector.' };
+      }
+      const source = tabularFromObject(target.data as Record<string, unknown>);
+      if (!source.rows.length) return { error: `${target.data.title} has no imported rows yet` };
+      const result = queryTabular(source, args);
+      if (result.unknownColumns.length) {
+        return { error: `Unknown column(s): ${result.unknownColumns.join(', ')}. Available columns: ${source.columns.join(', ')}` };
+      }
+      const materializeAs = ['table', 'chart', 'dashboard', 'kpi', 'map'].includes(String(args.materializeAs)) ? String(args.materializeAs) as 'table' | 'chart' | 'dashboard' | 'kpi' | 'map' : null;
+      // Resolve geography BEFORE anything is proposed, so a plot with no coordinates
+      // fails with the columns it actually looked at rather than staging an empty map.
+      const geoColumns = materializeAs === 'map' ? detectGeoColumns({ columns: result.columns, rows: result.rows }, args.mapValueColumn) : null;
+      const mapPoints = geoColumns ? mapPointsFromRows({ columns: result.columns, rows: result.rows }, geoColumns, MAX_MATERIALIZED_ROWS) : [];
+      if (materializeAs === 'map' && !mapPoints.length) {
+        return {
+          error: geoColumns?.latitude && geoColumns.longitude
+            ? `No row in this result has a usable coordinate pair in ${geoColumns.latitude}/${geoColumns.longitude}.`
+            : `This result has no latitude/longitude columns, so it cannot be plotted. Available columns: ${result.columns.join(', ')}. Resolve the place names with geo.geocode, write the returned lat/lng back onto the dataset rows with canvas_update_object, then plot it.`,
+        };
+      }
+      const payload = {
+        datasetId: target.id, datasetTitle: target.data.title,
+        columns: result.columns, rows: result.rows.slice(0, 20),
+        totalRows: result.totalRows, matchedRows: result.matchedRows, returnedRows: result.returnedRows, truncated: result.truncated,
+        ...(result.groups ? { groups: result.groups } : {}),
+        ...(result.aggregates ? { aggregates: result.aggregates } : {}),
+        computedFromEveryRow: true,
+      };
+      if (!materializeAs) return payload;
+      if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
+      const kind: CreationObjectKind = materializeAs;
+      const existing = [...nodes, ...stagedNodes].find((node) => node.data.kind === kind && node.data.sourceDatasetId === target.id);
+      const title = typeof args.title === 'string' && args.title.trim()
+        ? args.title.trim().slice(0, 160)
+        : `${target.data.title} ${materializeAs === 'kpi' ? 'metric' : materializeAs}`;
+      const highlightRules = Array.isArray(args.highlight)
+        ? args.highlight.filter((rule) => rule?.column && rule.tone).slice(0, 20)
+        : [];
+      const valueKey = result.columns.find((column) => column !== args.groupBy) ?? 'count';
+      const fields: Record<string, unknown> = materializeAs === 'table'
+        ? {
+          title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.matchedRows,
+          sampleRows: result.rows.slice(0, 8), ...(highlightRules.length ? { highlightRules } : {}),
+          status: `${result.matchedRows.toLocaleString()} of ${result.totalRows.toLocaleString()} rows`,
+          summary: `${result.matchedRows.toLocaleString()} matching rows of ${result.totalRows.toLocaleString()} in ${target.data.title}.`,
+          sourceDatasetId: target.id,
+        }
+        : materializeAs === 'kpi'
+          ? {
+            title, value: String(Object.values(result.aggregates ?? { count: result.matchedRows })[0] ?? result.matchedRows),
+            status: 'Live', summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`, sourceDatasetId: target.id,
+          }
+          : materializeAs === 'map'
+            // Same builder the Dataset inspector's "Plot on a map" uses — see
+            // `mapObjectFields`. Only the copy differs (model-facing here, localized
+            // there); the field assembly, region/outline sanitization and the
+            // MultiPolygon flattening are shared so the two paths cannot drift.
+            ? mapObjectFields({
+              title,
+              status: `${mapPoints.length.toLocaleString()} plotted`,
+              summary: `${mapPoints.length.toLocaleString()} of ${result.matchedRows.toLocaleString()} matching rows in ${target.data.title} have coordinates and are plotted.`,
+              points: mapPoints,
+              columns: geoColumns ?? { latitude: null, longitude: null, label: null, value: null },
+              sourceDatasetId: target.id,
+              region: args.mapRegion,
+              regionName: args.mapRegionName,
+              outline: args.mapOutline,
+              attribution: args.mapAttribution,
+            })
+            : {
+            title, status: 'Live',
+            chartTitle: title,
+            ...(args.groupBy ? { xAxisLabel: args.groupBy } : {}),
+            yAxisLabel: valueKey,
+            chartLabels: (result.groups ?? result.rows).map((row, index) => String((row as Record<string, unknown>).key ?? (args.groupBy ? (row as Record<string, unknown>)[args.groupBy] : '') ?? `Row ${index + 1}`)),
+            chartValues: (result.groups ?? result.rows).map((row) => Number((row as Record<string, unknown>)[valueKey] ?? (row as { count?: number }).count ?? 0)),
+            kpis: Object.entries(result.aggregates ?? {}).slice(0, 4).map(([label, value]) => ({ label, value: value.toLocaleString() })),
+            summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`,
+            sourceDatasetId: target.id,
+          };
+      const patch = sanitizeCreationObjectPatch(kind, fields);
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${kind} “${title}”`, objectId: existing.id, patch });
+        return { ...payload, proposed: true, materialized: { id: existing.id, kind, title, updated: true } };
+      }
+      const node = newNode(kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, kind));
+      node.data = { ...node.data, ...patch };
+      if (kind === 'table') node.style = { width: 720, height: 460 };
+      if (kind === 'map') node.style = { width: 420, height: 380 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${kind} “${title}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${target.data.title} to ${title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } } });
+      return { ...payload, proposed: true, materialized: { id: node.id, kind, title, created: true } };
+    },
+  }, {
+    /**
+     * The whole point of "show me my inbox on the canvas".
+     *
+     * A dedicated action rather than `canvas_add_object` with hand-authored
+     * fields, because a model cannot invent someone's real mail: this READS the
+     * connected mailbox and puts what is actually there on the board. It also
+     * stores the `filter` alongside the messages, which is what makes the tile a
+     * live, reproducible view rather than a one-off screenshot — `canvas_refresh_inbox`
+     * re-runs exactly the same query later.
+     */
+    name: 'canvas_add_inbox',
+    description: 'Put a LIVE INBOX from a connected Microsoft 365 or Gmail mailbox onto the canvas, optionally filtered. Use this whenever the user asks to see, show, display, review or triage their email or inbox — it reads their real mailbox rather than inventing messages. Filters combine: query (free text), from, subject, unreadOnly, hasAttachments, after/before (ISO dates). The filter is saved with the tile, so it can be refreshed later and still mean the same thing. Name the mailbox with accountEmail when the workspace has more than one connected.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        accountEmail: { type: 'string', description: 'Which connected mailbox. Omit when exactly one is connected.' },
+        title: { type: 'string', description: 'Tile title, e.g. "Unread from Acme". Defaults to a description of the filter.' },
+        query: { type: 'string', description: 'Free-text search across subject, body and participants.' },
+        from: { type: 'string', description: 'Match the sender address.' },
+        subject: { type: 'string', description: 'Match the subject line.' },
+        unreadOnly: { type: 'boolean' },
+        hasAttachments: { type: 'boolean' },
+        after: { type: 'string', description: 'ISO instant — only mail received at or after this.' },
+        before: { type: 'string', description: 'ISO instant — only mail received before this.' },
+        limit: { type: 'number', description: 'Up to 100. Defaults to 25.' },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as {
+        accountEmail?: string; title?: string; query?: string; from?: string; subject?: string;
+        unreadOnly?: boolean; hasAttachments?: boolean; after?: string; before?: string;
+        limit?: number; x?: number; y?: number;
+      };
+      const { connections } = await mailboxApi.listConnections().catch(() => ({ connections: [] }));
+      const resolved = resolveMailboxConnection(connections, { accountEmail: args.accountEmail ?? null });
+      if (!resolved.ok) {
+        // Actionable rather than a bare failure: the user has to leave the
+        // canvas to fix this, so say where to go.
+        return { error: `${resolved.error} Connect one in Growth → Mailboxes.` };
+      }
+
+      const filter = {
+        q: args.query, from: args.from, subject: args.subject,
+        unread: args.unreadOnly, hasAttachments: args.hasAttachments,
+        after: args.after, before: args.before, limit: args.limit,
+      };
+      let read: Awaited<ReturnType<typeof mailboxApi.listMessages>>;
+      try {
+        read = await mailboxApi.listMessages(resolved.connection.id, filter);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('inbox', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, 'inbox'));
+      const unreadCount = read.triage.filter((m) => m.unread).length;
+      node.data = {
+        ...node.data,
+        title: args.title?.trim().slice(0, 160) || read.accountEmail,
+        subtitle: describeMailboxFilter(filter),
+        status: `${read.triage.length} message${read.triage.length === 1 ? '' : 's'}`,
+        connectionId: resolved.connection.id,
+        accountEmail: read.accountEmail,
+        provider: read.provider,
+        filter,
+        // The TRIAGE projection, not the full messages: a canvas node's data is
+        // persisted with the session AND fed to Brain's snapshot, and 25 full
+        // emails would bloat both.
+        messages: read.triage,
+        unreadCount,
+        fetchedAt: new Date().toISOString(),
+      };
+      node.style = { width: 460, height: 520 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add inbox “${node.data.title}”`, node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'inbox', title: node.data.title },
+        accountEmail: read.accountEmail,
+        total: read.triage.length,
+        unread: unreadCount,
+        messages: read.triage,
+      };
+    },
+  }, {
+    name: 'canvas_refresh_inbox',
+    description: 'Re-read a mailbox already on the canvas, using the filter that tile was created with, and return what is there now. Use this when asked to refresh, re-check or "look again at" an inbox on the board — it updates the tile in place rather than adding a second one.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: { objectId: { type: 'string', description: 'The inbox object. Omit when the canvas holds exactly one.' } },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const objectId = (raw as { objectId?: string }).objectId;
+      const inboxes = nodes.filter((node) => node.data.kind === 'inbox');
+      const target = objectId ? inboxes.find((node) => node.id === objectId) : inboxes.length === 1 ? inboxes[0] : undefined;
+      if (!target) {
+        return { error: inboxes.length ? 'Say which inbox to refresh.' : 'There is no inbox on this canvas yet.' };
+      }
+      const connectionId = Number(target.data.connectionId);
+      if (!Number.isInteger(connectionId)) return { error: 'That inbox is not bound to a connected mailbox.' };
+
+      let read: Awaited<ReturnType<typeof mailboxApi.listMessages>>;
+      try {
+        read = await mailboxApi.listMessages(connectionId, (target.data.filter as MailboxFilter) ?? {});
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
+      }
+      const unreadCount = read.triage.filter((m) => m.unread).length;
+      const patch = {
+        messages: read.triage,
+        unreadCount,
+        fetchedAt: new Date().toISOString(),
+        status: `${read.triage.length} message${read.triage.length === 1 ? '' : 's'}`,
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Refresh inbox ${target.id}`, objectId: target.id, patch });
+      return { ok: true, proposed: true, objectId: target.id, total: read.triage.length, unread: unreadCount, messages: read.triage };
+    },
+  }, {
+    /** Lifting one message out of a live view is what makes it durable: an
+     *  `email` object stops changing, so it can be annotated and connected to a
+     *  task and will still be there after the inbox has moved on. */
+    name: 'canvas_pin_email',
+    description: 'Pin ONE message from an inbox on the canvas as its own object, and read it in full while doing so. Use this when a specific email needs to be discussed, annotated, or connected to a task — unlike the live inbox tile, a pinned email does not change when the mailbox does.',
+    parameters: {
+      type: 'object', required: ['messageId'], additionalProperties: false,
+      properties: {
+        messageId: { type: 'string', description: 'The message id, as listed by the inbox tile.' },
+        objectId: { type: 'string', description: 'Which inbox it came from. Omit when the canvas holds exactly one.' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { messageId?: string; objectId?: string };
+      const inboxes = nodes.filter((node) => node.data.kind === 'inbox');
+      const source = args.objectId ? inboxes.find((node) => node.id === args.objectId) : inboxes.length === 1 ? inboxes[0] : undefined;
+      if (!source) return { error: inboxes.length ? 'Say which inbox the message is in.' : 'There is no inbox on this canvas yet.' };
+      const connectionId = Number(source.data.connectionId);
+      if (!Number.isInteger(connectionId) || !args.messageId) return { error: 'That inbox is not bound to a connected mailbox.' };
+
+      let message: Awaited<ReturnType<typeof mailboxApi.getMessage>>;
+      try {
+        message = await mailboxApi.getMessage(connectionId, args.messageId);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That message could not be read.' };
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('email', nextCanvasObjectPosition(
+        [...nodes, ...stagedNodes],
+        { x: source.position.x + 500, y: source.position.y },
+        typeof window !== 'undefined' && window.innerWidth <= 760,
+        'email',
+      ));
+      node.data = {
+        ...node.data,
+        title: message.subject,
+        subtitle: message.fromName ? `${message.fromName} <${message.from}>` : message.from,
+        status: new Date(message.receivedAtISO).toLocaleString(),
+        messageId: message.id,
+        connectionId,
+        accountEmail: source.data.accountEmail,
+        from: message.from, fromName: message.fromName, to: message.to,
+        subject: message.subject, receivedAt: message.receivedAtISO,
+        bodyText: message.bodyText, unread: message.unread,
+        hasAttachments: message.hasAttachments, webUrl: message.webUrl,
+      };
+      node.style = { width: 460, height: 420 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Pin email “${message.subject}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${source.data.title} to ${message.subject}`, edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } } });
+      return { ok: true, proposed: true, object: { id: node.id, kind: 'email', title: message.subject }, message };
+    },
+  }, {
+    /**
+     * The diagnostics catalog, on the board (PRD 21 §11.4.5).
+     *
+     * `/tools/<id>` is the REFERENCE page for a diagnostic — where you read what
+     * it measures. This pair is where you USE it: the capability reaches the
+     * canvas as a tool Brain can call, not as a canvas mounted on a marketing
+     * URL, which is what it used to be.
+     *
+     * Listed separately from `canvas_add_diagnostic` for the reason
+     * `creative.capabilities` is separate from `creative.compose`: a model that
+     * has to guess an id before it can see the catalog guesses, and a wrong
+     * `toolId` is a 404 the user reads as "the diagnostic does not exist".
+     */
+    name: 'canvas_list_diagnostics',
+    description: 'List the free diagnostics and calculators this platform can run (id, name, what it measures, whether it is a calculator/assessment/quiz, and whether it also has a data-driven mode). Call this BEFORE canvas_add_diagnostic whenever the exact diagnostic id is not already known — for "what can you assess?", "estimate my AI spend", "how mature is our delivery?", "check our DORA metrics", "governance readiness".',
+    parameters: { type: 'object', additionalProperties: false, properties: {} },
+    mutates: false,
+    run: async () => {
+      try {
+        const catalog = await toolsApi.list();
+        return { diagnostics: catalog.map((entry) => ({
+          id: entry.id, name: entry.name, about: entry.tagline,
+          category: entry.category, kind: entry.kind, hasDataDriven: entry.hasDataDriven === true,
+          referencePage: `/tools/${entry.id}`,
+        })) };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'The diagnostics catalog could not be read.' };
+      }
+    },
+  }, {
+    name: 'canvas_add_diagnostic',
+    description: 'Put a diagnostic or calculator on the canvas as a live object the user can answer in place. Pass `answers` (question id → number, as listed by this tool when called without them) to ALSO compute the result and land the object already scored. Use this for "add the AI cost estimator", "run the maturity assessment on the board", "score our delivery". Get the id from canvas_list_diagnostics first.',
+    parameters: {
+      type: 'object', required: ['toolId'], additionalProperties: false,
+      properties: {
+        toolId: { type: 'string', description: 'Catalog id, e.g. from canvas_list_diagnostics.' },
+        answers: { type: 'object', description: 'Question/input id → numeric answer. Omit to place an unanswered object for the user to fill in.', additionalProperties: { type: 'number' } },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { toolId?: string; answers?: Record<string, unknown>; x?: number; y?: number };
+      const toolId = typeof args.toolId === 'string' ? args.toolId.trim() : '';
+      if (!toolId) return { error: 'Say which diagnostic. Call canvas_list_diagnostics for the ids.' };
+
+      let definition: Awaited<ReturnType<typeof toolsApi.get>>;
+      try {
+        definition = await toolsApi.get(toolId);
+      } catch {
+        const catalog = await toolsApi.list().catch(() => []);
+        return { error: catalog.length
+          ? `No diagnostic '${toolId}'. Available: ${catalog.map((entry) => entry.id).join(', ')}.`
+          : `No diagnostic '${toolId}'.` };
+      }
+
+      // Only the questions this diagnostic actually has: a model that invents an
+      // extra key would otherwise get a result scored against a shape the tool
+      // does not define, which is a number that looks computed and is not.
+      const accepted = new Set(questionIds(definition));
+      const answers: Record<string, number> = {};
+      for (const [key, value] of Object.entries(args.answers ?? {})) {
+        if (accepted.has(key) && Number.isFinite(Number(value))) answers[key] = Number(value);
+      }
+      const input = Object.keys(answers).length ? { ...defaultInput(definition), ...answers } : {};
+      const complete = Object.keys(answers).length > 0 && answersComplete(definition, input);
+
+      let result: ToolResult | null = null;
+      if (complete) {
+        try {
+          result = await toolsApi.compute(toolId, input);
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : 'That diagnostic could not be scored.' };
+        }
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('diagnostics', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, 'diagnostics'));
+      node.data = {
+        ...node.data,
+        title: definition.name,
+        subtitle: definition.about,
+        toolId,
+        toolIcon: definition.icon,
+        toolInput: input,
+        ...(result ? {
+          toolResult: result, result,
+          status: result.scoreLabel || result.headline,
+          qualityScore: result.score, qualityLabel: result.scoreLabel, qualityHeadline: result.headline,
+          summary: result.summary,
+          recommendations: result.recommendations,
+          results: result.metrics.map((metric) => ({ title: metric.label, result: metric.value, detail: metric.hint })),
+          gapCount: result.recommendations.length,
+        } : { status: 'Ready to run' }),
+      };
+      node.style = { width: 760 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add diagnostic “${definition.name}”`, node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'diagnostics', title: definition.name },
+        toolId, kind: definition.kind, referencePage: `/tools/${toolId}`,
+        // Unanswered, the model needs the question ids to be able to offer to
+        // fill them in; answered, it needs the score to be able to talk about it.
+        ...(result ? { result } : { questions: [...accepted], awaitingAnswers: true }),
+      };
+    },
+  }, {
+    name: 'canvas_add_image',
+    description: 'Find or create an actual image and put the finished image on the Canvas. ALWAYS use this instead of canvas_add_object for an image request. Use mode="generate" for create/draw/generate/make requests, mode="find" for find/search/stock/photo requests, and mode="auto" only when the user did not express a preference.',
+    parameters: {
+      type: 'object', required: ['query', 'mode'], additionalProperties: false,
+      properties: {
+        query: { type: 'string', description: 'The complete visual search query or generation prompt.' },
+        mode: { type: 'string', enum: ['find', 'generate', 'auto'] },
+        title: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      if (persistence !== 'server') return { error: 'Image search and generation require a saved Canvas session' };
+      const args = raw as { query?: string; mode?: CanvasImageResolveMode; title?: string; x?: number; y?: number };
+      const query = typeof args.query === 'string' ? args.query.trim().slice(0, 2_000) : '';
+      const mode = args.mode === 'find' || args.mode === 'generate' || args.mode === 'auto' ? args.mode : null;
+      if (!query || !mode) return { error: 'Pass an image query and mode (find, generate, or auto)' };
+      try {
+        const asset = await resolveCanvasImage(query, mode);
+        const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+        const node = newNode('image', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
+        const imageTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : query.slice(0, 80);
+        const mimeType = asset.url.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(asset.url) ? 'image/png'
+          : /\.webp(?:$|[?#])/i.test(asset.url) ? 'image/webp' : 'image/jpeg';
+        const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const delivered: CreationDeliverable = {
+          id: crypto.randomUUID(), action: asset.source === 'stock' ? 'find' : 'generate', artifactKind: 'image',
+          status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+          url: asset.url, mimeType, fileName: `${safeDownloadName(imageTitle)}.${extension}`, provider: asset.provider,
+          validation: { status: 'passed', detail: asset.source === 'stock' ? t('imageFoundValidation', { provider: asset.licence ?? asset.provider }) : t('imageGeneratedValidation') },
+          metadata: { source: asset.source, ...(asset.model ? { model: asset.model } : {}) },
+        };
+        node.data = {
+          ...node.data,
+          title: imageTitle,
+          subtitle: asset.source === 'stock' ? `${asset.licence ?? asset.provider}${asset.author ? ` · ${asset.author}` : ''}` : query,
+          status: asset.source === 'stock' ? t('imageFoundStatus') : t('creativeGeneratedStatus'),
+          prompt: query,
+          outputUrl: asset.url,
+          thumbnailUrl: asset.thumbnailUrl,
+          outputFormat: 'Image',
+          outputFileName: delivered.fileName,
+          outputMimeType: mimeType,
+          provider: asset.provider,
+          ...(asset.model ? { model: asset.model } : {}),
+          ...(asset.width ? { imageWidth: asset.width } : {}),
+          ...(asset.height ? { imageHeight: asset.height } : {}),
+          imageSource: asset.source,
+          imageLicence: asset.licence,
+          imageAuthor: asset.author,
+          imageAuthorUrl: asset.authorUrl,
+          deliverables: withCreationDeliverable(node.data, delivered),
+        };
+        node.style = { width: 520, height: 430 };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t(asset.source === 'stock' ? 'imageFoundProposal' : 'imageGeneratedProposal', { title: node.data.title }), node });
+        return { ok: true, proposed: true, object: { id: node.id, kind: 'image', title: node.data.title }, source: asset.source, provider: asset.provider, imageUrl: asset.url };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'The image could not be resolved' };
+      }
+    },
+  }, {
     name: 'canvas_add_object',
-    description: 'Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot.',
+    description: `Create a fully authored visual object. For an actual image, NEVER use this tool; use canvas_add_image so pixels are found or generated and attached immediately. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.`,
     parameters: {
       type: 'object', required: ['kind'], additionalProperties: false,
       properties: {
         kind: { type: 'string', enum: CREATION_OBJECT_REGISTRY.map((definition) => definition.kind) },
         title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' },
-        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected.', additionalProperties: true },
+        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected. Website and prototype objects require complete WYSIWYG pages and an authored theme; never create a titled shell. For courses, course must match the declared nested schema. For guidedTour objects, author the complete reusable onboarding contract in tour.', properties: { course: COURSE_AUTHORING_SCHEMA, tour: GUIDED_TOUR_AUTHORING_SCHEMA, pages: WEBSITE_PAGES_SCHEMA, websiteTheme: WEBSITE_THEME_SCHEMA }, additionalProperties: true },
         x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
       },
     },
@@ -1494,12 +3439,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; fields?: unknown; x?: number; y?: number; width?: number; height?: number };
       const allowed = new Set(CREATION_OBJECT_REGISTRY.map((definition) => definition.kind));
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
+      const updateTarget = duplicateAddUpdateTarget(prompt, args.kind, nodes, effectiveSelectedIds);
+      if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport));
+      const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, args.kind));
+      if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
       const authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
       if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
         return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
+      }
+      // A Course seeds the worked "Build an LLM" sample so a human dragging one
+      // out of the palette gets something real to read. That default is a TRAP
+      // for a generated object: a course titled "Recruiting and Hiring" with no
+      // authored `course` inherits the LLM curriculum verbatim, which reads as
+      // the product having built the wrong subject rather than as a missing
+      // argument. Refuse it and say what to send instead.
+      if (args.kind === 'course' && !(authored.course as { modules?: unknown } | undefined)?.modules) {
+        return { error: `A generated course must include the authored curriculum in fields.course as ${COURSE_AUTHORING_CONTRACT}. Without it the object would show the sample "Build an LLM" curriculum under your title.` };
+      }
+      if (args.kind === 'website' || args.kind === 'prototype') {
+        const problem = authoredWebsiteProblem(authored);
+        if (problem) return { error: `${problem} Do not create an empty website shell or rely on renderer defaults.` };
       }
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
@@ -1519,6 +3480,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.objectId || !target) return { error: 'Object not found' };
       const patch = sanitizeCreationObjectPatch(target.data.kind, args.fields);
       if (!Object.keys(patch).length) return { error: `No supported fields supplied. Mutable fields: ${creationObjectDefinition(target.data.kind).mutableFields.join(', ')}` };
+      if (target.data.kind === 'website' || target.data.kind === 'prototype') {
+        const problem = authoredWebsiteProblem({ ...target.data, ...patch });
+        if (problem) return { error: `${problem} Update this object with its complete WYSIWYG page structure.` };
+      }
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${args.objectId}`, objectId: args.objectId, patch });
       return { ok: true, proposed: true, objectId: args.objectId, updatedFields: Object.keys(patch) };
     },
@@ -1577,6 +3542,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, objectId: args.objectId };
     },
   }, {
+    name: 'canvas_convert_to_drawio',
+    description: 'Convert an uploaded Image or freehand Drawing into a portable draw.io canvas file. To add another image to the same draw.io file, pass that existing Diagram object as diagramObjectId.',
+    parameters: { type: 'object', required: ['sourceObjectId'], additionalProperties: false, properties: {
+      sourceObjectId: { type: 'string', description: 'Image or Drawing object to embed.' },
+      diagramObjectId: { type: 'string', description: 'Existing draw.io Diagram to append to. Omit to create a new file; when exactly one draw.io Diagram exists it is reused.' },
+    } },
+    mutates: true,
+    run: (raw: unknown) => {
+      const args = raw as { sourceObjectId?: string; diagramObjectId?: string };
+      if (!args.sourceObjectId) return { error: 'sourceObjectId is required' };
+      const result = convertObjectToDrawio(args.sourceObjectId, args.diagramObjectId);
+      return result.ok ? { ok: true, diagramObjectId: result.diagramId, savedWithSession: persistence === 'server' } : { error: result.error };
+    },
+  }, {
     name: 'canvas_invoke_object_action',
     description: 'Invoke a native capability declared by a canvas object. Inspect and edit return guidance immediately; operational actions are proposed for user review before execution.',
     parameters: { type: 'object', required: ['objectId', 'action'], additionalProperties: false, properties: { objectId: { type: 'string' }, action: { type: 'string' } } },
@@ -1589,6 +3568,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
       if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data) }, actions: definition.actions, mutableFields: definition.mutableFields };
       if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
+      if (!canInvokeCreationObjectAction(target.data.kind, args.action)) {
+        return { error: `${args.action} is declared for ${definition.label}, but no real Canvas delivery adapter is connected yet. Do not claim that it ran.` };
+      }
       if (persistence === 'local' && ACCOUNT_REQUIRED_OBJECT_ACTIONS.has(args.action)) {
         requireAccount(args.action, `Create an account to ${args.action}`, `Your ${target.data.title} remains saved on this device. Create a free account to ${args.action} it with durable tenant resources, permissions, and history.`);
         return { requiresAccount: true, action: args.action, objectId: target.id, message: 'The account creation prompt is open. The local canvas remains unchanged.' };
@@ -1639,17 +3621,94 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, edges, nodes, persistence, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
+  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
 
-  const evaluateCanvas = useCallback((event: FormEvent) => {
-    event.preventDefault();
-    if (!prompt.trim() || thinking) return;
-    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
+  const addAgentKnowledge = useCallback((agentId: string, content: string) => {
+    const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
+    const authored = content.trim();
+    if (!agent || !authored || !canEdit) return;
+    const knowledge = newNode('knowledge', { x: agent.position.x - 390, y: agent.position.y + 40 });
+    knowledge.data = { ...knowledge.data, title: `${agent.data.title} knowledge`, status: 'Ready', markdown: authored, content: authored, sources: [{ label: 'Authored in Agent inspector', resource: `session:${agent.id}` }] };
+    setNodes((current) => [...current, knowledge]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: knowledge.id, target: agent.id, type: 'smoothstep', label: 'grounds', animated: true, data: { connectionKind: 'reference' } }]);
+    setNotice(t('noticeKnowledgeConnected'));
+  }, [canEdit, nodes, persistence, setEdges, setNodes]);
+
+  const runAgentTest = useCallback(async (agentId: string, testPrompt: string, expected: string) => {
+    const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
+    if (!agent || !testPrompt.trim()) return;
+    const connectedIds = new Set(edges.flatMap((edge) => edge.source === agentId ? [edge.target] : edge.target === agentId ? [edge.source] : []));
+    const knowledge = nodes.filter((node) => connectedIds.has(node.id) && ['knowledge', 'document', 'dataset', 'file', 'url'].includes(node.data.kind));
+    const evaluations = nodes.filter((node) => node.data.kind === 'evaluation');
+    const evaluationNode = evaluations.find((node) => connectedIds.has(node.id)) || (evaluations.length === 1 ? evaluations[0] : undefined);
+    if (evaluationNode && !connectedIds.has(evaluationNode.id)) {
+      connectedIds.add(evaluationNode.id);
+      setEdges((current) => current.some((edge) => (edge.source === agentId && edge.target === evaluationNode.id) || (edge.target === agentId && edge.source === evaluationNode.id)) ? current : [...current, { id: crypto.randomUUID(), source: agentId, target: evaluationNode.id, type: 'smoothstep', label: 'evaluated by', animated: true, data: { connectionKind: 'reference' } }]);
+    }
+    const snapshot = JSON.stringify({
+      testMode: true,
+      agent: { id: agent.id, ...creationObjectDefinition('agent').contextAdapter(agent.data) },
+      knowledge: knowledge.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data) })),
+    });
+    setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testPrompt, testExpected: expected, testStatus: 'Running', testResponse: '' } } : node));
+    setNotice(t('noticeTestingAgent', { name: agent.data.title }));
+    try {
+      const response = await runCreationCanvasAi({
+        prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [],
+        ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
+        routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+        participant: { ref: agent.data.resourceId || agent.id, name: agent.data.title, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
+      });
+      const score = scoreAgentTestResponse(response, expected);
+      const status = score.passed == null ? 'Completed · review response' : score.passed ? 'Passed' : 'Failed';
+      const result = { id: crypto.randomUUID(), prompt: testPrompt.trim(), expected: expected.trim(), response, status, passed: score.passed, matched: score.matched, missing: score.missing, runAt: new Date().toISOString(), knowledgeObjectIds: knowledge.map((node) => node.id) };
+      setNodes((current) => {
+        const evaluation = evaluationNode ? current.find((node) => node.id === evaluationNode.id) : undefined;
+        const currentAgent = current.find((node) => node.id === agentId);
+        const priorHistory = Array.isArray(currentAgent?.data.testHistory) ? currentAgent.data.testHistory : [];
+        const updated = current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testPrompt, testExpected: expected, testResponse: response, testStatus: status, testHistory: [result, ...priorHistory].slice(0, 25), status: 'Tested' } } : node);
+        if (!evaluation) return updated;
+        const priorResults = Array.isArray(evaluation.data.testResults) ? evaluation.data.testResults : [];
+        const results = [result, ...priorResults].slice(0, 100);
+        const scored = results.filter((item) => item && typeof item === 'object' && typeof (item as { passed?: unknown }).passed === 'boolean') as Array<{ passed: boolean }>;
+        const passed = scored.filter((item) => item.passed).length;
+        return updated.map((node) => node.id === evaluation.id ? { ...node, data: { ...node.data, testResults: results, runCount: results.length, passRate: scored.length ? Math.round(passed / scored.length * 100) : null, lastRunAt: result.runAt, verdict: status, status: 'Tested', gaps: score.missing, recommendations: score.missing.map((item) => `Improve the response so it demonstrates: ${item}`) } } : node);
+      });
+      setNotice(t('noticeAgentTestResult', { name: agent.data.title, status: status.toLowerCase() }));
+    } catch (error) {
+      const message = describeTurnError(error, 'noticeAgentTestFailed');
+      setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: t('noticeAgentTestStatusError', { reason: message }) } } : node));
+      setNotice(message);
+    }
+  }, [describeTurnError, edges, modelSelection, nodes, persistence, setEdges, setNodes, t]);
+
+  const evaluateCanvas = useCallback((promptOverride?: string) => {
+    const requestText = (promptOverride ?? prompt).trim();
+    if (!requestText || thinking) return;
+    const executiveUseCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => requestText.includes(`Execution contract ${candidate.id}:`)) ?? null;
+    const executiveWorkflow = executiveUseCase ? cSuiteCanvasWorkflow(executiveUseCase) : null;
+    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } });
     setThinking(true);
-    setNotice('Brain is evaluating connected objects…');
-    const requestText = prompt.trim();
+    setBrainRunStartedAt(Date.now());
+    setNotice(t('noticeBrainEvaluating'));
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
-    const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
+    const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
+    const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
+    const promptStartedAt = performance.now();
+    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode, ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } }).catch(() => undefined);
+    // A composer submission is a chat interaction, so reveal its Brain object
+    // immediately. Waiting for the vendor request to succeed left a blank canvas
+    // (and hid useful streaming/failure state) whenever the provider cascade
+    // rejected the turn.
+    const existingChat = nodes.find((node) => node.data.kind === 'chat');
+    const brainId = existingChat?.id ?? crypto.randomUUID();
+    if (!existingChat) {
+      const brain = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
+      brain.data = { ...brain.data, title: 'Brain', subtitle: requestText };
+      setNodes((current) => current.some((node) => node.data.kind === 'chat') ? current : [...current, brain]);
+    }
+    setSelectedId(brainId);
+    setSelectedIds([brainId]);
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
       setBrainTrace([]);
@@ -1658,40 +3717,155 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText;
       const snapshot = JSON.stringify({
         sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
+        // A scoped turn used to send ONLY the scoped objects, with nothing saying
+        // the view was partial — so the model answered "that file is not anywhere
+        // on the canvas" about a file that was on the canvas, and asked the user
+        // to upload it again. The inventory is identity-only (cheap) and always
+        // complete, so an absence claim is never available to be made.
+        scopeNote: scopeNote(resolvedScopeMode, nodes.length, scopedNodes.length),
+        boardInventory: boardInventory(nodes, scopedNodeIds),
         objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');
-      void runCreationCanvasAi({
-        prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
-        ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
-        routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
-        autoApprove: autoApplyRef.current,
-        confirmAction: ({ name, args }) => {
-          let preview = '';
-          try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
-          return confirm({ title: 'Approve Brain action', message: `Brain wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
-        },
-        ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
-          recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
-          learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
-        } } : {}),
-        onTrace: (event) => setBrainTrace((current) => [...current, event]),
-        conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
-      }).then((answer) => {
+      const connectedAgentNodes = nodes.filter((node) => node.data.kind === 'agent' && (
+        effectiveSelectedIds.includes(node.id)
+        || edges.some((edge) => (edge.source === brainId && edge.target === node.id) || (edge.target === brainId && edge.source === node.id))
+      )).slice(0, 3);
+      setActiveAgentIds(new Set(connectedAgentNodes.map((agent) => agent.id)));
+      const confirmCanvasAction = ({ name, args }: { name: string; args: unknown }) => {
+        let preview = '';
+        try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
+        return confirm({ title: 'Approve agent action', message: `A session agent wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
+      };
+      const runGroupTurn = async () => {
+        const historicalConversation = timeline.map((message) => ({ role: message.messageRole, content: message.metadata?.authoredBy?.name ? `${message.metadata.authoredBy.name}: ${message.body}` : message.body }));
+        const groupConversation = connectedAgentNodes.length
+          ? [...historicalConversation, { role: 'user' as const, content: request }]
+          : historicalConversation;
+        const canonicalAgents = connectedAgentNodes.flatMap((agent) => {
+          const ref = agent.data.resourceId?.match(/^agent:(.+)$/)?.[1];
+          return ref ? [{ ref, name: agent.data.title || 'Specialist agent', role: typeof agent.data.role === 'string' ? agent.data.role : undefined }] : [];
+        });
+        if (persistence === 'server' && canonicalAgents.length) {
+          try {
+            const existingChatId = nodes.find((node) => node.data.kind === 'chat')?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
+            const projectId = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data))[0] ?? null;
+            const groupTurn = await runCanonicalCanvasGroupTurn({
+              chatId: existingChatId ? Number(existingChatId) : null,
+              title, projectId,
+              sessionId, prompt: request, agents: canonicalAgents,
+            });
+            setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, resourceId: `chat:${groupTurn.chatId}`, status: 'Canonical group chat' } } : node));
+            for (const { agent, message } of groupTurn.contributions) {
+              appendTimeline('assistant', message.content, {
+                scope: resolvedScopeMode, objectIds: [...scopedNodeIds],
+                authoredBy: { kind: 'agent', ref: agent.ref, name: agent.name },
+              }, `${requestMessageId}:agent:${agent.ref}`);
+              groupConversation.push({ role: 'assistant', content: `${agent.name}: ${message.content}` });
+              setActiveAgentIds((current) => {
+                const next = new Set(current);
+                const canvasAgent = connectedAgentNodes.find((candidate) => candidate.data.resourceId === `agent:${agent.ref}`);
+                if (canvasAgent) next.delete(canvasAgent.id);
+                return next;
+              });
+            }
+          } catch (error) {
+            const detail = describeTurnError(error, 'noticeAgentGroupFailed');
+            appendTimeline('system', t('noticeAgentGroupTurnFailed', { reason: detail }), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
+          }
+        } else if (connectedAgentNodes.length) {
+          // Guest drafts cannot call the tenant workforce runtime. Keep ideation
+          // useful, but do not present these local personas as canonical agents.
+          for (const agent of connectedAgentNodes) {
+            const name = agent.data.title || 'Draft specialist';
+            const ref = agent.id;
+            try {
+              const contribution = await runCreationCanvasAi({
+                prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: snapshot,
+                guestTurnId: requestMessageId,
+                guestTurnInput: request,
+                persistence, canvasActions, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+                autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
+                participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
+                conversation: groupConversation,
+              });
+              if (contribution.trim()) {
+                appendTimeline('assistant', contribution.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'agent', ref, name } }, `${requestMessageId}:draft-agent:${agent.id}`);
+                groupConversation.push({ role: 'assistant', content: `${name}: ${contribution.trim()}` });
+              }
+            } catch { /* Brain synthesis still runs with the available transcript. */ }
+            finally {
+              setActiveAgentIds((current) => {
+                const next = new Set(current);
+                next.delete(agent.id);
+                return next;
+              });
+            }
+          }
+        }
+        return runCreationCanvasAi({
+          prompt: connectedAgentNodes.length
+            ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
+            : request,
+          canvasSnapshot: snapshot, persistence, canvasActions,
+          guestTurnId: requestMessageId,
+          guestTurnInput: request,
+          // The session's mode + the project the ticket would be filed against, so a
+          // WORK turn has somewhere to put the work it creates.
+          mode: sessionMode,
+          projectId: evermindProjectId,
+          ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
+          routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+          autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
+          ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
+            recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
+            learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
+          } } : {}),
+          onTrace: (event) => {
+            // Every tool and MCP call, as it happens. The trace already existed
+            // for display; journalling it is what puts the CALLS beside the
+            // timings and the user's actions in one ordered record.
+            journal.current.record({
+              kind: 'tool', label: event.label, at: event.ts,
+              durationMs: event.durationMs ?? 0,
+              ...(event.isError === true ? { ok: false } : {}),
+              ...(event.category ? { detail: event.category } : {}),
+            });
+            setBrainTrace((current) => [...current, event]);
+          },
+          conversation: groupConversation,
+        });
+      };
+      // The turn, start to finish — including the SCOPE it ran against, which is
+      // the fact that explained the reported "I don't see that file" answer and
+      // which nothing was recording.
+      const turnDone = journal.current.begin(
+        'turn', 'brain.turn',
+        `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
+      );
+      void runGroupTurn().then((answer) => {
         const changes = [...proposalBuffer.current];
+        const changedKinds = new Set(changes.flatMap((change) => {
+          if (change.type === 'object.add') return [change.node.data.kind];
+          if ('objectId' in change) {
+            const target = nodes.find((node) => node.id === change.objectId)
+              ?? changes.find((candidate): candidate is Extract<ProposedCanvasChange, { type: 'object.add' }> => candidate.type === 'object.add' && candidate.node.id === change.objectId)?.node;
+            return target ? [target.data.kind] : [];
+          }
+          return [];
+        }));
+        const executiveContractSatisfied = !executiveWorkflow || executiveWorkflow.outputs.some((kind) => changedKinds.has(kind as CreationObjectKind));
+        turnDone({ ok: executiveContractSatisfied, detail: `${proposalBuffer.current.length} proposed change(s)${executiveUseCase ? ` · ${executiveUseCase.id} ${executiveContractSatisfied ? 'complete' : 'incomplete'}` : ''}` });
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim()) {
-          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
-          const chat = nodes.find((node) => node.data.kind === 'chat');
-          const brainId = chat?.id ?? crypto.randomUUID();
-          if (!chat) {
-            const responseNode = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
-            responseNode.data = { ...responseNode.data, title: 'Brain', subtitle: request, aiResponse: answer.trim() };
-            setNodes((current) => [...current, responseNode]);
-          } else setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
+          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' } }, `${requestMessageId}:assistant`);
+          setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
           const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
           if (promptTargets.length) setEdges((current) => associateBrainWithArtifacts(current, brainId, promptTargets));
+        }
+        if (!executiveContractSatisfied && executiveUseCase && executiveWorkflow) {
+          appendTimeline('system', `${executiveUseCase.label} is incomplete: the run did not successfully create or update an allowed ${executiveWorkflow.outputs.join(' or ')} Canvas object.`, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:use-case-incomplete`);
         }
         if (changes.length) {
           setProposedChanges(changes);
@@ -1703,17 +3877,33 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setAutoApplyPending(shouldAutoApply);
         }
         setThinking(false);
-        setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
-        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: 'web', proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
+        setActiveAgentIds(new Set());
+        setNotice(!executiveContractSatisfied && executiveUseCase
+          ? `${executiveUseCase.label} did not produce its required Canvas artifact.`
+          : changes.length ? t(shouldAutoApply ? 'noticeApplyingBrainChanges' : 'noticeBrainChangesAwaitReview', { count: changes.length }) : t('noticeBrainFinished'));
+        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: executiveContractSatisfied } : {}) } });
+        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: executiveContractSatisfied ? 'succeeded' : 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count', metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: executiveContractSatisfied, allowedOutputs: executiveWorkflow?.outputs } : undefined }).catch(() => undefined);
       }).catch((error) => {
-        appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
+        const detail = describeTurnError(error, 'noticeBrainFailed');
+        turnDone({ ok: false, detail });
+        appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
-        setNotice(error instanceof Error ? error.message : 'Brain could not complete this request');
+        setActiveAgentIds(new Set());
+        setNotice(detail);
+        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: false } : undefined }).catch(() => undefined);
       });
       return;
     }
     window.setTimeout(() => {
-      const request = prompt.toLowerCase();
+      const request = requestText.toLowerCase();
+      if (/\b(?:course|training|lms|academy|learn)\b/.test(request) && /\b(?:llm|language model)\b/.test(request)) {
+        const brain = nodes.find((node) => node.data.kind === 'chat');
+        const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: 'Build an LLM', status: 'Ready to learn', subtitle: 'From requirements and data to training, evaluation, and deployment.', course: buildLlmCourse() } };
+        const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
+        setNodes((current) => [...current, course, lab]);
+        setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
+        setSelectedId(course.id); setThinking(false); setPrompt(''); setNotice(t('noticeLlmCourseAdded')); return;
+      }
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -1721,7 +3911,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
         setNodes((current) => [...current, roadmap, slides]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
-        setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice('Roadmap added to canvas'); return;
+        setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice(t('noticeRoadmapAdded')); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -1729,7 +3919,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
         setNodes((current) => [...current, summary, mockups]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
-        setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice('Feature summary and mockups added'); return;
+        setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
       setNodes((current) => [...current, { id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }]);
@@ -1740,18 +3930,109 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setSelectedId(evaluationId);
       setThinking(false);
       setPrompt('');
-      setNotice('Evaluation added to canvas');
+      setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
+  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
 
   useEffect(() => {
+    if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
+    const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
+    if (!initial?.body.trim()) return;
+    const completed = nodes.filter((node) => node.data.comparisonPrompt === initial.body && node.data.comparisonState === 'completed');
+    if (comparisonModelIds.every((model) => completed.some((node) => node.data.comparisonModel === model))) {
+      modelComparisonStarted.current = true;
+      return;
+    }
+
+    modelComparisonStarted.current = true;
+    initialPromptSubmitted.current = true;
+    const promptId = `comparison-prompt:${sessionId}`;
+    const resultIds = new Map(comparisonModelIds.map((model, index) => [model, `comparison-result:${index}:${sessionId}`]));
+    const promptNode: CreationFlowNode = {
+      id: promptId,
+      type: 'creation',
+      position: { x: 100, y: 180 },
+      data: {
+        kind: 'chat',
+        title: t('comparison.promptTitle'),
+        subtitle: initial.body,
+        status: t('comparison.sharedPrompt'),
+        comparisonPrompt: initial.body,
+      },
+    };
+    const resultNodes: CreationFlowNode[] = comparisonModelIds.map((model, index) => ({
+      id: resultIds.get(model)!,
+      type: 'creation',
+      position: { x: 620, y: 60 + index * 280 },
+      data: {
+        kind: 'document',
+        title: model,
+        subtitle: t('comparison.responseFrom', { model }),
+        status: t('comparison.executing'),
+        model,
+        comparisonModel: model,
+        comparisonPrompt: initial.body,
+        comparisonState: 'running',
+        markdown: t('comparison.executingWith', { model }),
+      },
+    }));
+    setNodes([promptNode, ...resultNodes]);
+    setEdges(comparisonModelIds.map((model) => ({
+      id: `comparison-edge:${resultIds.get(model)}`,
+      source: promptId,
+      target: resultIds.get(model)!,
+      type: 'smoothstep',
+      label: t('comparison.executesWith', { model }),
+      animated: true,
+    })));
+    setNotice(t('comparison.runningCount', { count: comparisonModelIds.length }));
+
+    void Promise.all(comparisonModelIds.map(async (model) => {
+      try {
+        const output = await executeModelComparison({ prompt: initial.body, model, persistence });
+        setNodes((current) => current.map((node) => node.id === resultIds.get(model) ? {
+          ...node,
+          data: {
+            ...node.data,
+            status: t('comparison.completed'),
+            comparisonState: 'completed',
+            markdown: output || t('comparison.emptyOutput'),
+          },
+        } : node));
+      } catch (error) {
+        setNodes((current) => current.map((node) => node.id === resultIds.get(model) ? {
+          ...node,
+          data: {
+            ...node.data,
+            status: t('comparison.failed'),
+            comparisonState: 'failed',
+            markdown: describeTurnError(error, 'noticeBrainFailed'),
+          },
+        } : node));
+      }
+    })).then(() => {
+      setNotice(t('comparison.finished'));
+    });
+  }, [comparisonModelIds, describeTurnError, nodes, persistence, sessionId, setEdges, setNodes, t, timeline]);
+
+  useEffect(() => {
+    if (comparisonModelIds.length >= 2) return;
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
     initialPromptSubmitted.current = true;
     setPrompt(initial.body);
-    window.setTimeout(() => composerFormRef.current?.requestSubmit(), 0);
-  }, [thinking, timeline]);
+    evaluateCanvas(initial.body);
+  }, [comparisonModelIds.length, thinking, timeline, evaluateCanvas]);
+
+  useEffect(() => {
+    const request = initialPrompt?.trim();
+    if (!request || !hydrated.current || initialPromptSubmitted.current || thinking) return;
+    if (initialFocusId && selectedId !== initialFocusId) return;
+    initialPromptSubmitted.current = true;
+    setPrompt(request);
+    evaluateCanvas(request);
+  }, [evaluateCanvas, initialFocusId, initialPrompt, selectedId, thinking]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
@@ -1768,14 +4049,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let materializedAdditions = additions;
     const canonicalPrds = additions.filter((change) => change.node.data.kind === 'prd' && change.node.data.canonicalPrdPending === true);
     if (canonicalPrds.length) {
-      setNotice('Saving reviewed PRD to its project…');
+      setNotice(t('noticeSavingPrd'));
       try {
         materializedAdditions = await Promise.all(additions.map(async (change) => {
           if (!canonicalPrds.includes(change)) return change;
           return { ...change, node: await persistCanonicalProjectPrd(change.node) };
         }));
       } catch (error) {
-        setNotice(error instanceof Error ? `Project PRD was not saved: ${error.message}` : 'Project PRD was not saved');
+        setNotice(error instanceof Error ? t('noticePrdNotSavedReason', { reason: error.message }) : t('noticePrdNotSaved'));
         return;
       }
     }
@@ -1811,14 +4092,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const brainId = nodes.find((node) => node.data.kind === 'chat')?.id;
       const focusIds = [brainId, ...materializedAdditions.map((change) => change.node.id)].filter((id): id is string => !!id);
       window.setTimeout(() => {
-        void flowRef.current?.fitView({ nodes: focusIds.map((id) => ({ id })), padding: .18, duration: 350 });
+        void flowRef.current?.fitView({ nodes: focusIds.map((id) => ({ id })), padding: .18, minZoom: .62, maxZoom: .9, duration: 350 });
       }, 0);
     }
     if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
     setNotice(canonicalPrds.length ? `${canonicalPrds.length} project PRD${canonicalPrds.length === 1 ? '' : 's'} saved and ${selected.length} reviewed Brain changes applied` : `${selected.length} reviewed Brain changes applied`);
-    trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: 'web', commandCount: selected.length } });
+    trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: canvasSurface(), commandCount: selected.length } });
   }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
 
   useEffect(() => {
@@ -1837,25 +4118,100 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAcceptedProposalIds(new Set());
     proposalBuffer.current = [];
     setAutoApplyPending(false);
-    setNotice('Brain changes rejected; canvas unchanged');
+    setNotice(t('noticeChangesRejected'));
   }, []);
 
-  const runWorkflow = useCallback((workflowId?: string) => {
-    if (!canRun) { setNotice('Runner or owner access is required'); return; }
-    const requestedTarget = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
-    const target = requestedTarget ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow'));
-    if (!target) { setNotice('Add a workflow to run it'); return; }
+  /** Merge a patch into one node's data. Run/compile state is written by the
+   *  app, not the user, so this deliberately skips the `cardsEditable` gate that
+   *  `updateNodeData` applies to inspector edits. */
+  const patchWorkflowNode = useCallback((targetId: string, patch: Partial<CreationNodeData>) => {
+    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, ...patch } } : node));
+  }, [setNodes]);
+
+  /** Resolve which workflow node an action applies to: the one named, else the
+   *  selection, else the only one on the board. Shared by build and run. */
+  const resolveWorkflowNode = useCallback((workflowId?: string) => {
+    const requested = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
+    return requested ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow')) ?? null;
+  }, [nodes, selectedNode]);
+
+  /**
+   * Turn an authored canvas workflow into a REAL definition and link it.
+   *
+   * This is the step that used to be missing entirely: `steps` were rendered and
+   * never compiled, so a canvas workflow could not run no matter what it said on
+   * the card. Resolves the new definition id, or null when the steps are not
+   * runnable — in which case the per-step reasons are written onto the node and
+   * shown on the card.
+   */
+  const compileWorkflow = useCallback(async (workflowId?: string): Promise<string | null> => {
+    const target = resolveWorkflowNode(workflowId);
+    if (!target) { setNotice(t('noticeNeedWorkflow')); return null; }
+    // Compiling creates a tenant-owned, runnable resource, so a local draft has
+    // to become an account first — the same gate saving a collaborator uses.
+    if (persistence !== 'server') {
+      requireAccount('workflow', t('buildWorkflowGateTitle'), t('buildWorkflowGate'));
+      return null;
+    }
     const targetId = target.id;
-    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running' } } : node));
-    const definitionId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
+    setNotice(t('noticeWorkflowBuilding'));
+    patchWorkflowNode(targetId, { status: 'Building', workflowIssues: [] });
+    try {
+      // Bind the definition to the canvas's project when there is one, so the
+      // compiled workflow lands in the same scope as the rest of this board's work.
+      const projectId = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data))[0] ?? null;
+      const definition = await workflowDefinitions.fromCanvas({
+        name: target.data.title || 'Canvas workflow',
+        steps: target.data.steps,
+        ...(typeof target.data.content === 'string' && target.data.content ? { description: target.data.content } : {}),
+        ...(projectId != null ? { projectId } : {}),
+      });
+      patchWorkflowNode(targetId, {
+        resourceId: `workflow:${definition.id}`,
+        resourceSubtype: 'definition',
+        workflowExecutable: true,
+        workflowIssues: [],
+        workflowStepCount: definition.compiledCount,
+        status: 'Built',
+      });
+      setNotice(t('noticeWorkflowBuilt', { count: definition.compiledCount }));
+      return definition.id;
+    } catch (error) {
+      // `details.issues` is the per-step explanation the compile endpoint
+      // returns; without it the card can only say "failed", which is what made
+      // the previous behaviour impossible to act on.
+      const details = error instanceof ApiRequestError ? error.details as { issues?: unknown } | undefined : undefined;
+      const issues = Array.isArray(details?.issues) ? details.issues : [];
+      const message = error instanceof Error ? error.message : t('noticeWorkflowNotRunnable');
+      patchWorkflowNode(targetId, { status: 'Needs setup', workflowIssues: issues });
+      setNotice(message);
+      return null;
+    }
+  }, [nodes, patchWorkflowNode, persistence, requireAccount, resolveWorkflowNode, t]);
+
+  const runWorkflow = useCallback((workflowId?: string) => {
+    if (!canRun) { setNotice(t('noticeNeedRunnerAccess')); return; }
+    const target = resolveWorkflowNode(workflowId);
+    if (!target) { setNotice(t('noticeNeedWorkflow')); return; }
+    const targetId = target.id;
+    // A run record is a past execution, not something that can be run again.
     if (persistence === 'server' && target.data.workflowExecutable === false) {
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: target.data.status } } : node));
-      setNotice('This object is a workflow run record. Add or open its Workflow definition to start a new run.');
+      setNotice(t('noticeWorkflowRunRecord'));
       return;
     }
-    if (persistence === 'server' && definitionId) {
-      setNotice('Starting canonical workflow…');
-      void workflowDefinitions.get(definitionId).then((definition) => {
+    // A draft that has never been built has nothing to run. It is BUILT first —
+    // and if it cannot be built, the run stops here with the reasons on the card.
+    // The old code instead waited 1400ms and wrote a `delivered` deliverable with
+    // `validation: passed`, so a workflow that had never executed anything
+    // reported "Complete". Nothing here may report success it did not observe.
+    const linkedId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
+    void (async () => {
+      const definitionId = linkedId || await compileWorkflow(targetId);
+      if (!definitionId) return;
+      const started: CreationDeliverable = { id: crypto.randomUUID(), action: 'run', artifactKind: 'workflow-run', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-workflows' };
+      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', deliverables: withCreationDeliverable(node.data, started) } } : node));
+      setNotice(t('noticeStartingWorkflow'));
+      await workflowDefinitions.get(definitionId).then((definition) => {
         if (!definition.runTargetRuntime) throw new Error('Choose a run target in the Workflow inspector before running it');
         return workflowDefinitions.run(definitionId, {
           runtime: definition.runTargetRuntime,
@@ -1863,8 +4219,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           cloudAgentRef: definition.runTargetCloudAgentRef,
         });
       }).then((run) => {
-        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount } } : node));
-        setNotice(`Workflow started · ${run.taskCount} task${run.taskCount === 1 ? '' : 's'}`);
+        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
+        setNotice(t('noticeWorkflowStarted', { count: run.taskCount }));
         const pollRun = (remaining: number) => {
           if (remaining <= 0) return;
           window.setTimeout(() => {
@@ -1874,39 +4230,439 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               const normalized = currentRun.status.toLowerCase();
               const terminal = ['completed', 'complete', 'failed', 'cancelled', 'canceled'].includes(normalized);
               const label = normalized === 'completed' || normalized === 'complete' ? 'Complete' : normalized === 'failed' ? 'Run failed' : normalized === 'cancelled' || normalized === 'canceled' ? 'Cancelled' : currentRun.status;
-              setNodes((nodesNow) => nodesNow.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt } } : node));
-              if (terminal) setNotice(`Workflow ${label.toLowerCase()}`);
+              setNodes((nodesNow) => nodesNow.map((node) => {
+                if (node.id !== targetId) return node;
+                const terminalDeliverable: CreationDeliverable | null = terminal ? { ...started, status: normalized === 'completed' || normalized === 'complete' ? 'delivered' : 'failed', completedAt: currentRun.completedAt || new Date().toISOString(), resourceRef: `workflow-run:${run.workflowId}`, validation: { status: normalized === 'completed' || normalized === 'complete' ? 'passed' : 'failed', detail: `Workflow ${currentRun.status}` }, metadata: { taskCount: run.taskCount }, ...(!(normalized === 'completed' || normalized === 'complete') ? { error: `Workflow ${currentRun.status}` } : {}) } : null;
+                return { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
+              }));
+              if (terminal) setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
               else pollRun(remaining - 1);
             }).catch(() => pollRun(remaining - 1));
           }, 2_000);
         };
         pollRun(30);
       }).catch((error) => {
-        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed' } } : node));
-        setNotice(error instanceof Error ? error.message : 'Workflow could not be started');
+        const message = error instanceof Error ? error.message : 'Workflow could not be started';
+        const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+        setNotice(message);
       });
-      return;
-    }
-    setNotice(persistence === 'local' ? 'Draft workflow running locally…' : 'Link a saved Workflow definition before running it');
-    if (persistence !== 'local') {
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Draft' } } : node));
-      return;
-    }
-    window.setTimeout(() => {
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Complete' } } : node));
-      setNotice('Workflow completed');
-    }, 1400);
-  }, [canRun, nodes, persistence, selectedNode, setNodes]);
+    })();
+  }, [canRun, compileWorkflow, persistence, resolveWorkflowNode, setNodes, t]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
     const ref = selectedNode.data.resourceId?.startsWith('agent:') ? selectedNode.data.resourceId.slice('agent:'.length) : '';
-    if (!ref) { setNotice('This is a canvas draft. Link or create the agent before publishing settings.'); return; }
-    setNotice('Saving canonical agent settings…');
-    void updateAgent(ref, { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio: typeof selectedNode.data.instructions === 'string' ? selectedNode.data.instructions : selectedNode.data.subtitle || '', baseModel: selectedNode.data.model || 'gpt-4o' })
-      .then(() => setNotice('Agent settings saved everywhere'))
-      .catch((error) => setNotice(error instanceof Error ? error.message : 'Agent settings could not be saved'));
-  }, [selectedNode]);
+    if (!ref && persistence === 'local') { requireAccount('agent', t('saveCollaborator'), t('saveCollaboratorGate')); return; }
+    const personality = typeof selectedNode.data.personality === 'string' ? selectedNode.data.personality.trim() : '';
+    const direction = typeof selectedNode.data.instructions === 'string' ? selectedNode.data.instructions.trim() : selectedNode.data.subtitle || '';
+    const bio = [personality, direction].filter(Boolean).join('\n\n');
+    const baseModel = selectedNode.data.model && selectedNode.data.model !== 'auto' ? String(selectedNode.data.model) : undefined;
+    const input = { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio, skills: Array.isArray(selectedNode.data.tools) ? selectedNode.data.tools.map(String) : undefined, baseModel };
+    setNotice(ref ? t('savingAgentSettings') : t('creatingWorkforceAgent'));
+    void (ref ? updateAgent(ref, input) : createCloudAgent(input))
+      .then((saved) => {
+        setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, resourceId: `agent:${saved.id}`, status: 'Configured' } } : node));
+        setNotice(ref ? t('agentSettingsSaved') : t('agentCreatedReady'));
+      })
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('agentSettingsSaveFailed')));
+  }, [persistence, requireAccount, selectedNode, setNodes, t]);
+
+  /**
+   * Open the ship-to-device panel for a game object.
+   *
+   * Guarded here rather than inside the panel so the two things that make it
+   * impossible are said in the canvas's own voice: a guest session has no
+   * project to write files into, and a game with no connected project has
+   * nowhere to publish to. The panel itself stays a pure view of a project.
+   */
+  const openGamePanel = useCallback((gameId: string) => {
+    const target = nodes.find((node) => node.id === gameId && node.data.kind === 'game');
+    if (!target) { setNotice(t('game.selectFirst')); return; }
+    if (persistence !== 'server') {
+      requireAccount('publish', t('game.accountTitle'), t('game.accountBody'));
+      return;
+    }
+    setGameFocus(gameId);
+  }, [nodes, persistence, requireAccount, t]);
+
+  /** The project a game ships into, and the game as it stands right now. */
+  const gamePanelTarget = useMemo(() => {
+    const target = gameFocus ? nodes.find((node) => node.id === gameFocus) : null;
+    if (!target) return null;
+    const connectedProject = connectedCanvasProjectNode(nodes, edges, target.id);
+    return {
+      projectId: connectedProject ? canvasProjectId(connectedProject.data) : null,
+      game: gamePayloadFrom(target.data),
+    };
+  }, [edges, gameFocus, nodes]);
+
+  const publishWebsite = useCallback((websiteId?: string) => {
+    const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
+      ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
+    if (!target) { setNotice(t('noticeNeedWebsite')); return; }
+    if (persistence !== 'server') { requireAccount('publish', 'Create an account to publish', 'Save this session to publish the Website as a live Builderforce site.'); return; }
+    const connectedProject = connectedCanvasProjectNode(nodes, edges, target.id);
+    const projectId = connectedProject ? canvasProjectId(connectedProject.data) : null;
+    if (projectId == null) { setNotice(t('noticeConnectWebsite')); return; }
+    const deliveryId = crypto.randomUUID();
+    const correlationId = `deliver:${deliveryId}`;
+    const startedAt = performance.now();
+    const started: CreationDeliverable = { id: deliveryId, action: 'publish', artifactKind: 'website', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-sites', resourceRef: `project:${projectId}` };
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publishing…', deliverables: withCreationDeliverable(node.data, started) } } : node));
+    setNotice(t('noticePublishingWebsite'));
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'started', artifactId: target.id, projectId: Number(projectId) }).catch(() => undefined);
+    const subdomain = typeof target.data.subdomain === 'string' ? target.data.subdomain : undefined;
+    void publishSite(projectId, buildWebsiteAssets(target.data), subdomain).then((site) => {
+      const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), url: site.url, pathUrl: site.pathUrl, mimeType: 'text/html', resourceRef: `site:${site.subdomain}`, validation: { status: 'passed', detail: `${site.assetCount} assets published (${site.totalBytes} bytes)` }, metadata: { versionToken: site.versionToken, assetCount: site.assetCount, totalBytes: site.totalBytes } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Published', url: site.url, siteUrl: site.url, pathUrl: site.pathUrl, subdomain: site.subdomain, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      setNotice(t('noticeWebsitePublished', { url: site.url }));
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'succeeded', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { url: site.url, versionToken: site.versionToken } }).catch(() => undefined);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'Website publish failed';
+      const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publish failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+      setNotice(message);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt }).catch(() => undefined);
+    });
+  }, [edges, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+
+  /**
+   * Open a Builder object's workspace on the board, creating its backing legacy
+   * build record first when the object is not bound yet. Creation goes through
+   * the existing `/api/ide-projects` compatibility route, so the workspace is
+   * seeded with its modality's starter template and opens runnable — the
+   * in-browser website/app builder, on the canvas.
+   */
+  const openBuild = useCallback((buildId?: string) => {
+    const target = nodes.find((node) => node.id === buildId && node.data.kind === 'build')
+      ?? (selectedNode?.data.kind === 'build' ? selectedNode : nodes.find((node) => node.data.kind === 'build'));
+    if (!target) { setNotice(t('build.selectFirst')); return; }
+    const bound = canvasBuildBinding(target.data);
+    if (bound) { setBuildFocus({ nodeId: target.id, storageProjectId: bound.storageProjectId }); return; }
+    if (persistence !== 'server') { requireAccount('open', t('build.gateTitle'), t('build.gateDescription')); return; }
+    if (creatingBuild) return;
+    setCreatingBuild(true);
+    setNotice(t('build.creating'));
+    const container = connectedCanvasProjectNode(nodes, edges, target.id);
+    void createCanvasBuild({
+      title: target.data.title,
+      modality: canvasBuildModality(target.data),
+      containerProjectId: container ? canvasProjectId(container.data) : null,
+    })
+      .then((ide) => {
+        const patch = canvasBuildPatch(ide);
+        setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, ...patch } } : node));
+        setBuildFocus({ nodeId: target.id, storageProjectId: ide.storageProjectId });
+        setNotice(t('build.created'));
+      })
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('build.createFailed')))
+      .finally(() => setCreatingBuild(false));
+  }, [creatingBuild, edges, nodes, persistence, requireAccount, selectedNode, setNodes, t]);
+
+  /** Bind a Builder object to a legacy build record that already exists, instead of
+   *  provisioning a second workspace for work that is already under way. */
+  const attachBuild = useCallback((nodeId: string, ide: IdeProject) => {
+    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...canvasBuildPatch(ide) } } : node));
+    setBuildFocus({ nodeId, storageProjectId: ide.storageProjectId });
+    setNotice(t('build.attached'));
+  }, [setNodes, t]);
+
+  /**
+   * Delete the build record a Builder object provisioned, and return the object to
+   * its unbound state. Removing the OBJECT deliberately leaves the workspace alone
+   * — a build record is a first-class child of a Project and outlives the session
+   * that spawned it — so this is the explicit way to discard the files too.
+   */
+  const deleteBuildWorkspace = useCallback(async (nodeId: string) => {
+    const target = nodes.find((node) => node.id === nodeId);
+    const binding = target ? canvasBuildBinding(target.data) : null;
+    if (!target || !binding) return;
+    if (!(await confirm({ message: t('build.deleteConfirm', { title: target.data.title }), destructive: true }))) return;
+    try {
+      await deleteIdeProject(binding.ideProjectId);
+      setBuildFocus((current) => current?.nodeId === nodeId ? null : current);
+      setNodes((current) => current.map((node) => node.id === nodeId
+        ? { ...node, data: { ...node.data, resourceId: undefined, ideProjectId: undefined, storageProjectId: undefined, storageProjectPublicId: undefined, siteUrl: undefined, url: undefined, pathUrl: undefined, status: 'Not created' } }
+        : node));
+      setNotice(t('build.workspaceDeleted'));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('build.deleteWorkspaceFailed'));
+    }
+  }, [confirm, nodes, setNodes, t]);
+
+  /**
+   * Grow an authored Website object into a real codebase: add a Builder object
+   * beside it, connect the two, and open the workspace. The static site stays
+   * publishable while the code project takes over — no object loses its contract.
+   */
+  const buildWebsiteWithCode = useCallback((websiteId: string) => {
+    const source = nodes.find((node) => node.id === websiteId);
+    if (!source) return;
+    const existing = nodes.find((node) => node.data.kind === 'build'
+      && edges.some((edge) => (edge.source === websiteId && edge.target === node.id) || (edge.target === websiteId && edge.source === node.id)));
+    if (existing) { openBuild(existing.id); return; }
+    const build = newNode('build', nextCanvasObjectPosition(nodes, { x: source.position.x + 520, y: source.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'build'));
+    build.data = { ...build.data, title: source.data.title, modality: canvasBuildModality(source.data) };
+    setNodes((current) => [...current, build]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: websiteId, target: build.id, type: 'smoothstep', label: t('build.edgeLabel'), data: { connectionKind: 'delivery' } }]);
+    setSelectedId(build.id);
+    setSelectedIds([build.id]);
+    setNotice(t('build.addedFromWebsite'));
+  }, [edges, nodes, openBuild, setEdges, setNodes, t]);
+
+  const generateVideo = useCallback((videoId?: string) => {
+    const target = nodes.find((node) => node.id === videoId && node.data.kind === 'video')
+      ?? (selectedNode?.data.kind === 'video' ? selectedNode : nodes.find((node) => node.data.kind === 'video'));
+    if (!target) { setNotice(t('noticeNeedVideo')); return; }
+    if (persistence !== 'server') { requireAccount('generate', 'Create an account to generate video', 'Save this session to run a published Evermind video model.'); return; }
+    const deliveryId = crypto.randomUUID();
+    const correlationId = `deliver:${deliveryId}`;
+    const startedAt = performance.now();
+    const started: CreationDeliverable = { id: deliveryId, action: 'generate', artifactKind: 'video', status: 'running', createdAt: new Date().toISOString(), provider: 'evermind' };
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generating…', deliverables: withCreationDeliverable(node.data, started) } } : node));
+    setNotice(t('noticeGeneratingVideo'));
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'started', artifactId: target.id }).catch(() => undefined);
+    void listEvermindModels().then((models) => {
+      const configured = typeof target.data.modelSlug === 'string' ? target.data.modelSlug : typeof target.data.model === 'string' ? target.data.model : '';
+      const model = models.find((candidate) => candidate.slug === configured || candidate.name === configured) ?? models[0];
+      if (!model) throw new Error('Publish an Evermind video model before generating this deliverable');
+      return generateEvermindMedia(model.slug, { prompt: typeof target.data.prompt === 'string' ? target.data.prompt : target.data.content as string | undefined, maxFrames: typeof target.data.maxFrames === 'number' ? target.data.maxFrames : 16 }).then((media) => ({ media, model }));
+    }).then(({ media, model }) => {
+      const previewUrl = media.frames[0] ? mediaFrameDataUrl(media.frames[0], media.width, media.height, media.channels) : null;
+      const aiFrameDuration = 1 / Math.min(12, Math.max(1, media.frameCount));
+      const aiSources: CanvasVideoSource[] = media.frames.flatMap((frame, index) => {
+        const url = mediaFrameDataUrl(frame, media.width, media.height, media.channels);
+        return url ? [{
+          id: crypto.randomUUID(),
+          kind: 'image' as const,
+          captureKind: 'ai' as const,
+          url,
+          fileName: `${target.data.title}-${index + 1}.png`,
+          mimeType: 'image/png',
+          durationSeconds: aiFrameDuration,
+          width: media.width,
+          height: media.height,
+        }] : [];
+      });
+      const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), mimeType: media.modality === 'video' ? 'application/x-builderforce-video-frames' : 'image/png', resourceRef: media.model, validation: { status: media.frameCount > 0 ? 'passed' : 'failed', detail: `${media.frameCount} ${media.width}×${media.height} frames generated` }, metadata: { modelSlug: model.slug, frameCount: media.frameCount, width: media.width, height: media.height, channels: media.channels, usage: media.usage } };
+      setNodes((current) => current.map((node) => {
+        if (node.id !== target.id) return node;
+        const priorSources = canvasVideoSourcesFrom(node.data.videoSources);
+        const nextTimeline = aiSources.reduce((value, source) => appendCanvasVideoSource(value, source, 'visual'), canvasVideoTimelineFrom(node.data.videoTimeline));
+        return { ...node, data: { ...node.data, status: 'Generated · Editable', modelSlug: model.slug, frameCount: media.frameCount, videoWidth: media.width, videoHeight: media.height, generatedFrames: media.frames, videoSources: [...priorSources, ...aiSources], videoTimeline: nextTimeline, duration: canvasVideoDuration(nextTimeline), ...(previewUrl ? { videoUrl: previewUrl } : {}), deliverables: withCreationDeliverable(node.data, delivered) } };
+      }));
+      setNotice(t('noticeVideoGenerated', { frames: media.frameCount, model: model.name }));
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { model: model.slug, frameCount: media.frameCount } }).catch(() => undefined);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'Video generation failed';
+      const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generation failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+      setNotice(message);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'failed', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt }).catch(() => undefined);
+    });
+  }, [nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+
+  const runCreativeAction = useCallback((objectId?: string, action = 'generate') => {
+    const target = nodes.find((node) => node.id === objectId && CREATIVE_GENERATOR_KINDS.has(node.data.kind))
+      ?? (selectedNode && CREATIVE_GENERATOR_KINDS.has(selectedNode.data.kind) ? selectedNode : undefined);
+    if (!target) { setNotice(t('creativeSelectFirst')); return; }
+    const existingUrl = typeof target.data.outputUrl === 'string' ? target.data.outputUrl : '';
+    if ((action === 'preview' || action === 'export') && existingUrl) {
+      // A browser refuses to open a `data:` URL in a top-level tab, so both paths
+      // go through a navigable URL. It is revoked on a timer rather than at once:
+      // revoking it before the new tab has read it is the same blank page.
+      const navigable = navigableArtifactUrl(existingUrl);
+      if (action === 'preview') window.open(navigable, '_blank', 'noopener,noreferrer');
+      else {
+        const anchor = document.createElement('a'); anchor.href = navigable;
+        anchor.download = typeof target.data.outputFileName === 'string' ? target.data.outputFileName : `${target.data.title}.artifact`;
+        anchor.click();
+      }
+      if (navigable !== existingUrl) window.setTimeout(() => URL.revokeObjectURL(navigable), 60_000);
+      setNotice(action === 'preview' ? t('creativePreviewOpened') : t('creativeDownloaded'));
+      return;
+    }
+    /**
+     * The generator for this kind, best first.
+     *
+     * A creative brief has to produce the thing described in it, so the object goes
+     * to a real generator: the tenant's own published Evermind model renders the
+     * pixels, and the server generator authors the geometry, the game, the resume,
+     * the script. The browser baseline stays as the LAST answer, not the only one —
+     * it is what a local session, an unavailable model or a failed call falls back
+     * to, so a creative object always ends up with a real, portable file.
+     */
+    const deliveryId = crypto.randomUUID();
+    const correlationId = `deliver:${deliveryId}`;
+    const startedAt = performance.now();
+    const kind = target.data.kind;
+    const started: CreationDeliverable = { id: deliveryId, action, artifactKind: kind, status: 'running', createdAt: new Date().toISOString() };
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: t('creativeGenerating'), deliverables: withCreationDeliverable(node.data, started) } } : node));
+    setNotice(t('creativeGenerating'));
+    if (persistence === 'server') {
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: `creative.${action}`, phase: 'started', artifactId: target.id }).catch(() => undefined);
+    }
+
+    const generate = async (): Promise<CreativeArtifact> => {
+      if (persistence === 'server' && EVERMIND_CREATIVE_KINDS.has(kind)) {
+        const models = await listEvermindModels();
+        const configured = typeof target.data.modelSlug === 'string' ? target.data.modelSlug : '';
+        const model = models.find((candidate) => candidate.slug === configured || candidate.name === configured) ?? models[0];
+        if (!model) throw new Error(t('creativeNoMediaModel'));
+        const media = await generateEvermindMedia(model.slug, {
+          prompt: creativeBrief(target.data),
+          maxFrames: kind === 'animation' ? 24 : 1,
+        });
+        const rendered = evermindMediaArtifact(target.data, media, model.slug);
+        if (!rendered) throw new Error(t('creativeNoFrames'));
+        return rendered;
+      }
+      if (persistence === 'server' && SERVER_CREATIVE_KINDS.has(kind)) return generateServerCreativeArtifact(target.data);
+      return { ...buildBrowserCreativeArtifact(target.data), provider: 'builderforce-browser' };
+    };
+
+    void generate()
+      .then((artifact) => ({ artifact, fellBack: false }))
+      // A generator that is unavailable must not leave the object empty: the
+      // browser baseline is a real file, and saying which one produced it is the
+      // difference between a fallback and a silent downgrade.
+      .catch(() => ({ artifact: { ...buildBrowserCreativeArtifact(target.data), provider: 'builderforce-browser' } as CreativeArtifact, fellBack: true }))
+      .then(({ artifact, fellBack }) => {
+        const delivered: CreationDeliverable = {
+          ...started, artifactKind: artifact.artifactKind, status: 'delivered', completedAt: new Date().toISOString(),
+          url: artifact.url, mimeType: artifact.mimeType, fileName: artifact.fileName, provider: artifact.provider,
+          validation: { status: 'passed', detail: artifact.validationDetail },
+          metadata: { outputFormat: artifact.outputFormat, capabilityId: target.data.capabilityId, ...(artifact.model ? { model: artifact.model } : {}) },
+        };
+        // The tile shows the preview the artifact came with, and nothing when it
+        // has none — a stale thumbnail from an earlier generation would
+        // misdescribe the file that is now attached.
+        setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: {
+          ...node.data,
+          status: action === 'apply' ? t('creativeApplied') : t('creativeGeneratedStatus'),
+          outputUrl: artifact.url,
+          outputFormat: artifact.outputFormat,
+          outputFileName: artifact.fileName,
+          outputMimeType: artifact.mimeType,
+          provider: artifact.provider,
+          ...(artifact.summary ? { subtitle: artifact.summary } : {}),
+          thumbnailUrl: artifact.previewImageUrl ?? '',
+          deliverables: withCreationDeliverable(node.data, delivered),
+        } } : node));
+        setNotice(fellBack ? t('creativeGeneratedOffline', { file: artifact.fileName }) : t('creativeGenerated', { file: artifact.fileName }));
+        if (persistence === 'server') {
+          void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: `creative.${action}`, phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { provider: artifact.provider, outputFormat: artifact.outputFormat } }).catch(() => undefined);
+        }
+      });
+  }, [nodes, persistence, selectedNode, sessionId, setNodes, t]);
+
+  /**
+   * The one export path for an authored object. The inspector's buttons, Brain's
+   * `export` action, and the Files library all call this, so the file that lands
+   * in Downloads, the deliverable recorded on the object, and the row the library
+   * lists are produced once and cannot disagree.
+   */
+  const exportArtifact = useCallback(async (nodeId: string, action: CanvasExportAction): Promise<string> => {
+    const target = nodes.find((node) => node.id === nodeId);
+    if (!target) return t('exportFailed');
+    const markdown = canvasObjectMarkdown(target.data);
+    const base = safeDownloadName(target.data.title);
+    try {
+      if (action === 'copy') return await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable');
+      const diagram = canvasDiagram(target.data);
+      let fileName = `${base}.${EXPORT_EXTENSION[action as Exclude<CanvasExportAction, 'copy' | 'diagram'>] ?? 'md'}`;
+      // Set only when the renderer refuses THIS caller — a guest out of daily
+      // downloads. Decided by the attempt, not guessed from the session, because
+      // a guest CAN render: the export surface takes a guest token.
+      let degraded = false;
+
+      if (action === 'markdown') downloadText(markdown, fileName, 'text/markdown');
+      if (action === 'html') downloadText(markdownHtmlDocument(target.data.title, markdown), fileName, 'text/html');
+      if (action === 'csv') {
+        const sheet = artifactSheet(target.data);
+        if (!sheet) throw new Error(t('noTabularRows'));
+        exportCsv(toCsv(sheet.columns, sheet.rows), fileName);
+      }
+      if (action === 'diagram') {
+        if (!diagram) throw new Error(t('noDiagramSource'));
+        fileName = `${base}.${diagram.format === 'drawio' ? 'drawio' : 'mmd'}`;
+        downloadText(diagram.source, fileName, diagram.format === 'drawio' ? 'application/vnd.jgraph.mxfile' : 'text/vnd.mermaid');
+      }
+      if (action === 'svg') {
+        // The drawing that is ON the board, not a second rendering of its source.
+        const svg = canvasObjectSvg(target.data, nodeId);
+        if (!svg) throw new Error(t('noRenderedDrawing'));
+        downloadText(svg, fileName, 'image/svg+xml');
+      }
+      if (SERVER_RENDERED_ACTIONS.has(action)) {
+        const sheet = action === 'xlsx' ? artifactSheet(target.data) : null;
+        if (action === 'xlsx' && !sheet) throw new Error(t('noTabularRows'));
+        try {
+          if (action === 'docx') await exportDocx(markdown, target.data.title);
+          if (action === 'pptx') await exportPptx(markdown, target.data.title);
+          if (action === 'xlsx') await exportXlsx(sheet!.columns, sheet!.rows, target.data.title);
+        } catch (error) {
+          // Only a credential/allowance refusal degrades. A malformed payload or
+          // a render fault is a real failure and must surface as one.
+          if (!(error instanceof OfficeExportUnavailableError)) throw error;
+          degraded = true;
+          fileName = `${base}.${action === 'xlsx' ? 'csv' : 'md'}`;
+          if (action === 'xlsx') exportCsv(toCsv(sheet!.columns, sheet!.rows), fileName);
+          else downloadText(markdown, fileName, 'text/markdown');
+        }
+      }
+      if (action === 'pdf') {
+        // The browser's own print pipeline, where "Save as PDF" lives. It needs
+        // no server at all, and it prints each kind AS that kind: pages for a
+        // document, a slide per page for a deck, the drawing for anything drawn.
+        if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
+      }
+      if (action === 'json') downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
+      if (action === 'scorm') downloadBlob(new Blob([buildScormPackage(courseFromNode(target.data), target.data.title)], { type: EXPORT_MIME.scorm }), fileName);
+
+      const delivered: CreationDeliverable = {
+        id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered',
+        createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        provider: degraded ? 'browser-office-fallback' : SERVER_RENDERED_ACTIONS.has(action) ? 'builderforce-office-export' : action === 'pdf' ? 'browser-print' : 'browser-download',
+        fileName,
+        mimeType: action === 'diagram'
+          ? (diagram?.format === 'mermaid' ? 'text/vnd.mermaid' : 'application/vnd.jgraph.mxfile')
+          : degraded ? (action === 'xlsx' ? EXPORT_MIME.csv : EXPORT_MIME.markdown) : EXPORT_MIME[action],
+        validation: { status: 'passed', detail: 'Export generated and download started' },
+      };
+      setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      if (action === 'pdf') return t('printOpened');
+      // A guest session cannot reach the authenticated Office renderer, so say
+      // what actually landed in Downloads and point at the export that DOES work
+      // there, rather than reporting a Word file that was never produced.
+      return degraded ? (action === 'xlsx' ? t('csvDownloadedSignInForExcel') : t('markdownDownloadedUsePdf')) : t('downloadReady');
+    } catch (error) {
+      return error instanceof Error ? error.message : t('exportFailed');
+    }
+  }, [nodes, setNodes, t]);
+
+  /** Every file this session holds, derived from the objects themselves so a new
+   * document, deck, diagram, or sheet appears in the library the moment Brain
+   * authors it — no separate registration step to forget. */
+  const sessionFiles = useMemo(() => canvasFiles(nodes), [nodes]);
+
+  /** A file the library offers: a delivered artifact opens, an authored object
+   * exports through the path above. */
+  const downloadCanvasFile = useCallback((file: CanvasFile) => {
+    if (file.url) {
+      const navigable = navigableArtifactUrl(file.url);
+      const anchor = document.createElement('a');
+      anchor.href = navigable;
+      anchor.download = file.name;
+      anchor.click();
+      if (navigable !== file.url) window.setTimeout(() => URL.revokeObjectURL(navigable), 60_000);
+      setNotice(t('downloadReady'));
+      return;
+    }
+    const target = nodes.find((node) => node.id === file.nodeId);
+    if (target) void exportArtifact(file.nodeId, defaultExportAction(target.data.kind)).then(setNotice);
+  }, [exportArtifact, nodes, t]);
 
   useEffect(() => {
     const pending = pendingBrainActions[0];
@@ -1919,91 +4675,220 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     const finish = () => setPendingBrainActions((current) => current.slice(1));
-    if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow();
+    if (target.data.kind === 'workflow' && pending.action === 'build') void compileWorkflow(target.id);
+    else if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow(target.id);
+    else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
+    else if (target.data.kind === 'build' && pending.action === 'open') openBuild(target.id);
+    else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
+    else if (CREATIVE_GENERATOR_KINDS.has(target.data.kind)) runCreativeAction(target.id, pending.action);
     else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
+    else if (target.data.kind === 'dataset' && pending.action === 'plot') plotDataset();
+    else if (target.data.kind === 'dataset' && pending.action === 'profile') profileDataset(target.id);
     else if (target.data.kind === 'project' && pending.action === 'expand') expandProject();
     else if (target.data.kind === 'project' && pending.action === 'compare') compareProjects();
     else if (target.data.kind === 'mockupSet' && pending.action === 'expand') expandMockupSet();
     else if ((target.data.kind === 'mockup' || target.data.kind === 'mockupSet') && pending.action === 'deliver') deliverMockup();
     else if (target.data.kind === 'standup' && pending.action === 'start') startStandup();
-    else if (target.data.kind === 'evermind' && pending.action === 'train') expandEvermindPipeline();
-    else if (target.data.kind === 'evermind' && pending.action === 'evaluate') {
-      const evaluation = newNode('evaluation', { x: target.position.x + 560, y: target.position.y });
-      evaluation.data = { ...evaluation.data, title: `${target.data.title} evaluation`, status: 'Ready', content: `Evaluate ${target.data.title} against its connected dataset, training evidence, and quality criteria.` };
-      setNodes((current) => [...current, evaluation]);
-      setEdges((current) => [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluates', animated: true }]);
-      setNotice('Evermind evaluation added to the canvas');
-    } else if (['preview', 'drill', 'play', 'profile'].includes(pending.action)) {
-      void flowRef.current?.fitView({ nodes: [{ id: target.id }], padding: .3, duration: 350 });
-      setNotice(`${target.data.title} ready to ${pending.action}`);
-    } else if (pending.action === 'publish' && ['website', 'evermind'].includes(target.data.kind)) {
-      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: persistence === 'local' ? 'Publish-ready draft' : 'Publish requested' } } : node));
-      setNotice(persistence === 'local' ? 'Save the session to publish this artifact' : `${target.data.title} is ready for its canonical publish step`);
-    } else {
-      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: `${pending.action} requested` } } : node));
-      setNotice(`${pending.action} is ready in the ${creationObjectDefinition(target.data.kind).label} inspector`);
+    else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
+    else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
+    else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
+    else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
+    else if (target.data.kind === 'evermind' && pending.action === 'publish') {
+      openEvermindTraining();
+      setNotice(t('noticeUseTrainedPackage'));
+    }
+    else {
+      setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, deliverMockup, expandEvermindPipeline, expandMockupSet, expandProject, nodes, pendingBrainActions, persistence, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
     if (persistence !== 'server') return;
     void creationSessionsApi.history.list(sessionId).then((result) => setHistory(result.snapshots))
-      .catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load history'));
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadHistoryFailed')));
   }, [persistence, sessionId]);
 
   const restoreRevision = useCallback((targetRevision: number) => {
     if (!canEdit || persistence !== 'server') return;
-    setNotice(`Restoring revision ${targetRevision}…`);
+    setNotice(t('noticeRestoringRevision', { revision: targetRevision }));
     void creationSessionsApi.history.get(sessionId, targetRevision).then((snapshot) => {
       const restored = flowFromSnapshotGraph(snapshot.graph);
       setNodes(restored.nodes);
       setEdges(restored.edges);
       setHistoryOpen(false);
-      setNotice(`Revision ${targetRevision} restored; saving as a new revision…`);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not restore revision'));
+      setNotice(t('noticeRevisionRestored', { revision: targetRevision }));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeRestoreRevisionFailed')));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createCheckpoint = useCallback(() => {
     if (persistence !== 'server' || !canEdit) return;
     const label = window.prompt('Name this checkpoint')?.trim(); if (!label) return;
     void creationSessionsApi.history.checkpoint(sessionId, label).then(() => {
-      setNotice(`Checkpoint “${label}” saved`);
+      setNotice(t('noticeCheckpointSaved', { label }));
       return creationSessionsApi.history.list(sessionId);
-    }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not save checkpoint'));
+    }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveCheckpointFailed')));
   }, [canEdit, persistence, sessionId]);
 
   const exportSession = useCallback(() => {
     const filename = `${safeDownloadName(title)}.builderforce-canvas.json`;
-    setNotice('Preparing Canvas export…');
+    setNotice(t('noticePreparingExport'));
     if (persistence === 'local') {
       downloadJson({
         format: 'builderforce.creation-session.v1', exportedAt: new Date().toISOString(),
         session: { id: sessionId, title, persistence: 'local' }, nodes, edges, timeline,
         viewport: flowRef.current?.getViewport() ?? viewportRef.current,
       }, filename);
-      setNotice('Canvas export downloaded');
+      setNotice(t('noticeExportDownloaded'));
       return;
     }
     void creationSessionsApi.export(sessionId).then((payload) => {
       downloadJson(payload, filename);
-      setNotice('Canvas export downloaded');
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Canvas export failed'));
+      setNotice(t('noticeExportDownloaded'));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExportFailed')));
   }, [edges, nodes, persistence, sessionId, timeline, title]);
 
   const minimapColor = useCallback((node: CreationFlowNode) => {
-    const colors: Partial<Record<CreationObjectKind, string>> = { workflow: '#7357ed', website: '#3978f6', dashboard: '#08b59d', agent: '#8a5cf5', staff: '#f09a3e', evaluation: '#6941d7', evermind: '#df4fa5', projectComparison: '#0d8f82' };
-    return colors[node.data.kind] ?? '#9aa8bd';
+    // The board's own identity hues, declared beside the rest of its palette in
+    // CreationCanvas.module.css — see PRD 21 §2.6 rule 9. Four pitch kinds share
+    // one hue because they are four faces of one object.
+    const colors: Partial<Record<CreationObjectKind, string>> = { workflow: 'var(--canvas-obj-workflow)', website: 'var(--canvas-obj-website)', dashboard: 'var(--canvas-obj-dashboard)', agent: 'var(--canvas-obj-agent)', staff: 'var(--canvas-obj-staff)', evaluation: 'var(--canvas-obj-evaluation)', evermind: 'var(--canvas-obj-evermind)', projectComparison: 'var(--canvas-obj-comparison)', pitch: 'var(--canvas-obj-pitch)', pitchScorecard: 'var(--canvas-obj-pitch)', pitchQa: 'var(--canvas-obj-pitch)', pitchApplication: 'var(--canvas-obj-pitch)' };
+    return colors[node.data.kind] ?? 'var(--canvas-obj-unknown)';
   }, []);
-  const renderedNodes = useMemo(() => nodes.map((node) => node.data.placementHidden === true ? { ...node, hidden: !showHidden, style: showHidden ? { ...node.style, opacity: .42 } : node.style } : node), [nodes, showHidden]);
+  const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
+  const renderedNodes = useMemo(() => nodes.map((node) => {
+    const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
+    const live = evermindLiveByNodeId[node.id];
+    const liveNode = attachedEvermind ? { ...node, data: { ...node.data, ...(live ?? { evermindLoading: true, status: 'Syncing project…' }) } } : node;
+    const agentRef = liveNode.data.kind === 'agent' ? liveNode.data.resourceId?.match(/^agent:(.+)$/)?.[1] : undefined;
+    const latestAgentReply = liveNode.data.kind === 'agent' ? [...timeline].reverse().find((message) => {
+      const author = message.metadata?.authoredBy;
+      return author?.kind === 'agent' && (author.ref === agentRef || author.ref === liveNode.id || author.name === liveNode.data.title);
+    }) : undefined;
+    const withCollaboration = liveNode.data.kind === 'agent' && (activeAgentIds.has(liveNode.id) || latestAgentReply)
+      ? { ...liveNode, data: { ...liveNode.data, ...(activeAgentIds.has(liveNode.id) ? { collaborationState: 'thinking' } : {}), ...(latestAgentReply ? { collaborationReply: latestAgentReply.body, collaborationReplyAt: latestAgentReply.createdAt } : {}) } }
+      : liveNode;
+    const hasDatasetConnection = ['chart', 'dashboard', 'report'].includes(withCollaboration.data.kind) && edges.some((edge) => {
+      const otherId = edge.source === withCollaboration.id ? edge.target : edge.target === withCollaboration.id ? edge.source : null;
+      return otherId != null && nodes.some((candidate) => candidate.id === otherId && ['dataset', 'table', 'spreadsheet'].includes(candidate.data.kind));
+    });
+    const withLiveData = hasDatasetConnection && /connect a dataset/i.test(String(withCollaboration.data.status || ''))
+      ? { ...withCollaboration, data: { ...withCollaboration.data, status: 'Dataset connected' } }
+      : withCollaboration;
+    return withLiveData.data.placementHidden === true ? { ...withLiveData, hidden: !showHidden, style: showHidden ? { ...withLiveData.style, opacity: .42 } : withLiveData.style } : withLiveData;
+  }), [activeAgentIds, edges, evermindLiveByNodeId, nodes, showHidden, timeline]);
+  /**
+   * The 3D view reads the SAME nodes the board renders, minus the ones the board
+   * is currently hiding — a mode that quietly resurrects hidden objects would
+   * report a different canvas than the one the user is working on.
+   */
+  const threeDNodes = useMemo(() => renderedNodes.filter((node) => node.hidden !== true), [renderedNodes]);
+  const describeThreeD = useCallback((node: CreationFlowNode): Canvas3DDescriptor => {
+    const definition = creationObjectDefinition(node.data.kind);
+    const comparisonModel = typeof node.data.comparisonModel === 'string' ? node.data.comparisonModel : '';
+    const comparisonPrompt = typeof node.data.comparisonPrompt === 'string' && !comparisonModel;
+    return {
+      label: node.data.title || t(`object.${node.data.kind}`),
+      sublabel: node.data.status || node.data.subtitle,
+      group: comparisonModel
+        ? t('comparison.modelLayer', { model: comparisonModel })
+        : comparisonPrompt ? t('comparison.promptLayer') : t(`group.${definition.group}`),
+      icon: definition.icon,
+      accent: typeof node.data.accent === 'string' ? node.data.accent : minimapColor(node),
+      // A generated object carries a picture of what it produced — a rendered
+      // mesh, a drawn profile, an image. In 3D that is the point of the card.
+      preview: creativePreviewImageUrl(node.data) ?? undefined,
+      // A model is handed over as geometry, not as a picture of geometry: the 3D
+      // view redraws it from wherever the camera ends up, so turning the scene
+      // turns the object instead of sliding a photograph of it around.
+      geometry: creativeMeshGeometry(node.data) ?? undefined,
+      // Where the user has put this object through depth, if they have. It rides
+      // in the object's own content, so it survives a reload and a share exactly
+      // like its position on the flat board does.
+      depthOffset: canvas3dDepthOffset(node),
+      locked: !canvasPlacementUnlocked(node),
+    };
+  }, [minimapColor, t]);
+  const selectThreeDObject = useCallback((id: string) => {
+    setInspectorFocus(null);
+    setSelectedId(id);
+    setSelectedIds([id]);
+  }, []);
+  /**
+   * Objects moved in the 3D space, written straight back to the board.
+   *
+   * There is one set of positions, not a 3D copy of them: across the plane the
+   * move IS the board position, and through depth it is how far the object
+   * floats off the layer its dependencies put it on. So an object dragged in the
+   * space is where the user left it on the flat canvas too, and is saved by the
+   * same autosave that persists any other placement.
+   */
+  const moveThreeDObjects = useCallback((moves: readonly Canvas3DMove[]) => {
+    if (!canEdit) return;
+    setNodes((current) => applyCanvas3DMoves(current, moves, canvasPlacementUnlocked));
+  }, [canEdit, setNodes]);
+  /**
+   * Zoom and fit mean the scene while it is up, and the flat board otherwise —
+   * the phone-sized action stack keeps the same buttons in both views instead of
+   * leaving three dead controls behind whenever 3D opens.
+   */
+  const zoomInAction = useCallback(() => {
+    if (threeDControls) threeDControls.zoomIn(); else void flowRef.current?.zoomIn({ duration: 180 });
+  }, [threeDControls]);
+  const zoomOutAction = useCallback(() => {
+    if (threeDControls) threeDControls.zoomOut(); else void flowRef.current?.zoomOut({ duration: 180 });
+  }, [threeDControls]);
+  const fitViewAction = useCallback(() => {
+    if (threeDControls) threeDControls.resetView(); else void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 });
+  }, [threeDControls]);
+  /**
+   * Export from a card, at the identity React Flow needs.
+   *
+   * `exportArtifact` closes over `nodes`, so a card holding it directly would
+   * either export a stale document or force `nodeTypes` to change on every board
+   * edit — remounting every Object. The ref keeps the callback stable while
+   * always running the newest closure, so a paragraph typed a moment ago is in
+   * the file.
+   */
+  const exportRef = useRef(exportArtifact);
+  exportRef.current = exportArtifact;
+  const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
+    void exportRef.current(nodeId, action).then(setNotice);
+  }, []);
+  /**
+   * The same treatment for `runWorkflow`, which needed it just as badly and was
+   * missed.
+   *
+   * It closes over `resolveWorkflowNode`, which closes over `nodes` AND
+   * `selectedNode` — so it changed identity on every board edit and on every
+   * SELECTION, which handed React Flow a new `nodeTypes` and remounted every
+   * Object on the board each time. Most cards survive a remount because they are
+   * pure functions of their data; the ones that fetch do not. The catalog-tool
+   * card refetches its definition on mount, so clicking around a board with a
+   * diagnostic on it put that card back on "Loading…" indefinitely — one request
+   * per selection, hundreds in a session.
+   */
+  const runWorkflowRef = useRef(runWorkflow);
+  runWorkflowRef.current = runWorkflow;
+  const runWorkflowFromNode = useCallback((nodeId: string) => { runWorkflowRef.current(nodeId); }, []);
+  // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
+  // a per-token dependency here would hand React Flow a new nodeTypes object and
+  // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} />,
-  }), [canRun, runWorkflow]);
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+      setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
+      setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
+    }} />,
+  }), [canRun, cardsEditable, exportFromNode, runWorkflowFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
-    objectCount: nodes.length, connectionCount: edges.length,
-    objectKinds: nodes.reduce<Record<string, number>>((counts, node) => ({ ...counts, [node.data.kind]: (counts[node.data.kind] || 0) + 1 }), {}),
+    // Objects are passed WHOLE: the report decides which fields explain whether
+    // an object can act, so every caller reports the same evidence rather than
+    // each one choosing a different subset (which is how the field that mattered
+    // — a workflow's step count — came to be missing).
+    objects: nodes.map((node) => ({ id: node.id, data: node.data as Record<string, unknown> })),
+    connectionCount: edges.length,
     selectedObjectIds: effectiveSelectedIds,
     hiddenObjectCount: nodes.filter((node) => node.data.placementHidden === true).length,
     lockedObjectCount: nodes.filter((node) => node.data.placementLocked === true).length,
@@ -2011,86 +4896,339 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     canonicalResourceCount: nodes.filter((node) => !!node.data.resourceId).length,
     memberCount: persistence === 'local' ? 1 : allMembers.length,
     pendingInvitationCount: pendingInvitations.length,
+    unsavedChanges: currentGraph.current !== lastSavedGraph.current,
+    saveInFlight: saveInFlight.current,
+    undoDepth: undoStack.current.length,
     timeline: timeline.map((message) => ({ role: message.messageRole === 'assistant' ? 'Brain' : message.messageRole, body: message.body, createdAt: message.createdAt })),
     brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
-  }, await captureDiagnosticsContext()), [allMembers.length, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
+    trace: brainTrace.map((event) => ({
+      ts: event.ts, category: event.category, label: event.label,
+      ok: event.isError === true ? false : null,
+      detail: [event.args === undefined ? '' : `args=${safeTraceJson(event.args)}`, event.result === undefined ? '' : `result=${safeTraceJson(event.result)}`].filter(Boolean).join(' '),
+    })),
+    // What the person and the agent DID, with durations — the evidence that lets
+    // the report explain how the board got into the state it is in, rather than
+    // only restating that state back to whoever is already looking at it.
+    actions: journal.current.entries(),
+    // How much of the board the last turn could actually see. A turn scoped to a
+    // selection is why "I don't see that file anywhere on the canvas" could be
+    // said about a file that was on the canvas.
+    scopedObjectCount: scopedNodes.length,
+  }, await captureDiagnosticsContext()), [allMembers.length, brainTrace, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, scopedNodes.length, sessionId, sessionRole, thinking, timeline, title]);
+
+  /**
+   * The diagnostics control does the whole job in one click: the report is on the
+   * clipboard (ready to paste into a bug report) before the panel finishes opening,
+   * so nobody has to find a second "Copy" button to report what they are looking at.
+   *
+   * Assembling the report is a real operation — it reads the board, the transcript and
+   * the build stamp — so it can fail, and a failure used to be swallowed whole: the
+   * rejection escaped into `void`, no toast was raised, and the click looked like a
+   * button that was never wired up. The one control people reach for when something is
+   * already wrong is the last one allowed to fail silently, so a throw is reported as
+   * itself and the panel stays open with the state that is on screen.
+   */
+  const openDiagnostics = useCallback(async () => {
+    setDiagnosticsOpen(true);
+    setHistoryOpen(false);
+    setOutcomeMetricsOpen(false);
+    let report: string;
+    try {
+      report = await buildDiagnostics();
+    } catch (error) {
+      toast.error(t('diagnosticsBuildFailed', { reason: error instanceof Error ? error.message : String(error) }));
+      return;
+    }
+    if (await copyTextToClipboard(report)) toast.success(t('diagnosticsCopied'));
+    else toast.error(t('diagnosticsCopyFailed'));
+  }, [buildDiagnostics, t, toast]);
+
+  const openOutcomeMetrics = useCallback(() => {
+    setOutcomeMetricsOpen(true);
+    setOutcomeMetricsError(null);
+    if (persistence === 'local') return;
+    setOutcomeMetricsLoading(true);
+    void creationSessionsApi.outcomeMetrics(sessionId)
+      .then(setOutcomeMetrics)
+      .catch((error) => setOutcomeMetricsError(error instanceof Error ? error.message : t('noticeOutcomeMetricsFailed')))
+      .finally(() => setOutcomeMetricsLoading(false));
+  }, [persistence, sessionId]);
+
+  const formatOutcomeValue = useCallback((value: number | null, unit: string) => {
+    if (value == null) return 'Not measured';
+    if (unit === 'percent') return `${Math.round(value * 100)}%`;
+    if (unit === 'usd') return `$${value.toFixed(2)}`;
+    if (unit === 'seconds') return value >= 60 ? `${(value / 60).toFixed(value >= 600 ? 0 : 1)} min` : `${Math.round(value)} sec`;
+    if (unit === 'agents') return `${value.toFixed(value % 1 ? 1 : 0)} agent${value === 1 ? '' : 's'}`;
+    return value.toFixed(value % 1 ? 1 : 0);
+  }, []);
+
+  const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
+  /**
+   * Where the ONE Brain surface actually renders.
+   *
+   * Inline means "inside the Brain Object on the graph" — and the 3D view replaces
+   * the flat board rather than floating over it, so while it is up there is no
+   * Object to render into and an inline Brain simply vanished: no transcript, no
+   * tabs, no controls, and nothing on screen offering a way back to it. The 3D
+   * reading therefore places the surface on the edge, which is the placement that
+   * survives losing the board. The stored preference is untouched, so leaving 3D
+   * puts Brain back in its Object.
+   */
+  const brainPlacement: BrainDockMode = threeD.active ? 'docked' : brainDock.mode;
+  // An inline Brain IS an Object on the board, so only a docked one is reserved.
+  const brainDockReserved = brainDockReservedWidth({ ...brainDock, mode: brainPlacement });
+  const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
+    id: index + 1,
+    seq: index + 1,
+    role: message.messageRole,
+    content: message.body,
+    metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
+    createdAt: message.createdAt,
+  })), [timeline]);
+
+  const brainSurfaceOpen = !presentMode && brainDock.open;
+  const brainCollaborators = useMemo(
+    () => members.filter((member) => member.userId !== currentUserId),
+    [currentUserId, members],
+  );
+  /**
+   * Exactly one surface renders the conversation. When it is inline, the Brain Object
+   * reads this and becomes the chat; the edge dock is not rendered at all. Feeding both
+   * placements from ONE value is what guarantees the board can never show two.
+   */
+  const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
+    open: brainSurfaceOpen,
+    canOpen: !presentMode,
+    mode: brainPlacement,
+    showExecutionDetail: brainDock.showExecutionDetail,
+    running: thinking,
+    runStartedAt: brainRunStartedAt,
+    messages: brainMessages,
+    trace: brainTrace,
+    nodes,
+    edges,
+    collaborators: brainCollaborators,
+    joinedCollaborator,
+    onOpen: (nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock(); },
+    onModeChange: (mode) => updateBrainDock({ mode }),
+    onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
+    onClose: () => updateBrainDock({ open: false }),
+  }), [
+    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRunStartedAt,
+    brainSurfaceOpen, brainTrace, edges, joinedCollaborator, nodes, openBrainDock, presentMode, thinking, updateBrainDock,
+  ]);
+
+  /**
+   * The prompt lives in the centre of the board, bottom-aligned — where ChatGPT and
+   * every other chat product people already use puts it. It is deliberately NOT part
+   * of the Brain surface: it stays put and stays reachable whether Brain is inline in
+   * its Object, docked to either edge, or closed entirely.
+  */
+  const canvasUsesTwilio = twilioPromptSelected || nodes.some((node) => (
+    Array.isArray(node.data.steps) && node.data.steps.some((step) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return false;
+      const connector = (step as Record<string, unknown>).connector;
+      return typeof connector === 'string' && (connector === 'twilio' || connector.startsWith('twilio-'));
+    })
+  ));
+
+  const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
+    <PromptUseCasePicker placement="top" align="end" onSelect={(nextPrompt, useCase) => {
+      setPrompt(executiveCanvasPrompt(useCase) ?? nextPrompt);
+      if (useCase.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
+    }} />
+  </div>;
+
+  const composer = !presentMode && <div ref={composerDockRef} className={styles.composerDock} data-tour="creation-brain-dock">
+    <div className={styles.composerUtilities}>
+      {/* Keep the settled receipt mounted after the run. Token consumption used
+          to disappear at the exact moment the answer arrived because this whole
+          component was conditional on `thinking`. */}
+      <BrainActivityIndicator
+        running={thinking}
+        trace={brainTrace}
+        startedAt={brainRunStartedAt}
+        variant="composer"
+      />
+      {promptStarter}
+    </div>
+    <ChatInput
+      className={styles.composer}
+      value={prompt}
+      onChange={setPrompt}
+      onSubmit={evaluateCanvas}
+      placeholder={t('askBrain')}
+      submitLabel={t('sendBrain')}
+      disabled={thinking}
+      rows={1}
+      submitOnEnter
+      contextControls={<>
+        <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
+      </>}
+      onAttach={attachCanvasArtifact}
+      onAddContext={openPalette}
+      autoMode={autoApply}
+      onAutoModeChange={setAutoApplyMode}
+      modelSelection={modelSelection}
+      modelOptions={canvasModelOptions}
+      onModelSelectionChange={setModelSelection}
+      canChooseModel={canChooseModel}
+    // Mode and memory live in the `/` menu now — on a phone this row had grown to
+    // eight unlabelled circles, and the two settings that actually decide what a turn
+    // does were the two hardest to read. The menu's trigger names the armed mode, so
+    // nothing has to be opened to see whether this turn can dispatch work.
+      chatMode={sessionMode}
+      onChatModeChange={setSessionMode}
+      memoryEnabled={memoryEnabled}
+      onMemoryChange={setMemoryMode}
+      memoryUnavailableReason={evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined}
+      showVoice
+    />
+  </div>;
 
   return (
-    <div className={`${styles.canvasShell} app-full-height`}>
+    <div
+      ref={shellRef}
+      className={`${styles.canvasShell} app-full-height`}
+      data-fullscreen={fullscreen ? 'true' : 'false'}
+    >
       <div className={styles.sessionBar}>
-        <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice('Title save failed')); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
+        <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
-          <div className={styles.collaborators} aria-label="Active collaborators">
-            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}${member.userId !== currentUserId ? ' · click to follow viewport' : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
-            <button aria-label="Invite collaborator" onClick={() => persistence === 'local' ? requireAccount('invite', 'Create an account to invite collaborators', 'Your canvas will be saved securely so teammates can join the same live session with roles, comments, and presence.') : setShareOpen(true)}>+</button>
+          <TwilioCanvasSetup active={canvasUsesTwilio} />
+          <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
+            {/* In a shared free session the roster is REAL — showing only "you"
+                while three other people move cards around is a lie the board
+                itself contradicts. */}
+            {(persistence !== 'local'
+              ? members
+              : inRoom && room.participants.length
+                ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
+                : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]
+            ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            <button aria-label={t('inviteCollaborator')} onClick={() => setShareOpen(true)}>+</button>
           </div>
-          <div className={styles.undoRedoGroup} role="group" aria-label="Canvas history">
-            <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
-            <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
+          {/* Editor-only capture actions. Renders nothing on the web — it asks the
+              host port whether an editor is present rather than being told. */}
+          <CanvasHostActions
+            selectedNode={selectedNode ?? null}
+            disabled={!canEdit || lockBlocked}
+            onCapture={addHostCapture}
+            onError={setNotice}
+          />
+          <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
+            <button className={styles.secondaryButton} onClick={undo} aria-label={t('undoCanvasChange')}>↶</button>
+            <button className={styles.secondaryButton} onClick={redo} aria-label={t('redoCanvasChange')}>↷</button>
           </div>
-          <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
+          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label={t('viewOutcomeMetrics')} title={t('outcomeMetricsTitle')} onClick={openOutcomeMetrics}><Icon source="↗" size="1em" /></button>
+          {/* Full screen survives the phone layout (hence `mobileAction`): a small
+              screen is where trading the app chrome for board is worth the most,
+              and the ⛶ / ⤡ glyphs it used to draw are exactly the characters a
+              phone font is most likely to render as a blank box. */}
+          <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}</button>
+          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}><Icon source="⚠" size="1em" /></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
-          <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
-          {persistence === 'local' && <button className={`${styles.primaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', 'Create an account to save and collaborate', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>Save</span></button>}
+          {/* A local canvas opens the SAME share menu a saved one does. It used to
+              open a sign-up gate, which answered a question nobody asked: they
+              wanted to show someone the board, not to create an account. */}
+          <button className={styles.secondaryButton} data-tour="creation-share" onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
+          {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
-            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>
-            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden>◌</span>{t('conversation')}</button>
+            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
+            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
             <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
-            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>▶</span>{presentMode ? t('exitPresentation') : t('present')}</button>
+            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="▶" size="1em" /></span>{presentMode ? t('exitPresentation') : t('present')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
             <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
-            <button onClick={() => { setTourStep(1); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
+            <button onClick={() => { sectionTour.openOffer(); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
             <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
             <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
             {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
-            <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+            <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label={t('connectionKind')} value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
           </div>}
-          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}>
+          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
             <div className={styles.shareMenuHeader}>
-              <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
-              <button type="button" className={styles.shareMenuClose} aria-label="Close invitation panel" onClick={() => setShareOpen(false)}>×</button>
+              <strong>{t('inviteCollaborators')}</strong>
+              <button type="button" className={styles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={() => setShareOpen(false)}>×</button>
             </div>
-            <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
-            {persistence === 'local' ? <button onClick={() => requireAccount('save', 'Create an account to save this session', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}>Create free account</button> : <>
-              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? 'Invitation emailed and backup link copied' : 'Invitation saved; backup link copied (email delivery is not configured)'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? 'Collaborator invited by email' : 'Collaborator invited in Builderforce'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
-              {sessionRole === 'owner' && <div aria-label="Session members">{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <span>{member.displayName || 'Collaborator'}{member.userId === currentUserId ? ' (you)' : ''}</span>
-                <select aria-label={`Role for ${member.displayName || member.userId}`} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : 'Role update failed')); }}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select>
-                <button type="button" disabled={member.userId === currentUserId} aria-label={`Remove ${member.displayName || 'member'}`} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : 'Member removal failed')); }}>×</button>
-              </div>)}{!!pendingInvitations.length && <div aria-label="Pending invitations" style={{ marginTop: 10 }}><strong>Pending invitations</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={`Revoke invitation for ${invitation.email}`} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice('Invitation revoked'); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invitation could not be revoked')); }}>×</button>
+            <p>{persistence === 'local' ? (inRoom ? t('sharedLiveHint') : t('sharedInviteHint')) : t('invitedCanBuild')}</p>
+            {/* NO ACCOUNT: invite by link into a shared free session. Everyone edits
+                the same board and shares one free-message allowance; signing up is
+                offered as the way to KEEP it, not as the price of sharing it. */}
+            {persistence === 'local' ? (inRoom && roomCode ? <>
+              <GuestInviteLink code={roomCode} surface="canvas" full={room.participants.length >= (room.state?.maxParticipants ?? 0)} />
+              <div className={styles.shareRoomPeople} aria-label={t('sharedPeopleHere', { count: room.participants.length })}>
+                {room.participants.map((person) => <span key={`${person.name}-${person.joinedAt}`}>{person.name}{person.isHost ? ` ${t('sharedHostTag')}` : ''}</span>)}
+              </div>
+              <div className={styles.shareRoomActions}>
+                <button type="button" onClick={() => void leaveSharedSession()}>{t('sharedStopSharing')}</button>
+                <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
+              </div>
+            </> : <button disabled={roomBusy} onClick={() => void startSharedSession()}>{roomBusy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
+              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
+              {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
+                <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : t('roleUpdateFailed'))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
+                <button type="button" disabled={member.userId === currentUserId} aria-label={t('removeMember', { name: member.displayName || t('member') })} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : t('memberRemovalFailed'))); }}>×</button>
+              </div>)}{!!pendingInvitations.length && <div aria-label={t('pendingInvitations')} style={{ marginTop: 10 }}><strong>{t('pendingInvitations')}</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(error instanceof Error ? error.message : t('invitationRevokeFailed'))); }}>×</button>
               </div>)}</div>}</div>}
             </>}
-            <small>Access: {persistence === 'local' ? 'Private on this device' : inviteRole}</small>
+            <small>{t('accessLabel', { access: persistence === 'local' ? (inRoom ? t('sharedAnyoneWithLink') : t('privateOnDevice')) : inviteRole })}</small>
           </div>}
           {templateOpen && <div className={styles.templateMenu}>
-            <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label="Close templates">×</button></header>
-            {CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{template.name}</b><small>{template.category} · {template.objects.length} objects</small><span>{template.description}</span></button>)}
-            {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? 'Shared with tenant' : 'Private'} · {template.category}</small><span>{template.description}</span></button>)}</>}
-            {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>Private custom frame</span> · this device</small></button>)}</>}
+            <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
+            {CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{templateText(template, 'name')}</b><small>{t('templateMeta', { category: templateCategoryLabel(template.category), count: template.objects.length })}</small><span>{templateText(template, 'description')}</span></button>)}
+            {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
+            {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}
         </div>
       </div>
 
       {accountGate && <div className={styles.accountGateBackdrop} role="presentation">
         <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
-          <button type="button" className={styles.accountGateClose} aria-label="Close account prompt" onClick={() => setAccountGate(null)}>×</button>
-          <span className={styles.accountGateIcon} aria-hidden>✦</span>
-          <small>Keep your momentum</small>
+          <button type="button" className={styles.accountGateClose} aria-label={t('closeAccountPrompt')} onClick={() => setAccountGate(null)}>×</button>
+          <span className={styles.accountGateIcon} aria-hidden><Icon name="sparkles" size={20} /></span>
+          <small>{t('keepMomentum')}</small>
           <h2 id="canvas-account-gate-title">{accountGate.title}</h2>
           <p>{accountGate.description}</p>
-          <div className={styles.accountGateBenefits}><span>✓ Keep this entire local session</span><span>✓ Unlock durable resources and history</span><span>✓ Collaborate with your team</span></div>
+          <div className={styles.accountGateBenefits}><span>{`✓ ${t('gateBenefitKeep')}`}</span><span>{`✓ ${t('gateBenefitUnlock')}`}</span><span>{`✓ ${t('gateBenefitCollaborate')}`}</span></div>
           <div className={styles.accountGateActions}>
-            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: 'web', action: accountGate.action } }); window.location.href = `/register?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Create free account</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Sign in</button>
+            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: accountGate.action } }); canvasNavigate(`/register?next=${encodeURIComponent(`/create/${sessionId}`)}`); }}>{t('createFreeAccount')}</button>
+            <button type="button" className={styles.secondaryButton} onClick={() => { canvasNavigate(signInHref(`/create/${sessionId}`)); }}>{t('signIn')}</button>
           </div>
-          <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>Not now — keep creating locally</button>
+          <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>{t('notNowKeepLocal')}</button>
         </section>
       </div>}
 
-      <div ref={flowWrapRef} className={styles.flowWrap} data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+      <div
+        ref={flowWrapRef}
+        className={styles.flowWrap}
+        data-tour="creation-board"
+        style={{
+          // The dock owns one edge of the board; every other floating panel is
+          // pushed in by exactly its width so nothing can ever sit underneath it.
+          '--brain-dock-left': `${brainDock.side === 'left' ? brainDockReserved : 0}px`,
+          '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
+        } as CSSProperties}
+        data-brain-side={brainDockReserved > 0 ? brainDock.side : 'none'}
+        // A phone renders the DOCKED placement as one bottom sheet, so what the board
+        // loses there is the bottom edge — not a side. The phone layout moves the
+        // board controls off that edge from this, not from the side. An inline Brain
+        // is an Object on the board and takes no edge, so it must not set this.
+        data-brain-open={brainSurfaceOpen && brainPlacement === 'docked' ? 'true' : 'false'}
+        data-view={threeD.active ? '3d' : 'flat'}
+        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        {fileDragging && <div className={styles.fileDropOverlay} role="status" aria-live="polite">
+          <div>
+            <span aria-hidden>⇩</span>
+            <strong>{canEdit ? t('dropFilesTitle') : t('roleCannotEdit')}</strong>
+            {canEdit && <small>{t('dropFilesHint')}</small>}
+          </div>
+        </div>}
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>
@@ -2100,13 +5238,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button onClick={togglePlacementLock} disabled={!canEdit}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
           <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
         </div>}
-        {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>Loading session…</b></div>}
-        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
-        {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
-          <strong>{['', 'Ask Brain from the composer', 'Everything is an object', 'Select to focus Brain', 'Connect ideas explicitly', 'Build with collaborators', 'Deliver when you are ready'][tourStep]}</strong>
-          <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{['', 'The familiar prompt stays at the bottom and can create or evaluate anything in this session.', 'Drag workflows, sites, data, agents, people, and project context from the palette.', 'Select one object for a focused question, or click the background to evaluate the complete session.', 'Connect two objects to define a real data, control, reference, presentation, or delivery relationship.', 'Share the session, comment on objects, and see live cursors without moving anyone else’s viewport.', 'Projects are optional. Add one only when you want to turn an artifact into a Task and assign an Agent.'][tourStep]}</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{tourStep} of 6</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>Dismiss</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: 'web', step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? 'Next' : 'Start creating'}</button></span></div>
-        </div>}
+        {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
+        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
+        <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
           edges={edges}
@@ -2120,76 +5254,257 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onMoveEnd={onViewportChange}
           onInit={(instance) => { flowRef.current = instance; if (pendingViewport.current) void instance.setViewport(pendingViewport.current); }}
           fitView
-          fitViewOptions={{ padding: 0.12 }}
-          minZoom={0.35}
+          fitViewOptions={{ padding: 0.12, minZoom: CANVAS_FIT_MIN_ZOOM }}
+          minZoom={CANVAS_FIT_MIN_ZOOM}
           maxZoom={1.6}
-          defaultEdgeOptions={{ type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { stroke: '#7b8aa0', strokeWidth: 1.5 } }}
+          defaultEdgeOptions={{ type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { stroke: 'var(--canvas-edge)', strokeWidth: 1.5 } }}
           nodesDraggable={canEdit && !drawingMode}
           nodesConnectable={canEdit && !drawingMode}
           elementsSelectable
           deleteKeyCode={canEdit ? ['Backspace', 'Delete'] : null}
-          selectionOnDrag
-          multiSelectionKeyCode={['Meta', 'Control']}
+          // Pan/marquee, drag threshold and pinch behaviour come from ONE pure decision
+          // (`canvasPointerMode.ts`) rather than being spelled out here, so they can be
+          // asserted without mounting the board.
+          {...interactionProps}
           proOptions={{ hideAttribution: true }}
           onlyRenderVisibleElements
         >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="var(--creation-dot, #c9d8ea)" />
-          <Controls position="bottom-left" showInteractive={false}>
-            {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
-              <MinimapIcon />
-            </ControlButton>}
-          </Controls>
-          {minimapOpen && <>
-            <MiniMap position="bottom-right" nodeColor={minimapColor} maskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))" pannable zoomable />
-            <button type="button" className={styles.minimapClose} onClick={() => setMinimapOpen(false)} aria-label="Close mini map" title="Close mini map">×</button>
-          </>}
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="var(--creation-dot)" />
+          <CanvasCommands
+            minimapOpen={minimapOpen}
+            setMinimapOpen={setMinimapOpen}
+            onCleanLayout={cleanLayout}
+            showInteractive={false}
+            minimapNodeColor={minimapColor as (node: Node) => string}
+            minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
+            {...threeD.commandProps}
+            extraControls={<>
+              {/* Pan vs marquee. A one-finger (or left-button) drag can only do one of
+                  them, so the choice is explicit rather than inferred — and making it
+                  explicit is what gives touch a marquee at all, since the modifier-key
+                  route it used to need does not exist on a phone. Hidden in 3D, where
+                  the scene owns its own navigation. */}
+              {!threeD.active && <CanvasRailToggle
+                pressed={canvasGesture === 'select'}
+                onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))}
+                label={t('canvasGestureToggle')}
+                activeTitle={t('canvasGestureSelectActive')}
+                inactiveTitle={t('canvasGesturePanActive')}
+              ><MarqueeSelectIcon /></CanvasRailToggle>}
+              <CanvasRailToggle
+                pressed={filesOpen}
+                onClick={() => setFilesOpen((value) => !value)}
+                label={tFiles('title')}
+              ><CanvasFilesIcon /></CanvasRailToggle>
+              <CanvasRailToggle
+                pressed={outlineOpen}
+                onClick={() => setOutlineOpen((value) => !value)}
+                label={t('canvasOutline')}
+              ><AccessibleOutlineIcon /></CanvasRailToggle>
+            </>}
+          />
         </ReactFlow>
+        </BrainSurfaceProvider>
+
+        {/* The phone's board controls. Every command draws its glyph from the shared
+            canvas icon set, so the rail is one toolbar at one size rather than a
+            column of whatever a phone font makes of ⌗ / ⌘ / ◱ next to two real icons. */}
+        <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
+          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}><ZoomInIcon /></button>
+          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}><ZoomOutIcon /></button>
+          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
+          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}><CleanLayoutIcon /></button>
+          <button type="button" onClick={threeD.toggle} aria-pressed={threeD.active} aria-label={tCommands('threeD.toggle')}><ThreeDIcon /></button>
+          {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}><DepthIcon /></button>}
+          {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}
+          {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
+          <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
+          <button type="button" onClick={() => setDriveOpen((value) => !value)} aria-pressed={driveOpen} aria-label={tDrive('title')}><CanvasDriveIcon /></button>
+          <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
+        </div>
+
+        {threeD.active && <Canvas3DView
+          nodes={threeDNodes}
+          edges={edges}
+          describe={describeThreeD}
+          measure={canvasNodeDimensions}
+          selectedIds={effectiveSelectedIds}
+          onSelect={selectThreeDObject}
+          onMove={canEdit ? moveThreeDObjects : undefined}
+          onExit={threeD.exit}
+          initialDepthMode={comparisonModelIds.length >= 2 ? 'group' : 'flow'}
+        />}
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
-        <details className={styles.structuredGraph}><summary>Accessible canvas outline</summary><ol>{nodes.map((node) => <li key={node.id}><button aria-label={`Focus ${node.data.title}`} onClick={() => { setSelectedId(node.id); setSelectedIds([node.id]); }}>{node.data.title} ({node.data.kind})</button><span>{node.data.status || 'Canvas object'}{node.data.placementLocked === true ? ' · placement locked' : ''}</span><ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>{String(edge.data?.connectionKind || 'reference')} connection to {nodes.find((target) => target.id === edge.target)?.data.title || 'object'}{edge.label ? `: ${String(edge.label)}` : ''}</li>)}</ul></li>)}</ol></details>
+        {filesOpen && <CanvasFilesPanel
+          files={sessionFiles}
+          onOpen={(nodeId) => { setInspectorFocus(null); setSelectedId(nodeId); setSelectedIds([nodeId]); void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 }); }}
+          onDownload={downloadCanvasFile}
+          onClose={() => setFilesOpen(false)}
+        />}
+        {gameFocus && gamePanelTarget && <CanvasGamePanel
+          open
+          onClose={() => setGameFocus(null)}
+          projectId={gamePanelTarget.projectId}
+          game={gamePanelTarget.game}
+          onNotice={setNotice}
+        />}
+        {driveOpen && <CanvasDrivePanel
+          onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
+          onClose={() => setDriveOpen(false)}
+          returnTo={`/create/${sessionId}`}
+        />}
+        {outlineOpen && <CanvasOutlinePanel
+          nodes={nodes}
+          edges={edges}
+          onFocus={(nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); }}
+          onClose={() => setOutlineOpen(false)}
+        />}
 
-        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label="Toggle object palette">{paletteOpen ? '‹' : '+'}</button>}
+        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" className={styles.palette}>
-          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden>⌕</span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
-          <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
+          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
+          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
+          <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
             return <section key={group.group} className={styles.paletteSection}>
-              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
-                <span className={styles.paletteGroupIcon} aria-hidden>{PALETTE_GROUP_ICONS[group.group]}</span><strong>{group.group}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden>{collapsed ? '›' : '⌄'}</span>
+              {/* Named explicitly: without it the control's accessible name is
+                  its own contents — "Build 22 ⌄" — which tells a screen-reader
+                  user nothing about what pressing it does, and silently changes
+                  every time an object is added to the group. */}
+              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} aria-label={t(collapsed ? 'expandPaletteGroup' : 'collapsePaletteGroup', { group: t(`group.${group.group}`) })} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
+                <span className={styles.paletteGroupIcon} aria-hidden><Icon source={PALETTE_GROUP_ICONS[group.group]} size={18} /></span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden><Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} /></span>
               </button>
-              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div>}
+              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span><Icon source={item.icon} size={20} /></span>{t(`object.${item.kind}`)}</button>)}</div>}
             </section>;
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
 
-        {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
-          <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
-          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice('Workflow saved from this Session'); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(`Workflow run ${workflowId} started`); }} /></ReactFlowProvider></div>
+        {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
+          <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
+          <div className={styles.buildFocusBody}>
+            <CanvasBuildPanel
+              storageProjectId={buildFocus.storageProjectId}
+              initialChatId={initialBuildChatId}
+              initialTicket={initialBuildTicket ?? undefined}
+              onClose={() => setBuildFocus(null)}
+              onProjectRenamed={(name) => setNodes((current) => current.map((node) => node.id === buildFocus.nodeId ? { ...node, data: { ...node.data, title: name } } : node))}
+            />
+          </div>
         </section>}
 
-        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
-        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
-        {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label="Canvas diagnostics"><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label="Close diagnostics">×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>Session</dt><dd>{persistence} · revision {revision.current}</dd></div><div><dt>Realtime</dt><dd>{realtimeState}</dd></div><div><dt>Canvas</dt><dd>{nodes.length} objects · {edges.length} connections</dd></div><div><dt>Brain</dt><dd>{thinking ? 'responding' : 'ready'} · {canvasActions.length} actions</dd></div><div><dt>Scope</dt><dd>{resolvedScopeMode}</dd></div><div><dt>Access</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
+        {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('workflowFocusEditor')}>
+          <header><div><strong>{t('editWorkflowOnCanvas')}</strong><small>{t('editWorkflowHint')}</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label={t('closeWorkflowEditor')}>×</button></header>
+          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice(t('workflowSaved')); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(t('noticeWorkflowRunStarted', { id: workflowId })); }} /></ReactFlowProvider></div>
+        </section>}
 
-        {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title="Apply this batch and automatically apply following Brain actions">Apply &amp; auto-apply</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
-        {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
-
-        {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}>
-            <button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button>
-            <label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label>
-            <ModelSelectionPicker selection={modelSelection} options={canvasModelOptions} onChange={setModelSelection} ariaLabel="Choose Canvas chat model" />
-            <button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} aria-label="Auto apply" title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span><span className={styles.composerActionLabel}>Auto apply</span></button>
-            <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label="Memory" disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>Memory</span></button>
-            <span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button>
+        {trainingFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('evermindAdapterStudio')}>
+          <header><div><strong>{t('trainEvermindOnCanvas')}</strong><small>{t('trainEvermindHint')}</small></div><button type="button" onClick={() => setTrainingFocus(null)} aria-label={t('closeAdapterStudio')}>×</button></header>
+          <div className={styles.workflowFocusBody} style={{ overflow: 'auto', background: 'var(--bg-elevated)', justifyContent: 'center', padding: 20 }}>
+            <AITrainingPanel
+              projectId={trainingFocus.projectId}
+              initialDataMode={trainingFocus.localOnly ? 'local-only' : 'workspace'}
+              workspaceEnabled={!trainingFocus.localOnly}
+              onJobCompleted={(job) => {
+                setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Adapter trained', trainingJobId: job.id, adapterArtifact: job.r2_artifact_key, model: job.base_model, loraRank: job.lora_rank } } : node));
+                setNotice(t('adapterTrained'));
+              }}
+              onLocalArtifactCompleted={(artifact) => {
+                setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Local adapter trained', adapterArtifact: `local://${artifact.filename}`, trainableParams: artifact.trainableParams } } : node));
+                setNotice(t('localAdapterTrained'));
+              }}
+              onModelPublished={(model) => {
+                setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Published', model: model.ref, modelSlug: model.slug, evermindRef: model.evermindRef, publishedAt: new Date().toISOString() } } : node));
+                setNotice(t('noticeEvermindPublished', { ref: model.ref }));
+              }}
+            />
           </div>
-        </form>}
+        </section>}
+
+        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: new Date(snapshot.createdAt).toLocaleString() })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
+        {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
+          <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
+          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
+            const comparable = metric.current != null && metric.baseline != null;
+            const delta = comparable ? metric.current! - metric.baseline! : null;
+            const improving = delta == null ? null : metric.direction === 'higher' ? delta >= 0 : false;
+            const favorable = improving == null ? null : improving || (metric.direction !== 'higher' && delta! <= 0);
+            return <article key={metric.key} className={styles.outcomeMetric}>
+              <div><strong>{metric.label}</strong><span>{formatOutcomeValue(metric.current, metric.unit)}</span></div>
+              <small>{metric.baseline == null ? t('baselineGathering') : t('typicalValue', { value: formatOutcomeValue(metric.baseline, metric.unit) })}{delta != null && Math.abs(delta) > .0001 ? <em data-positive={favorable}>{favorable ? <Icon source="↗" size="1em" /> : <Icon source="↘" size="1em" />}</em> : null}</small>
+            </article>;
+          })}</div> : null}
+          <footer><span>{t('correlationCoverage')}</span><small>{t('aggregatesScoped')}</small></footer>
+        </aside>}
+        {conversationOpen && <aside className={styles.historyPanel} aria-label={t('sessionConversation')}><header><div><strong>{t('sessionConversation')}</strong><small>{t('sessionConversationHint')}</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label={t('closeConversation')}>×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>{t('brainEmpty')}</p>}</div></aside>}
+        {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label={t('canvasDiagnostics')}><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label={t('closeDiagnostics')}>×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>{t('diagSession')}</dt><dd>{t('diagSessionValue', { persistence, revision: revision.current })}</dd></div><div><dt>{t('diagRealtime')}</dt><dd>{realtimeState}</dd></div><div><dt>{t('diagCanvas')}</dt><dd>{t('diagCanvasValue', { objects: nodes.length, connections: edges.length })}</dd></div><div><dt>{t('brain')}</dt><dd>{t('diagBrainValue', { state: thinking ? t('diagResponding') : t('diagReady'), actions: canvasActions.length })}</dd></div><div><dt>{t('diagScope')}</dt><dd>{resolvedScopeMode}</dd></div><div><dt>{t('diagAccess')}</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
+
+        {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>{t('reviewBrainChanges')}</strong><small>{t('reviewBrainChangesHint')}</small></div><button onClick={rejectProposedChanges} aria-label={t('closeChangeSet')}>×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>{t('rejectAll')}</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title={t('applyAutoApplyHint')}>{t('applyAutoApply')}</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>{t('applySelected', { count: acceptedProposalIds.size })}</button></footer></aside>}
+        {mergeReview && <aside className={styles.mergePanel}><header><div><strong>{t('mergeBranch')}</strong><p>{t('mergeBranchHint')}</p></div><button onClick={() => setMergeReview(null)} aria-label={t('closeMergeReview')}>×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? t('mergeBothContain', { kind: item.source.data.kind }) : t('mergeNewFromBranch', { kind: item.source.data.kind })}</small>{item.target && <span><select aria-label={t('mergeChoiceFor', { title: item.source.data.title })} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">{t('useBranchVersion')}</option><option value="parent">{t('keepParentVersion')}</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>{t('applyReviewedMerge')}</button></aside>}
+
+        {/* Docked ONLY. An inline Brain renders inside its Object on the graph, so
+            rendering the edge panel here too would put the same live conversation on
+            screen twice — the duplicate this placement model exists to prevent. */}
+        {brainSurfaceOpen && brainPlacement === 'docked' && <BrainDock
+          mode={brainPlacement}
+          side={brainDock.side}
+          size={brainDock.size}
+          width={brainDockWidth(brainDock)}
+          showExecutionDetail={brainDock.showExecutionDetail}
+          onModeChange={(mode) => updateBrainDock({ mode })}
+          onSideChange={(side) => updateBrainDock({ side })}
+          // Switching preset clears a stale drag width, so "expand" always expands.
+          onSizeChange={(size) => updateBrainDock({ size, width: null })}
+          onWidthChange={(width, commit) => updateBrainDock({ width }, commit)}
+          onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
+          onClose={() => updateBrainDock({ open: false })}
+          messages={brainMessages}
+          trace={brainTrace}
+          running={thinking}
+          runStartedAt={brainRunStartedAt}
+          node={brainNode}
+          nodes={nodes}
+          edges={edges}
+          collaborators={members.filter((member) => member.userId !== currentUserId)}
+          joinedCollaborator={joinedCollaborator}
+        />}
+        {composer}
+        {/* The way back to a closed Brain. An inline Brain that still has its Object on
+            the board already offers one ("Open Brain chat"), so the pill would be a
+            second control for the same thing — it appears only when there is no Object
+            to click, which is exactly when the board has no other route back. */}
+        {!presentMode && !brainDock.open && (brainPlacement === 'docked' || !brainNode) && <button
+          type="button"
+          className={styles.brainDockLauncher}
+          data-side={brainDock.side}
+          aria-label={t('openBrainDock')}
+          title={t('openBrainDock')}
+          onClick={() => updateBrainDock({ open: true })}
+        ><span aria-hidden><Icon source="✦" size="1em" /></span>{t('brain')}</button>}
       </div>
+      <SectionTour
+        phase={sectionTour.phase}
+        step={sectionTour.step}
+        steps={tourSteps}
+        label={t('tourLabel')}
+        offerTitle={t('tourOfferTitle')}
+        offerBody={t('tourOfferBody')}
+        startLabel={t('tourStart')}
+        cancelLabel={t('tourCancel')}
+        closeLabel={t('tourClose')}
+        backLabel={t('back')}
+        nextLabel={t('next')}
+        finishLabel={t('startCreating')}
+        stepLabel={(current) => t('tourStep', { step: current })}
+        onStart={sectionTour.start}
+        onCancel={sectionTour.cancel}
+        onNext={() => sectionTour.next(tourSteps.length)}
+        onBack={sectionTour.back}
+        onStepChange={prepareTourStep}
+      />
     </div>
   );
 }
@@ -2199,62 +5514,53 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   const rect = container.getBoundingClientRect();
   return <div className={styles.remoteCursors} aria-live="polite">{members.filter((member) => member.userId !== currentUserId && typeof member.cursor?.x === 'number' && typeof member.cursor?.y === 'number').map((member, index) => {
     const screen = instance.flowToScreenPosition({ x: member.cursor!.x!, y: member.cursor!.y! });
-    return <span key={member.userId} style={{ left: screen.x - rect.left, top: screen.y - rect.top, color: ['#d946ef', '#f97316', '#059669', '#2563eb'][index % 4] }}><i>◢</i><b>{member.displayName || 'Collaborator'}{member.typing ? ' · typing…' : ''}</b></span>;
+    return <span key={member.userId} style={{ left: screen.x - rect.left, top: screen.y - rect.top, color: ['var(--canvas-presence-1)', 'var(--canvas-presence-2)', 'var(--canvas-presence-3)', 'var(--canvas-presence-4)'][index % 4] }}><i>◢</i><b>{member.displayName || 'Collaborator'}{member.typing ? ' · …' : ''}</b></span>;
   })}</div>;
 }
 
-function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; trace: BrainTraceEvent[] }) {
-  const messages = timeline.length ? timeline : Array.isArray(node.data.messages) ? node.data.messages.flatMap((value) => {
-    if (!value || typeof value !== 'object') return [];
-    const message = value as Record<string, unknown>;
-    if (typeof message.content !== 'string') return [];
-    return [{
-      clientMessageId: `${message.createdAt || 'message'}:${message.role || 'assistant'}:${message.content}`,
-      messageRole: message.role === 'user' || message.role === 'system' ? message.role : 'assistant',
-      body: message.content,
-      createdAt: typeof message.createdAt === 'string' ? message.createdAt : '',
-    } satisfies CanvasTimelineMessage];
-  }) : [];
-  const connectedIds = new Set(edges.flatMap((edge) => edge.source === node.id ? [edge.target] : edge.target === node.id ? [edge.source] : []));
-  const connected = nodes.filter((candidate) => candidate.id !== node.id && connectedIds.has(candidate.id));
-  const agents = connected.filter((candidate) => candidate.data.kind === 'agent');
-  const tickets = connected.filter((candidate) => candidate.data.kind === 'task');
-  const related = connected.filter((candidate) => candidate.data.kind !== 'agent' && candidate.data.kind !== 'task');
-  const canonicalChatId = node.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
-  const connectedProjectId = connected.find((candidate) => candidate.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-  const timelineMessages: BrainMessage[] = messages.map((message, index) => ({
-    id: index + 1,
-    seq: index + 1,
-    role: message.messageRole,
-    content: message.body,
-    metadata: null,
-    createdAt: message.createdAt,
-  }));
-  const visibleTrace = trace.length ? trace : Array.isArray(node.data.trace) ? node.data.trace.filter((value): value is BrainTraceEvent => !!value && typeof value === 'object' && typeof (value as { ts?: unknown }).ts === 'string' && typeof (value as { category?: unknown }).category === 'string' && typeof (value as { label?: unknown }).label === 'string') : [];
-  const roster = (items: CreationFlowNode[], empty: string) => items.length ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}><span aria-hidden>{creationObjectDefinition(item.data.kind).icon}</span><p><b>{item.data.title}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p></div>)}</div> : <p className={styles.brainEmpty}>{empty}</p>;
-
-  return <div className={styles.brainDetails}>
-    <section aria-labelledby="brain-conversation-heading">
-      <div className={styles.brainSectionHeading}><h3 id="brain-conversation-heading">Conversation</h3><span>{messages.length}</span></div>
-      <div className={styles.brainInspectorTimeline} role="log" aria-label="Full Brain activity" tabIndex={0}>
-        <BrainTimeline messages={timelineMessages} trace={visibleTrace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
-      </div>
-    </section>
-    {canonicalChatId ? <section aria-label="Brain chat associations" className={styles.brainCanonicalAssociations}>
-      <ChatTicketsPanel chatId={Number(canonicalChatId)} projectId={connectedProjectId ? Number(connectedProjectId) : null} chatList={[{ id: Number(canonicalChatId), title: node.data.title }]} />
-    </section> : <>
-      <section aria-labelledby="brain-agents-heading"><div className={styles.brainSectionHeading}><h3 id="brain-agents-heading">Agents</h3><span>{agents.length}</span></div>{roster(agents, 'No agents associated with this chat.')}</section>
-      <section aria-labelledby="brain-tickets-heading"><div className={styles.brainSectionHeading}><h3 id="brain-tickets-heading">Associated tickets</h3><span>{tickets.length}</span></div>{roster(tickets, 'No tickets associated with this chat.')}</section>
-      <section aria-labelledby="brain-objects-heading"><div className={styles.brainSectionHeading}><h3 id="brain-objects-heading">Connected objects</h3><span>{related.length}</span></div>{roster(related, 'No other objects connected yet.')}</section>
-    </>}
-  </div>;
+function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode; nodes: CreationFlowNode[]; onChange: (patch: Partial<CreationNodeData>) => void }) {
+  const t = useTranslations('creationCanvas.tourBuilder');
+  const objectT = useTranslations('creationCanvas.object');
+  const tour = canvasTourDesignFromNode(node.data);
+  const update = (patch: Partial<CanvasTourDesign>) => {
+    const next = { ...tour, ...patch };
+    onChange({ tour: next, status: t('draftSteps', { count: next.steps.length }) });
+  };
+  const updateStep = (index: number, patch: Partial<CanvasTourDesign['steps'][number]>) => update({ steps: tour.steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step) });
+  const targets = nodes.filter((candidate) => candidate.id !== node.id);
+  return <section className={styles.tourInspector} aria-label={t('settings')}>
+    <p className={styles.inspectorHint}>{t('settingsHint')}</p>
+    <label>{t('offerTitle')}<input value={tour.offerTitle} onChange={(event) => update({ offerTitle: event.target.value })} /></label>
+    <label>{t('offerBody')}<textarea rows={3} value={tour.offerBody} onChange={(event) => update({ offerBody: event.target.value })} /></label>
+    <div className={styles.tourInspectorGrid}>
+      <label>{t('version')}<input type="number" min={1} max={999} value={tour.version} onChange={(event) => update({ version: Number(event.target.value) || 1 })} /></label>
+      <label>{t('minimumVisits')}<input type="number" min={1} max={20} value={tour.minimumVisits} onChange={(event) => update({ minimumVisits: Number(event.target.value) || 1 })} /></label>
+    </div>
+    <label className={styles.tourToggle}><input type="checkbox" checked={tour.blurBackground} onChange={(event) => update({ blurBackground: event.target.checked })} /><span>{t('blurBackground')}</span></label>
+    <label className={styles.tourToggle}><input type="checkbox" checked disabled /><span>{t('escapeHatch')}</span></label>
+    <div className={styles.tourStepEditor}>
+      <div className={styles.tourStepEditorHeader}><strong>{t('steps')}</strong><button type="button" onClick={() => update({ steps: [...tour.steps, { id: crypto.randomUUID(), title: t('newStepTitle'), body: '', targetObjectId: '' }] })}>{t('addStep')}</button></div>
+      {tour.steps.map((step, index) => <fieldset key={step.id} className={styles.tourStepFields}>
+        <legend>{t('stepOf', { current: index + 1, total: tour.steps.length })}</legend>
+        <label>{t('stepTitle')}<input value={step.title} onChange={(event) => updateStep(index, { title: event.target.value })} /></label>
+        <label>{t('stepBody')}<textarea rows={2} value={step.body} onChange={(event) => updateStep(index, { body: event.target.value })} /></label>
+        <label>{t('targetObject')}<select value={step.targetObjectId} onChange={(event) => updateStep(index, { targetObjectId: event.target.value })}><option value="">{t('chooseTarget')}</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.data.title} · {objectT(target.data.kind)}</option>)}</select></label>
+        <button type="button" disabled={tour.steps.length <= 1} onClick={() => update({ steps: tour.steps.filter((_, stepIndex) => stepIndex !== index) })}>{t('removeStep')}</button>
+      </fieldset>)}
+    </div>
+  </section>;
 }
 
-function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+  const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
+  const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
+  const websiteHero = websiteHeroFrom(node.data);
+  const websiteTheme = websiteThemeFrom(node.data);
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
   const [actionStatus, setActionStatus] = useState('');
+  const [knowledgeDraft, setKnowledgeDraft] = useState('');
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     if (typeof window === 'undefined') return INSPECTOR_DEFAULT_WIDTH;
     const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY));
@@ -2265,6 +5571,11 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
   const inspectorWidthRef = useRef(inspectorWidth);
   const restoreInspectorWidth = useRef(INSPECTOR_DEFAULT_WIDTH);
   const resizeStart = useRef({ pointerX: 0, width: INSPECTOR_DEFAULT_WIDTH });
+  useEffect(() => {
+    if (!focus) return;
+    const frame = window.requestAnimationFrame(() => inspectorRef.current?.querySelector<HTMLElement>(`[data-inspector-section="${focus}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [focus, node.id]);
   const maxInspectorWidth = useCallback(() => {
     const available = inspectorRef.current?.parentElement?.getBoundingClientRect().width;
     return available && available > INSPECTOR_MIN_WIDTH
@@ -2298,11 +5609,17 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
     setExpandedInspector(false);
     applyInspectorWidth(next, true);
   };
-  const markdown = artifactMarkdown(node.data);
-  const csv = artifactCsv(node.data);
+  const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
+  const drawioTargets = nodes.filter((candidate) => candidate.id !== node.id && candidate.data.kind === 'diagram' && canvasDiagram(candidate.data)?.format === 'drawio');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
+  const isExistingAgent = kind === 'agent' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('agent:');
+  const connectedAgentKnowledge = kind === 'agent' ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : [];
+  const connectedAgentEvaluation = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'evaluation' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
+  const connectedAgentRelease = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'release' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
+  const deliveryAgent = kind === 'release' ? (nodes.find((candidate) => candidate.data.kind === 'agent' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) || (nodes.filter((candidate) => candidate.data.kind === 'agent').length === 1 ? nodes.find((candidate) => candidate.data.kind === 'agent') : undefined)) : undefined;
+  const deliveryKnowledgeCount = deliveryAgent ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === deliveryAgent.id && edge.target === candidate.id) || (edge.target === deliveryAgent.id && edge.source === candidate.id))).length : 0;
   const availableAgentTools = ['Audience Analyzer', 'Copy Optimizer', 'Research', 'Browser'];
   const mockupProjects = nodes.filter((candidate) => candidate.data.kind === 'project');
   const mockupAgents = taskAgents;
@@ -2328,47 +5645,24 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
     done: 'This task is complete. Reopen it only when the PRD or acceptance criteria are not satisfied.',
   };
   const persistTaskPatch = async (apiPatch: Parameters<typeof tasksApi.update>[1], canvasPatch: Partial<CreationNodeData>) => {
-    setActionStatus('Saving task…');
+    setActionStatus(t('savingTask'));
     try {
       if (taskId != null && persistence === 'server') await tasksApi.update(taskId, apiPatch);
       onChange(canvasPatch);
-      setActionStatus(taskId != null && persistence === 'server' ? 'Task updated' : 'Task updated in this session');
+      setActionStatus(taskId != null && persistence === 'server' ? t('taskUpdated') : t('taskUpdatedLocal'));
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : 'Task update failed');
+      setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed'));
     }
   };
-  const runArtifactAction = async (action: 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json') => {
-    setActionStatus('Preparing…');
-    try {
-      const base = safeDownloadName(node.data.title);
-      if (action === 'copy') {
-        setActionStatus(await copyTextToClipboard(markdown) ? 'Copied to clipboard' : 'Clipboard access was unavailable');
-        return;
-      }
-      if (action === 'markdown') downloadText(markdown, `${base}.md`, 'text/markdown');
-      if (action === 'csv') {
-        if (!csv) throw new Error('This object does not contain tabular rows yet');
-        exportCsv(csv, `${base}.csv`);
-      }
-      if (action === 'docx') {
-        if (persistence === 'local') downloadText(markdown, `${base}.md`, 'text/markdown');
-        else await exportDocx(markdown, node.data.title);
-      }
-      if (action === 'pptx') {
-        if (persistence === 'local') downloadText(markdown, `${base}.md`, 'text/markdown');
-        else await exportPptx(markdown, node.data.title);
-      }
-      if (action === 'json') downloadJson({ kind, title: node.data.title, data: node.data }, `${base}.json`);
-      setActionStatus(action === 'docx' && persistence === 'local' || action === 'pptx' && persistence === 'local' ? 'Markdown downloaded; save the Session for Office export' : 'Download ready');
-    } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : 'Export failed');
-    }
+  const runArtifactAction = async (action: CanvasExportAction) => {
+    setActionStatus(t('preparing'));
+    setActionStatus(await onExportArtifact(action));
   };
   return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
     <div
       className={styles.inspectorResizeHandle}
       role="separator"
-      aria-label="Resize details panel"
+      aria-label={t('resizeDetailsPanel')}
       aria-orientation="vertical"
       aria-valuemin={INSPECTOR_MIN_WIDTH}
       aria-valuemax={maxInspectorWidth()}
@@ -2390,89 +5684,474 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidthRef.current));
       }}
     />
-    <header><div className={styles.inspectorTitle}><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><div className={styles.inspectorHeaderActions}><button type="button" onClick={toggleInspectorWidth} aria-label={expandedInspector ? 'Restore details panel width' : 'Expand details panel'} title={expandedInspector ? 'Restore panel width' : 'Expand panel'}>{expandedInspector ? '⇥' : '↔'}</button><button type="button" onClick={onClose} aria-label="Close inspector">×</button></div></header>
-    <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>Details</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>Activity</button></div>
+    <header><div className={styles.inspectorTitle}><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>{t('liveKind', { kind })}</small></div><div className={styles.inspectorHeaderActions}><button type="button" onClick={toggleInspectorWidth} aria-label={expandedInspector ? t('restoreDetailsWidth') : t('expandDetailsPanel')} title={expandedInspector ? t('restorePanelWidth') : t('expandPanel')}>{expandedInspector ? '⇥' : <Icon source="↔" size="1em" />}</button><button type="button" onClick={onClose} aria-label={t('closeInspector')}>×</button></div></header>
+    <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>{t('details')}</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>{t('activity')}</button></div>
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
-      {node.data.redacted === true && <><p className={styles.inspectorHint}>You can see this object’s position, but its source is no longer available to you.</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus('Requesting…'); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus('Access requested')).catch((error) => setAccessStatus(error instanceof Error ? error.message : 'Request failed')); }}>{accessStatus || 'Request access'}</button></>}
-      <label>Name<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
-      {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={`Evermind setup step ${node.data.pipelineStep}`}><span>Evermind setup · {node.data.pipelineStep} of 5</span><strong>{node.data.pipelineStart === true ? 'Start here' : node.data.title}</strong><p>{String(node.data.pipelineInstruction || 'Complete this stage, then follow the numbered connection to the next card.')}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>Use the file picker directly below to begin.</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>Data is ready. Follow “2 · examples” to Tokenize examples.</small>}</section>}
-      {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} trace={brainTrace} />}
+      {node.data.redacted === true && <><p className={styles.inspectorHint}>{t('redactedObject')}</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus(t('requesting')); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus(t('accessRequested'))).catch((error) => setAccessStatus(error instanceof Error ? error.message : t('requestFailed'))); }}>{accessStatus || t('requestAccess')}</button></>}
+      <label>{t('name')}<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
+      {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={t('evermindSetupStep', { step: node.data.pipelineStep })}><span>{t('evermindSetupOf5', { step: node.data.pipelineStep })}</span><strong>{node.data.pipelineStart === true ? t('startHere') : node.data.title}</strong><p>{String(node.data.pipelineInstruction || t('pipelineStageHint'))}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>{t('useFilePicker')}</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>{t('dataReadyNext')}</small>}</section>}
       {kind === 'agent' && <>
-        <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
-        <label>Instructions<textarea value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} /></label>
-        <label>Tools<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={`Remove ${tool}`} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>+ Add tool</button></div></label>
-        <label>Autonomy<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">Medium · request approvals</option><option value="low">Low · suggest only</option><option value="high">High · act within policy</option></select></label>
-        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
+        <section className={styles.agentSetupGuide} data-existing={isExistingAgent} aria-label={t('agentSetupProgress')}>
+          <strong>{isExistingAgent ? t('agentExisting') : t('agentPrepareNew')}</strong>
+          <p>{isExistingAgent ? t('agentExistingHint') : t('agentPrepareHint')}</p>
+          {!isExistingAgent && <div className={styles.agentSetupSteps}><span data-done={!!String(node.data.personality || '').trim()}>{t('agentStepPersonality')}</span><span data-done={connectedAgentKnowledge.length > 0}>{connectedAgentKnowledge.length ? t('agentStepTrainingAdded') : t('agentStepTrainingNeeded')}</span><span data-done={!!String(node.data.instructions || '').trim()}>{t('agentStepDirection')}</span><span data-done={!!node.data.testResponse}>{node.data.testResponse ? t('agentStepTestRun') : t('agentStepTestNeeded')}</span></div>}
+        </section>
+        {!isExistingAgent && <label>{t('personality')}<textarea aria-label={t('personality')} value={typeof node.data.personality === 'string' ? node.data.personality : ''} onChange={(event) => onChange({ personality: event.target.value })} rows={3} placeholder={t('personalityPlaceholder')} /></label>}
+        <label>{t('model')}<select value={node.data.model || 'auto'} onChange={(event) => onChange({ model: event.target.value })}><option value="auto">{t('modelAuto')}</option><option value="gpt-4o">gpt-4o</option><option value="claude-3.5-sonnet">claude-3.5-sonnet</option><option value="Evermind">Evermind</option></select></label>
+        <label>{isExistingAgent ? t('instructions') : t('agentDirection')}<textarea aria-label={t('instructions')} value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} placeholder={isExistingAgent ? undefined : t('agentDirectionPlaceholder')} /></label>
+        <label>{t('tools')}<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={t('removeTool', { tool })} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>{t('addTool')}</button></div></label>
+        <label>{t('autonomy')}<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">{t('autonomyMedium')}</option><option value="low">{t('autonomyLow')}</option><option value="high">{t('autonomyHigh')}</option></select></label>
+        <section className={styles.agentWorkbench} aria-label={t('agentKnowledge')} data-inspector-section="knowledge">
+          <div className={styles.workbenchHeading}><strong>{t('knowledge')}</strong><span>{t('connectedCount', { count: connectedAgentKnowledge.length })}</span></div>
+          {connectedAgentKnowledge.length > 0 && <div className={styles.knowledgeList}>{connectedAgentKnowledge.map((item) => <span key={item.id}>{item.data.kind} · {item.data.title}</span>)}</div>}
+          <label>{t('addKnowledge')}<textarea rows={4} value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder={t('addKnowledgePlaceholder')} /></label>
+          <button type="button" className={styles.fullButton} disabled={!knowledgeDraft.trim()} onClick={() => { onAddAgentKnowledge(knowledgeDraft); setKnowledgeDraft(''); }}>{t('addAndConnectKnowledge')}</button>
+        </section>
+        <section className={styles.agentWorkbench} aria-label={t('agentTestBench')} data-inspector-section="test">
+          <div className={styles.workbenchHeading}><strong>{t('testBench')}</strong><span>{String(node.data.testStatus || t('notRun'))}</span></div>
+          <label>{t('customerMessage')}<textarea rows={3} value={typeof node.data.testPrompt === 'string' ? node.data.testPrompt : ''} onChange={(event) => onChange({ testPrompt: event.target.value })} placeholder={t('customerMessagePlaceholder')} /></label>
+          <label>{t('expectedSignals')}<textarea rows={2} value={typeof node.data.testExpected === 'string' ? node.data.testExpected : ''} onChange={(event) => onChange({ testExpected: event.target.value })} placeholder={t('expectedSignalsPlaceholder')} /></label>
+          <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? t('runningTest') : t('runAgentTest')}</button>
+          {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{node.data.testResponse}</p></div>}
+        </section>
+        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : t('createInviteAgent')}</button>
       </>}
-      {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
-      {kind === 'workflow' && <><label>Execution target<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>Approval mode<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">Required before publish</option><option value="autonomous">Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
-      {kind === 'dashboard' && <><label>Date range<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option><option value="qtd">Quarter to date</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>Refresh live data</button></>}
-      {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
+      {kind === 'evaluation' && <section data-inspector-section="evaluation">
+        <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || t('notRun'))}</strong><span>{typeof node.data.passRate === 'number' ? t('passRate', { rate: node.data.passRate }) : t('runTestForResult')}</span></div>
+        <label>{t('evaluationCriteria')}<textarea rows={5} value={typeof node.data.criteria === 'string' ? node.data.criteria : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ criteria: event.target.value })} placeholder={t('evaluationCriteriaPlaceholder')} /></label>
+        <p className={styles.inspectorHint}>{t('evaluationHint')}</p>
+        {Array.isArray(node.data.testResults) && node.data.testResults.length > 0 && <div className={styles.testResults}>{node.data.testResults.slice(0, 10).map((value, index) => { const result = value as Record<string, unknown>; return <div key={String(result.id || index)}><b>{String(result.status || t('completed'))}</b><span>{String(result.prompt || t('testCase'))}</span><small>{String(result.runAt || '')}</small></div>; })}</div>}
+      </section>}
+      {kind === 'release' && <section className={styles.deliveryChecklist} data-inspector-section="delivery" aria-label={t('agentDeliveryChecklist')}>
+        <strong>{t('deliveryChecklist')}</strong>
+        <span>{`${deliveryAgent ? '✓' : '○'} ${t('agentSelected')} ${deliveryAgent ? `· ${deliveryAgent.data.title}` : `· ${t('connectAgentCard')}`}`}</span>
+        <span>{`${deliveryKnowledgeCount > 0 ? '✓' : '○'} ${t('knowledgeConnected')} ${deliveryKnowledgeCount ? `· ${t('sourceCount', { count: deliveryKnowledgeCount })}` : ''}`}</span>
+        <span>{`${deliveryAgent?.data.testResponse ? '✓' : '○'} ${t('testResponseRecorded')}`}</span>
+        <span>{`${deliveryAgent?.data.resourceId ? '✓' : '○'} ${t('workforceAgentSaved')}`}</span>
+        <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? t('deliveryConnectedHint') : t('deliveryPendingHint')}</p>
+      </section>}
+      {kind === 'staff' && <><label>{t('role')}<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>{t('currentFocus')}<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={websiteHero.heading} onChange={(event) => onWebsiteChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={websiteHero.body} onChange={(event) => onWebsiteChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={websiteHero.cta} onChange={(event) => onWebsiteChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={websiteTheme.accent && /^#[0-9a-f]{6}$/i.test(websiteTheme.accent) ? websiteTheme.accent : AUTHORED_WEBSITE_ACCENT} onChange={(event) => onChange({ websiteAccent: event.target.value, websiteTheme: { ...(typeof node.data.websiteTheme === 'object' && node.data.websiteTheme ? node.data.websiteTheme as Record<string, unknown> : {}), accent: event.target.value } })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
+      {kind === 'guidedTour' && <GuidedTourInspector node={node} nodes={nodes} onChange={onChange} />}
+      {kind === 'build' && <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />}
+      {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 'var(--radius-lg)' }} />}</>}
+      {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button type="button" className={styles.fullButton} onClick={onBuildWorkflow}>{t('buildWorkflow')}</button><button className={styles.fullButton} onClick={onRun}>{`${t('runWorkflow')}`}</button></>}
+      {kind === 'dashboard' && <><label>{t('dateRange')}<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">{t('last30Days')}</option><option value="7d">{t('last7Days')}</option><option value="qtd">{t('quarterToDate')}</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>{t('refreshLiveData')}</button></>}
+      {kind === 'dataset' && <>
+        <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
+        <p className={styles.inspectorHint}>{t('datasetImportHint')}</p>
+        <DatasetProfileSummary data={node.data} />
+        <button type="button" className={styles.fullButton} onClick={() => onProfileDataset(node.id)}>{t('datasetProfileAction')}</button>
+        <button type="button" className={styles.fullButton} onClick={onVisualizeDataset}>{t('datasetVisualizeAction')}</button>
+        <DatasetPlotAction data={node.data} onPlot={onPlotDataset} />
+      </>}
+      {kind === 'file' && <>
+        <label>{t('fileNameLabel')}<input value={typeof node.data.fileName === 'string' ? node.data.fileName : node.data.title} onChange={(event) => onChange({ fileName: event.target.value })} /></label>
+        <p className={styles.inspectorHint}>{t('fileInspectorHint')}</p>
+      </>}
+      {isWebPageKind(kind) && <>
+        <label>{t('webPage.addressLabel')}<input
+          type="url"
+          inputMode="url"
+          spellCheck={false}
+          value={typeof node.data.url === 'string' ? node.data.url : ''}
+          placeholder={t('webPage.addressPlaceholder')}
+          onChange={(event) => onChange({ url: event.target.value })}
+          // Clearing the probe is what re-arms the panel: it re-reads the page
+          // and re-asks whether the new origin allows being framed.
+          onBlur={(event) => { const next = normalizeWebPageUrl(event.target.value); if (next) onChange({ url: next, frameCheckedUrl: '', frameable: true, frameBlockedBy: null }); }}
+        /></label>
+        <label>{t('viewport')}<select value={webPageViewport(node.data.viewport)} onChange={(event) => onChange({ viewport: event.target.value })}>
+          <option value="desktop">{t('viewportDesktop')}</option>
+          <option value="tablet">{t('viewportTablet')}</option>
+          <option value="mobile">{t('viewportMobile')}</option>
+        </select></label>
+        <button type="button" className={styles.fullButton} disabled={!canvasWebPageUrl(node.data)} onClick={() => onChange({ frameCheckedUrl: '' })}>{t('webPage.reread')}</button>
+        <p className={styles.inspectorHint}>{t('webPage.inspectorHint')}</p>
+        {node.data.frameable === false && <p className={styles.inspectorHint}>{t('webPage.blockedHint')}</p>}
+      </>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
-      {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Load its quality evidence, add related work, or compare it with every other project on the canvas.</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>Visualize quality diagnostics</button><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
+      {kind === 'project' && <><label>{t('projectView')}<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">{t('lensEverything')}</option><option value="delivery">{t('lensDelivery')}</option><option value="metrics">{t('lensMetrics')}</option><option value="customer-feedback">{t('lensFeedback')}</option></select></label><p className={styles.inspectorHint}>{t('projectContextHint')}</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>{t('visualizeQuality')}</button><button className={styles.fullButton} onClick={onExpandProject}>{t('addRelatedItems')}</button><button className={styles.fullButton} onClick={onCompareProjects}>{t('compareProjects')}</button></>}
       {kind === 'task' && <>
         <div className={styles.taskInspectorGrid}>
-          <label>Status<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
+          <label>{t('status')}<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
             {!['backlog','todo','ready','assigned','in_progress','in_review','blocked','done'].includes(String(node.data.status || 'ready')) && <option value={String(node.data.status)}>{String(node.data.status)}</option>}
-            <option value="backlog">Backlog</option><option value="todo">To do</option><option value="ready">Ready</option><option value="assigned">Assigned</option><option value="in_progress">In progress</option><option value="in_review">In review</option><option value="blocked">Blocked</option><option value="done">Done</option>
+            <option value="backlog">{t('statusBacklog')}</option><option value="todo">{t('statusTodo')}</option><option value="ready">{t('statusReady')}</option><option value="assigned">{t('statusAssigned')}</option><option value="in_progress">{t('statusInProgress')}</option><option value="in_review">{t('statusInReview')}</option><option value="blocked">{t('statusBlocked')}</option><option value="done">{t('statusDone')}</option>
           </select></label>
-          <label>Priority<select value={typeof node.data.priority === 'string' ? node.data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+          <label>{t('priority')}<select value={typeof node.data.priority === 'string' ? node.data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">{t('priorityLow')}</option><option value="medium">{t('priorityMedium')}</option><option value="high">{t('priorityHigh')}</option><option value="urgent">{t('priorityUrgent')}</option></select></label>
         </div>
-        <div className={styles.statusGuidance}><b>How to move this forward</b><p>{statusGuidance[normalizedTaskStatus] || 'Keep the owner, PRD, acceptance criteria, and current state accurate so the next action is clear.'}</p></div>
-        <label>Assigned agent<select value={taskAgentValue} onChange={(event) => {
+        <div className={styles.statusGuidance}><b>{t('howToMoveForward')}</b><p>{statusGuidance[normalizedTaskStatus] || t('taskGuidanceFallback')}</p></div>
+        <label>{t('assignedAgent')}<select value={taskAgentValue} onChange={(event) => {
           const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === event.target.value);
           const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
-          if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus('Save this Agent before assigning it to a project task'); return; }
+          if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus(t('saveAgentBeforeAssign')); return; }
           void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: event.target.value || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
-        }}><option value="">Unassigned</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
-        <label>Description<textarea rows={5} value={typeof node.data.content === 'string' ? node.data.content : typeof node.data.subtitle === 'string' ? node.data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
-        <label>Acceptance criteria<textarea rows={4} value={typeof node.data.acceptanceCriteria === 'string' ? node.data.acceptanceCriteria : ''} placeholder="What must be true for this task to be done?" onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
-        <section className={styles.taskPrdSummary} aria-label="Task PRD">
-          <div><span>PRD</span>{prdStatus && <small>{prdStatus}</small>}</div>
-          {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>No PRD linked</strong><p>Connect a PRD object to this task or link one from the project task details. The PRD gives the agent the goal and handoff context.</p></>}
+        }}><option value="">{t('unassigned')}</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
+        <label>{t('description')}<textarea rows={5} value={typeof node.data.content === 'string' ? node.data.content : typeof node.data.subtitle === 'string' ? node.data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
+        <label>{t('acceptanceCriteria')}<textarea rows={4} value={typeof node.data.acceptanceCriteria === 'string' ? node.data.acceptanceCriteria : ''} placeholder={t('acceptanceCriteriaPlaceholder')} onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
+        <section className={styles.taskPrdSummary} aria-label={t('taskPrd')}>
+          <div><span>{t('prd')}</span>{prdStatus && <small>{prdStatus}</small>}</div>
+          {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>{t('noPrdLinked')}</strong><p>{t('noPrdLinkedHint')}</p></>}
         </section>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </>}
-      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This portfolio view combines project health with saved quality diagnostics, open gaps, remediation state, and prioritized recommendations.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh quality comparison</button><SourceList sources={node.data.sources} /></>}
-      {kind === 'mockup' && <><label>Delivery project<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : 'No project') }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">No project</option></select></label><label>Assign agent<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : 'Unassigned') }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">Unassigned</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
-      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
-      {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} />}
-      {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
-      {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
-      {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['chat', 'agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
-      </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
-      {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-        <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>Copy</button>}
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>Download Markdown</button>}
-          {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>Download CSV</button>}
-          {kind === 'document' && <button type="button" onClick={() => void runArtifactAction('docx')}>Download Word</button>}
-          {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>Download PowerPoint</button>}
-          {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>Download data</button>}
-        </div>
+      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>{t('portfolioViewHint')}</p><button className={styles.fullButton} onClick={onCompareProjects}>{t('refreshQualityComparison')}</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'mockup' && <><label>{t('deliveryProject')}<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : t('noProject')) }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">{t('noProject')}</option></select></label><label>{t('assignAgent')}<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : t('unassigned')) }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">{t('unassigned')}</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button></>}
+      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>{t('mockupSetHint')}</p><button className={styles.fullButton} onClick={onExpandMockupSet}>{t('expandAllMockups')}</button><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
+      {isPitchObjectKind(kind) && <PitchInspector node={node} editable={editable} onChange={onChange} />}
+      {kind === 'standup' && <><p className={styles.inspectorHint}>{t('standupHint')}</p><button className={styles.fullButton} onClick={onStartStandup}>{t('gatherStandup')}</button></>}
+      {(kind === 'image' || kind === 'drawing') && <section className={styles.taskPrdSummary} aria-label={t('drawioSectionTitle')}>
+        <div><span>{t('drawioSectionTitle')}</span><small>.drawio</small></div>
+        <p>{t('drawioSectionHint')}</p>
+        <button type="button" className={styles.fullButton} onClick={() => setActionStatus(onConvertDrawio('__new__'))}>{t('drawioCreateAction')}</button>
+        {drawioTargets.map((diagram) => <button type="button" key={diagram.id} className={styles.secondaryFullButton} onClick={() => setActionStatus(onConvertDrawio(diagram.id))}>{t('drawioAddAction', { name: diagram.data.title })}</button>)}
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
+      {CREATIVE_GENERATOR_KINDS.has(kind) && <>
+        <label>{t('creativeBrief')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={t('creativeBriefPlaceholder', { label: creationObjectDefinition(kind).label.toLowerCase() })} /></label>
+        <label>{t('templateId')}<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>
+        <label>{t('outputFormat')}<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">{t('chooseOnExport')}</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
+        <section className={styles.taskPrdSummary} aria-label={t('nativeCreativeCapability')}><div><span>{t('creativeCapability')}</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>{t('creativeCapabilityHint')}</p></section>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}{/* A game is the one creative artifact that can be played somewhere other
+              than here — the phone, an app store, Roblox. The panel behind this
+              is where that happens; it stays out of the inspector because it is
+              a flow with its own state, not another action button. */}
+          {kind === 'game' && typeof node.data.outputUrl === 'string' && <button type="button" onClick={onShipGame}>{t('game.shipAction')}</button>}</div>
+      </>}
+      {kind === 'frame' && <><label>{t('purpose')}<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : t('arrangeObjectsHere')} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>{t('fillColor')}<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : AUTHORED_FRAME_FILL} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>{t('borderColor')}<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : AUTHORED_FRAME_BORDER} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>{t('saveReusableFrame')}</button></>}
+      {kind === 'drawing' && <><label>{t('strokeColor')}<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : AUTHORED_DRAWING_STROKE} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>{t('strokeWidth')}<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>{t('drawingHint')}</p></>}
+      {DOCUMENT_EDITOR_KINDS.has(kind) && <label>{kind === 'slides' ? t('deckOutline') : t('documentBody')}<textarea
+        rows={12}
+        aria-label={kind === 'slides' ? t('deckOutline') : t('documentBody')}
+        value={typeof node.data.markdown === 'string' ? node.data.markdown : typeof node.data.content === 'string' ? node.data.content : ''}
+        placeholder={kind === 'slides' ? t('deckOutlinePlaceholder') : t('documentBodyPlaceholder')}
+        onChange={(event) => onChange({ markdown: event.target.value, content: event.target.value })}
+      /></label>}
+      {kind === 'diagram' && <>
+        <label>{t('diagramFormat')}<select value={typeof node.data.diagramFormat === 'string' ? node.data.diagramFormat : 'drawio'} onChange={(event) => onChange({ diagramFormat: event.target.value })}>
+          <option value="drawio">{t('diagramFormatDrawio')}</option>
+          <option value="mermaid">{t('diagramFormatMermaid')}</option>
+        </select></label>
+        <label>{t('diagramSource')}<textarea
+          rows={12}
+          aria-label={t('diagramSource')}
+          value={typeof node.data.diagram === 'string' ? node.data.diagram : typeof node.data.content === 'string' ? node.data.content : ''}
+          placeholder={t('diagramSourcePlaceholder')}
+          onChange={(event) => onChange({ diagram: event.target.value, content: event.target.value })}
+        /></label>
+      </>}
+      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'guidedTour', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
+      </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
+      {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+        <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
+        <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />
+        {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
+      </section>}
+      {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 12 }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 12 }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--error-text)' }}>{deliverable.error}</small>}</div>)}</section>}
     </div>
-    <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus('Task details are saved') : onChange({ status: 'Saved' })}>{kind === 'task' ? 'Save task details' : 'Save changes'}</button></footer>
+    <footer><span>{t('resourceRole', { role })}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus(t('taskDetailsSaved')) : onChange({ status: 'Saved' })}>{kind === 'task' ? t('saveTaskDetails') : t('saveChanges')}</button></footer>
   </aside>;
 }
 
+/**
+ * "Plot on a map", offered only when the rows can actually be plotted.
+ *
+ * It decides its own visibility rather than taking a `canPlot` prop, because the same
+ * `detectGeoColumns` call that answers "should this button exist" also answers "what
+ * would it plot" — splitting those across a parent and a child is how the two get to
+ * disagree. Absent (not disabled) when there are no coordinates: an inert control on a
+ * dataset that will never have geography is noise, whereas the button APPEARING the
+ * moment a lat/lng column lands is the affordance itself.
+ */
+function DatasetPlotAction({ data, onPlot }: { data: CreationNodeData; onPlot: () => void }) {
+  const t = useTranslations('creationCanvas');
+  const source = tabularFromObject(data as Record<string, unknown>);
+  if (!source.columns.length || !source.rows.length) return null;
+  const columns = detectGeoColumns(source);
+  if (!columns.latitude || !columns.longitude) return null;
+  return <>
+    <button type="button" className={styles.fullButton} onClick={onPlot}>{t('datasetPlotAction')}</button>
+    <p className={styles.inspectorHint}>{t('datasetPlotHint', { latitude: columns.latitude, longitude: columns.longitude })}</p>
+  </>;
+}
+
+/**
+ * Column-level shape of an imported dataset. This is what tells a user whether
+ * the column they want to analyze actually survived the import, and it is the
+ * same profile Brain reads before it queries.
+ */
+function DatasetProfileSummary({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas');
+  const profile = Array.isArray(data.profile) ? data.profile as Array<Record<string, unknown>> : [];
+  const rowCount = Number(data.rowCount) || (Array.isArray(data.rows) ? data.rows.length : 0);
+  if (!profile.length) return <p className={styles.inspectorHint}>{rowCount ? t('datasetProfilePending') : t('datasetProfileEmpty')}</p>;
+  return <section className={styles.datasetProfile} aria-label={t('datasetProfileLabel')}>
+    <div className={styles.datasetProfileHead}><strong>{t('datasetProfileLabel')}</strong><span>{t('dataGridShape', { rows: rowCount.toLocaleString(), columns: profile.length })}</span></div>
+    <div className={styles.datasetProfileList}>
+      {profile.slice(0, 40).map((column, index) => {
+        const filled = Number(column.filled) || 0;
+        const coverage = rowCount ? Math.round(filled / rowCount * 100) : 0;
+        const top = Array.isArray(column.topValues) ? column.topValues as Array<Record<string, unknown>> : [];
+        return <article key={`${String(column.name)}-${index}`}>
+          <div><b>{String(column.name)}</b><small>{t(`datasetColumnType_${String(column.type)}` as 'datasetColumnType_text')}</small></div>
+          <p>{t('datasetColumnCoverage', { coverage, distinct: Number(column.distinct) || 0 })}</p>
+          {column.type === 'number' && column.min != null
+            ? <small>{t('datasetColumnRange', { min: String(column.min), max: String(column.max), sum: String(column.sum ?? 0) })}</small>
+            : top.length ? <small>{top.slice(0, 3).map((value) => `${String(value.value)} (${Number(value.count) || 0})`).join(' · ')}</small> : null}
+        </article>;
+      })}
+    </div>
+  </section>;
+}
+
 function SourceList({ sources }: { sources: unknown }) {
+  const t = useTranslations('creationCanvas');
   if (!Array.isArray(sources) || !sources.length) return null;
-  return <div className={styles.sourceList}><strong>Evidence sources</strong>{sources.map((source, index) => { const item = source as { label?: string; resource?: string }; return <div key={`${item.resource}-${index}`}><span>{index + 1}</span><p><b>{item.label || 'Source'}</b><code>{item.resource || 'Canonical API'}</code></p></div>; })}</div>;
+  return <div className={styles.sourceList}><strong>{t('evidenceSources')}</strong>{sources.map((source, index) => { const item = source as { label?: string; resource?: string }; return <div key={`${item.resource}-${index}`}><span>{index + 1}</span><p><b>{item.label || t('source')}</b><code>{item.resource || t('canonicalApi')}</code></p></div>; })}</div>;
+}
+
+/**
+ * Pitch inspector — one panel for all four pitch objects.
+ *
+ * They differ in what they hold and agree on everything else: they are entered
+ * in a competition, they are scored or timed against that competition's own
+ * rules, and their content is a list of items a person edits one at a time.
+ * Splitting that into four inspectors would have duplicated the competition
+ * picker four times and let them drift, so the shape is chosen once here and the
+ * rows are chosen by kind.
+ *
+ * Editing MATERIALIZES: the arrays start empty and the preset supplies the
+ * defaults, so the first edit writes the whole normalized list back. After that
+ * the object owns its content and a competition change never silently discards
+ * what someone wrote.
+ */
+const DERIVED_PITCH_FIELDS: ReadonlySet<string> = new Set(['labelKey', 'written', 'answered', 'over', 'chars']);
+
+function PitchInspector({ node, editable, onChange }: {
+  node: CreationFlowNode;
+  editable: boolean;
+  onChange: (patch: Partial<CreationNodeData>) => void;
+}) {
+  const t = useTranslations('creationCanvas.pitch');
+  const data = node.data;
+  const kind = data.kind;
+  const competition = pitchCompetitionFor(data);
+  /** A preset row is product copy and translates; a renamed row is the author's
+   * own words and is shown exactly as they typed it. */
+  const label = (item: PitchLabelled) => (item.labelKey && t.has(item.labelKey) ? t(item.labelKey) : item.label);
+  /**
+   * Write the whole list back with one row changed.
+   *
+   * The normalized rows carry derived state — the catalog key, whether a beat is
+   * written, whether an answer is over length — which is recomputed on every
+   * read and must never be persisted; storing it would let a stale `over: false`
+   * outlive the text that made it true.
+   */
+  const patchList = <T extends object>(field: string, items: readonly T[], index: number, change: Partial<T>) => {
+    onChange({
+      [field]: items.map((item, position) => Object.fromEntries(
+        Object.entries({ ...item, ...(position === index ? change : {}) })
+          .filter(([key]) => !DERIVED_PITCH_FIELDS.has(key)),
+      )),
+    });
+  };
+  const scoreInput = (current: number, onPick: (score: number) => void, name: string) => (
+    <div className={styles.pitchScoreInput} role="group" aria-label={t('scoreOutOf', { max: PITCH_MAX_SCORE, name })}>
+      {Array.from({ length: PITCH_MAX_SCORE }, (_, index) => index + 1).map((score) => (
+        <button
+          key={score}
+          type="button"
+          disabled={!editable}
+          aria-pressed={current === score}
+          aria-label={t('scoreValue', { score, max: PITCH_MAX_SCORE })}
+          onClick={() => onPick(current === score ? 0 : score)}
+        >{score}</button>
+      ))}
+    </div>
+  );
+
+  const beats = pitchBeats(data);
+  const criteria = pitchCriteria(data);
+  const questions = pitchQaItems(data);
+  const answers = pitchApplicationAnswers(data);
+  const eligibility = pitchEligibility(data);
+  const spoken = pitchSpokenSeconds(beats);
+
+  return <section data-inspector-section="pitch">
+    <label>{t('competition')}<select
+      value={competition.id}
+      disabled={!editable}
+      onChange={(event) => onChange({ competitionId: event.target.value })}
+    >{PITCH_COMPETITIONS.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+    <p className={styles.inspectorHint}>{t('competitionHint', {
+      pitch: formatPitchDuration(competition.pitchSeconds),
+      qa: formatPitchDuration(competition.qaSeconds),
+      criteria: competition.criteria.length,
+    })}</p>
+    {competition.url && <a href={competition.url} target="_blank" rel="noreferrer">{t('officialRules')}</a>}
+
+    {kind === 'pitch' && <>
+      <div className={styles.pitchInspectorRow}>
+        <div className={styles.pitchInspectorItem} data-over={pitchTimingTone(spoken, competition.pitchSeconds) === 'risk' ? 'true' : 'false'}>
+          <strong>{formatPitchDuration(spoken)}</strong>
+          <span>{t('spokenAt130', { limit: formatPitchDuration(competition.pitchSeconds) })}</span>
+        </div>
+        <div className={styles.pitchInspectorItem}>
+          <strong>{formatPitchDuration(pitchRuntimeSeconds(beats))}</strong>
+          <span>{t('budgetedAcrossBeats', { count: beats.length })}</span>
+        </div>
+      </div>
+      {beats.map((beat, index) => <div key={beat.id} className={styles.pitchInspectorItem}>
+        <strong>{label(beat)}</strong>
+        <span>{beat.prompt}</span>
+        <label>{t('seconds')}<input
+          type="number" min="0" max="600" value={beat.seconds} disabled={!editable}
+          onChange={(event) => patchList('beats', beats, index, { seconds: Math.max(0, Math.min(600, Number(event.target.value) || 0)) })}
+        /></label>
+        <label>{t('script')}<textarea
+          rows={3} value={beat.script} disabled={!editable} placeholder={beat.prompt}
+          onChange={(event) => patchList('beats', beats, index, { script: event.target.value })}
+        /></label>
+      </div>)}
+    </>}
+
+    {kind === 'pitchScorecard' && <>
+      <div className={styles.pitchInspectorItem}>
+        <strong>{t('readinessPercent', { value: pitchReadiness(criteria) })}</strong>
+        <span>{t('readinessHint')}</span>
+      </div>
+      {criteria.map((criterion, index) => <div key={criterion.id} className={styles.pitchInspectorItem}>
+        <strong>{label(criterion)}</strong>
+        <span>{criterion.prompt}</span>
+        {scoreInput(criterion.score, (score) => patchList('criteria', criteria, index, { score }), label(criterion))}
+        <label>{t('evidence')}<textarea
+          rows={3} value={criterion.evidence} disabled={!editable} placeholder={t('evidencePlaceholder')}
+          onChange={(event) => patchList('criteria', criteria, index, { evidence: event.target.value })}
+        /></label>
+        <label>{t('gap')}<input
+          value={criterion.gap} disabled={!editable} placeholder={t('gapPlaceholder')}
+          onChange={(event) => patchList('criteria', criteria, index, { gap: event.target.value })}
+        /></label>
+      </div>)}
+    </>}
+
+    {kind === 'pitchQa' && <>
+      <div className={styles.pitchInspectorItem}>
+        <strong>{t('rehearsedOf', { answered: pitchQaCoverage(questions).answered, total: questions.length })}</strong>
+        <span>{t('qaHint', { qa: formatPitchDuration(competition.qaSeconds) })}</span>
+      </div>
+      {questions.map((item, index) => <div key={item.id} className={styles.pitchInspectorItem}>
+        <label>{t('question')}<input
+          value={item.question} disabled={!editable}
+          onChange={(event) => patchList('questions', questions, index, { question: event.target.value })}
+        /></label>
+        <label>{t('answer')}<textarea
+          rows={3} value={item.answer} disabled={!editable} placeholder={t('answerPlaceholder')}
+          onChange={(event) => patchList('questions', questions, index, { answer: event.target.value })}
+        /></label>
+        {scoreInput(item.strength, (strength) => patchList('questions', questions, index, { strength }), item.question)}
+      </div>)}
+      <button type="button" className={styles.fullButton} disabled={!editable} onClick={() => onChange({
+        questions: [...questions, { id: `question-${questions.length + 1}-${Date.now().toString(36)}`, question: '', answer: '', strength: 0 }],
+      })}>{t('addQuestion')}</button>
+    </>}
+
+    {kind === 'pitchApplication' && <>
+      <div className={styles.pitchInspectorItem}>
+        <strong>{t('completePercent', { value: pitchApplicationReadiness(answers, eligibility).percent })}</strong>
+        <span>{pitchApplicationReadiness(answers, eligibility).submittable ? t('readyToSubmit') : t('applicationHint')}</span>
+      </div>
+      {competition.categories.length > 0 && <label>{t('category')}<select
+        value={typeof data.category === 'string' ? data.category : ''}
+        disabled={!editable}
+        onChange={(event) => onChange({ category: event.target.value })}
+      ><option value="">{t('chooseCategory')}</option>{competition.categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>}
+      {eligibility.map((rule, index) => <label key={rule.id} className={styles.inspectorHint}>
+        <input
+          type="checkbox" checked={rule.met} disabled={!editable}
+          onChange={(event) => patchList('eligibility', eligibility, index, { met: event.target.checked })}
+        /> {label(rule)}
+      </label>)}
+      {answers.map((answer, index) => <div key={answer.id} className={styles.pitchInspectorItem} data-over={answer.over ? 'true' : 'false'}>
+        <strong>{label(answer)}</strong>
+        <span>{answer.maxChars > 0 ? t('charCount', { chars: answer.chars, max: answer.maxChars }) : t('noLimit')}</span>
+        <textarea
+          rows={4} value={answer.answer} disabled={!editable} aria-label={label(answer)}
+          onChange={(event) => patchList('answers', answers, index, { answer: event.target.value })}
+        />
+      </div>)}
+    </>}
+  </section>;
+}
+
+/**
+ * Builder inspector — pick what to build, then open the workspace.
+ *
+ * The type list is Builder's modality registry, so Canvas offers every supported
+ * project type and each one seeds its own starter template.
+ * Type is fixed once the workspace exists (a project's modality
+ * is set at creation, not switched mid-session).
+ */
+function BuildInspectorSection({ node, editable, creating, persistence, onChange, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace }: {
+  node: CreationFlowNode;
+  editable: boolean;
+  creating: boolean;
+  persistence: 'local' | 'server';
+  onChange: (patch: Partial<CreationNodeData>) => void;
+  onOpenBuild: () => void;
+  onAttachBuild: (ide: IdeProject) => void;
+  onDeleteBuildWorkspace: () => void;
+}) {
+  const t = useTranslations('creationCanvas.build');
+  const modalities = useLocalizedModalities();
+  const active = useModalityCopy()(typeof node.data.modality === 'string' ? node.data.modality : null);
+  const binding = canvasBuildBinding(node.data);
+  // Existing workspaces, so a Builder object can adopt work already under way
+  // instead of only ever provisioning a second one. Only fetched while unbound.
+  const [existing, setExisting] = useState<IdeProject[]>([]);
+  useEffect(() => {
+    if (binding || persistence !== 'server') { setExisting([]); return; }
+    let alive = true;
+    void listIdeProjects().then((projects) => { if (alive) setExisting(projects); }).catch(() => { if (alive) setExisting([]); });
+    return () => { alive = false; };
+  }, [binding, persistence]);
+  return <section data-inspector-section="build">
+    <label>{t('typeLabel')}
+      <select
+        value={active.id}
+        disabled={!editable || !!binding || creating}
+        onChange={(event) => onChange({ modality: event.target.value as ProjectModality })}
+      >
+        {modalities.map((modality) => <option key={modality.id} value={modality.id} disabled={!!modality.comingSoon}>{modality.label}</option>)}
+      </select>
+    </label>
+    <p className={styles.inspectorHint}>{binding ? t('typeLockedHint') : active.tagline}</p>
+    <button type="button" className={styles.fullButton} disabled={!editable || creating} onClick={onOpenBuild}>
+      {creating ? t('creating') : binding ? t('openBuilder') : t('createWorkspace')}
+    </button>
+    {!binding && existing.length > 0 && <label>{t('attachLabel')}
+      <select
+        value=""
+        disabled={!editable || creating}
+        onChange={(event) => { const chosen = existing.find((project) => String(project.id) === event.target.value); if (chosen) onAttachBuild(chosen); }}
+      >
+        <option value="">{t('attachPlaceholder')}</option>
+        {existing.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+      </select>
+    </label>}
+    <p className={styles.inspectorHint}>{binding ? t('boundHint') : t('unboundHint')}</p>
+    {binding && <>
+      <button type="button" className={styles.secondaryFullButton} disabled={!editable} onClick={onDeleteBuildWorkspace}>{t('deleteWorkspace')}</button>
+      <p className={styles.inspectorHint}>{t('deleteWorkspaceHint')}</p>
+    </>}
+  </section>;
 }
 
 function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationFlowNode; persistence: 'local' | 'server'; onChange: (patch: Partial<CreationNodeData>) => void }) {
-  const storageProjectId = useMemo(() => {
-    const ref = node.data.resourceId;
-    if (!ref?.startsWith('project:')) return null;
-    const value = Number(ref.slice('project:'.length));
-    return Number.isInteger(value) && value > 0 ? value : null;
-  }, [node.data.resourceId]);
+  const t = useTranslations('creationCanvas');
+  const storageProjectId = useMemo(() => canvasProjectId(node.data), [node.data]);
   const voice = useVoiceStudio({ enabled: persistence === 'server', storageProjectId });
   const loadedNode = useRef<string | null>(null);
   const savedResult = useRef<unknown>(null);
@@ -2519,37 +6198,40 @@ function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationF
       voice.setText(transcript);
       onChange({ voiceScript: transcript, voiceTranscript: transcript, subtitle: transcript, status: 'Transcribed' });
     };
-    recognition.onerror = () => onChange({ status: 'Voice transcription failed' });
+    recognition.onerror = () => onChange({ status: t('voiceTranscriptionFailed') });
     recognition.onend = null;
     recognition.start();
   };
 
-  if (persistence === 'local') return <p className={styles.inspectorHint}>Save this Session to create or select a consented voice, record a sample, transcribe speech, and generate playable audio.</p>;
+  if (persistence === 'local') return <p className={styles.inspectorHint}>{t('voiceLocalHint')}</p>;
   return <div className={styles.canvasVoiceStudio}>
-    <button type="button" className={styles.fullButton} onClick={dictate}>Dictate and transcribe script</button>
+    <button type="button" className={styles.fullButton} onClick={dictate}>{t('dictateScript')}</button>
     <VoiceConfigPanel voice={voice} />
-    <button type="button" className={styles.fullButton} disabled={voice.busy || !voice.selectedCloneId || !voice.text.trim()} onClick={() => { onChange({ voiceScript: voice.text, voiceTranscript: voice.text, status: 'Generating voice…' }); void voice.synth(); }}>{voice.busy ? 'Generating…' : 'Generate voice'}</button>
+    <button type="button" className={styles.fullButton} disabled={voice.busy || !voice.selectedCloneId || !voice.text.trim()} onClick={() => { onChange({ voiceScript: voice.text, voiceTranscript: voice.text, status: t('generatingVoiceStatus') }); void voice.synth(); }}>{voice.busy ? t('generating') : t('generateVoice')}</button>
     <div className={styles.canvasVoiceOutput}><VoiceOutput result={voice.result} audioUrl={voice.audioUrl} busy={voice.busy} unavailable={voice.unavailable} /></div>
   </div>;
 }
 
-function EvermindInspector({ node, persistence, onAttach, onExpand }: { node: CreationFlowNode; persistence: 'local' | 'server'; onAttach: () => void; onExpand: () => void }) {
+function EvermindInspector({ node, persistence, onAttach, onExpand, onTrain }: { node: CreationFlowNode; persistence: 'local' | 'server'; onAttach: () => void; onExpand: () => void; onTrain: () => void }) {
+  const t = useTranslations('creationCanvas');
   const rawProjectId = node.data.resourceId?.startsWith('evermind:') ? node.data.resourceId.slice('evermind:'.length) : '';
   const projectId = /^\d+$/.test(rawProjectId) ? Number(rawProjectId) : null;
   return <>
-    <div className={styles.evermindStartGuide}><span>{node.data.pipelineExpanded === true ? 'Guided setup added' : 'New model'}</span><strong>{node.data.pipelineExpanded === true ? 'Continue from Step 1' : 'Start with training examples'}</strong><p>{node.data.pipelineExpanded === true ? 'The numbered cards show the complete learning path. This button returns you to the first unfinished action.' : 'We’ll add a five-step flow and open the training-data picker first. Each card explains the next action.'}</p></div>
-    <button className={styles.fullButton} onClick={onExpand}>{node.data.pipelineExpanded === true ? 'Go to Step 1 · Training data' : 'Start guided setup'}</button>
-    {persistence === 'local' && <p className={styles.inspectorHint}>This blueprint works without an account. Save the session when you want to run training, store versions, or deploy inference.</p>}
-    {persistence === 'server' && projectId == null && <button className={styles.fullButton} onClick={onAttach}>Use project on canvas</button>}
+    <div className={styles.evermindStartGuide}><span>{node.data.pipelineExpanded === true ? t('guidedSetupAdded') : t('newModel')}</span><strong>{node.data.pipelineExpanded === true ? t('continueFromStep1') : t('startWithExamples')}</strong><p>{node.data.pipelineExpanded === true ? t('guidedSetupAddedHint') : t('guidedSetupHint')}</p></div>
+    <button className={styles.fullButton} onClick={onExpand}>{node.data.pipelineExpanded === true ? t('goToStep1') : t('startGuidedSetup')}</button>
+    <button className={styles.fullButton} onClick={onTrain}>{t('trainLoraAdapter')}</button>
+    {persistence === 'local' && <p className={styles.inspectorHint}>{t('blueprintNoAccountHint')}</p>}
+    {persistence === 'server' && projectId == null && <button className={styles.fullButton} onClick={onAttach}>{t('useProjectOnCanvas')}</button>}
     {persistence === 'server' && projectId != null && <div className={styles.evermindConsoleHost}><EvermindValidationProvider><ProjectEvermindPanel projectId={projectId} /></EvermindValidationProvider></div>}
   </>;
 }
 
 function ActivityInspector({ sessionId, objectId, persistence, role, members }: { sessionId: string; objectId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
+  const t = useTranslations('creationCanvas');
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);
   const [draft, setDraft] = useState('');
-  const [status, setStatus] = useState(persistence === 'local' ? 'Save this session to collaborate.' : 'Loading activity…');
+  const [status, setStatus] = useState(persistence === 'local' ? 'Save this session to collaborate.' : t('noticeLoadingActivity'));
   const canComment = role !== 'viewer';
 
   const reload = useCallback(async () => {
@@ -2561,9 +6243,9 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
       ]);
       setComments(commentResult.comments);
       setActivity(activityResult.activity.filter((item) => !item.objectId || item.objectId === objectId));
-      setStatus(commentResult.comments.length || activityResult.activity.length ? '' : 'No activity on this object yet.');
+      setStatus(commentResult.comments.length || activityResult.activity.length ? '' : t('noticeNoActivityYet'));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not load activity');
+      setStatus(error instanceof Error ? error.message : t('noticeLoadActivityFailed'));
     }
   }, [objectId, persistence, sessionId]);
 
@@ -2579,36 +6261,38 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
       setDraft('');
       setStatus('Comment posted');
       void reload();
-    }).catch((error) => setStatus(error instanceof Error ? error.message : 'Could not post comment'));
+    }).catch((error) => setStatus(error instanceof Error ? error.message : t('noticePostCommentFailed')));
   };
 
   const resolve = (comment: CreationSessionComment) => {
     void creationSessionsApi.comments.resolve(sessionId, comment.id, !comment.resolvedAt).then(() => void reload())
-      .catch((error) => setStatus(error instanceof Error ? error.message : 'Could not update comment'));
+      .catch((error) => setStatus(error instanceof Error ? error.message : t('commentUpdateFailed')));
   };
 
-  if (persistence === 'local') return <div className={styles.activityEmpty}><strong>Collaboration starts when you save</strong><p>Your canvas remains editable on this device. Sign in to add comments, mentions, shared activity, and collaborators.</p></div>;
+  if (persistence === 'local') return <div className={styles.activityEmpty}><strong>{t('collaborationStartsOnSave')}</strong><p>{t('collaborationStartsHint')}</p></div>;
 
   return <div className={styles.activityPanel}>
     <section className={styles.commentComposer}>
-      <label>Comment on this object<textarea rows={3} value={draft} disabled={!canComment} onChange={(event) => setDraft(event.target.value)} placeholder={canComment ? 'Write a comment or @mention a collaborator…' : 'View-only access'} /></label>
-      <button className={styles.fullButton} disabled={!canComment || !draft.trim()} onClick={submit}>Post comment</button>
+      <label>{t('commentOnObject')}<textarea rows={3} value={draft} disabled={!canComment} onChange={(event) => setDraft(event.target.value)} placeholder={canComment ? t('commentPlaceholder') : t('viewOnlyAccess')} /></label>
+      <button className={styles.fullButton} disabled={!canComment || !draft.trim()} onClick={submit}>{t('postComment')}</button>
     </section>
     {status && <p className={styles.inspectorHint}>{status}</p>}
-    <section className={styles.commentList} aria-label="Object comments">
+    <section className={styles.commentList} aria-label={t('objectComments')}>
       {comments.map((comment) => <article key={comment.id} className={comment.resolvedAt ? styles.commentResolved : ''}>
-        <header><b>{comment.authorName || 'Collaborator'}</b><time>{new Date(comment.createdAt).toLocaleString()}</time></header>
+        <header><b>{comment.authorName || t('collaborator')}</b><time>{new Date(comment.createdAt).toLocaleString()}</time></header>
         <p>{comment.body}</p>
-        {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? 'Reopen' : 'Resolve'}</button>}
+        {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? t('reopen') : t('resolve')}</button>}
       </article>)}
     </section>
-    <section className={styles.activityList} aria-label="Object activity">
-      <h4>Recent activity</h4>
-      {activity.filter((item) => item.kind === 'event').map((item) => <div key={item.id}><span>•</span><p><b>{item.actorName || 'BuilderForce'}</b> {item.type.replaceAll('.', ' ')}</p><time>{new Date(item.createdAt).toLocaleString()}</time></div>)}
+    <section className={styles.activityList} aria-label={t('objectActivity')}>
+      <h4>{t('recentActivity')}</h4>
+      {activity.filter((item) => item.kind === 'event').map((item) => <div key={item.id}><span>•</span><p><b>{item.actorName || 'BuilderForce'}</b>{` ${item.type.replaceAll('.', ' ')}`}</p><time>{new Date(item.createdAt).toLocaleString()}</time></div>)}
     </section>
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
-  return <ReactFlowProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} /></ReactFlowProvider>;
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+  // The 3D scene publishes its view commands to the canvas rail rather than
+  // carrying a toolbar of its own, so both live under one provider.
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
 }

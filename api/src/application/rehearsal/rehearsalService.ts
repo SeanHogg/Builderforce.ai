@@ -27,12 +27,14 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { executions, ideAgents, projects, rehearsalSteps, rehearsals, tasks } from '../../infrastructure/database/schema';
+import { agentDefinitionVersions, executions, ideAgents, projects, rehearsalSteps, rehearsals, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ShadowRecorder, shadowProvider } from './shadowProvider';
 import { prepareCloudRun, runCloudToolLoop } from '../runtime/cloudAgentEngine';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { freezeIdeAgentDefinition, type FrozenAgentDefinition } from '../agentIdentity/agentRunIdentity';
+import { findTaskPrimarySpec } from '../prd/taskPrd';
 
 export const REHEARSAL_KINDS = ['dry_run', 'replay', 'trial'] as const;
 export type RehearsalKind = (typeof REHEARSAL_KINDS)[number];
@@ -90,6 +92,15 @@ export interface RehearsalStepRow {
   detail: unknown;
 }
 
+export interface RehearsalComparison {
+  left: RehearsalSummary;
+  right: RehearsalSummary;
+  sameTicket: boolean;
+  sameFrozenRef: boolean;
+  delta: { steps: number; suppressedWrites: number; finishedOkChanged: boolean };
+  operations: Array<{ op: string; left: number; right: number; delta: number }>;
+}
+
 const iso = (d: Date | string | null): string | null => (d == null ? null : new Date(d).toISOString());
 
 /**
@@ -105,15 +116,23 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
   let taskId = input.taskId ?? null;
   let frozenRef: string | null = null;
   let sourceExecutionId = input.sourceExecutionId ?? null;
+  let frozenDefinition: FrozenAgentDefinition | null = null;
 
   if (input.kind === 'replay' && sourceExecutionId) {
     const [src] = await db
-      .select({ taskId: executions.taskId, payload: executions.payload, cloudAgentRef: executions.cloudAgentRef })
+      .select({ taskId: executions.taskId, payload: executions.payload, cloudAgentRef: executions.cloudAgentRef, agentDefinitionVersionId: executions.agentDefinitionVersionId })
       .from(executions)
       .where(and(eq(executions.id, sourceExecutionId), eq(executions.tenantId, tenantId)))
       .limit(1);
     if (!src) throw new Error(`execution ${sourceExecutionId} not found in this workspace`);
     taskId = src.taskId;
+    if (!input.agentRef && src.cloudAgentRef) input.agentRef = src.cloudAgentRef;
+    if (src.agentDefinitionVersionId) {
+      const [version] = await db.select().from(agentDefinitionVersions).where(and(
+        eq(agentDefinitionVersions.id, src.agentDefinitionVersionId), eq(agentDefinitionVersions.tenantId, tenantId),
+      )).limit(1);
+      frozenDefinition = version ? version as FrozenAgentDefinition : null;
+    }
     // The ref the original run read from, when the payload recorded one. Absent on
     // older rows — the replay then reads the current base, which is still a replay of
     // the PROMPT even if not of the tree, and the report says which it was.
@@ -140,8 +159,14 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
   if (!task) throw new Error(`ticket ${taskId} not found in this workspace`);
 
   const agentRef = input.agentRef ?? task.assignedAgentRef ?? null;
-  const agentLabel = await resolveAgentLabel(db, tenantId, agentRef);
+  if (!frozenDefinition && agentRef) frozenDefinition = await freezeIdeAgentDefinition(db, tenantId, agentRef);
+  const frozenLabel = frozenDefinition?.definition.name;
+  const agentLabel = typeof frozenLabel === 'string' ? frozenLabel : await resolveAgentLabel(db, tenantId, agentRef);
+  const frozenModel = frozenDefinition?.definition.baseModel;
+  const runModel = input.model ?? (typeof frozenModel === 'string' ? frozenModel : undefined);
   const projectId = task.projectId ?? 0;
+  const primarySpec = await findTaskPrimarySpec(db, task.id);
+  const missingPrdDuringReadOnlyPrep = !primarySpec?.prd?.trim();
 
   const [row] = await db
     .insert(rehearsals)
@@ -151,8 +176,9 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       kind: input.kind,
       status: 'running',
       agentRef,
+      agentDefinitionVersionId: frozenDefinition?.id ?? null,
       agentLabel,
-      model: input.model ?? null,
+      model: runModel ?? null,
       taskId: task.id,
       sourceExecutionId,
       frozenRef,
@@ -175,6 +201,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       status: 'running',
       mode: 'rehearsal',
       cloudAgentRef: agentRef,
+      agentDefinitionVersionId: frozenDefinition?.id ?? null,
       payload: JSON.stringify({ rehearsalId, kind: input.kind, frozenRef }),
       startedAt: new Date(),
     })
@@ -195,12 +222,12 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
     // branch and records a personality event. Without this flag a rehearsal's very
     // first act would be a real commit.
     const prep = await prepareCloudRun(
-      env, db, executionId, taskRow, tenantId, projectId, agentLabel, input.model, undefined, agentRef ?? undefined,
-      undefined, { readOnly: true },
+      env, db, executionId, taskRow, tenantId, projectId, agentLabel, runModel, undefined, agentRef ?? undefined,
+      undefined, { readOnly: true, ...(frozenDefinition ? { agentDefinitionSnapshot: frozenDefinition.definition } : {}) },
     );
 
     const result = await runCloudToolLoop(
-      env, db, executionId, tenantId, taskRow, agentRef ?? undefined, agentLabel, input.model,
+      env, db, executionId, tenantId, taskRow, agentRef ?? undefined, agentLabel, runModel,
       `${prep.systemPrompt}\n\n${REHEARSAL_DIRECTIVE}`,
       prep.userContent,
       async () => false,
@@ -234,7 +261,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
         steps: recorder.steps.length,
         suppressedWrites: recorder.writeCount,
         finishedOk: result.finished === true && result.ok,
-        summary: result.output.slice(0, 20_000),
+        summary: `${missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.\n\n' : ''}${result.output}`.slice(0, 20_000),
         completedAt: new Date(),
       })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
@@ -277,8 +304,8 @@ export async function runTrial(
   input: { tenantId: number; projectId?: number | null; agentRef: string; model?: string; ticketCount?: number; createdBy?: string | null },
 ): Promise<string[]> {
   const limit = Math.min(Math.max(1, Math.trunc(input.ticketCount ?? 3)), TRIAL_MAX_TICKETS);
-  const recent = await db
-    .select({ id: tasks.id })
+  const candidates = await db
+    .select({ id: tasks.id, priority: tasks.priority, status: tasks.status, taskType: tasks.taskType })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(
@@ -287,7 +314,8 @@ export async function runTrial(
         : eq(projects.tenantId, input.tenantId),
     )
     .orderBy(desc(tasks.updatedAt))
-    .limit(limit);
+    .limit(Math.max(limit * 8, 20));
+  const recent = selectRepresentativeTickets(candidates, limit);
 
   const ids: string[] = [];
   for (const t of recent) {
@@ -303,6 +331,23 @@ export async function runTrial(
     );
   }
   return ids.filter(Boolean);
+}
+
+/** Greedy diversity sample: prefer a new priority/status/type stratum before taking a
+ * second ticket from one already represented. Input remains newest-first. */
+export function selectRepresentativeTickets<T extends { priority: string; status: string; taskType: string }>(rows: T[], limit: number): T[] {
+  const selected: T[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const stratum = `${row.priority}|${row.status}|${row.taskType}`;
+    if (!seen.has(stratum)) { selected.push(row); seen.add(stratum); }
+    if (selected.length >= limit) return selected;
+  }
+  for (const row of rows) {
+    if (!selected.includes(row)) selected.push(row);
+    if (selected.length >= limit) break;
+  }
+  return selected;
 }
 
 /**
@@ -417,6 +462,30 @@ export async function getRehearsal(
   };
 }
 
+export async function compareRehearsals(db: Db, tenantId: number, leftId: string, rightId: string): Promise<RehearsalComparison | null> {
+  const [left, right] = await Promise.all([getRehearsal(db, tenantId, leftId), getRehearsal(db, tenantId, rightId)]);
+  if (!left || !right) return null;
+  const count = (steps: RehearsalStepRow[]) => {
+    const result = new Map<string, number>();
+    for (const step of steps) result.set(step.op, (result.get(step.op) ?? 0) + 1);
+    return result;
+  };
+  const lc = count(left.steps); const rc = count(right.steps);
+  const operations = [...new Set([...lc.keys(), ...rc.keys()])].sort().map((op) => ({
+    op, left: lc.get(op) ?? 0, right: rc.get(op) ?? 0, delta: (rc.get(op) ?? 0) - (lc.get(op) ?? 0),
+  }));
+  return {
+    left: left.rehearsal, right: right.rehearsal,
+    sameTicket: left.rehearsal.taskId === right.rehearsal.taskId,
+    sameFrozenRef: left.rehearsal.frozenRef != null && left.rehearsal.frozenRef === right.rehearsal.frozenRef,
+    delta: {
+      steps: right.rehearsal.steps - left.rehearsal.steps,
+      suppressedWrites: right.rehearsal.suppressedWrites - left.rehearsal.suppressedWrites,
+      finishedOkChanged: right.rehearsal.finishedOk !== left.rehearsal.finishedOk,
+    }, operations,
+  };
+}
+
 // ── internals ─────────────────────────────────────────────────────────────────────
 
 /** Prepended to the rehearsal's system prompt so the agent knows the stakes without
@@ -441,7 +510,7 @@ function extractFrozenRef(payload: string | null): string | null {
   if (!payload) return null;
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    const candidates = [parsed.baseSha, parsed.headSha, parsed.base, parsed.ref];
+    const candidates = [parsed.sourceSha, parsed.baseSha, parsed.headSha, parsed.base, parsed.ref];
     for (const c of candidates) if (typeof c === 'string' && c.trim()) return c.trim();
     return null;
   } catch {

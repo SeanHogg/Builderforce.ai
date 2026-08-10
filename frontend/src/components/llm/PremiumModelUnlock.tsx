@@ -36,10 +36,10 @@ export function PremiumModelUnlock() {
 
   return (
     <div style={wrapStyle}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+      <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
         {t('premiumUnlockTitle')}
       </div>
-      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
         {needsCard ? t('premiumUnlockCardBody') : t('premiumUnlockUpgradeBody')}
       </p>
 
@@ -54,12 +54,12 @@ export function PremiumModelUnlock() {
             {busy ? t('premiumValidating') : pending ? t('premiumPending') : t('premiumValidateCard')}
           </button>
           {pending && <span style={hintStyle}>{t('premiumPendingHint')}</span>}
-          {failed && <span style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>{t('premiumFailedHint')}</span>}
+          {failed && <span style={{ ...hintStyle, color: 'var(--danger)' }}>{t('premiumFailedHint')}</span>}
         </div>
       ) : null}
 
       {error !== null && (
-        <div role="alert" style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>
+        <div role="alert" style={{ ...hintStyle, color: 'var(--danger)' }}>
           {error || t('premiumUnlockFailed')}
         </div>
       )}
@@ -70,7 +70,7 @@ export function PremiumModelUnlock() {
 const wrapStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8,
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-  borderRadius: 12, padding: 16, maxWidth: '100%',
+  borderRadius: 'var(--radius-lg)', padding: 16, maxWidth: '100%',
 };
 const rowStyle: React.CSSProperties = {
   display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
@@ -78,7 +78,7 @@ const rowStyle: React.CSSProperties = {
 const buttonPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 12, fontWeight: 600,
   background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, minHeight: 36,
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', minHeight: 36,
 };
 const hintStyle: React.CSSProperties = {
   fontSize: 11, color: 'var(--text-secondary)',

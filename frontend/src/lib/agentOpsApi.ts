@@ -125,11 +125,23 @@ export interface RehearsalStep {
   detail: unknown;
 }
 
+export interface RehearsalComparison {
+  left: Rehearsal;
+  right: Rehearsal;
+  sameTicket: boolean;
+  sameFrozenRef: boolean;
+  delta: { steps: number; suppressedWrites: number; finishedOkChanged: boolean };
+  operations: Array<{ op: string; left: number; right: number; delta: number }>;
+}
+
 export const listRehearsals = (projectId?: number | null): Promise<{ rehearsals: Rehearsal[] }> =>
   apiRequest<{ rehearsals: Rehearsal[] }>(`/api/agent-ops/rehearsals${projectId ? `?projectId=${projectId}` : ''}`);
 
 export const getRehearsalReport = (id: string): Promise<{ rehearsal: Rehearsal; steps: RehearsalStep[] }> =>
   apiRequest<{ rehearsal: Rehearsal; steps: RehearsalStep[] }>(`/api/agent-ops/rehearsals/${id}`);
+
+export const compareRehearsals = (left: string, right: string): Promise<RehearsalComparison> =>
+  apiRequest<RehearsalComparison>(`/api/agent-ops/rehearsals/compare?left=${encodeURIComponent(left)}&right=${encodeURIComponent(right)}`);
 
 export interface StartRehearsalBody {
   kind: RehearsalKind;

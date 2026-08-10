@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const libDir = resolve(here, '../src/lib');
+const srcDir = resolve(here, '../src');
 
 /**
  * Files allowed to call `fetch` directly. Every entry needs a REASON that is
@@ -46,10 +47,19 @@ const ALLOWED = new Map([
       'login and bounce the user off the login page they are standing on.',
   ],
   [
-    'marketplaceSeo.ts',
-    'Runs server-side (generateMetadata + sitemap). The transport reads ' +
-      'localStorage and document.cookie, neither of which exists there, and these ' +
-      'calls carry no credential.',
+    'publicApi.ts',
+    'It is the transport for UNCREDENTIALED server reads (generateMetadata, ' +
+      'sitemap, public reference pages). apiClient reads localStorage and ' +
+      'document.cookie, neither of which exists server-side; these calls carry no ' +
+      'credential and are held in Next\'s data cache. Every public server read ' +
+      'goes through here — marketplaceSeo and integrationCatalog included.',
+  ],
+  [
+    'meshPreviewCache.ts',
+    'Reads an artifact\'s own output URL (R2/blob/data) to parse its triangles. ' +
+      'Not the Builderforce API — attaching our auth headers to a storage or ' +
+      'third-party origin would leak the token, and the transport\'s JSON/redirect ' +
+      'handling is wrong for an arrayBuffer read that must degrade to [] silently.',
   ],
   [
     'model-provider.ts',
@@ -72,6 +82,7 @@ function collect(dir, out = []) {
 }
 
 const violations = [];
+const cacheViolations = [];
 
 for (const file of collect(libDir)) {
   const rel = relative(libDir, file).split('\\').join('/');
@@ -85,6 +96,28 @@ for (const file of collect(libDir)) {
     if (/^\s*[*]/.test(line)) return;
     const code = line.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '');
     if (FETCH_CALL.test(code)) violations.push(`${rel}:${i + 1}  ${line.trim()}`);
+  });
+}
+
+// A domain request cache belongs in infrastructure/http/readThrough. This
+// deliberately targets module-scope cache-shaped declarations, not every Map:
+// registries, graph indexes and bounded computational memoization are valid.
+const CACHE_ALLOWED = new Map([
+  ['infrastructure/http/readThrough.ts', 'It is the shared cache implementation.'],
+  ['lib/meshPreviewCache.ts', 'Bounded computational geometry memoization, not an API response cache.'],
+  ['lib/pendingWork.ts', 'Single-flight for destructive local-draft claims; it stores no HTTP read result.'],
+]);
+const CACHE_DECLARATION = /^(?:const|let)\s+\w*(?:cache|cached|inflight|inFlight)\w*\s*=/;
+const PROMISE_MAP_DECLARATION = /^(?:const|let)\s+\w+\s*=\s*new Map<[^\n;]*Promise</;
+
+for (const file of collect(srcDir)) {
+  const rel = relative(srcDir, file).split('\\').join('/');
+  if (CACHE_ALLOWED.has(rel) || rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) continue;
+  const lines = readFileSync(file, 'utf8').split('\n');
+  lines.forEach((line, i) => {
+    if (CACHE_DECLARATION.test(line) || PROMISE_MAP_DECLARATION.test(line)) {
+      cacheViolations.push(`${rel}:${i + 1}  ${line.trim()}`);
+    }
   });
 }
 
@@ -104,6 +137,17 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
+if (cacheViolations.length > 0) {
+  console.error(`❌  Hand-rolled client request cache (${cacheViolations.length} site(s)):\n`);
+  for (const violation of cacheViolations) console.error('  - ' + violation);
+  console.error(
+    "\n   Use getOrSetClientCached / invalidateClientCache from " +
+      "'@/infrastructure/http/readThrough'. Add an exception only for a bounded " +
+      'computational cache or registry, with its reason.\n',
+  );
+  process.exit(1);
+}
+
 console.log(
-  `✅  API transport check passed — fetch() appears only in ${[...ALLOWED.keys()].join(', ')}.`,
+  `✅  API transport/cache check passed — fetch() appears only in ${[...ALLOWED.keys()].join(', ')}, and request caches use the shared primitive.`,
 );

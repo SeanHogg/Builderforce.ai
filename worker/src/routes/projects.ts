@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
+import { scaffoldForProject } from '../../../api/src/application/project/projectTemplate';
 
 interface Env extends WorkerAuthBindings {
   NEON_DATABASE_URL: string;
@@ -17,57 +18,25 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-/** Default files for new (vanilla) projects. Must match API template and Run flow. */
-export const VANILLA_TEMPLATE: Record<string, string> = {
-  'package.json': JSON.stringify({
-    name: 'my-app',
-    version: '1.0.0',
-    type: 'module',
-    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-    dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
-    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
-  }, null, 2),
-  'index.html': `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`,
-  'src/main.jsx': `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
+/**
+ * Starter templates come from the API's `projectTemplate` module — the single
+ * source the auth API and the lazy self-heal already seed from. This route used
+ * to keep its own `VANILLA_TEMPLATE` copy AND ignore its `template` argument, so
+ * a `mobile` / `webmobile` project created through this legacy worker was seeded
+ * with the Vite scaffold and opened unrunnable. Re-exported for the tests that
+ * assert the scaffold's shape.
+ */
+export { VANILLA_TEMPLATE, MOBILE_TEMPLATE } from '../../../api/src/application/project/projectTemplate';
 
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
-  'src/index.css': `body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`,
-  'vite.config.js': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});`,
-};
-
-export async function createTemplateFiles(storage: R2Bucket, projectId: string, template: string): Promise<void> {
-  const files = VANILLA_TEMPLATE;
+/** Seed a new project's workspace with the scaffold its template/modality selects. */
+export async function createTemplateFiles(
+  storage: R2Bucket,
+  projectId: string,
+  template: string | null,
+  modality = 'designer',
+): Promise<void> {
+  const files = scaffoldForProject({ id: 0, template, modality, sourceControlRepoFullName: null, githubRepoUrl: null });
+  if (!files) return;
   await Promise.all(
     Object.entries(files).map(([path, content]) =>
       storage.put(`${projectId}/${path}`, content)
@@ -98,14 +67,18 @@ projects.post('/', async (c) => {
     const body = await c.req.json<{ name: string; description?: string; template?: string; modality?: string }>();
     const sql = neon(c.env.NEON_DATABASE_URL);
     const id = generateId();
-    const template = body.template ?? 'vanilla';
+    // No `?? 'vanilla'` default: an explicit template WINS over the modality, so
+    // defaulting it here silently shadowed the modality and seeded every Mobile /
+    // Web + Mobile project with the Vite scaffold. Null lets the modality decide,
+    // matching the auth API's create path.
+    const template = body.template ?? null;
     const modality = body.modality ?? 'designer';
     const rows = await sql`
       INSERT INTO projects (id, name, description, owner_id, template, modality)
       VALUES (${id}, ${body.name}, ${body.description ?? null}, 'anonymous', ${template}, ${modality})
       RETURNING *
     `;
-    await createTemplateFiles(c.env.STORAGE, id, template);
+    await createTemplateFiles(c.env.STORAGE, id, template, modality);
     return c.json(rows[0], 201);
   } catch (e) {
     return c.json({ error: 'Failed to create project' }, 500);

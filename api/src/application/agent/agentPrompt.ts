@@ -13,7 +13,7 @@
  * stock OpenAI SDKs call a user's model verbatim.
  */
 
-import { eq, sql as dsql } from 'drizzle-orm';
+import { and, eq, sql as dsql } from 'drizzle-orm';
 import {
   agentMemorySignal,
   compilePsychometricProfile,
@@ -124,14 +124,14 @@ function parseAgentPsychometric(raw: unknown): LimbicPsychProfile | undefined {
 }
 
 /** The published agent's base config — query-INDEPENDENT, so it is read-through
- *  cached by id (agents change rarely post-publish). Grounded recall is layered on
+ *  cached by tenant + id (agents change rarely post-publish). Grounded recall is layered on
  *  per request (query-dependent) by {@link resolveWorkforceModel}. */
 type WorkforceAgentBase = { baseModel: string | null; descriptor: AgentDescriptor; inferenceMode: 'base' | 'lora' | 'hybrid' };
 
-async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<WorkforceAgentBase | null> {
+async function loadWorkforceAgentBase(env: Env, tenantId: number, agentId: string): Promise<WorkforceAgentBase | null> {
   return getOrSetCached(
     env,
-    `workforce_model:resolve:${agentId}`,
+    `workforce_model:resolve:${tenantId}:${agentId}`,
     async (): Promise<WorkforceAgentBase | null> => {
       const [a] = await buildDatabase(env)
         .select({
@@ -146,7 +146,7 @@ async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<Workfo
           psychometric: ideAgents.psychometric,
         })
         .from(ideAgents)
-        .where(eq(ideAgents.id, agentId))
+        .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, agentId)))
         .limit(1);
       if (!a) return null;
       // Compile the agent's OWN personality (ide_agents.psychometric) into persona
@@ -186,11 +186,12 @@ async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<Workfo
  * and folded into the directives through the SAME `lowerAgentSpec` lowering every
  * other surface uses — so a stock OpenAI-SDK caller addressing the model by id gets
  * the agent grounded on its own docs, exactly like the dedicated chat path. The agent
- * base is cached by id; recall is layered per request (chunk load is itself cached,
+ * base is cached by tenant + id; recall is layered per request (chunk load is itself cached,
  * selection is pure) so the keyspace stays bounded.
  */
 export async function resolveWorkforceModel(
   env: Env,
+  tenantId: number,
   ref: string | undefined | null,
   query?: string,
 ): Promise<ResolvedWorkforceModel | null> {
@@ -198,11 +199,11 @@ export async function resolveWorkforceModel(
   const agentId = ref.slice(WORKFORCE_MODEL_REF_PREFIX.length).trim();
   if (!agentId) return null;
 
-  const base = await loadWorkforceAgentBase(env, agentId);
+  const base = await loadWorkforceAgentBase(env, tenantId, agentId);
   if (!base) return null;
 
   const recalledContext = query?.trim()
-    ? await recallAgentKnowledge(env, buildDatabase(env), agentId, query)
+    ? await recallAgentKnowledge(env, buildDatabase(env), tenantId, agentId, query)
     : '';
 
   // `buildAgentInference` lowers the descriptor to BOTH the system prompt (now carrying

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
@@ -29,13 +30,13 @@ export interface TaskBadgeSignals {
 const chip = {
   fontSize: 10,
   padding: '2px 6px',
-  borderRadius: 4,
+  borderRadius: 'var(--radius-sm)',
 } as const;
 
 /** Review-verdict tone: green complete, amber gaps, neutral when only a count. */
 function reviewTone(verdict: Task['lastReviewVerdict']): { color: string; glyph: string } {
-  if (verdict === 'complete') return { color: 'var(--success-text, #22c55e)', glyph: '✓' };
-  if (verdict === 'gaps') return { color: 'var(--warning-text, #f59e0b)', glyph: '⚠' };
+  if (verdict === 'complete') return { color: 'var(--success-text, var(--success))', glyph: '✓' };
+  if (verdict === 'gaps') return { color: 'var(--warning-text, var(--warning))', glyph: '⚠' };
   return { color: 'var(--text-secondary)', glyph: '↻' };
 }
 
@@ -80,7 +81,7 @@ export function TaskBadges({
             background: 'var(--bg-elevated)', color: review.color, fontWeight: 600,
           }}
         >
-          {review.glyph} {tCommon('reviewedTimes', { count: task.reviewCount })}
+          <Icon source={review.glyph} size={13} /> {tCommon('reviewedTimes', { count: task.reviewCount })}
         </span>
       ) : null}
       {flagged && (
@@ -88,10 +89,11 @@ export function TaskBadges({
           title={tBoard('audit.flaggedTitle')}
           style={{
             ...chip, display: 'inline-flex', alignItems: 'center', gap: 3,
-            background: 'var(--danger-bg, #fee2e2)', color: 'var(--danger-text, #991b1b)', fontWeight: 700,
+            background: 'var(--danger-bg)', color: 'var(--danger-text)', fontWeight: 700,
           }}
         >
-          ⚑ {tBoard('audit.flagged')}
+          
+          <Icon source="⚑" size="1em" /> {tBoard('audit.flagged')}
         </span>
       )}
       {participants && participants.required > 0 && (
@@ -99,11 +101,12 @@ export function TaskBadges({
           title={tBoard('audit.participantsTitle')}
           style={{
             ...chip, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 700,
-            background: participants.percent >= 100 ? 'var(--success-bg, #dcfce7)' : 'var(--bg-deep, #eef2ff)',
-            color: participants.percent >= 100 ? 'var(--success-text, #166534)' : 'var(--text-secondary, #475569)',
+            background: participants.percent >= 100 ? 'var(--success-bg)' : 'var(--bg-deep)',
+            color: participants.percent >= 100 ? 'var(--success-text)' : 'var(--text-secondary)',
           }}
         >
-          ✅ {participants.completed}/{participants.required}
+          
+          <Icon source="✅" size="1em" /> {participants.completed}/{participants.required}
         </span>
       )}
       {task.businessValue != null && (
@@ -122,7 +125,8 @@ export function TaskBadges({
           title={tBoard('prdBadgeTitle', { count: task.specCount })}
           style={{ ...chip, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
         >
-          📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
+          
+          <Icon source="📄" size="1em" /> PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
         </span>
       ) : null}
     </>

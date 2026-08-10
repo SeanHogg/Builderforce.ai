@@ -37,6 +37,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { provisionBuiltinAgents } from '../agent/provisionBuiltinAgents';
+import { membershipChanged } from '../tenant/membershipChanged';
 import { getActiveTermsVersion } from '../legal/termsAcceptance';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import {
@@ -114,7 +115,7 @@ async function ensureDemoUser(db: Db, bp: DemoBlueprint): Promise<{ id: string; 
   return { id: userId, email };
 }
 
-async function ensureDemoTenant(db: Db, bp: DemoBlueprint, ownerUserId: string): Promise<{ id: number; slug: string; created: boolean }> {
+async function ensureDemoTenant(env: Env, db: Db, bp: DemoBlueprint, ownerUserId: string): Promise<{ id: number; slug: string; created: boolean }> {
   const [existing] = await db
     .select({ id: tenants.id, slug: tenants.slug })
     .from(tenants)
@@ -130,7 +131,7 @@ async function ensureDemoTenant(db: Db, bp: DemoBlueprint, ownerUserId: string):
       paidOverflowDailyCap: 0,
       updatedAt: new Date(),
     }).where(eq(tenants.id, existing.id));
-    await ensureMembership(db, existing.id, ownerUserId);
+    await ensureMembership(env, db, existing.id, ownerUserId);
     return { id: existing.id, slug: existing.slug, created: false };
   }
 
@@ -159,11 +160,11 @@ async function ensureDemoTenant(db: Db, bp: DemoBlueprint, ownerUserId: string):
     plan: 'pro',
     isDefault: true,
   }).onConflictDoNothing();
-  await ensureMembership(db, tenantId, ownerUserId);
+  await ensureMembership(env, db, tenantId, ownerUserId);
   return { id: tenantId, slug, created: true };
 }
 
-async function ensureMembership(db: Db, tenantId: number, userId: string): Promise<void> {
+async function ensureMembership(env: Env, db: Db, tenantId: number, userId: string): Promise<void> {
   const [member] = await db
     .select({ id: tenantMembers.id })
     .from(tenantMembers)
@@ -174,6 +175,10 @@ async function ensureMembership(db: Db, tenantId: number, userId: string): Promi
   } else {
     await db.update(tenantMembers).set({ role: 'owner', isActive: true }).where(eq(tenantMembers.id, member.id));
   }
+  // The one membership write outside the tenant aggregate — it announces itself
+  // through the same hook, so a reseeded demo workspace's footer roster is right
+  // on the first read rather than after the TTL.
+  await membershipChanged(env, tenantId, [userId]);
 }
 
 /** Upsert the blueprint's demo agents and return id lookups for assignment. */
@@ -249,9 +254,9 @@ async function wipeTenantContent(db: Db, tenantId: number, keepProjectKeys: stri
   if (ids.length > 0) await db.delete(tasks).where(inArray(tasks.projectId, ids));
 }
 
-async function seedPersona(db: Db, bp: DemoBlueprint): Promise<DemoPersonaSeedResult> {
+async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPersonaSeedResult> {
   const user = await ensureDemoUser(db, bp);
-  const tenant = await ensureDemoTenant(db, bp, user.id);
+  const tenant = await ensureDemoTenant(env, db, bp, user.id);
   const tenantId = tenant.id;
   const agents = await ensureAgents(db, bp, tenantId);
   await wipeTenantContent(db, tenantId, bp.projects.map((p) => p.key));
@@ -476,7 +481,7 @@ export async function reseedDemoTenants(env: Env): Promise<{ personas: DemoPerso
   const db = buildDatabase(env);
   const personas: DemoPersonaSeedResult[] = [];
   for (const bp of DEMO_BLUEPRINTS) {
-    personas.push(await seedPersona(db, bp));
+    personas.push(await seedPersona(env, db, bp));
     await invalidateCached(env, demoTenantCacheKey(bp.key));
   }
   return { personas };
@@ -519,7 +524,7 @@ export async function getDemoSessionTarget(env: Env, persona: DemoPersonaKey): P
     };
     const found = await lookup();
     if (found) return found;
-    await seedPersona(db, bp);
+    await seedPersona(env, db, bp);
     const seeded = await lookup();
     if (!seeded) throw new Error(`Demo persona '${persona}' could not be provisioned`);
     return seeded;

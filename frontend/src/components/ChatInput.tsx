@@ -1,13 +1,15 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
-import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
-import type { BrainEffort } from '@/lib/brain';
-import { ModelSelectionPicker, type ChatModelOptions, type ChatModelSelection } from './ModelSelectionPicker';
-export type { ChatModelOptions, ChatModelSelection } from './ModelSelectionPicker';
+import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
+import { PlanBadge } from '@/components/PlanBadge';
+import { Icon } from '@/components/ui/Icon';
+export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 
 /** Browser Web Speech API (not in all TS libs). */
 type SpeechRecognitionInstance = {
@@ -31,6 +33,8 @@ export interface ChatInputProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder?: string;
+  /** Accessible name when it should differ from the visible placeholder. */
+  ariaLabel?: string;
   disabled?: boolean;
   /** Send button label/title. */
   submitLabel?: string;
@@ -67,11 +71,42 @@ export interface ChatInputProps {
   onThinkingChange?: (on: boolean) => void;
   /** When set, the `/` options menu shows an "Account settings" link to this href. */
   accountSettingsHref?: string;
-  /** Model routing for the next turn. A named model is sent as a strict pin. */
+  /** Model routing for the next turn, shown and changed in the `/` menu. A named
+   *  model is sent as a strict pin. */
   modelSelection?: ChatModelSelection;
   modelOptions?: ChatModelOptions;
   onModelSelectionChange?: (selection: ChatModelSelection) => void;
-  /** When set, an "Auto mode" pill toggles this (auto-approve tool actions). */
+  /** The model the gateway will actually use while the selection is `auto`, when
+   *  the host knows it — so the menu names what is running, not just "Auto". */
+  effectiveModel?: string;
+  /** False ⇒ the tenant may not pin a model (no paid plan, no connected provider):
+   *  the `/` menu says why instead of offering a list the gateway would reject. */
+  canChooseModel?: boolean;
+  /**
+   * Conversation mode for this turn — Chat (answer it) or Work (open it, staff it,
+   * dispatch it). Shown and changed in the `/` menu, and named on its trigger: this
+   * is the setting that decides whether a turn can leave real work behind, so it is
+   * readable without opening anything but does not cost the action row a control.
+   */
+  chatMode?: ChatMode;
+  onChatModeChange?: (mode: ChatMode) => void;
+  /** Persistent memory for this conversation, shown and changed in the `/` menu. */
+  memoryEnabled?: boolean;
+  onMemoryChange?: (on: boolean) => void;
+  /** Why memory is unusable right now — the `/` menu states it rather than offering
+   *  a toggle that would do nothing. */
+  memoryUnavailableReason?: string;
+  /**
+   * Consolidate / fork THIS chat, shown in the `/` menu (never as pills in the
+   * action row — they are inert for most of a chat's life and would crowd out Send
+   * on a narrow panel). Needs both handlers to render.
+   */
+  canConsolidate?: boolean;
+  consolidating?: boolean;
+  forking?: boolean;
+  onConsolidate?: () => void;
+  onFork?: () => void;
+  /** When set, the `/` options menu toggles auto-approval of tool actions. */
   autoMode?: boolean;
   onAutoModeChange?: (on: boolean) => void;
   /** Show brain storm (ideation) icon — link to /brainstorm or callback. */
@@ -91,6 +126,10 @@ export interface ChatInputProps {
   mentionables?: DirectedRecipient[];
   /** Called when a participant is picked from the @-mention typeahead. */
   onMention?: (recipient: DirectedRecipient) => void;
+  /** Context selectors rendered first in the canonical action row. */
+  contextControls?: React.ReactNode;
+  /** Host-specific modes rendered after the shared mode/model controls. */
+  modeControls?: React.ReactNode;
   className?: string;
   /**
    * Change this to any new value to focus the composer and put the caret at the
@@ -190,24 +229,6 @@ function SendArrowIcon() {
   );
 }
 
-/** Forward slash (options menu trigger) */
-function SlashIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="15" y1="5" x2="9" y2="19" />
-    </svg>
-  );
-}
-
-/** Lightning bolt (auto mode) */
-function BoltIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />
-    </svg>
-  );
-}
-
 const menuPopStyle: React.CSSProperties = {
   position: 'absolute',
   bottom: 'calc(100% + 8px)',
@@ -215,7 +236,7 @@ const menuPopStyle: React.CSSProperties = {
   zIndex: 50,
   minWidth: 224,
   padding: 5,
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)',
   boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
@@ -261,14 +282,13 @@ function ComposerMenu({ trigger, title, disabled, children }: {
   );
 }
 
-/** One row in a {@link ComposerMenu}: icon + label, optional hint/active check, button or link. */
-function MenuRow({ icon, label, hint, active, onClick, href }: {
+/** One row in a {@link ComposerMenu}: icon + label, optional hint/active check. */
+function MenuRow({ icon, label, hint, active, onClick }: {
   icon: React.ReactNode;
   label: string;
   hint?: string;
   active?: boolean;
   onClick?: () => void;
-  href?: string;
 }) {
   const [hover, setHover] = useState(false);
   const style: React.CSSProperties = {
@@ -278,7 +298,7 @@ function MenuRow({ icon, label, hint, active, onClick, href }: {
     width: '100%',
     padding: '8px 9px',
     border: 'none',
-    borderRadius: 8,
+    borderRadius: 'var(--radius-md)',
     background: hover ? 'var(--surface-interactive, var(--bg-base))' : 'transparent',
     color: 'var(--text-primary)',
     fontSize: 13,
@@ -288,21 +308,14 @@ function MenuRow({ icon, label, hint, active, onClick, href }: {
   };
   const body = (
     <>
-      <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+      <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}><Icon source={icon} size={18} /></span>
       <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
-      {hint != null && <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
-      {active && <span aria-hidden style={{ color: 'var(--coral-bright, #f4726e)', width: 12 }}>✓</span>}
+      {hint != null && <span style={{ fontSize: 'var(--font-size-field-label)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
+      {active && <span aria-hidden style={{ color: 'var(--coral-bright)', width: 12 }}><Icon name="check" size={14} /></span>}
     </>
   );
   const shared = { style, role: 'menuitem' as const, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) };
-  return href
-    ? <Link href={href} {...shared}>{body}</Link>
-    : <button type="button" onClick={onClick} {...shared}>{body}</button>;
-}
-
-/** Section heading inside a menu (e.g. "Effort"). */
-function menuGroupStyle(): React.CSSProperties {
-  return { padding: '6px 9px 3px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' };
+  return <button type="button" onClick={onClick} {...shared}>{body}</button>;
 }
 
 /**
@@ -314,6 +327,7 @@ export function ChatInput({
   onChange,
   onSubmit,
   placeholder = 'Message…',
+  ariaLabel,
   disabled = false,
   submitLabel = 'Send',
   running = false,
@@ -333,6 +347,18 @@ export function ChatInput({
   modelSelection,
   modelOptions,
   onModelSelectionChange,
+  effectiveModel,
+  canChooseModel = true,
+  chatMode,
+  onChatModeChange,
+  memoryEnabled,
+  onMemoryChange,
+  memoryUnavailableReason,
+  canConsolidate = false,
+  consolidating = false,
+  forking = false,
+  onConsolidate,
+  onFork,
   autoMode,
   onAutoModeChange,
   showBrainIcon = false,
@@ -342,10 +368,15 @@ export function ChatInput({
   secondaryContent,
   mentionables,
   onMention,
+  contextControls,
+  modeControls,
   className,
   focusToken,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
+  // The two mode names are the conversation's vocabulary, not the composer's — they
+  // are the SAME words the Brain empty state uses, from the same catalog namespace.
+  const tModes = useTranslations('brain.modes');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -364,24 +395,95 @@ export function ChatInput({
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, [focusToken]);
+  const router = useRouter();
   const canSubmit = value.trim().length > 0 && !disabled;
   // "Activated" once the user is typing in / focused on the composer — the whole
   // box lights up in accent (blue), the same treatment as the VS Code composer so
   // the experience matches across every modality.
   const active = focused || value.trim().length > 0;
-  // The `/` options menu appears when the consumer wires any of its controls.
-  const hasOptionsMenu = !!(onEffortChange || onThinkingChange || accountSettingsHref);
+
+  // The `/` menu's copy. Localized here (next-intl) and handed to the SHARED
+  // control, so the web and the editor render the same menu from their own bundles.
+  // The per-row funding lines that interpolate a value (the BYO vendor, the metered
+  // price) are formatted by the options builder instead — see useChatModelOptions.
+  const optionLabels = useMemo<Partial<PromptOptionsLabels>>(() => ({
+    options: t('options'),
+    mode: tModes('pickerAria'),
+    memory: t('memory'),
+    autoMode: t('autoMode'),
+    autoModeHint: t('autoModeHint'),
+    conversation: t('conversation'),
+    consolidate: t('consolidate'),
+    consolidating: t('consolidating'),
+    consolidateHint: t('consolidateHint'),
+    fork: t('fork'),
+    forking: t('forking'),
+    forkHint: t('forkHint'),
+    sessionUnavailable: t('sessionUnavailable'),
+    effort: t('effort'),
+    effortQuick: t('effort_quick'),
+    effortBalanced: t('effort_balanced'),
+    effortThorough: t('effort_thorough'),
+    thinking: t('thinking'),
+    on: t('on'),
+    off: t('off'),
+    model: t('model'),
+    modelInUse: t('modelInUse'),
+    searchModels: t('searchModels'),
+    filterModels: t('filterModels'),
+    chooseModel: t('chooseModel'),
+    noModels: t('noModels'),
+    all: t('all'),
+    categoryAuto: t('categoryAuto'),
+    categoryByo: t('categoryByo'),
+    categoryFree: t('categoryFree'),
+    categoryPlan: t('categoryPlan'),
+    categoryPaid: t('categoryPaid'),
+    categoryConfigured: t('categoryConfigured'),
+    autoLabel: t('categoryAuto'),
+    autoDetail: t('autoDetail'),
+    poolLabel: t('poolLabel'),
+    poolDetail: t('poolDetail'),
+    freeDetail: t('freeDetail'),
+    planDetail: t('planDetail'),
+    paidDetail: t('paidDetail'),
+    configuredDetail: t('configuredDetail'),
+    evermindLabel: t('evermindLabel'),
+    evermindDetail: t('evermindDetail'),
+    modelLocked: t('modelLocked'),
+    accountSettings: t('accountSettings'),
+  }), [t]);
+
+  // Chat | Work, built from the SHARED mode list so a mode cannot exist in the
+  // vocabulary and be missing from the control that arms it.
+  const modeChoices = useMemo(
+    () => CHAT_MODES.map((mode) => ({ value: mode, label: tModes(`${mode}.label`), hint: tModes(`${mode}.hint`), icon: CHAT_MODE_ICON[mode] })),
+    [tModes],
+  );
+  const describeMemory = useCallback((on: boolean) => t(on ? 'memoryOnHint' : 'memoryOffHint'), [t]);
+
+  // What each control really costs, read from the SHARED effort table so the copy
+  // can never promise a budget the request does not send.
+  const describeEffort = useCallback((level: BrainEffort) => {
+    const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
+    const base = t(`effortDesc_${level}`, { answer: maxTokens.toLocaleString() });
+    return thinking ? `${base} ${t('effortDescThinking', { thinking: thinkingBudgetTokens.toLocaleString() })}` : base;
+  }, [t, thinking]);
+  const describeThinking = useCallback(
+    (on: boolean) => (on
+      ? t('thinkingOnDesc', { budget: effortProfile(effort ?? 'balanced').thinkingBudgetTokens.toLocaleString() })
+      : t('thinkingOffDesc')),
+    [t, effort],
+  );
 
   // The textarea always takes its own full-width row on top (so typed text is
   // never crushed into a sliver in a narrow side-panel), and the control buttons
   // sit on a second row below — matching the VS Code composer across modalities.
-  // The trailing icon group (brain / voice / send) is pushed to the right via
-  // marginLeft:auto on whichever of them renders first, so Send always lands
-  // bottom-right, Claude-style.
+  // The trailing group (plan · host modes · brain / voice / send) is pushed right
+  // by marginLeft:auto on the plan-chip wrapper, so Send always lands bottom-right,
+  // Claude-style. The wrapper renders even when the chip self-gates to nothing,
+  // which is exactly why it — and not a conditional icon — owns the anchor.
   const trailingShift: React.CSSProperties = { marginLeft: 'auto' };
-  const brainAnchored = showBrainIcon;
-  const voiceAnchored = !showBrainIcon && showVoice;
-  const sendAnchored = !showBrainIcon && !showVoice;
 
   // @-mention typeahead — active only when the host supplies participants. Picking
   // one routes the next turn (via onMention) and strips the "@query" from the text.
@@ -506,67 +608,53 @@ export function ChatInput({
   }, []);
 
   return (
-    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)', width: '100%' }}>
-      {pendingAttachments.length > 0 && onRemoveAttachment && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {pendingAttachments.map((a) => (
-            <span
-              key={a.key}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '4px 8px',
-                borderRadius: 8,
-                background: 'var(--surface-coral-soft)',
-                fontSize: 12,
-                color: 'var(--text-primary)',
-              }}
-            >
-              📎 {a.name}
-              <button
-                type="button"
-                onClick={() => onRemoveAttachment(a.key)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 0 }}
-                aria-label={t('removeAttachment')}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div
+    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
+      <PromptPanel
+        active={active}
         onDrop={onAttach ? handleDrop : undefined}
         onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'flex-end',
-          gap: 'var(--chat-ctl-gap, 6px)',
-          rowGap: 'var(--chat-ctl-pad-y, 6px)',
-          width: '100%',
-          padding: 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)',
-          borderRadius: 18,
-          border: `1px solid ${active ? 'var(--chat-input-active-border)' : 'var(--chat-input-border)'}`,
-          background: 'var(--chat-input-bg)',
-          boxShadow: active ? 'var(--chat-input-active-ring), var(--chat-input-shadow)' : 'var(--chat-input-shadow)',
-          transition: 'border-color 120ms ease, box-shadow 120ms ease',
-        }}
-      >
-        {mention.popup}
-        {onAttach && (
+        overlay={mention.popup}
+        status={pendingAttachments.length > 0 && onRemoveAttachment ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {pendingAttachments.map((a) => (
+              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
+                
+                <Icon source="📎" size="1em" /> {a.name}
+                <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', padding: 0 }} aria-label={t('removeAttachment')}>×</button>
+              </span>
+            ))}
+          </div>
+        ) : undefined}
+        input={(
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onSelect={mention.onSelect}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onPaste={onAttach ? handlePaste : undefined}
+            placeholder={placeholder}
+            aria-label={ariaLabel ?? placeholder}
+            disabled={disabled}
+            rows={rows}
+            style={{ ...inputStyle, flexBasis: '100%', minWidth: '100%' }}
+          />
+        )}
+        actions={(
           <>
+            {onAttach && (
+              <>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,.pdf,.txt,.md,.csv,.json"
+              accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json,.docx,.rtf,.xlsx,.pptx"
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />
             {/* `+` becomes a Claude-style menu: Upload, Add context, Browse the web. */}
-            <ComposerMenu title={t('add')} disabled={disabled} trigger={<span style={{ fontSize: '1.25rem', fontWeight: 300, lineHeight: 1 }}>+</span>}>
+            <ComposerMenu title={t('add')} disabled={disabled} trigger={<Icon name="plus" size={19} />}>
               {(close) => (
                 <>
                   <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />
@@ -583,106 +671,59 @@ export function ChatInput({
                 </>
               )}
             </ComposerMenu>
-          </>
-        )}
-        {hasOptionsMenu && (
-          <ComposerMenu title={t('options')} disabled={disabled} trigger={<SlashIcon />}>
-            {(close) => (
-              <>
-                {onEffortChange && (
-                  <>
-                    <div style={menuGroupStyle()}>{t('effort')}</div>
-                    {(['quick', 'balanced', 'thorough'] as const).map((e) => (
-                      <MenuRow
-                        key={e}
-                        icon={e === 'quick' ? '🏃' : e === 'balanced' ? '⚖️' : '🎯'}
-                        label={t(`effort_${e}`)}
-                        active={effort === e}
-                        onClick={() => onEffortChange(e)}
-                      />
-                    ))}
-                  </>
-                )}
-                {onThinkingChange && (
-                  <MenuRow
-                    icon="💭"
-                    label={t('thinking')}
-                    hint={thinking ? t('on') : t('off')}
-                    active={!!thinking}
-                    onClick={() => onThinkingChange(!thinking)}
-                  />
-                )}
-                {accountSettingsHref && (
-                  <MenuRow icon="⚙️" label={t('accountSettings')} href={accountSettingsHref} onClick={close} />
-                )}
               </>
             )}
-          </ComposerMenu>
-        )}
-        {onAutoModeChange && (
-          <button
-            type="button"
-            onClick={() => onAutoModeChange(!autoMode)}
-            disabled={disabled}
-            title={t('autoModeHint')}
-            aria-pressed={!!autoMode}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              flexShrink: 0,
-              height: 'var(--chat-ctl-size, 32px)',
-              padding: '0 10px',
-              borderRadius: 9999,
-              fontSize: 12,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              border: `1px solid ${autoMode ? 'var(--coral-bright, #f4726e)' : 'var(--chat-input-border)'}`,
-              background: autoMode ? 'var(--surface-coral-soft, rgba(244,114,110,0.12))' : 'transparent',
-              color: autoMode ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
-            }}
-          >
-            <BoltIcon />
-            <span>{t('autoMode')}</span>
-          </button>
-        )}
-        {onModelSelectionChange && modelOptions && modelSelection && (
-          <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} />
-        )}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onSelect={mention.onSelect}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onPaste={onAttach ? handlePaste : undefined}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={rows}
-          style={{ ...inputStyle, order: -1, flexBasis: '100%', minWidth: '100%' }}
-        />
-        {showBrainIcon && (
+            {/* `/` : effort, thinking, WHICH MODEL IS RUNNING and how to change it,
+                and account settings — the one shared control, so this composer can
+                never grow a second "which model" chip beside it again. */}
+            <PromptOptionsMenu
+              labels={optionLabels}
+              disabled={disabled}
+              mode={chatMode && onChatModeChange ? { value: chatMode, onChange: (next) => onChatModeChange(next as ChatMode), choices: modeChoices } : undefined}
+              memory={onMemoryChange ? { enabled: !!memoryEnabled, onChange: onMemoryChange, unavailableReason: memoryUnavailableReason, describe: describeMemory } : undefined}
+              autoMode={onAutoModeChange ? { enabled: !!autoMode, onChange: onAutoModeChange, description: t('autoModeHint') } : undefined}
+              session={onConsolidate && onFork ? { canConsolidate, consolidating, forking, onConsolidate, onFork } : undefined}
+              effort={effort}
+              onEffortChange={onEffortChange}
+              describeEffort={describeEffort}
+              thinking={thinking}
+              onThinkingChange={onThinkingChange}
+              describeThinking={describeThinking}
+              model={onModelSelectionChange && modelOptions && modelSelection
+                ? { selection: modelSelection, options: modelOptions, onChange: onModelSelectionChange, effective: effectiveModel, canChoose: canChooseModel }
+                : undefined}
+              onAccountSettings={accountSettingsHref ? () => router.push(accountSettingsHref) : undefined}
+            />
+            {contextControls}
+            {/* Which plan is funding this chat (and, when metered, what allowance is
+                left) — the same chip, in the same place, as the VS Code composer.
+                Self-gating: it renders nothing without a tenant session, so the
+                wrapper carries the right-alignment anchor instead of the chip. */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0, ...trailingShift }}>
+              <PlanBadge />
+            </span>
+            {modeControls}
+            {showBrainIcon && (
           <Link
             href="/brainstorm"
-            style={brainAnchored ? { ...iconButtonStyle(false), ...trailingShift } : iconButtonStyle(false)}
+            style={iconButtonStyle(false)}
             title={t('brainstorm')}
           >
             <SpeechBubbleIcon />
           </Link>
-        )}
-        {showVoice && (
+            )}
+            {showVoice && (
           <button
             type="button"
             onClick={recording ? stopVoice : startVoice}
             disabled={disabled}
             title={recording ? t('stopDictation') : t('dictate')}
-            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined, ...(voiceAnchored ? trailingShift : null) }}
+            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined }}
           >
             <MicIcon />
           </button>
-        )}
-        {running && onStop && !canSubmit ? (
+            )}
+            {running && onStop && !canSubmit ? (
           // Streaming with an empty composer → the button interrupts the run.
           // When the composer HAS submittable text (e.g. the queue-while-thinking
           // path where the host keeps the input editable), the Send button below
@@ -692,21 +733,23 @@ export function ChatInput({
             onClick={onStop}
             title={stopLabel}
             aria-label={stopLabel}
-            style={sendAnchored ? { ...sendButtonStyle(false), ...trailingShift } : sendButtonStyle(false)}
+            style={sendButtonStyle(false)}
           >
             <StopSquareIcon />
           </button>
-        ) : (
+            ) : (
           <button
             type="submit"
             disabled={!canSubmit}
             title={submitLabel}
-            style={sendAnchored ? { ...sendButtonStyle(!canSubmit), ...trailingShift } : sendButtonStyle(!canSubmit)}
+            style={sendButtonStyle(!canSubmit)}
           >
             <SendArrowIcon />
           </button>
+            )}
+          </>
         )}
-      </div>
+      />
       {secondaryContent && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {secondaryContent}

@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { byoVendorLabel, perMillionUsd, type ChatModelOptions } from '@seanhogg/builderforce-brain-ui';
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
+import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
  * Shared loader for the gateway model list. `models` is the full plan pool;
@@ -73,18 +76,17 @@ export interface LlmModelLists {
 
 const EMPTY: LlmModelLists = { models: [], freeModels: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
-let cache: LlmModelLists | null = null;
-let inflight: Promise<LlmModelLists> | null = null;
+const CACHE_KEY = 'llm-models:lists';
 
 function load(): Promise<LlmModelLists> {
-  if (cache) return Promise.resolve(cache);
+  const cached = readClientCached<LlmModelLists>(CACHE_KEY);
+  if (cached) return Promise.resolve(cached);
   // The local Creation Canvas is intentionally usable by guests. It mounts this
   // shared picker too, but tenant model/catalog endpoints require a workspace JWT.
   // Do not manufacture noisy 401 support tickets for an expected guest session;
   // guest inference chooses its model server-side.
   if (!getStoredTenantToken()) return Promise.resolve(EMPTY);
-  if (!inflight) {
-    inflight = Promise.all([
+  return getOrSetClientCached(CACHE_KEY, () => Promise.all([
       llmApi.models(),
       // Tenant models are tenant-scoped + optional; a failure must not block the pool.
       tenantModelApi.list().then((r) => r.models).catch(() => [] as TenantModel[]),
@@ -117,36 +119,59 @@ function load(): Promise<LlmModelLists> {
         const premiumModels = canUsePremiumModels
           ? await getPremiumModelCatalog().catch(() => [] as ModelRecord[])
           : [];
-        cache = {
+        const value: LlmModelLists = {
           models: models ?? [], freeModels: res.freeModels ?? (res.effectivePlan === 'free' ? models ?? [] : []), codingModels: res.codingModels ?? [], teacherModels, tenantModels,
           isPaid, byoModels, byoProviders, fundingSurface, canChooseModel, canUseFrontierModels,
           canUsePremiumModels,
           ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),
           premiumModels,
         };
-        return cache;
+        return value;
       })
-      .catch(() => {
-        inflight = null; // allow a later retry after a transient failure
-        return EMPTY;
-      });
-  }
-  return inflight;
+      .catch(() => EMPTY));
 }
 
 /** Drop the module cache so the next mount re-fetches (call after creating/editing
  *  a tenant model, so freshly-saved "LLMs" show up in every picker). */
 export function invalidateLlmModels(): void {
-  cache = null;
-  inflight = null;
+  invalidateClientCache(CACHE_KEY);
 }
 
 export function useLlmModels(): LlmModelLists {
-  const [state, setState] = useState<LlmModelLists>(cache ?? EMPTY);
+  const [state, setState] = useState<LlmModelLists>(readClientCached(CACHE_KEY) ?? EMPTY);
   useEffect(() => {
     let alive = true;
     load().then((r) => { if (alive) setState(r); });
     return () => { alive = false; };
   }, []);
   return state;
+}
+
+/**
+ * The composer's model surface, grouped by WHO PAYS — the exact shape the shared
+ * `/` options menu consumes. Every chat surface (Brain panel, Creation Canvas)
+ * reads it from here, so no two composers can offer different lists or price the
+ * same premium model differently.
+ */
+export function useChatModelOptions(): { options: ChatModelOptions; canChooseModel: boolean } {
+  const lists = useLlmModels();
+  const t = useTranslations('chatInput');
+  // The two funding lines that carry per-row values (the vendor billed, the metered
+  // price) are formatted HERE, through next-intl, and ride each row's `cost` — the
+  // menu's own label defaults only cover rows a host does not price itself.
+  return useMemo(() => ({
+    options: {
+      configured: lists.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
+      // `byoVendorLabel` is the SHARED vendor map, so a connected account reads the same
+      // ('Kimi Code', not 'kimi-code') here, in the editor composer, and in its QuickPick.
+      byo: lists.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor, cost: t('byoDetail', { vendor: byoVendorLabel(vendor) }) })),
+      free: lists.freeModels,
+      plan: lists.models,
+      paid: lists.premiumModels.map((model) => ({
+        id: model.id,
+        cost: t('paidCostDetail', { input: perMillionUsd(model.pricing.prompt), output: perMillionUsd(model.pricing.completion) }),
+      })),
+    },
+    canChooseModel: lists.canChooseModel,
+  }), [lists, t]);
 }

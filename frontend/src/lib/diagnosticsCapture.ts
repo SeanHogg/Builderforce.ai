@@ -10,8 +10,11 @@
  * on every capture because it only ever passed the UI build, making a report unable to
  * say which API served the data it is complaining about.
  *
- * Never throws and never blocks a capture: an unreachable `/health` resolves to null and
- * the report says `apiVersion: (none)` honestly.
+ * Never throws and never blocks a capture: an unreachable — or merely SLOW — `/health`
+ * resolves to null (bounded in {@link ./appVersions}) and the report says
+ * `apiVersion: (none)` honestly. Both halves matter: a capture that hangs on the least
+ * important line in the report is indistinguishable, to the person clicking, from a
+ * button that is not wired up at all.
  */
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import type { DiagnosticsContext } from '@/lib/diagnosticsReport';

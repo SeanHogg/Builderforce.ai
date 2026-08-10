@@ -1,15 +1,15 @@
-import { pageMetadata } from '@/lib/seo';
-import AgentOpsClient from '@/components/agent-ops/AgentOpsClient';
+import { redirect } from 'next/navigation';
 
 export const runtime = 'edge';
 
-export const metadata = pageMetadata({
-  title: 'Agent Ops',
-  description:
-    'Operate your agent fleet: see which files agents currently hold and what they are telling each other, govern what they remember and for how long, and rehearse an agent against a ticket before it touches real work.',
-  path: '/agent-ops',
-});
-
-export default function AgentOpsPage() {
-  return <AgentOpsClient />;
+/** Agent Ops now lives inside Workforce; preserve old bookmarks and deep links. */
+export default async function AgentOpsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolved = await searchParams;
+  const requested = resolved?.tab;
+  const tab = requested === 'memory' || requested === 'rehearsal' ? requested : 'coordination';
+  redirect(`/workforce?tab=${tab}`);
 }

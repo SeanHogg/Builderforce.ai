@@ -62,11 +62,11 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 const RUNTIME_SUPPORT_KEYS: AgentRuntimeSupport[] = ['cloud', 'host', 'both'];
 const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container', 'github_actions'];
 
-export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 
 export const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)',
+  width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
   background: 'var(--bg-elevated)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box',
 };
 export const labelStyle: React.CSSProperties = {
@@ -100,7 +100,7 @@ export function CloudAgentDetailsFields({ form, onChange, autoFocus }: FieldGrou
       <div>
         <label style={labelStyle}>{t('tags')}</label>
         <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder={t('tagsPlaceholder')} />
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('tagsHelp')}</p>
+        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>{t('tagsHelp')}</p>
       </div>
     </div>
   );
@@ -117,7 +117,7 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
         <label style={labelStyle}>{t('runtimeSupport')}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {RUNTIME_SUPPORT_KEYS.map((rs) => (
-            <label key={rs} style={{ fontSize: 13, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label key={rs} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="radio" name="runtimeSupport" checked={form.runtimeSupport === rs} onChange={() => onChange({ runtimeSupport: rs })} />
               {t(`runtime.${rs}`)}
             </label>
@@ -140,7 +140,7 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
             <option key={rs} value={rs}>{t(`surfaceLabel.${rs}`)}</option>
           ))}
         </Select>
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
+        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
         {/* Warns when "GitHub Actions" is picked for a project whose repo has no
             agent workflow — otherwise dispatch silently degrades to the durable
             executor and only says so in the run timeline afterwards. Resolves its
@@ -157,7 +157,7 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           preserveValue={form.baseModel}
           style={inputStyle}
         />
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
+        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
         {/* Renders only when premium needs billing details/card validation —
             it decides its own visibility, so no entitlement prop-drilling here. */}
         <div style={{ marginTop: 10 }}><PremiumModelUnlock /></div>
@@ -173,7 +173,7 @@ export function CloudAgentPersonalityFields({ form, onChange }: FieldGroupProps)
   return (
     <div>
       <label style={labelStyle}>{t('personality')}</label>
-      <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px' }}>{t('personalityHelp')}</p>
+      <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '0 0 8px' }}>{t('personalityHelp')}</p>
       {/* Self-gates on the Pro entitlement (renders a locked upsell when not entitled). */}
       <PsychometricEditor value={form.psychometric} onChange={(p) => onChange({ psychometric: p })} />
     </div>

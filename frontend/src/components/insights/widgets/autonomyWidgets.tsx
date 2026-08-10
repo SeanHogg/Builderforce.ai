@@ -25,6 +25,7 @@
  *     chrome from theme tokens, so both themes work with no per-theme hex.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import {
   autonomyApi, autonomousHopShare, shareOfCreated,
@@ -124,7 +125,7 @@ function rowsWithTotals(data: AutonomySummary): Array<{ stats: AutonomyOriginSta
 function OriginChip({ origin, label }: { origin: TicketOrigin; label: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-      <span style={{ width: 10, height: 10, borderRadius: 3, background: ORIGIN_COLOR[origin], flexShrink: 0 }} />
+      <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: ORIGIN_COLOR[origin], flexShrink: 0 }} />
       <span style={{ fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {label}
       </span>
@@ -145,13 +146,13 @@ export function AutonomyCoverage({ data }: { data: AutonomySummary }) {
       role="note"
       style={{
         display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
-        fontSize: '0.78rem', lineHeight: 1.5, padding: '8px 12px', borderRadius: 8,
-        border: `1px solid ${warn ? 'var(--warning, #d97706)' : 'var(--border-subtle)'}`,
+        fontSize: '0.78rem', lineHeight: 1.5, padding: '8px 12px', borderRadius: 'var(--radius-md)',
+        border: `1px solid ${warn ? 'var(--warning)' : 'var(--border-subtle)'}`,
         background: warn ? 'var(--warning-bg, rgba(245,158,11,0.16))' : 'var(--bg-elevated)',
         color: warn ? 'var(--warning-text, var(--text-primary))' : 'var(--text-secondary)',
       }}
     >
-      <span aria-hidden>{warn ? '⚠' : 'ℹ'}</span>
+      <span aria-hidden>{warn ? <Icon source="⚠" size="1em" /> : <Icon source="ℹ" size="1em" />}</span>
       <span>
         {warn
           ? t('autonomy.coverage.truncated', { n: int(data.ticketsScanned), days: data.windowDays })

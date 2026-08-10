@@ -1,0 +1,4 @@
+-- Superseded before release by 0447_contention_activity_log.sql. Contention is an
+-- activity_log event, not a domain-specific event table. Migration 0447 detects
+-- environments that already ran an older copy of this migration, copies their
+-- legacy rows, and then drops the retired table.

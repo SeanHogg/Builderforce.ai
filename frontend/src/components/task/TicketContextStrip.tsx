@@ -23,7 +23,7 @@ import { tasksApi, kanbanApi, type TicketContext, type TicketObjective } from '@
 
 const card: CSSProperties = {
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 12,
   background: 'var(--bg-elevated)',
   display: 'flex',
@@ -45,7 +45,7 @@ const linkButton: CSSProperties = {
   background: 'none',
   padding: 0,
   font: 'inherit',
-  color: 'var(--coral-bright, #f4726e)',
+  color: 'var(--coral-bright)',
   fontWeight: 600,
   cursor: 'pointer',
   textAlign: 'left',
@@ -53,9 +53,9 @@ const linkButton: CSSProperties = {
 
 /** Tone a completion bar by how far along it is — red early, amber mid, green done. */
 function meterColor(percent: number): string {
-  if (percent >= 100) return 'var(--success, #16a34a)';
-  if (percent >= 50) return 'var(--coral-bright, #f97316)';
-  return 'var(--warning-text, #d97706)';
+  if (percent >= 100) return 'var(--success)';
+  if (percent >= 50) return 'var(--coral-bright)';
+  return 'var(--warning-text)';
 }
 
 function Meter({ percent, height = 8 }: { percent: number; height?: number }) {
@@ -65,7 +65,7 @@ function Meter({ percent, height = 8 }: { percent: number; height?: number }) {
       aria-valuenow={percent}
       aria-valuemin={0}
       aria-valuemax={100}
-      style={{ height, borderRadius: 999, background: 'var(--bg-deep, #e2e8f0)', overflow: 'hidden', width: '100%' }}
+      style={{ height, borderRadius: 'var(--radius-full)', background: 'var(--bg-deep)', overflow: 'hidden', width: '100%' }}
     >
       <div style={{ width: `${Math.min(100, Math.max(0, percent))}%`, height: '100%', background: meterColor(percent), transition: 'width .3s ease' }} />
     </div>
@@ -173,7 +173,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
   }, [taskId, load, onChanged]);
 
   if (error) {
-    return <div style={{ fontSize: 12, color: 'var(--danger-text, #991b1b)', marginBottom: 12 }}>{error}</div>;
+    return <div style={{ fontSize: 12, color: 'var(--danger-text)', marginBottom: 12 }}>{error}</div>;
   }
   // Nothing to show until it loads — the drawer's own content is already useful,
   // so a skeleton here would only push it down.
@@ -239,13 +239,13 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
         <div
           style={{
             ...card,
-            border: '1px solid var(--warning-border, #fed7aa)',
-            background: 'var(--warning-bg, #fffbeb)',
+            border: '1px solid var(--warning-border)',
+            background: 'var(--warning-bg)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ ...label, color: 'var(--warning-text, #854d0e)' }}>{t('waitingOn')}</span>
-            <span style={{ fontSize: 13, color: 'var(--warning-text, #854d0e)', flex: '1 1 180px', minWidth: 0 }}>
+            <span style={{ ...label, color: 'var(--warning-text)' }}>{t('waitingOn')}</span>
+            <span style={{ fontSize: 13, color: 'var(--warning-text)', flex: '1 1 180px', minWidth: 0 }}>
               {signoff.outstandingRoles.length > 0
                 ? signoff.outstandingRoles.join(' · ')
                 : t('gapsOnly', { count: signoff.gaps })}
@@ -257,8 +257,8 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
               onClick={coordinate}
               disabled={coordinating}
               style={{
-                padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700,
-                background: 'var(--coral-bright, #f97316)', color: '#fff',
+                padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', fontSize: 12, fontWeight: 700,
+                background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
                 cursor: coordinating ? 'default' : 'pointer', opacity: coordinating ? 0.65 : 1,
               }}
             >
@@ -268,7 +268,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
               type="button"
               onClick={() => onOpenTab?.('accountability')}
               style={{
-                padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+                padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-base)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
               }}
             >

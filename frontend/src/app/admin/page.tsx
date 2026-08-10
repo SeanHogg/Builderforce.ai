@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { EmulationLauncherProvider } from '@/components/admin/EmulationLauncher';
-import AdminGroupNav from '@/components/admin/AdminGroupNav';
-import { resolveAdminRoute } from '@/lib/adminGroups';
+import { DestinationIndex } from '@/components/shell/DestinationIndex';
+import { adminSubHref, resolveAdminRoute } from '@/lib/adminGroups';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LlmTracesPanel } from './LlmTracesPanel';
 import HealthPanel from '@/components/admin/panels/HealthPanel';
@@ -23,6 +24,8 @@ import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
 import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
 import DemoFunnelPanel from '@/components/admin/panels/DemoFunnelPanel';
 import SalesLeadsPanel from '@/components/admin/panels/SalesLeadsPanel';
+import BroadcastsPanel from '@/components/admin/panels/BroadcastsPanel';
+import SalesCommissionsPanel from '@/components/admin/panels/SalesCommissionsPanel';
 import PrivacyPanel from '@/components/admin/panels/PrivacyPanel';
 import PersonasPanel from '@/components/admin/panels/PersonasPanel';
 import GovernancePanel from '@/components/admin/panels/GovernancePanel';
@@ -33,13 +36,17 @@ import AuditLogPanel from '@/components/admin/panels/AuditLogPanel';
 import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
 import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
+import PricingPanel from '@/components/admin/panels/PricingPanel';
+import OutcomeMetricsPanel from '@/components/admin/panels/OutcomeMetricsPanel';
+import EmailDeliveriesPanel from '@/components/admin/panels/EmailDeliveriesPanel';
+import { signInHref } from '@/lib/auth';
 
 /**
  * Platform Admin shell — a THIN router.
  *
  * The 19 admin capabilities are consolidated into 10 top-level GROUPS (see
- * `ADMIN_GROUP_META`); each group's sub-views are the shared shell <SectionTabs>
- * bar's tabs, and within a group an inner <AdminGroupNav> switches sub-views via
+ * `ADMIN_GROUP_META`); each group's sub-views are the shared shell <ShellIndex>
+ * bar's tabs, and within a group the shared <DestinationIndex> switches sub-views via
  * `?sub=`. This page owns no state: it resolves `?tab=`/`?sub=` to a group + sub
  * and renders the matching self-fetching panel (`components/admin/panels/*`).
  */
@@ -49,6 +56,7 @@ import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   health: HealthPanel,
   cron: CronPanel,
+  outcomes: OutcomeMetricsPanel,
   directory: UsersPanel,
   sessions: GuestSessionsPanel,
   creationSessions: CreationSessionsPanel,
@@ -64,11 +72,15 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   legal: LegalPanel,
   privacy: PrivacyPanel,
   billing: BillingPanel,
+  pricing: PricingPanel,
   newsletter: NewsletterPanel,
   releaseNotes: ReleaseNotesPanel,
   demoFunnel: DemoFunnelPanel,
   salesLeads: SalesLeadsPanel,
+  broadcasts: BroadcastsPanel,
+  salesCommissions: SalesCommissionsPanel,
   errors: ErrorsPanel,
+  emailDeliveries: EmailDeliveriesPanel,
   audit: AuditLogPanel,
   apiKeys: () => <TenantApiKeysAdminTab active />,
   token: TokenPanel,
@@ -76,6 +88,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
 };
 
 export default function AdminPage() {
+  const tAdmin = useTranslations('admin');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated } = useAuth();
@@ -83,7 +96,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/admin');
+      router.replace(signInHref('/admin'));
       return;
     }
     if (isAuthenticated && !isSuperadmin) {
@@ -105,7 +118,19 @@ export default function AdminPage() {
         {/* One provider owns the emulate flow so Users / Tenants / the user drawer
             can launch it without prop-drilling a callback + modal state. */}
         <EmulationLauncherProvider>
-          <AdminGroupNav group={group} activeSubId={sub.id} />
+          {/* The group's sub-views through the ONE index (PRD 21 §3.4) — the
+              thin adapter it used to go through is deleted. */}
+          <DestinationIndex
+            items={group.subs.map((entry) => ({
+              id: entry.id,
+              label: tAdmin(`sub.${entry.subKey}`),
+              icon: entry.icon,
+              href: adminSubHref(group.id, entry.id),
+            }))}
+            activeId={sub.id}
+            ariaLabel={tAdmin('subnavLabel')}
+            style={{ marginBottom: 20 }}
+          />
           <Panel />
         </EmulationLauncherProvider>
       </div>

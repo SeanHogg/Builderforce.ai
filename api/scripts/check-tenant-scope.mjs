@@ -2,7 +2,7 @@
 /**
  * Tenant-scope ratchet — a query against a tenant-owned table must filter by tenant.
  *
- * 261 of the 318 tables carry `tenant_id`, and the rule "every query against them
+ * 306 of the 374 tables carry `tenant_id`, and the rule "every query against them
  * is scoped to the caller's tenant" is what keeps customers' data apart. It is
  * currently re-typed by hand at ~1,100 sites. An omission does not fail to
  * compile and does not throw — it just returns another tenant's rows. This guard
@@ -116,6 +116,60 @@ if (TENANT_TABLES.size === 0) {
 // 2 · Extract whole Drizzle statements
 // ---------------------------------------------------------------------------
 
+/**
+ * Blank out COMMENTS, preserving every character position.
+ *
+ * The scanner below is a bracket counter, and prose is full of the characters it
+ * counts. A comma inside a `//` comment mid-chain — `// LEFT join: a mailbox
+ * campaign has no sender identity at all, and an inner join …` — terminated the
+ * statement BEFORE its `.where()`, so a properly scoped query was reported as
+ * unscoped. A `)` in prose does the same thing in the other direction: it can
+ * end the statement early and MASK a real violation.
+ *
+ * Strings are skipped over but NOT blanked: a raw `sql\`… tenant_id = …\`` is a
+ * genuine tenant predicate, and blanking it would turn a scoped query into a
+ * reported violation. Skipping is still necessary so that a `//` inside a string
+ * (`'https://…'`) is not mistaken for the start of a comment.
+ *
+ * Positions are preserved (comment bodies become spaces, newlines kept) so
+ * reported line numbers still point at the real source.
+ */
+function blankComments(text) {
+  const out = text.split('');
+  const blank = (from, to) => {
+    for (let i = from; i < to && i < out.length; i++) if (out[i] !== '\n') out[i] = ' ';
+  };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (ch === '/' && next === '/') {
+      const end = text.indexOf('\n', i);
+      const stop = end === -1 ? text.length : end;
+      blank(i, stop);
+      i = stop;
+    } else if (ch === '/' && next === '*') {
+      const end = text.indexOf('*/', i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      blank(i, stop);
+      i = stop;
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      let j = i + 1;
+      for (; j < text.length; j++) {
+        if (text[j] === '\\') { j++; continue; }
+        if (text[j] === ch) break;
+        // An unterminated quote is an apostrophe in prose we mis-read, not a
+        // string — stop at the newline rather than skip the rest of the file.
+        if (text[j] === '\n' && ch !== '`') break;
+      }
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return out.join('');
+}
+
 /** A statement head: `db.select(`, `this.db.update(`, `tx.delete(`, … */
 const STATEMENT_HEAD = /\b(?:db|tx|trx|this\.db)\s*\.\s*(select|selectDistinct|update|delete)\s*\(/g;
 
@@ -184,7 +238,8 @@ function arrayCarriesTenant(text, ident) {
   return init.test(text) || push.test(text);
 }
 
-function violationsIn(text) {
+function violationsIn(source) {
+  const text = blankComments(source);
   const found = [];
   STATEMENT_HEAD.lastIndex = 0;
   let m;

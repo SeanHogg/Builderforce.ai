@@ -64,12 +64,12 @@ export default function PermissionDebuggerPanel() {
   }
 
   /** Status colours come from the shared semantic tokens, not literal hex, so the
-   *  panel stays legible in light mode (a raw #22c55e on a light surface fails
+   *  panel stays legible in light mode (a raw var(--success) on a light surface fails
    *  contrast where var(--success) is theme-tuned). */
   function statusColor(status: string) {
-    if (status === 'granted') return 'var(--success, #22c55e)';
-    if (status === 'soft-gate') return 'var(--warning, #eab308)';
-    return 'var(--error, #ef4444)';
+    if (status === 'granted') return 'var(--success, var(--success))';
+    if (status === 'soft-gate') return 'var(--warning)';
+    return 'var(--error)';
   }
 
   /** A gate's status is a fixed enum from the permission registry (`granted` /
@@ -93,8 +93,8 @@ export default function PermissionDebuggerPanel() {
       <div className="perm-debugger-summary">
         <span>{t('role')} <strong>{activeRole}</strong></span>
         <span>{t('activeCount', { granted: granted.length, total: gates.length })}</span>
-        {denied.length > 0 && <span style={{ color: 'var(--error, #ef4444)' }}>{t('deniedCount', { count: denied.length })}</span>}
-        {soft.length > 0 && <span style={{ color: 'var(--warning, #eab308)' }}>{t('softGatedCount', { count: soft.length })}</span>}
+        {denied.length > 0 && <span style={{ color: 'var(--error)' }}>{t('deniedCount', { count: denied.length })}</span>}
+        {soft.length > 0 && <span style={{ color: 'var(--warning)' }}>{t('softGatedCount', { count: soft.length })}</span>}
       </div>
 
       {/* Tabs */}
@@ -129,18 +129,18 @@ export default function PermissionDebuggerPanel() {
           <tbody>
             {(panelTab === 'role' ? roleGrouped : displayed).map((g) => (
               <tr key={g.id ?? g.permission}>
-                <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>{g.permission}</td>
+                <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--font-size-eyebrow)' }}>{g.permission}</td>
                 <td>
-                  <span style={{ color: statusColor(g.status), fontWeight: 600, fontSize: 11 }}>
+                  <span style={{ color: statusColor(g.status), fontWeight: 600, fontSize: 'var(--font-size-eyebrow)' }}>
                     {statusLabel(g.status)}
                   </span>
                 </td>
-                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.grantedVia ?? '—'}</td>
+                <td style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{g.grantedVia ?? '—'}</td>
                 {panelTab === 'role' && (
-                  <td style={{ fontSize: 11 }}>{(g as PermissionRegistration & { count?: number }).count ?? 1}</td>
+                  <td style={{ fontSize: 'var(--font-size-eyebrow)' }}>{(g as PermissionRegistration & { count?: number }).count ?? 1}</td>
                 )}
                 {panelTab !== 'role' && (
-                  <td style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{g.apiEndpoint ?? '—'}</td>
+                  <td style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{g.apiEndpoint ?? '—'}</td>
                 )}
               </tr>
             ))}

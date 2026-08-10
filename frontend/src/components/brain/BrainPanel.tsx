@@ -8,10 +8,11 @@
  * is chrome (two-column page vs. collapsible drawer).
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { BrainTimeline, Avatar, ConsolidateForkControl } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import {
   consolidationMarkerContent,
@@ -28,7 +29,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
-import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
+import { EvermindStatusBadge } from '@/components/builder/EvermindStatusBadge';
 import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
@@ -40,6 +41,8 @@ import { UnreadBadge } from '@/components/UnreadBadge';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
+import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
+import { WorkOptionsPicker } from '@/components/brain/WorkOptionsPicker';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { ThemeSelect } from '@/components/ThemeSelect';
@@ -61,6 +64,10 @@ import {
   resolveRecipient,
   isStepMessage,
   getBrainCapability,
+  normalizeChatMode,
+  NEW_CHAT_MODE,
+  type ChatMode,
+  type WorkOptionId,
   type BrainCapabilityId,
   type BrainCapabilitySurface,
   type SuggestedAction,
@@ -72,7 +79,7 @@ import {
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
-import { useLlmModels } from '@/lib/useLlmModels';
+import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { PlanBadge } from '@/components/PlanBadge';
 import { BrainErrorBanner } from './BrainErrorBanner';
@@ -81,6 +88,7 @@ import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
 import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
+import { nextSeedPromptStep } from '@/lib/brain/seedPrompt';
 import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
 import { fetchLimbicBlock } from '@/lib/personalityApi';
 
@@ -209,7 +217,28 @@ export function BrainPanel({
   const [input, setInput] = useState('');
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  /**
+   * The mode a NOT-YET-CREATED chat will be born in (migration 0409). Declared here,
+   * above `startNewChat`, because every creation path has to carry it: a user who
+   * picks Work in the empty state and then types must get a WORK conversation, not a
+   * chat one that silently declines to do the thing they asked for. Mirrored into a
+   * ref so `startNewChat` reads the current value without being re-created (it is a
+   * dependency of `ensureChatId`, which is captured into every run).
+   */
+  const [pendingMode, setPendingMode] = useState<ChatMode>(NEW_CHAT_MODE);
+  const pendingModeRef = useRef<ChatMode>(NEW_CHAT_MODE);
+  // eslint-disable-next-line react-hooks/refs
+  pendingModeRef.current = pendingMode;
+  /**
+   * Docked drawer sections. Chat history used to be a collapsible strip stacked
+   * ABOVE the conversation, which squeezed the thread in a ~440px drawer and hid
+   * past chats behind a disclosure; it is now a peer tab of the conversation, so
+   * a returning user can reach any earlier chat without giving up thread height.
+   * The full-page variant keeps its permanent sidebar and ignores this.
+   */
+  const [dockedTab, setDockedTab] = useState<'chat' | 'history'>('chat');
+  /** Which chat row has its rename/summarize/delete/assign actions revealed. */
+  const [actionsChatId, setActionsChatId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [summarizingId, setSummarizingId] = useState<number | null>(null);
@@ -345,10 +374,37 @@ export function BrainPanel({
     if (isPage) publishActiveChat?.(chats.activeChatId);
   }, [isPage, publishActiveChat, chats.activeChatId]);
 
+  /**
+   * Start a chat and land the user in it. The ONE "new chat" path for every
+   * surface control (header button, empty-state buttons, capability tiles,
+   * composer-driven creation) — docked, that also has to leave the history tab,
+   * otherwise pressing "+ New" from history silently created a chat the user
+   * never saw.
+   */
+  const startNewChat = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null; mode?: ChatMode }) => {
+    // The mode chosen in the empty state rides EVERY creation path — including the one
+    // that fires implicitly when the user just types and hits send (`ensureChatId`).
+    const created = await chats.create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
+    if (!isPage) setDockedTab('chat');
+    return created;
+  }, [chats, isPage]);
+
+  /**
+   * Open an existing chat from the history list. Docked, history is a tab beside
+   * the conversation, so opening a chat has to switch back to it; the page keeps
+   * the list permanently beside the thread and instead reveals that row's
+   * actions (its long-standing behaviour).
+   */
+  const openChat = useCallback((id: number) => {
+    void chats.select(id);
+    if (isPage) setActionsChatId(id);
+    else setDockedTab('chat');
+  }, [chats, isPage]);
+
   const ensureChatId = useCallback(async () => {
-    const c = await chats.create();
+    const c = await startNewChat();
     return c?.id ?? null;
-  }, [chats]);
+  }, [startNewChat]);
 
   // Tell the model which project is in context, so "create a task" / "list
   // specs" without a named project default to it. Chat-FIRST: a chat that belongs
@@ -380,7 +436,7 @@ export function BrainPanel({
     // (same path the "Start new chat" button takes, plus the capability).
     if (chats.activeChatId == null) {
       if (id == null) return;
-      await chats.create({ capability: id });
+      await startNewChat({ capability: id });
     } else {
       await chats.setCapability(chats.activeChatId, id);
     }
@@ -390,8 +446,28 @@ export function BrainPanel({
       // not a finished message. (Sending the raw seed produced stub replies.)
       setComposerFocusToken((n) => n + 1);
     }
-  }, [chats, tBrain]);
+  }, [chats, startNewChat, tBrain]);
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
+
+  // ---- Mode ("am I asking, or delegating?") --------------------------------
+  // A property of the CHAT (migration 0409), like `capability`, so the choice follows
+  // the conversation rather than the browser. `pendingMode` (declared above, beside the
+  // composer state, because `startNewChat` reads it) covers the pre-chat empty state:
+  // without it, picking Work and then typing would silently mint a `chat`-mode chat.
+  const chatMode: ChatMode = chats.activeChat
+    ? normalizeChatMode(chats.activeChat.mode)
+    : pendingMode;
+  const selectMode = useCallback(async (mode: ChatMode) => {
+    setPendingMode(mode);
+    const id = chats.activeChatId;
+    if (id != null) await chats.setMode(id, mode);
+  }, [chats]);
+  // A work option is a STARTING POINT, not a message: seed the composer and drop the
+  // caret at the end so the user finishes the brief instead of sending the template.
+  const pickWorkOption = useCallback((_id: WorkOptionId, brief: string) => {
+    setInput((prev) => (prev.trim() ? prev : brief));
+    setComposerFocusToken((n) => n + 1);
+  }, []);
 
   const ambientSystem = useMemo(() => {
     const parts: string[] = [];
@@ -485,13 +561,7 @@ export function BrainPanel({
   // — because the run loop needs it to fail over when a model will not emit tool
   // calls; the diagnostics capture below reads the same cached object.
   const llmModels = useLlmModels();
-  const modelOptions = useMemo(() => ({
-    configured: llmModels.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
-    byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
-    free: llmModels.freeModels,
-    plan: llmModels.models,
-    paid: llmModels.premiumModels.map((model) => model.id),
-  }), [llmModels]);
+  const { options: modelOptions, canChooseModel } = useChatModelOptions();
   const selectedModel = modelSelection.mode === 'model' ? modelSelection.model : undefined;
   // Tool-call failover: the SHARED selector over that surface, so "which model next"
   // is decided in one place for every host rather than per surface.
@@ -517,6 +587,7 @@ export function BrainPanel({
     onFirstUserTurn: chats.autoTitle,
     evermind: gatedEvermind,
     augmentSystemPrompt,
+    chatMode,
   });
 
   const { pendingConfirm, resolveConfirm } = conv;
@@ -1065,21 +1136,21 @@ export function BrainPanel({
         width: 28,
         height: 24,
         padding: 0,
-        fontSize: 13,
+        fontSize: 'var(--font-size-small)',
         lineHeight: 1,
         background: 'var(--bg-elevated)',
         color: capture.state === 'error'
-          ? 'var(--red, #ef4444)'
+          ? 'var(--danger)'
           : capture.state === 'copied'
-            ? 'var(--green, #22c55e)'
+            ? 'var(--success, var(--success))'
             : 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         cursor: conv.hasTrace ? 'pointer' : 'not-allowed',
         opacity: conv.hasTrace ? 1 : 0.5,
       }}
     >
-      {capture.state === 'copied' ? '✓' : capture.state === 'error' ? '✕' : '⧉'}
+      <Icon name={capture.state === 'copied' ? 'check' : capture.state === 'error' ? 'close' : 'document'} size={14} />
     </button>
   );
 
@@ -1109,17 +1180,36 @@ export function BrainPanel({
     })();
   }, [initialTicket, initialChatId, chats, pinnedProjectId, viewingProjectId]);
 
-  // Auto-send a one-shot prompt (e.g. a landing-page prompt replayed after auth).
-  // `conv.send` creates+selects a chat on demand, so the conversation renders and
-  // streams a reply. Ref-guarded so re-renders never re-send; `ticketReady` holds it
-  // until any auto-link has claimed the chat so the prompt lands in the linked one.
+  // Auto-send a one-shot SEED prompt (a home/landing-page prompt replayed after
+  // auth, an IDE `?prompt=`). A seed starts a NEW conversation: the drawer
+  // restores the chat you were last in, so sending straight away appended a
+  // returning visitor's fresh idea to an old thread. `nextSeedPromptStep` decides
+  // — clear the restored selection first, then send, at which point `conv.send`
+  // creates the chat via `ensureChatId`. Refs (not state) so re-renders can never
+  // re-send; `ticketReady` holds it until any auto-link has claimed its chat.
   const initialPromptSentRef = useRef(false);
+  const initialPromptClearedRef = useRef(false);
   useEffect(() => {
-    const text = initialPrompt?.trim();
-    if (!text || initialPromptSentRef.current || !ticketReady) return;
+    const text = initialPrompt?.trim() ?? '';
+    const step = nextSeedPromptStep({
+      prompt: text,
+      ready: ticketReady && !chats.loading,
+      alreadySent: initialPromptSentRef.current,
+      targetChatId: initialChatId,
+      targetTicket: initialTicket,
+      activeChatId: chats.activeChatId,
+      selectionCleared: initialPromptClearedRef.current,
+    });
+    if (step === 'clear-selection') {
+      initialPromptClearedRef.current = true;
+      void chats.select(null);
+      return;
+    }
+    if (step !== 'send') return;
     initialPromptSentRef.current = true;
+    if (!isPage) setDockedTab('chat');
     void conv.send(text);
-  }, [initialPrompt, conv, ticketReady]);
+  }, [initialPrompt, conv, ticketReady, initialChatId, initialTicket, isPage, chats]);
 
   const error = chats.error || conv.error;
   // The banner surfaces either source; dismissing must clear whichever is set.
@@ -1131,48 +1221,73 @@ export function BrainPanel({
   const providerCapKey = conv.providerCap.join(',');
   const showProviderCapBanner = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
 
+  // Unread messages sitting in chats OTHER than the open one — the reason to go
+  // look at history at all, surfaced on the tab so it isn't a blind switch.
+  const historyUnread = useMemo(
+    () => chats.chats.reduce((n, c) => n + (c.id === chats.activeChatId ? 0 : (attn.chatUnread[c.id] ?? 0)), 0),
+    [chats.chats, chats.activeChatId, attn.chatUnread],
+  );
+
   // ---- Shared sub-renders ---------------------------------------------------
 
   const chatRows = (
     <>
-      {chats.loading && <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)' }}>{tCommon('loading')}</div>}
+      {chats.loading && <div style={{ padding: 12, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tCommon('loading')}</div>}
       {!chats.loading && filteredChats.length === 0 && (
-        <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+        <div style={{ padding: 12, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center' }}>
           {chats.chats.length === 0 ? tBrain('noChatsYet') : tBrain('noChatsMatch')}
         </div>
       )}
       {filteredChats.map((chat) => {
         const active = chats.activeChatId === chat.id;
+        // Row actions are revealed per-row rather than "whatever is selected":
+        // docked, opening a chat leaves the history tab, so tying the actions to
+        // the selection put rename/delete somewhere the user can no longer see.
+        const actionsOpen = actionsChatId === chat.id;
         return (
           <div
             key={chat.id}
             className={isPage ? `bs-chat-item ${active ? 'active' : ''}` : undefined}
             role="button"
             tabIndex={0}
-            onClick={() => chats.select(chat.id)}
-            onKeyDown={(e) => e.key === 'Enter' && chats.select(chat.id)}
+            onClick={() => openChat(chat.id)}
+            onKeyDown={(e) => e.key === 'Enter' && openChat(chat.id)}
             style={isPage ? undefined : {
               padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)',
               background: active ? 'var(--bg-elevated)' : 'transparent',
-              borderLeft: active ? '3px solid var(--coral-bright, #f43f5e)' : '3px solid transparent',
+              borderLeft: active ? '3px solid var(--coral-bright)' : '3px solid transparent',
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {renamingId === chat.id ? (
-                <input
-                  autoFocus
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={submitRename}
-                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); } }}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ width: '100%', fontSize: 13, padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 4 }}
-                />
-              ) : chat.title}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {renamingId === chat.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={submitRename}
+                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); } }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ width: '100%', fontSize: 'var(--font-size-small)', padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}
+                  />
+                ) : chat.title}
+              </div>
+              {renamingId !== chat.id && (
+                <button
+                  type="button"
+                  aria-expanded={actionsOpen}
+                  aria-label={tBrain('chatActionsAria', { title: chat.title })}
+                  title={tBrain('chatActions')}
+                  onClick={(e) => { e.stopPropagation(); setActionsChatId(actionsOpen ? null : chat.id); }}
+                  style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--font-size-small)', lineHeight: 1, borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: actionsOpen ? 'var(--bg-elevated)' : 'transparent', border: '1px solid', borderColor: actionsOpen ? 'var(--border-subtle)' : 'transparent', color: 'var(--text-muted)' }}
+                >
+                  ⋯
+                </button>
+              )}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {chat.projectId != null && pinnedProjectId == null && (
-                <span style={{ background: 'var(--bg-elevated)', padding: '1px 4px', borderRadius: 4, fontSize: 10 }}>
+                <span style={{ background: 'var(--bg-elevated)', padding: '1px 4px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-field-label)' }}>
                   {projectName(chat.projectId)}
                 </span>
               )}
@@ -1183,13 +1298,13 @@ export function BrainPanel({
                   never shows one. */}
               <UnreadBadge count={active ? 0 : attn.chatUnread[chat.id]} />
             </div>
-            {active && renamingId !== chat.id && (
+            {actionsOpen && renamingId !== chat.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
-                <button type="button" onClick={() => { setRenamingId(chat.id); setRenameValue(chat.title); }} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{tBrain('rename')}</button>
-                <button type="button" onClick={() => onSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : tBrain('summarize')}</button>
-                <button type="button" onClick={() => onDelete(chat)} disabled={deletingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer', color: 'var(--coral-bright)' }}>{deletingId === chat.id ? '…' : tCommon('delete')}</button>
+                <button type="button" onClick={() => { setRenamingId(chat.id); setRenameValue(chat.title); }} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 6px', cursor: 'pointer' }}>{tBrain('rename')}</button>
+                <button type="button" onClick={() => onSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : tBrain('summarize')}</button>
+                <button type="button" onClick={() => onDelete(chat)} disabled={deletingId === chat.id} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 6px', cursor: 'pointer', color: 'var(--coral-bright)' }}>{deletingId === chat.id ? '…' : tCommon('delete')}</button>
                 {chat.projectId == null && pinnedProjectId == null && (
-                  <label style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <label style={{ fontSize: 'var(--font-size-eyebrow)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     {tBrain('addTo')}
                     <ThemeSelect
                       ariaLabel={tBrain('addChatToProjectAria')}
@@ -1200,7 +1315,7 @@ export function BrainPanel({
                         { value: '__new__', label: tBrain('createNewProject') },
                         ...projects.map((p) => ({ value: String(p.id), label: p.name })),
                       ]}
-                      style={{ marginLeft: 0, minWidth: 120, padding: '2px 6px', fontSize: 11 }}
+                      style={{ marginLeft: 0, minWidth: 120, padding: '2px 6px', fontSize: 'var(--font-size-eyebrow)' }}
                     />
                     {busyId === chat.id && <span style={{ color: 'var(--text-muted)' }}>…</span>}
                   </label>
@@ -1211,6 +1326,95 @@ export function BrainPanel({
         );
       })}
     </>
+  );
+
+  // One composer instance for both the pre-chat and active-chat states. Sending
+  // from the empty state creates the chat through conv.ensureChatId; selecting a
+  // capability can still seed and focus this same input.
+  const promptComposer = (
+    <ChatInput
+      value={input}
+      onChange={setInput}
+      onSubmit={handleSend}
+      placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
+      disabled={false}
+      running={conv.sending}
+      onStop={conv.stop}
+      stopLabel={tTimeline('stop')}
+      rows={2}
+      submitOnEnter={false}
+      onAttach={conv.attach}
+      onAddContext={onAddContext}
+      webBrowsing={webBrowsing}
+      onWebBrowsingChange={setWebBrowsing}
+      effort={effort}
+      onEffortChange={setEffort}
+      thinking={thinking}
+      onThinkingChange={setThinking}
+      accountSettingsHref="/settings"
+      modelSelection={modelSelection}
+      modelOptions={modelOptions}
+      canChooseModel={canChooseModel}
+      onModelSelectionChange={setModelSelection}
+      autoMode={autoApprove}
+      onAutoModeChange={setAutoApproveMode}
+      // Chat | Work moved into the composer's `/` menu, which names the armed mode on
+      // its trigger. One control less in a row that a phone could not fit, and the two
+      // surfaces that have this setting now render it from the same place.
+      chatMode={chatMode}
+      onChatModeChange={selectMode}
+      // Memory and the consolidate/fork actions live in that same `/` menu, for the
+      // same reason and on both surfaces: three pills that were inert for most of a
+      // chat's life used to sit between the mode control and Send.
+      memoryEnabled={memoryEnabled}
+      onMemoryChange={toggleMemory}
+      memoryUnavailableReason={evermindProjectId == null ? tBrain('memoryUnavailable') : undefined}
+      canConsolidate={canConsolidate}
+      consolidating={consolidating}
+      forking={forking}
+      onConsolidate={consolidate}
+      onFork={fork}
+      showVoice
+      pendingAttachments={conv.pendingAttachments}
+      onRemoveAttachment={conv.removeAttachment}
+      mentionables={participants}
+      onMention={setRecipientChoice}
+      focusToken={composerFocusToken}
+      contextControls={<>
+        <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
+        <Select
+          value={personaSel}
+          onChange={(e) => choosePersona(e.target.value)}
+          aria-label={tBrain('personaAria')}
+          style={{ fontSize: 'var(--font-size-small)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+        >
+          <option value="default">{tBrain('defaultBrain')}</option>
+          <optgroup label={tBrain('personas')}>
+            {localizedModalities.map((m) => <option key={m.id} value={`modality:${m.id}`}>{m.label}</option>)}
+          </optgroup>
+          {brainAgents.length > 0 && (
+            <optgroup label={tBrain('assignedAgents')}>
+              {brainAgents.map((a) => <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>)}
+            </optgroup>
+          )}
+        </Select>
+        {chats.activeChatId != null && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
+        {participants.length > 0 && <>
+          <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tBrain('to')}</span>
+          {recipient && <Avatar name={recipient.name} kind={recipient.kind} size={18} />}
+          <Select
+            value={recipient ? recipient.ref : 'brain'}
+            onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
+            aria-label={tBrain('recipientPickerTitle')}
+            style={{ fontSize: 'var(--font-size-small)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+          >
+            <option value="brain">{tBrain('brainRecipient')}</option>
+            {participants.map((p) => <option key={p.ref} value={p.ref}>{p.name}</option>)}
+          </Select>
+        </>}
+      </>}
+      modeControls={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
+    />
   );
 
   const conversation = (
@@ -1228,19 +1432,19 @@ export function BrainPanel({
           truncates turns. Self-gating on the shared consumption snapshot. */}
       <AllowanceBanner />
       {showProviderCapBanner && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 'var(--font-size-small)', background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 'var(--radius-md)' }} role="status">
           <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
             {tBrain('providerCapBanner', { providers: conv.providerCap.join(', ') })}{' '}
-            <a href="/settings/integrations" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
+            <Link href="/settings/integrations" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
               {tBrain('manageApiKeys')}
-            </a>
+            </Link>
           </span>
           <button
             type="button"
             onClick={() => setDismissedProviderCap(providerCapKey)}
             title={tCommon('dismiss')}
             aria-label={tCommon('dismiss')}
-            style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
+            style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 'var(--font-size-card-title)', lineHeight: 1, padding: 0 }}
           >
             ×
           </button>
@@ -1248,31 +1452,64 @@ export function BrainPanel({
       )}
       {chats.activeChatId == null ? (
         <div className={isPage ? 'bs-empty' : undefined} style={isPage ? undefined : { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 40 }}>🧠</div>
-          <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
-          <div style={{ fontSize: 13 }}>{tBrain('emptyHint')}</div>
+          <div style={{ fontSize: 'var(--font-size-page-title)' }}><Icon source="🧠" size="1em" /></div>
+          <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)' }}>{tBrain(chatMode === 'work' ? 'emptyHintWork' : 'emptyHint')}</div>
+          {/* The mode goes ABOVE the composer, at full size: it decides what the very
+              first turn is allowed to do, so it has to be a visible choice rather than
+              a toolbar control the user finds afterwards. Choosing here rides into the
+              chat `startNewChat` creates (see `pendingMode`). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <ChatModeToggle value={chatMode} onChange={selectMode} />
+            {/* File the conversation as it starts. New chats otherwise inherit the
+                global scope silently, so a user with no project in scope had no way to
+                put THIS conversation somewhere without first creating it. */}
+            {pinnedProjectId == null && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+                {tBrain('newChatProjectLabel')}
+                <ThemeSelect
+                  ariaLabel={tBrain('newChatProjectAria')}
+                  value={filterProjectId ?? ''}
+                  onChange={setFilterProjectId}
+                  options={[
+                    { value: '', label: tBrain('noProject') },
+                    ...projects.map((p) => ({ value: String(p.id), label: p.name })),
+                  ]}
+                  style={{ minWidth: 140, padding: '4px 8px', fontSize: 'var(--font-size-small)' }}
+                />
+              </label>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+            <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '10px 18px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}>
               {tBrain('startNewChat')}
             </button>
             {/* Onboarding entry point — starts a chat seeded so the Brain guides a
                 new user (scope, costs, plan recommendation, connecting an AI account). */}
             <button
               type="button"
-              onClick={() => { chats.create(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
-              style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 10, cursor: 'pointer' }}
+              onClick={() => { void startNewChat(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
+              style={{ padding: '10px 18px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'transparent', color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}
             >
-              ✨ {tBrain('onboardMe')}
+              
+              <Icon source="✨" size="1em" /> {tBrain('onboardMe')}
             </button>
           </div>
-          {/* …or start from what you want to make. Picking one opens a chat
-              already in that mode. */}
-          <BrainCapabilityPicker
-            surface={capabilitySurface}
-            value={capabilityId}
-            onSelect={selectCapability}
-            layout="tiles"
-          />
+          <div style={{ width: '100%', maxWidth: 720, marginTop: 12 }}>{promptComposer}</div>
+          {/* WORK: the jobs people actually hand over. Picking one fills the composer
+              with a complete brief to edit. Self-gating on the mode. */}
+          <WorkOptionsPicker mode={chatMode} onPick={pickWorkOption} />
+          {/* CHAT: …or start from what you want to make. Picking one opens a chat
+              already in that capability. The two are alternatives, not a stack — a
+              user in Work mode is delegating a job, not choosing an export format. */}
+          {chatMode !== 'work' && (
+            <BrainCapabilityPicker
+              surface={capabilitySurface}
+              value={capabilityId}
+              onSelect={selectCapability}
+              layout="tiles"
+            />
+          )}
         </div>
       ) : (
         <>
@@ -1300,12 +1537,12 @@ export function BrainPanel({
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && createProjectAndAssign()}
-                style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                style={{ flex: 1, padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
               />
-              <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                 {creatingProject ? '…' : tBrain('createAndAssign')}
               </button>
-              <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
+              <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 'var(--font-size-small)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tCommon('cancel')}</button>
             </div>
           )}
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1333,138 +1570,11 @@ export function BrainPanel({
               8px stack gaps ate most of the width. */}
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--chat-ctl-gap, 6px)', marginBottom: 'var(--chat-ctl-pad-y, 6px)', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
-              <Select
-                value={personaSel}
-                onChange={(e) => choosePersona(e.target.value)}
-                aria-label={tBrain('personaAria')}
-                style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-              >
-                <option value="default">{tBrain('defaultBrain')}</option>
-                <optgroup label={tBrain('personas')}>
-                  {localizedModalities.map((m) => (
-                    <option key={m.id} value={`modality:${m.id}`}>{m.label}</option>
-                  ))}
-                </optgroup>
-                {brainAgents.length > 0 && (
-                  <optgroup label={tBrain('assignedAgents')}>
-                    {brainAgents.map((a) => (
-                      <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </Select>
-              {/* What this chat is making — same registry as the empty-state tiles,
-                  changeable (or clearable) mid-chat. */}
-              <BrainCapabilityPicker
-                surface={capabilitySurface}
-                value={capabilityId}
-                onSelect={selectCapability}
-                layout="compact"
-                disabled={conv.sending}
-              />
-              {/* Recipient selector — only once the chat is multi-party. Routes the
-                  next message to the BRAIN (executes) or a participant (talked to). */}
-              {participants.length > 0 && (
-                <>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{tBrain('to')}</span>
-                  {recipient && <Avatar name={recipient.name} kind={recipient.kind} size={18} />}
-                  <Select
-                    value={recipient ? recipient.ref : 'brain'}
-                    onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
-                    aria-label={tBrain('recipientPickerTitle')}
-                    style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-                  >
-                    <option value="brain">{tBrain('brainRecipient')}</option>
-                    {participants.map((p) => (
-                      <option key={p.ref} value={p.ref}>{p.name}</option>
-                    ))}
-                  </Select>
-                </>
-              )}
-              {/* Compress a long chat into a summary marker (Consolidate) or branch
-                  that summary into a fresh chat (Fork). Shared presentational control;
-                  the summarize + marker-append logic lives here (web brain client). */}
-              <ConsolidateForkControl
-                canConsolidate={canConsolidate}
-                consolidating={consolidating}
-                forking={forking}
-                onConsolidate={consolidate}
-                onFork={fork}
-                labels={{
-                  consolidate: tBrain('consolidate'),
-                  consolidating: tBrain('consolidating'),
-                  fork: tBrain('fork'),
-                  forking: tBrain('forking'),
-                }}
-              />
-              {/* Per-chat memory switch: gate whether this chat recalls/learns from
-                  the project's Evermind. Default ON; persisted per chat. */}
-              <button
-                type="button"
-                onClick={() => toggleMemory(!memoryEnabled)}
-                aria-pressed={memoryEnabled}
-                title={memoryEnabled ? tBrain('memoryOnTooltip') : tBrain('memoryOffTooltip')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 12,
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border-subtle)',
-                  background: memoryEnabled ? 'var(--bg-elevated)' : 'var(--bg-base)',
-                  color: memoryEnabled ? 'var(--text-secondary)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                <span aria-hidden>{memoryEnabled ? '🧠' : '🚫'}</span>
-                <span>{tBrain('memoryToggleLabel')}</span>
-              </button>
-              {/* Honest Evermind posture: this planning chat doesn't train the model —
-                  agent runs do. Self-gates to nothing until the project's Evermind exists. */}
-              <span style={{ marginLeft: 'auto' }}><EvermindStatusBadge projectId={ctxProjectId} /></span>
-            </div>
-            <ChatInput
-              value={input}
-              onChange={setInput}
-              onSubmit={handleSend}
-              placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
-              // Stay editable while a run streams so the user can keep typing and
-              // queue follow-up turns (flushed one at a time as runs complete).
-              disabled={false}
-              running={conv.sending}
-              onStop={conv.stop}
-              stopLabel={tTimeline('stop')}
-              rows={2}
-              submitOnEnter={false}
-              onAttach={conv.attach}
-              onAddContext={onAddContext}
-              webBrowsing={webBrowsing}
-              onWebBrowsingChange={setWebBrowsing}
-              effort={effort}
-              onEffortChange={setEffort}
-              thinking={thinking}
-              onThinkingChange={setThinking}
-              accountSettingsHref="/settings"
-              modelSelection={modelSelection}
-              modelOptions={modelOptions}
-              onModelSelectionChange={setModelSelection}
-              autoMode={autoApprove}
-              onAutoModeChange={setAutoApproveMode}
-              showBrainIcon={false}
-              showVoice
-              pendingAttachments={conv.pendingAttachments}
-              onRemoveAttachment={conv.removeAttachment}
-              mentionables={participants}
-              onMention={setRecipientChoice}
-              focusToken={composerFocusToken}
-            />
-            {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
+            {promptComposer}
+            {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
             {queuedMessages.length > 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span aria-hidden>⏳</span>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span aria-hidden><Icon source="⏳" size="1em" /></span>
                 {tBrain('queuedCount', { count: queuedMessages.length })}
               </div>
             )}
@@ -1489,20 +1599,20 @@ export function BrainPanel({
         <div className="bs-sidebar">
           <div className="bs-sidebar-header">
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>{tBrain('brainStorm')}</span>
+              <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-strong)' }}>{tBrain('brainStorm')}</span>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
                 {/* Which plan funds this chat, and what's left of the allowance —
                     stated up front rather than after a turn dies on the cap. */}
                 <PlanBadge />
                 {captureButton}
-                <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                   {tBrain('newChat')}
                 </button>
               </div>
             </div>
-            <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--muted)' }}>
+            <label style={{ display: 'block', marginBottom: 6, fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>
               {tBrain('projectLabel')}
-              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{tBrain('newChatsHint')}</span>
+              <span style={{ display: 'block', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>{tBrain('newChatsHint')}</span>
               <ThemeSelect
                 ariaLabel={tBrain('filterByProjectAria')}
                 value={filterProjectId ?? ''}
@@ -1516,11 +1626,11 @@ export function BrainPanel({
               />
             </label>
             <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
+              style={{ width: '100%', padding: '6px 8px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
           </div>
           <div className="bs-chat-list">{chatRows}</div>
         </div>
-        <div className="bs-main">{conversation}</div>
+        <div className="bs-main"><AiDisclosure />{conversation}</div>
       </div>
     );
   }
@@ -1529,12 +1639,12 @@ export function BrainPanel({
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 {tBrain('brainTitle')}</span>
+        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon source="🧠" size="1em" /> {tBrain('brainTitle')}</span>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           {/* Plan + remaining allowance (see the page header). */}
           <PlanBadge />
           {captureButton}
-          <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
+          <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tBrain('newChat')}</button>
           {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the
               project it's scoped to) so the page opens the SAME conversation
               instead of a blank one — otherwise expanding a docked chat (e.g. the
@@ -1549,31 +1659,75 @@ export function BrainPanel({
               return s ? `/brainstorm?${s}` : '/brainstorm';
             })()}
             title={tBrain('openFullBrainStorm')}
-            style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}
+            style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}
           >{tBrain('expand')}</Link>
           {onClose && (
-            <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
+            <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 'var(--font-size-card-title)', cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
           )}
         </div>
       </div>
-      <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: historyOpen ? '1px solid var(--border-subtle)' : 'none' }}>
-        <button type="button" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-          <span style={{ color: 'var(--text-muted)' }}>{tBrain('chatHistory')}</span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{historyOpen ? '▼' : '▶'}</span>
-        </button>
+      {/* Conversation and history are peers, not a disclosure stacked on top of
+          the thread: in a ~440px drawer the old accordion ate a third of the
+          reading height and still hid past chats one click deep. */}
+      <div role="tablist" aria-label={tBrain('sectionsAria')} style={{ flexShrink: 0, display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
+        {DOCKED_TABS.map(({ id, labelKey }) => {
+          const selected = dockedTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`brain-tab-${id}`}
+              aria-selected={selected}
+              aria-controls={`brain-tabpanel-${id}`}
+              onClick={() => setDockedTab(id)}
+              style={{
+                flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '6px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                background: selected ? 'var(--bg-elevated)' : 'var(--bg-base)',
+                color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tBrain(labelKey)}</span>
+              {/* History carries the "there is something waiting in another chat"
+                  signal, so switching tabs is worth doing rather than guessing. */}
+              {id === 'history' && <UnreadBadge count={historyUnread} size={16} />}
+            </button>
+          );
+        })}
       </div>
-      {historyOpen && (
-        <div style={{ flex: '0 1 35%', minHeight: 80, maxHeight: 240, overflow: 'auto', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ padding: '6px 12px' }}>
+      {dockedTab === 'history' ? (
+        <div id="brain-tabpanel-history" role="tabpanel" aria-labelledby="brain-tab-history" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <div style={{ padding: '8px 12px' }}>
             <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
+              style={{ width: '100%', padding: '6px 8px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </div>
           {chatRows}
         </div>
+      ) : (
+        <div id="brain-tabpanel-chat" role="tabpanel" aria-labelledby="brain-tab-chat" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <AiDisclosure />
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{conversation}</div>
+        </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{conversation}</div>
     </div>
+  );
+}
+
+/** Docked drawer sections. Order is the tab order. */
+const DOCKED_TABS = [
+  { id: 'chat', labelKey: 'tabChat' },
+  { id: 'history', labelKey: 'tabHistory' },
+] as const;
+
+function AiDisclosure() {
+  const tBrain = useTranslations('brain');
+  return (
+    <aside aria-label={tBrain('aiDisclosureAria')} style={{ flexShrink: 0, padding: '7px 12px', fontSize: 'var(--font-size-eyebrow)', lineHeight: 1.45, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
+      {tBrain('aiDisclosureBody')}{' '}
+      <Link href="/legal/ai-transparency">{tBrain('aiDisclosureLink')}</Link>.
+    </aside>
   );
 }
 
@@ -1596,18 +1750,19 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
     <div
       role="alertdialog"
       aria-label={tBrain('confirmActionAria')}
-      style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--coral-bright, #f4726e)', background: 'var(--bg-elevated)' }}
+      style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--coral-bright)', background: 'var(--bg-elevated)' }}
     >
-      <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 6 }}>
-        ⚠️ {tBrain.rich('wantsTo', { action: label, b: (chunks) => <strong>{chunks}</strong> })}
+      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', marginBottom: 6 }}>
+        
+        <Icon source="⚠️" size="1em" /> {tBrain.rich('wantsTo', { action: label, b: (chunks) => <strong>{chunks}</strong> })}
       </div>
       {preview && preview !== '{}' && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
+        <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tCommon('approve')}</button>
-        <button type="button" onClick={onApproveAll} title={tBrain('approveAllTitle')} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>{tBrain('approveAll')}</button>
-        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
+        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tCommon('approve')}</button>
+        <button type="button" onClick={onApproveAll} title={tBrain('approveAllTitle')} style={{ padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tBrain('approveAll')}</button>
+        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 'var(--font-size-small)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tCommon('cancel')}</button>
       </div>
     </div>
   );
@@ -1638,14 +1793,14 @@ function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestio
               disabled={conv.sending}
               title={s.prompt}
               style={{
-                fontSize: 12,
+                fontSize: 'var(--font-size-small)',
                 fontWeight: 600,
                 padding: '5px 12px',
                 cursor: conv.sending ? 'wait' : 'pointer',
-                background: 'var(--coral-bright, #f4726e)',
-                color: 'var(--text-on-accent, #fff)',
+                background: 'var(--coral-bright)',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 999,
+                borderRadius: 'var(--radius-full)',
                 maxWidth: '100%',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -1692,11 +1847,11 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
   if (!chat) return null;
   return (
     <div className="bs-chat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-      <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>{chat.title}</span>
+      <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-strong)' }}>{chat.title}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {chat.projectId == null ? (
           <>
-            <label style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {tBrain('assignToProject')}
               <ThemeSelect
                 ariaLabel={tBrain('assignChatToProjectAria')}
@@ -1707,16 +1862,16 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
                   { value: '__new__', label: tBrain('createNewProject') },
                   ...projects.map((p) => ({ value: String(p.id), label: p.name })),
                 ]}
-                style={{ minWidth: 140, padding: '4px 8px', fontSize: 12 }}
+                style={{ minWidth: 140, padding: '4px 8px', fontSize: 'var(--font-size-small)' }}
               />
             </label>
-            <button type="button" onClick={onNewProject} style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', fontWeight: 600, color: 'var(--accent)' }}>{tBrain('addProject')}</button>
+            <button type="button" onClick={onNewProject} style={{ fontSize: 'var(--font-size-small)', padding: '4px 8px', cursor: 'pointer', fontWeight: 600, color: 'var(--accent)' }}>{tBrain('addProject')}</button>
           </>
         ) : (
           <>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
-            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
-            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
+            <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
+            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
+            <Link href={`/create/build/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--coral-bright)' }}>{tBrain('openInBuilder')}</Link>
           </>
         )}
       </div>

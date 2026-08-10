@@ -1,81 +1,33 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
+import { signInHref } from '@/lib/auth';
+import { ButtonLink } from '@/components/ui';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
-import { useCart } from '@/lib/CartContext';
-import ShoppingCart from './ShoppingCart';
+import { HeaderCartButton } from './HeaderCartButton';
 import NotificationBell from './NotificationBell';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
+import { CommandPalette } from './workspace/CommandPalette';
+import { LiveSessionChip } from './live/LiveSessionChip';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
 
-function CartButton() {
-  const { count, openCart } = useCart();
-  const t = useTranslations('topbar');
-  return (
-    <>
-      <button
-        type="button"
-        onClick={openCart}
-        title={t('cart')}
-        style={{
-          position: 'relative',
-          background: 'none',
-          border: 'none',
-          color: 'var(--text-muted)',
-          cursor: 'pointer',
-          padding: 6,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-        aria-label={count > 0 ? t('cartWithCount', { count }) : t('cart')}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-        </svg>
-        {count > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              minWidth: 16,
-              height: 16,
-              borderRadius: 8,
-              background: '#6366f1',
-              color: '#fff',
-              fontSize: 10,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 3px',
-              lineHeight: 1,
-            }}
-          >
-            {count > 99 ? '99+' : count}
-          </span>
-        )}
-      </button>
-      <ShoppingCart />
-    </>
-  );
-}
-
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const t = useTranslations('topbar');
-  const { logout, user, isAuthenticated } = useAuth();
+  const tc = useTranslations('common');
+  const pathname = usePathname() || '';
+  const { logout, user, isAuthenticated, hasTenant } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
 
@@ -116,7 +68,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
       <div className="topbar-center">
         {previewRole ? (
           <span className="topbar-preview-info">
-            <span aria-hidden="true">👁</span>
+            <span aria-hidden="true"><Icon source="👁" size="1em" /></span>
             {t('previewingAs', { role: previewRole })}
           </span>
         ) : (
@@ -130,7 +82,16 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       </div>
       <div className="topbar-right">
+        {/* Workspace scope stays in the header. Canvas/session navigation lives in
+            the sidebar, so it has one canonical home instead of two selectors. */}
         <TenantProjectSwitcher />
+        {/* …and who is here with you. The third thing that must survive every
+            navigation, so it is a peer of the other two rather than a control
+            that lives on whichever page happens to own the room. */}
+        <LiveSessionChip />
+        {/* Search-first navigation over the shared destination registry. Self-gates
+            on a tenant, and hides its trigger on phones where the bottom nav leads. */}
+        <CommandPalette />
 
         {/* New-account setup progress — self-gates to nothing once onboarding is
             complete/dismissed or for non-owner members. */}
@@ -169,13 +130,24 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           </div>
         )}
 
-        {isAuthenticated && <ManagerStatusIndicator />}
+        {/* Attention is workspace-scoped, so a person-level login alone is not
+            sufficient while onboarding or before a workspace is selected. */}
+        {hasTenant && <ManagerStatusIndicator />}
 
         {isAuthenticated && <NotificationBell />}
 
-        <CartButton />
+        <HeaderCartButton />
 
         <ThemeToggleButton />
+        {/* The shell is the same surface signed in or out (PRD 21 §0), so the way
+            IN has to live in it — the marketing header used to carry this pair,
+            and a guest on a canvas no longer sees that header. */}
+        {!isAuthenticated && (
+          <>
+            <ButtonLink href={signInHref(pathname)} variant="ghost" size="sm">{tc('signIn')}</ButtonLink>
+            <ButtonLink href="/register" variant="primary" size="sm">{tc('getStarted')}</ButtonLink>
+          </>
+        )}
         {isAuthenticated && (
           <button
             type="button"

@@ -37,10 +37,10 @@ importers:
         version: link:../builderforce-embedded
       '@seanhogg/builderforce-memory':
         specifier: ^2026.7.11
-        version: 2026.7.11(@seanhogg/builderforce-memory-engine@2026.7.11)
+        version: 2026.7.11(@seanhogg/builderforce-memory-engine@2026.7.14)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.7.11
-        version: 2026.7.11
+        specifier: ^2026.7.14
+        version: 2026.7.14
       '@seanhogg/builderforce-quality':
         specifier: ^2026.7.5
         version: 2026.7.5
@@ -105,8 +105,8 @@ importers:
         specifier: ^4.13.0
         version: 4.13.0(next@15.5.2(@babel/core@7.29.0)(@types/node@20.19.39)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
       onnxruntime-web:
-        specifier: ^1.21.0
-        version: 1.26.0
+        specifier: 1.22.0-dev.20250409-89f8206ba4
+        version: 1.22.0-dev.20250409-89f8206ba4
       react:
         specifier: ^18
         version: 18.3.1
@@ -1271,8 +1271,8 @@ packages:
   '@schummar/icu-type-parser@1.21.5':
     resolution: {integrity: sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.7.11':
-    resolution: {integrity: sha512-3rc/sDow7XMwShF1fTeEGdFSq1u7jne9GSZAlHfo+Kvnd86eqqU1rgG1Cxf9yK7CONT/aTkic4FiKpTwSKf6EA==}
+  '@seanhogg/builderforce-memory-engine@2026.7.14':
+    resolution: {integrity: sha512-0g1JoltFH+tm1Wuw1YpM1VDyKvh/kMeHO8ZTsnzVjrT/0NwrgUXmz1abzNddc7r68j8tHWUDWTbpasKZPXrHlg==}
     engines: {node: '>=18.0.0'}
 
   '@seanhogg/builderforce-memory@2026.7.11':
@@ -4309,18 +4309,12 @@ packages:
   onnxruntime-common@1.22.0-dev.20250409-89f8206ba4:
     resolution: {integrity: sha512-vDJMkfCfb0b1A836rgHj+ORuZf4B4+cc2bASQtpeoJLueuFc5DuYwjIZUBrSvx/fO5IrLjLz+oTrB3pcGlhovQ==}
 
-  onnxruntime-common@1.26.0:
-    resolution: {integrity: sha512-qVyMR4lcWgbkc4getFV+GQijsTnbg/siteoqcDwa3sI/LxbrMSNw4ePyvCq/ymdQaRomCA7YuWmhzsswxvymdw==}
-
   onnxruntime-node@1.21.0:
     resolution: {integrity: sha512-NeaCX6WW2L8cRCSqy3bInlo5ojjQqu2fD3D+9W5qb5irwxhEyWKXeH2vZ8W9r6VxaMPUan+4/7NDwZMtouZxEw==}
     os: [win32, darwin, linux]
 
   onnxruntime-web@1.22.0-dev.20250409-89f8206ba4:
     resolution: {integrity: sha512-0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==}
-
-  onnxruntime-web@1.26.0:
-    resolution: {integrity: sha512-LbRr/8zZt2xilI2smrVQGGKINo0U46i8qJp+UXyMBGfqN7KjnH1BiwCwLwyNIVV4i9CKFv7Sf4PwLKWnT8/bEA==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -6397,11 +6391,11 @@ snapshots:
 
   '@schummar/icu-type-parser@1.21.5': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.7.11': {}
+  '@seanhogg/builderforce-memory-engine@2026.7.14': {}
 
-  '@seanhogg/builderforce-memory@2026.7.11(@seanhogg/builderforce-memory-engine@2026.7.11)':
+  '@seanhogg/builderforce-memory@2026.7.11(@seanhogg/builderforce-memory-engine@2026.7.14)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.7.11
+      '@seanhogg/builderforce-memory-engine': 2026.7.14
 
   '@seanhogg/builderforce-quality@2026.7.5': {}
 
@@ -9868,8 +9862,6 @@ snapshots:
 
   onnxruntime-common@1.22.0-dev.20250409-89f8206ba4: {}
 
-  onnxruntime-common@1.26.0: {}
-
   onnxruntime-node@1.21.0:
     dependencies:
       global-agent: 3.0.0
@@ -9882,15 +9874,6 @@ snapshots:
       guid-typescript: 1.0.9
       long: 5.3.2
       onnxruntime-common: 1.22.0-dev.20250409-89f8206ba4
-      platform: 1.3.6
-      protobufjs: 7.5.6
-
-  onnxruntime-web@1.26.0:
-    dependencies:
-      flatbuffers: 25.9.23
-      guid-typescript: 1.0.9
-      long: 5.3.2
-      onnxruntime-common: 1.26.0
       platform: 1.3.6
       protobufjs: 7.5.6
 

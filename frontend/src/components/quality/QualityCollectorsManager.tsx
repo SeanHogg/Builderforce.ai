@@ -20,11 +20,11 @@ import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
-const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20 };
-const input: React.CSSProperties = { padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box' };
-const btnPrimary: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-const btnSubtle: React.CSSProperties = { padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' };
-const pre: React.CSSProperties = { background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12, fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
+const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 };
+const input: React.CSSProperties = { padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box' };
+const btnPrimary: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const btnSubtle: React.CSSProperties = { padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const pre: React.CSSProperties = { background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
 const sectionTitle: React.CSSProperties = { fontWeight: 600, fontSize: 14, marginBottom: 8 };
 
 /**
@@ -84,7 +84,7 @@ export function QualityCollectorsManager() {
       </div>
 
       {created && <CreatedKeyPanel created={created} onDismiss={() => setCreated(null)} t={t} />}
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
@@ -170,11 +170,11 @@ function CollectorPanel({
               {testing ? t('setup.testing') : t('setup.test')}
             </button>
             <button type="button" style={btnSubtle} onClick={toggle}>{collector.enabled ? t('setup.pause') : t('setup.resume')}</button>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={remove}>{t('setup.delete')}</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={remove}>{t('setup.delete')}</button>
           </RoleGate>
         </div>
 
-        {testMessage && <div role="status" style={{ fontSize: 12, color: 'var(--success, #16a34a)', marginTop: 10 }}>{testMessage}</div>}
+        {testMessage && <div role="status" style={{ fontSize: 12, color: 'var(--success)', marginTop: 10 }}>{testMessage}</div>}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>{t('setup.snippetNote')}</div>
         <CopyBlock label={t('setup.sdkSnippet')} value={sdkSnippet} />
@@ -243,7 +243,7 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
             <code style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, wordBreak: 'break-all' }}>{AUTH_API_URL}{i.webhookUrl}</code>
             <RoleGate capability="quality.manageSources">
               {i.provider === 'sentry' && <button type="button" style={btnSubtle} disabled={backfilling} onClick={backfill}>{backfilling ? t('setup.integrations.backfilling') : t('setup.integrations.backfill')}</button>}
-              <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(i.provider)}>{t('setup.integrations.remove')}</button>
+              <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(i.provider)}>{t('setup.integrations.remove')}</button>
             </RoleGate>
           </div>
           {i.provider === 'sentry' && msg && <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 90 }}>{msg}</div>}
@@ -252,7 +252,7 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
 
       <RoleGate capability="quality.manageSources">
         {adding ? (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
             <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={input} aria-label={t('setup.integrations.provider')}>
               {webhookProviders.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </Select>
@@ -337,14 +337,14 @@ function MappingSection({ collector, projects, projName, onChanged, setError, t 
             <span style={{ color: 'var(--text-muted)' }}> → {projName(r.projectId)} ({t('setup.mapping.priority')} {r.priority})</span>
           </span>
           <RoleGate capability="quality.manageSources">
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(r.id)}>{t('setup.mapping.remove')}</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(r.id)}>{t('setup.mapping.remove')}</button>
           </RoleGate>
         </div>
       ))}
 
       <RoleGate capability="quality.manageSources">
         {adding ? (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <Select value={matchField} onChange={(e) => setMatchField(e.target.value)} style={input} aria-label={t('setup.mapping.field')}>
                 {FIELDS.map((f) => <option key={f} value={f}>{t(`setup.mapping.field_${f}`)}</option>)}

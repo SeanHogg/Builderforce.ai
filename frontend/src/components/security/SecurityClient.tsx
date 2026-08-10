@@ -3,7 +3,7 @@
 /**
  * Workspace security governance (owner/admin). Personal account security (your
  * own sessions + admin-access log) has moved to Settings → Sessions; this page is
- * now purely workspace-scoped and split into focused sub-views via a <PillTabs>
+ * now purely workspace-scoped and split into focused sub-views via the shared <DestinationIndex>
  * bar (?sub=): Members · Agents · SOC 2.
  */
 
@@ -21,13 +21,13 @@ import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAc
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
 import { WebSecurityScanPanel } from '@/components/security/WebSecurityScanPanel';
 import PolicyPacksPanel from '@/components/security/PolicyPacksPanel';
-import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import PageContainer from '@/components/PageContainer';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -97,7 +97,7 @@ export default function SecurityClient() {
     }
   };
 
-  const subTabs: PillTab[] = [
+  const subTabs: IndexItem[] = [
     { id: '', label: t('membersTab'), icon: '👥', href: '/security' },
     { id: 'agents', label: t('agentsTab'), icon: '🛡', href: '/security?sub=agents' },
     { id: 'webscan', label: t('webTab'), icon: '🌐', href: '/security?sub=webscan' },
@@ -151,12 +151,12 @@ export default function SecurityClient() {
                     <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                       {user.displayName ?? user.username}
                       {isCurrentUser && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright)' }}>
                           {t('you')}
                         </span>
                       )}
                       {user.mfaEnabled && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.12)', color: 'rgba(34,197,94,0.9)' }}>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'rgba(34,197,94,0.12)', color: 'rgba(34,197,94,0.9)' }}>
                           MFA
                         </span>
                       )}
@@ -225,7 +225,7 @@ export default function SecurityClient() {
             style={{
               padding: '7px 14px', fontSize: 13, fontWeight: 600,
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
             }}
           >
             {loading ? t('loading') : t('refresh')}
@@ -240,7 +240,7 @@ export default function SecurityClient() {
         </div>
       ) : (
         <>
-          <PillTabs tabs={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
+          <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
           {sub === 'agents' ? renderAgents()
             : sub === 'webscan' ? <WebSecurityScanPanel />
               : sub === 'soc2' ? renderSoc2()

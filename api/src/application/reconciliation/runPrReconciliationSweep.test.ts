@@ -23,4 +23,9 @@ describe('scheduled PR reconciliation policy wiring', () => {
     expect(source).toContain('4 * 60 * 1_000');
     expect(source).not.toContain('23 * 60 * 60');
   });
+
+  it('backs off repeated GitHub authorization failures instead of retrying every cron tick', () => {
+    expect(source).toContain("failure.details ->> 'status' = '403'");
+    expect(source).toContain('6 * 60 * 60 * 1_000');
+  });
 });

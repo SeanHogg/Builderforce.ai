@@ -59,7 +59,7 @@ export function WorkforcePresenceStripView({ presence }: { presence: WorkforcePr
     <section
       style={{
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-elevated)',
         padding: 16,
         marginBottom: 24,

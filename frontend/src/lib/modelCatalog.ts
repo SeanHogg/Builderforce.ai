@@ -14,6 +14,7 @@
 
 import { BRAND } from './content';
 import { apiRequest } from './apiClient';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
 export type ModelTier = 'FREE' | 'PRO' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
 
@@ -136,7 +137,7 @@ function toRecord(m: CatalogModel): ModelRecord {
 }
 
 // Per-tab dedupe so concurrent callers / page remounts share one request.
-let inflight: Promise<ModelRecord[]> | null = null;
+const CATALOG_CACHE_KEY = 'model-catalog:public';
 
 async function fetchCatalog(): Promise<ModelRecord[]> {
   const json = await apiRequest<{ data?: CatalogModel[] }>('/llm/v1/catalog', {
@@ -152,14 +153,8 @@ async function fetchCatalog(): Promise<ModelRecord[]> {
  * records so the page is useful.
  */
 export async function getModelCatalog(): Promise<ModelRecord[]> {
-  if (!inflight) {
-    inflight = fetchCatalog().catch((err) => {
-      inflight = null; // allow a retry on the next call
-      throw err;
-    });
-  }
   try {
-    return [...BUILDERFORCE_MODELS, ...(await inflight)];
+    return [...BUILDERFORCE_MODELS, ...(await getOrSetClientCached(CATALOG_CACHE_KEY, () => fetchCatalog()))];
   } catch {
     return [...BUILDERFORCE_MODELS];
   }
@@ -207,6 +202,25 @@ export function formatPricePerMillion(perToken: number): string {
   return `$${perMillion.toFixed(2)}`;
 }
 
+/**
+ * Test a model against optional USD-per-million-token price ceilings.
+ * Catalog prices are stored per token, while every marketplace price is shown
+ * per 1M tokens; keeping the conversion here prevents the filter UI from
+ * accidentally comparing values expressed in different units.
+ */
+export function modelMatchesPriceLimits(
+  record: ModelRecord,
+  maxInputPerMillion?: number,
+  maxOutputPerMillion?: number,
+): boolean {
+  const inputPerMillion = record.pricing.prompt * 1_000_000;
+  const outputPerMillion = record.pricing.completion * 1_000_000;
+  return (
+    (maxInputPerMillion === undefined || inputPerMillion <= maxInputPerMillion) &&
+    (maxOutputPerMillion === undefined || outputPerMillion <= maxOutputPerMillion)
+  );
+}
+
 /** Format a context-window token count as "128K" / "1M". */
 export function formatContext(record: ModelRecord): string {
   if (record.contextLabel) return record.contextLabel;
@@ -219,7 +233,7 @@ export function formatContext(record: ModelRecord): string {
 
 /** Free / Paid / our-product badge color. */
 export function tierColor(record: ModelRecord): string {
-  if (record.tier === 'PRO') return 'var(--coral-bright, #f4726e)';
-  if (record.tier === 'FREE') return '#22c55e';
-  return 'var(--accent, #6366f1)';
+  if (record.tier === 'PRO') return 'var(--coral-bright)';
+  if (record.tier === 'FREE') return 'var(--success)';
+  return 'var(--accent)';
 }

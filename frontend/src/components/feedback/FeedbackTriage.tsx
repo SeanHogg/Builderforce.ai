@@ -22,19 +22,19 @@ import {
 } from '@/lib/feedbackApi';
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '7px 13px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '7px 13px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '7px 11px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const chip: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em',
-  padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
+  padding: '2px 8px', borderRadius: 'var(--radius-full)', whiteSpace: 'nowrap',
 };
 
 /** Narrow a stored kind/status to a key that definitely exists in the catalogs,
@@ -102,7 +102,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
             value={status ?? ''}
             onChange={(e) => setStatus((e.target.value || null) as FeedbackStatus | null)}
             style={{
-              padding: '6px 10px', fontSize: 13, borderRadius: 8,
+              padding: '6px 10px', fontSize: 13, borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
             }}
           >
@@ -114,7 +114,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
         </label>
       </div>
 
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('triage.loading')}</div>
@@ -147,10 +147,10 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
   const gated = isGated(s);
 
   const statusColour = s.status === 'approved'
-    ? { background: 'var(--success-soft, rgba(22,163,74,.14))', color: 'var(--success, #16a34a)' }
+    ? { background: 'var(--success-soft, rgba(22,163,74,.14))', color: 'var(--success)' }
     : s.status === 'declined'
       ? { background: 'var(--bg-elevated)', color: 'var(--text-muted)' }
-      : { background: 'var(--warning-soft, rgba(217,119,6,.14))', color: 'var(--warning, #b45309)' };
+      : { background: 'var(--warning-soft, rgba(217,119,6,.14))', color: 'var(--warning)' };
 
   return (
     <div style={card}>
@@ -201,7 +201,7 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
           for a human reads as a broken ticket unless we say why. */}
       {gated && (
         <div style={{
-          marginTop: 10, padding: '8px 10px', borderRadius: 8, fontSize: 12,
+          marginTop: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: 12,
           background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)',
         }}>
           {t('triage.gatedNote')}

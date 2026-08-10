@@ -9,6 +9,7 @@ import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -340,6 +341,9 @@ export interface BrainChat {
   /** What the chat is making — a capability id (see lib/brain/capabilities.ts).
    *  Shapes the system prompt and the export format; null = no capability. */
   capability?: string | null;
+  /** What the chat is FOR — 'chat' (a conversation) or 'work' (an execution that
+   *  creates, links and dispatches real work). See lib/brain/chatModes.ts. */
+  mode?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -366,7 +370,7 @@ export const brain = {
     return request<{ chats: BrainChat[] }>(`/api/brain/chats${query ? `?${query}` : ''}`).then((r) => r.chats);
   },
 
-  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null }) =>
+  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }) =>
     request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Resolve-or-create the canonical TEAM chat for a scope: a project when
@@ -384,7 +388,7 @@ export const brain = {
 
   getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
-  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }) =>
+  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }) =>
     request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   deleteChat: (id: number) =>
@@ -536,7 +540,7 @@ export const brain = {
    *  the timeline can rehydrate them after a reload. Best-effort; the caller drops
    *  the promise. Clears the local read cache so the next GET reflects the append. */
   appendChatTrace: (chatId: number, events: BrainChatTraceEventInput[]) => {
-    brainTraceCache.delete(chatId);
+    invalidateClientCache(`brain-trace:${chatId}`);
     return request<{ appended: number }>(`/api/brain/chats/${chatId}/trace`, {
       method: 'POST',
       body: JSON.stringify({ events }),
@@ -554,12 +558,10 @@ export const brain = {
    * would be wrong in precisely the way that wastes the session it was captured for.
    */
   getChatTrace: async (chatId: number, opts?: { refresh?: boolean }): Promise<BrainChatTraceRow[]> => {
-    if (opts?.refresh) brainTraceCache.delete(chatId);
-    const cached = brainTraceCache.get(chatId);
-    if (cached) return cached;
-    const { trace } = await request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`);
-    brainTraceCache.set(chatId, trace);
-    return trace;
+    const key = `brain-trace:${chatId}`;
+    if (opts?.refresh) invalidateClientCache(key);
+    return getOrSetClientCached(key, () =>
+      request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`).then(({ trace }) => trace));
   },
 };
 
@@ -588,9 +590,6 @@ export interface BrainChatTraceEventInput {
   ttftMs?: number;
   turnSeq?: number;
 }
-
-/** Per-chat client cache for the persisted trace GET (cleared on append). */
-const brainTraceCache = new Map<number, BrainChatTraceRow[]>();
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
 export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
@@ -657,6 +656,10 @@ export interface WebFetchResult {
   /** Plain-text content (HTML stripped), capped server-side. */
   text: string;
   truncated: boolean;
+  /** Whether the origin lets us frame the page (read off X-Frame-Options / CSP frame-ancestors). */
+  frameable: boolean;
+  /** Which header refused the frame, else null. */
+  frameBlockedBy: 'x-frame-options' | 'frame-ancestors' | null;
 }
 
 /** Structured error from the LLM gateway, with the fields callers branch on. */
@@ -955,6 +958,8 @@ export type EvermindBuildKind =
 export type WorkflowNodeKind =
   | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
   | 'transform' | 'filter' | 'branch' | 'output' | 'gmail'
+  /** The ONE node through which every connector action is reachable. */
+  | 'connector'
   | EvermindBuildKind;
 
 export interface WorkflowDefNode {
@@ -1062,6 +1067,16 @@ export const workflowDefinitions = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /**
+   * Compile a Creation Canvas workflow object's authored `steps` into a real,
+   * runnable definition. All-or-nothing: on 400 the thrown `ApiRequestError`
+   * carries `details.issues` naming each step that is not runnable and why.
+   */
+  fromCanvas: (body: { name: string; description?: string; steps: unknown; triggerType?: string } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
+    request<WorkflowDefinitionDetail & { compiledCount: number }>('/api/workflow-definitions/from-canvas', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
       method: 'PATCH',
@@ -1123,6 +1138,8 @@ export interface MarketplaceSkill {
   repo_url: string | null;
   downloads: number;
   likes: number;
+  price_cents: number;
+  pricing_model: 'flat_fee' | 'consumption';
   created_at: string;
   author_username?: string;
   author_display_name?: string;
@@ -2682,8 +2699,11 @@ export interface ActiveRun {
   status: 'pending' | 'submitted' | 'running';
   taskId: number;
   taskTitle: string;
+  projectId: number;
+  projectName: string;
   agentHostId: number | null;
   cloudAgentRef: string | null;
+  agentName: string | null;
   submittedBy: string;
   startedAt: string | null;
   createdAt: string;
@@ -2727,6 +2747,11 @@ export interface AttentionResponse {
   counts: { running: number; awaiting: number; unread: number };
   /** AI Manager cadence (present on every response). */
   manager: AttentionManager;
+}
+
+export interface ExecutionControlResponse {
+  enabled: boolean;
+  stopped?: { requested: number; cancelled: number; failed: number[] };
 }
 
 export const runtimeApi = {
@@ -2794,6 +2819,22 @@ export const runtimeApi = {
   /** Cancel a running/queued execution. */
   cancel: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}/cancel`, { method: 'POST' }),
+
+  /** Emergency tenant-wide stop for every queued or running agent execution. */
+  cancelAll: (): Promise<{ requested: number; cancelled: number; failed: number[] }> =>
+    request<{ requested: number; cancelled: number; failed: number[] }>(
+      '/api/runtime/executions/cancel-all', { method: 'POST' },
+    ),
+
+  /** Authoritative workspace kill switch. Disabling also cancels every current
+   * non-terminal run; all future RuntimeService submissions are refused. */
+  executionControl: (): Promise<ExecutionControlResponse> =>
+    request<ExecutionControlResponse>('/api/runtime/execution-control'),
+
+  setExecutionControl: (enabled: boolean): Promise<ExecutionControlResponse> =>
+    request<ExecutionControlResponse>('/api/runtime/execution-control', {
+      method: 'PUT', body: JSON.stringify({ enabled }),
+    }),
 
   /**
    * Revert a finished run: close the PR it opened and delete the ticket branch it
@@ -2899,10 +2940,27 @@ export interface MeterSnapshot {
   breakdown?: Array<{ key: string; used: number }>;
 }
 
+/** A boolean plan-feature flag, named exactly as the server's `PlanFeature`. */
+export type PlanFeatureKey =
+  | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
+  | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
+  | 'voiceCloning' | 'advancedInsights';
+
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
   plan: { effective: 'free' | 'pro' | 'teams'; billingStatus: string };
   meters: MeterSnapshot[];
+  /**
+   * Plan features resolved BY THE SERVER, from the same evaluator the routes
+   * gate on. The client never derives entitlement from `plan.effective` — that
+   * would be a second evaluator, and it would disagree the first time a flag
+   * moved between plans. Optional so a client running against an older API
+   * degrades to "nothing is known to be locked" rather than locking everything.
+   */
+  features?: {
+    entitled: Partial<Record<PlanFeatureKey, boolean>>;
+    requiredPlan: Partial<Record<PlanFeatureKey, 'free' | 'pro' | 'teams'>>;
+  };
 }
 
 export const consumptionApi = {
@@ -3359,6 +3417,9 @@ export interface OpenRouterConnectionTestResult {
   status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
   /** The bare OpenRouter id the probe pinned. */
   model?: string;
+  /** Selected ids skipped because OpenRouter reported a model/account limiter. The
+   *  connection remains usable when at least one other selected model succeeds. */
+  limitedModels?: string[];
   /** True when the dispatch rode the tenant's OWN OpenRouter key rather than the managed one. */
   ownKey: boolean;
   testedAt?: string;
@@ -4752,6 +4813,57 @@ export const tenantApiKeysApi = {
 // ---------------------------------------------------------------------------
 
 export type EmbedCapabilityKey = 'product' | 'agile' | 'security';
+export type CustomerEmbedFeatureKey =
+  | 'usage_tracking'
+  | 'support_widget'
+  | 'feedback_widget'
+  | 'heatmaps'
+  | 'feature_management'
+  | 'terms_gate'
+  | 'sourcing'
+  | 'lead_forms'
+  | 'push_notifications'
+  | 'onboarding'
+  | 'cookie_consent'
+  | 'hr_widget'
+  | 'status_page';
+
+export interface CustomerEmbedFeatureConfig {
+  enabled: boolean;
+  consentVersion: number | null;
+  consentedAt: string | null;
+  consentedBy: string | null;
+}
+
+export interface MarketplacePurchase {
+  id: number;
+  userId: string;
+  artifactType: 'skill' | 'persona' | 'content';
+  artifactSlug: string;
+  priceCents: number;
+  pricingModel: 'flat_fee' | 'consumption';
+  stripePaymentIntentId: string | null;
+  createdAt: string;
+}
+
+export const marketplacePurchaseApi = {
+  purchase: (item: { artifactType: 'skill' | 'persona' | 'content'; artifactSlug: string; stripePaymentIntentId?: string }) =>
+    mpRequest<{ ok: true; priceCents: number; pricingModel: 'flat_fee' | 'consumption' }>('/marketplace/purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    }),
+  list: () => mpRequest<{ purchases: MarketplacePurchase[] }>('/marketplace/purchases')
+    .then((result) => result.purchases ?? []),
+};
+
+export interface CustomerEmbedConsentEvent {
+  feature: CustomerEmbedFeatureKey;
+  action: 'OPT_IN' | 'OPT_OUT';
+  version: number;
+  at: string;
+  by: string;
+}
 
 export interface EmbedConfigResult {
   enabled: boolean;
@@ -4763,6 +4875,11 @@ export interface EmbedConfigResult {
   consentedBy: string | null;
   /** The version the host must (re-)consent to before enabling. */
   consentRequiredVersion: number;
+  customerFeatures: Record<CustomerEmbedFeatureKey, CustomerEmbedFeatureConfig>;
+  customerConsentLog: CustomerEmbedConsentEvent[];
+  customerFeatureKeys: CustomerEmbedFeatureKey[];
+  customerConsentRequiredVersion: number;
+  publicKey: string;
 }
 
 export interface EmbedSetConfigResult {
@@ -4773,32 +4890,45 @@ export interface EmbedSetConfigResult {
   consentedBy: string | null;
 }
 
+/** Embed administration is always workspace-scoped. Fail locally instead of
+ * emitting a guaranteed unauthenticated request (and a misleading API ticket)
+ * while the shell is still exchanging/selecting the workspace JWT. */
+function embedRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  if (!getStoredTenantToken()) return Promise.reject(new Error('Workspace token required'));
+  return request<T>(path, opts);
+}
+
 export const embedApi = {
   /** Current tenant's embed enablement + capabilities (any member). */
-  getConfig: () => request<EmbedConfigResult>('/api/embed/config'),
+  getConfig: () => embedRequest<EmbedConfigResult>('/api/embed/config'),
   /**
    * Enable/disable + set capabilities (manager+). Pass `consentAcknowledged: true`
    * when enabling for the first time (or after a consent-version bump) — the API
    * returns 409 `EMBED_CONSENT_REQUIRED` otherwise.
    */
   setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[]; consentAcknowledged?: boolean }) =>
-    request<EmbedSetConfigResult>('/api/embed/config', {
+    embedRequest<EmbedSetConfigResult>('/api/embed/config', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  setFeature: (feature: CustomerEmbedFeatureKey, body: { enabled: boolean; consentAcknowledged?: boolean }) =>
+    embedRequest<{ feature: CustomerEmbedFeatureKey } & CustomerEmbedFeatureConfig>(`/api/embed/features/${feature}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
 };
 
 // ---------------------------------------------------------------------------
-// Host BI bridge (/api/bi/*) — burn-rate pull + self-serve host-BI config +
-// validation-engagements overlay (spec 05 §4.1/§4.2).
+// Consolidated tenant-local BI reads (/api/bi/*).
 // ---------------------------------------------------------------------------
 
 export interface BurnRateResult {
   available: boolean;
   monthlyBurn?: number;
   runwayMonths?: number;
-  source?: 'host';
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+  source?: 'builderforce';
+  asOf?: string;
+  reason?: 'no_data';
 }
 
 export interface ValidationEngagement {
@@ -4811,23 +4941,15 @@ export interface ValidationEngagement {
 
 export interface ValidationEngagementsResult {
   available: boolean;
-  engagements?: ValidationEngagement[];
-  source?: 'host';
-  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+  engagements: ValidationEngagement[];
+  source: 'builderforce';
 }
 
 export const biApi = {
-  /** Pull the segment's burn/runway from the host BI endpoint. */
+  /** Read the segment's locally-computed burn/runway metrics. */
   getBurnRate: () => request<BurnRateResult>('/api/bi/burn-rate'),
-  /** List the host's validation engagements (feedback widgets/cohorts) for this segment. */
+  /** List local validation results, dashboards and feedback collectors. */
   getValidationEngagements: () => request<ValidationEngagementsResult>('/api/bi/validation-engagements'),
-  /** Read the stored host-BI config (token never returned — only `hasToken`). */
-  getConfig: () => request<{ baseUrl: string | null; hasToken: boolean }>('/api/bi/config'),
-  /** Set/rotate the host BI base URL + token (manager+). Omit token to keep the existing one. */
-  setConfig: (body: { baseUrl: string; token?: string }) =>
-    request<{ baseUrl: string; hasToken: boolean }>('/api/bi/config', { method: 'PUT', body: JSON.stringify(body) }),
-  /** Clear the host BI config (disconnect, manager+). */
-  clearConfig: () => request<{ ok: boolean }>('/api/bi/config', { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -5463,7 +5585,8 @@ export const meetingsApi = {
   start: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/start`, { method: 'POST' }),
   end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
   cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
-  ice: (): Promise<{ iceServers: unknown[] }> => request(`${MEETINGS_BASE}/ice`),
+  ice: (mode: 'direct-only' | 'relay-fallback' = 'relay-fallback'): Promise<{ iceServers: unknown[]; mode: 'direct-only' | 'relay-fallback'; turnEnabled: boolean }> =>
+    request(`${MEETINGS_BASE}/ice?mode=${mode}`),
 
   // Recording / transcription + agent voice (0330).
   transcript: (id: string): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript`),
@@ -6076,8 +6199,9 @@ export const rfpApi = {
 export type IntegrationProvider =
   | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
   | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
-  // BYO web-search vendor key — unlocks the cloud agent's `web_search` tool.
-  | 'brave_search'
+  // BYO web-search vendor keys — widen `web_search` from the keyless encyclopedic
+  // floor to a full open-web index. Optional: search works without any of them.
+  | 'tavily' | 'exa' | 'linkup'
   // Google connectors (OAuth offline credentials): Gmail powers the email
   // workflow node; Google Drive can back a project's file storage.
   | 'gmail' | 'google_drive';
@@ -6752,7 +6876,7 @@ export interface BoardProviderMeta {
 
 export type MigrationMode = 'migrate' | 'sync' | 'both';
 export type MigrationStatus =
-  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'failed' | 'cancelled';
+  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'rolled_back' | 'failed' | 'cancelled';
 
 export interface MigrationRun {
   id: string;
@@ -6841,6 +6965,9 @@ export const migrationsApi = {
 
   commit: (id: string): Promise<MigrationRun> =>
     request(`/api/migrations/${id}/commit`, { method: 'POST' }),
+
+  rollback: (id: string): Promise<MigrationRun> =>
+    request(`/api/migrations/${id}/rollback`, { method: 'POST' }),
 
   discard: (id: string): Promise<void> =>
     request<void>(`/api/migrations/${id}`, { method: 'DELETE' }),
@@ -7832,6 +7959,7 @@ export interface CreationSessionSummary {
   id: string;
   title: string;
   description: string | null;
+  folder?: string | null;
   status: 'active' | 'archived' | 'deleted';
   preview: { objectCount?: number; kinds?: string[]; objects?: Array<{ id: string; kind: string; x: number; y: number; title: string; status?: string; resourceType?: string; resourceId?: string }> } | null;
   revision: number;
@@ -7842,6 +7970,9 @@ export interface CreationSessionSummary {
   unread?: boolean;
   collaboratorCount?: number;
   projectIds?: number[];
+  /** Conversation ('chat') or execution ('work') — the same vocabulary as
+   *  `BrainChat.mode`. See lib/brain/chatModes.ts. */
+  mode?: string | null;
 }
 
 export interface CreationSessionObject {
@@ -7941,9 +8072,25 @@ export interface CreationTimelineMessage {
   clientMessageId: string;
   messageRole: 'user' | 'assistant' | 'system';
   body: string;
-  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean };
+  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string } };
   createdBy: string | null;
   createdAt: string;
+}
+
+export interface CreationOutcomeMetric {
+  key: string;
+  label: string;
+  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
+  direction: 'higher' | 'lower';
+  current: number | null;
+  baseline: number | null;
+}
+
+export interface CreationOutcomeMetrics {
+  sessionId: string;
+  scope: 'tenant';
+  sampleSize: number;
+  metrics: CreationOutcomeMetric[];
 }
 
 export interface CreationCommandResult {
@@ -7973,10 +8120,13 @@ export const creationSessionsApi = {
   quotas: () => request<{ usage: { sessions: number; templates: number }; limits: { sessions: number; collaboratorsPerSession: number; templates: number; historyPerSession: number; datasetRows: number; realtimeEditors: number; artifactBytesPerSession: number } }>('/api/creation-sessions/quotas'),
   create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>
     request<{ session: { id: string; title: string; revision: number } }>('/api/creation-sessions', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
-  claim: (body: CreationGraphInput & { clientSessionId: string; title: string; initialPrompt?: string; timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; createdAt: string }> }) =>
+  claim: (body: CreationGraphInput & { clientSessionId: string; title: string; initialPrompt?: string; timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: CreationTimelineMessage['metadata']; createdAt: string }> }) =>
     request<{ session: { id: string; title?: string; revision?: number; claimed: true; replayed?: boolean } }>('/api/creation-sessions/claim', { method: 'POST', body: JSON.stringify(body) }),
   get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
-  update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown }) =>
+  outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
+  recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
+    request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: { title?: string; description?: string | null; folder?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   preview: (id: string) => request<{ sessionId: string; title: string; revision: number; preview: CreationSessionSummary['preview']; lastActivityAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/preview`),
@@ -7984,7 +8134,7 @@ export const creationSessionsApi = {
   events: (id: string, after = 0) => request<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/events?after=${Math.max(0, Math.floor(after))}`),
   timeline: {
     list: (id: string, after = 0, limit = 200) => request<{ messages: CreationTimelineMessage[]; lastId: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline?after=${Math.max(0, Math.floor(after))}&limit=${Math.min(500, Math.max(1, Math.floor(limit)))}`),
-    append: (id: string, message: { clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean } }) => request<CreationTimelineMessage>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline`, { method: 'POST', body: JSON.stringify(message) }),
+    append: (id: string, message: { clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: CreationTimelineMessage['metadata'] }) => request<CreationTimelineMessage>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline`, { method: 'POST', body: JSON.stringify(message) }),
   },
   liveUrl: (id: string): string | null => {
     const token = getStoredTenantToken();
@@ -7994,6 +8144,7 @@ export const creationSessionsApi = {
   },
   pin: (id: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) }),
   duplicate: (id: string) => request<{ session: { id: string; title: string; revision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: '{}' }),
+  merge: (targetId: string, sourceSessionId: string) => request<{ session: { id: string; title: string; revision: number }; mergedSessionId: string }>(`/api/creation-sessions/${encodeURIComponent(targetId)}/merge`, { method: 'POST', body: JSON.stringify({ sourceSessionId }) }),
   branch: (id: string, title?: string) => request<{ session: { id: string; title: string; revision: number; parentSessionId: string; baseRevision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/branches`, { method: 'POST', body: JSON.stringify({ title }) }),
   watch: (id: string, state: 'all' | 'mentions' | 'muted') => request<{ state: 'all' | 'mentions' | 'muted' }>(`/api/creation-sessions/${encodeURIComponent(id)}/watch`, { method: 'PATCH', body: JSON.stringify({ state }) }),
   lock: (id: string, objectId: string, action: 'acquire' | 'renew' | 'release' = 'acquire', leaseSeconds = 60) => request<{ objectId: string; lockedBy: string | null; lockExpiresAt: string | null }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/lock`, { method: 'POST', body: JSON.stringify({ action, leaseSeconds }) }),
@@ -8047,4 +8198,272 @@ export const creationSessionsApi = {
     request<CreationProjectPrdContext>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/prd-context`),
   openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Challenges — paste a brief, get a working system
+// ---------------------------------------------------------------------------
+
+export interface ChallengeSpec {
+  title: string;
+  sponsor: string | null;
+  goal: string;
+  capabilities: string[];
+  integrations: string[];
+  deliverables: string[];
+  constraints: string[];
+  successCriteria: string[];
+}
+
+export interface ChallengeRequiredConnector { key: string; label: string; why: string }
+export interface ChallengeRequiredSecret { name: string; label: string; where: string }
+
+export interface ChallengePlan {
+  blueprintKey: string;
+  blueprintName: string;
+  matchScore: number;
+  matchReasons: string[];
+  considered: Array<{ key: string; name: string; score: number; reasons: string[] }>;
+  strategy: 'declarative' | 'github-worker';
+  summary: string;
+  files: Record<string, string>;
+  handlers: Record<string, unknown>;
+  handlerWarnings: string[];
+  tasks: Array<{ title: string; description: string; order: number }>;
+  requiredConnectors: ChallengeRequiredConnector[];
+  requiredSecrets: ChallengeRequiredSecret[];
+  successCriteria: string[];
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  sponsor: string | null;
+  status: 'parsed' | 'planned' | 'building' | 'built' | 'failed';
+  blueprintKey: string | null;
+  projectId: number | null;
+  brief: string;
+  spec: ChallengeSpec;
+  plan: ChallengePlan;
+  error: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/** A remaining human action before the built system is live. */
+export interface ChallengeSetupStep {
+  key: string;
+  label: string;
+  detail: string;
+  url?: string;
+  blocking: boolean;
+}
+
+export interface ChallengeBuildResult {
+  projectId: number;
+  projectKey: string;
+  ingressUrl: string;
+  filesWritten: string[];
+  handlersWritten: string[];
+  tasksCreated: number;
+  tasksSkipped: number;
+  /** Seeded BUILD tickets autonomy actually started a run for. */
+  tasksDispatched: number;
+  readiness: ChallengeSetupStep[];
+  warnings: string[];
+}
+
+export interface BlueprintSummary {
+  key: string;
+  name: string;
+  summary: string;
+  capabilities: string[];
+  strategy: string;
+  requiredConnectors: ChallengeRequiredConnector[];
+  requiredSecrets: ChallengeRequiredSecret[];
+  handlerCount: number;
+  successCriteria: string[];
+}
+
+export interface HostingStrategySummary {
+  key: string;
+  label: string;
+  summary: string;
+  zeroSetup: boolean;
+}
+
+export const challengeApi = {
+  list: (): Promise<Challenge[]> =>
+    request<{ challenges: Challenge[] }>('/api/challenges').then((r) => r.challenges),
+
+  get: (id: string): Promise<Challenge> =>
+    request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}`).then((r) => r.challenge),
+
+  /** Read + plan a pasted brief. Builds nothing. */
+  create: (brief: string, projectId?: number): Promise<Challenge> =>
+    request<{ challenge: Challenge }>('/api/challenges', {
+      method: 'POST',
+      body: JSON.stringify({ brief, projectId }),
+    }).then((r) => r.challenge),
+
+  /** Re-read the same brief — useful after connecting an integration. */
+  replan: (id: string): Promise<Challenge> =>
+    request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}/replan`, { method: 'POST' })
+      .then((r) => r.challenge),
+
+  /** Materialise the plan: canvas files, live handlers, tickets. Idempotent. */
+  build: (id: string): Promise<{ challenge: Challenge | null; result: ChallengeBuildResult }> =>
+    request<{ challenge: Challenge | null; result: ChallengeBuildResult }>(
+      `/api/challenges/${encodeURIComponent(id)}/build`,
+      { method: 'POST' },
+    ),
+
+  remove: (id: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/challenges/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  blueprints: (): Promise<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }> =>
+    request<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }>('/api/challenges/blueprints'),
+};
+
+// ---------------------------------------------------------------------------
+// Project backends — the server-side half of a project
+// ---------------------------------------------------------------------------
+
+/** Every way a handler can prove who called it. Mirrors VERIFY_KINDS on the api. */
+export const HANDLER_VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
+export type HandlerVerifyKind = (typeof HANDLER_VERIFY_KINDS)[number];
+
+export const HANDLER_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ANY'] as const;
+export type HandlerMethod = (typeof HANDLER_METHODS)[number];
+
+/** The canvas document a handler IS — edited as a whole and re-parsed on save. */
+export interface HandlerSpecDocument {
+  name?: string;
+  route: string;
+  method: HandlerMethod;
+  verify: HandlerVerifyKind;
+  /** Overrides the kind's default secret name — Stripe issues one per endpoint. */
+  verifySecret?: string;
+  /** Origins a browser may call this handler from. Absent means none — the
+   *  project's own site is same-origin and never needs it. `["*"]` means any. */
+  cors?: string[];
+  description?: string;
+  steps: unknown[];
+  respond: Record<string, unknown>;
+}
+
+export interface ProjectBackendHandler {
+  name: string;
+  route: string;
+  method: string;
+  verify: HandlerVerifyKind;
+  description: string | null;
+  url: string;
+  /** The same handler on the published site's own origin, when there is one. */
+  siteUrl: string | null;
+  stepCount: number;
+  /** The parsed spec, so the editor opens without a second round trip. */
+  spec: HandlerSpecDocument;
+}
+
+/** What a deployed `github-worker` backend reports about itself. */
+export interface WorkerHealth {
+  reachable: boolean;
+  /** Expected secret name → whether the Worker has it bound. Never a value. */
+  secrets: Record<string, boolean>;
+  handlers: Array<{ method: string; route: string; verify?: string }>;
+  reason?: string;
+}
+
+export interface ProjectSecretSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  hint: string | null;
+  updatedAt: string | null;
+}
+
+export interface ProjectBackendView {
+  backend: {
+    strategy: 'declarative' | 'github-worker';
+    status: string;
+    ingressUrl: string;
+    deployedUrl: string | null;
+    /** `https://<site>/api` once the project has published a site. */
+    siteUrl: string | null;
+    lastDeployedAt: string | null;
+    handlerCount: number;
+  };
+  strategies: HostingStrategySummary[];
+  handlers: ProjectBackendHandler[];
+  handlerErrors: Array<{ path: string; reason: string }>;
+  secrets: ProjectSecretSummary[];
+  missingSecrets: string[];
+  /** Present only for a deployed `github-worker` backend. */
+  workerHealth: WorkerHealth | null;
+}
+
+export interface ProjectBackendRequestRow {
+  id: number;
+  route: string;
+  method: string;
+  statusCode: number;
+  verdict: 'ok' | 'unverified' | 'no-handler' | 'rate-limited' | 'error';
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string | null;
+}
+
+export const projectBackendApi = {
+  get: (projectId: number): Promise<ProjectBackendView> =>
+    request<ProjectBackendView>(`/api/projects/${projectId}/backend`),
+
+  setStrategy: (projectId: number, strategy: string) =>
+    request<{ backend: { strategy: string; status: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ strategy }),
+    }),
+
+  /** Pause or resume the public ingress. A paused backend 404s every delivery. */
+  setStatus: (projectId: number, status: 'active' | 'paused') =>
+    request<{ backend: { strategy: string; status: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  /** Create or replace one handler. Rejected if the document does not parse. */
+  saveHandler: (projectId: number, name: string, document: unknown) =>
+    request<{ ok: boolean; path: string; spec: HandlerSpecDocument }>(
+      `/api/projects/${projectId}/backend/handlers/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ document }) },
+    ),
+
+  deleteHandler: (projectId: number, name: string) =>
+    request<{ ok: boolean }>(`/api/projects/${projectId}/backend/handlers/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
+
+  /** Re-run the hosting strategy (regenerate the endpoint map / the Worker). */
+  materialize: (projectId: number) =>
+    request<{ result: { setupSteps: ChallengeSetupStep[]; written: string[]; handlerCount: number } }>(
+      `/api/projects/${projectId}/backend/materialize`,
+      { method: 'POST' },
+    ),
+
+  requests: (projectId: number): Promise<ProjectBackendRequestRow[]> =>
+    request<{ requests: ProjectBackendRequestRow[] }>(`/api/projects/${projectId}/backend/requests`)
+      .then((r) => r.requests),
+
+  /** Store or rotate a secret. The value is never readable afterwards. */
+  setSecret: (projectId: number, name: string, value: string, description?: string) =>
+    request<{ ok: boolean; secrets: ProjectSecretSummary[] }>(
+      `/api/projects/${projectId}/backend/secrets/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ value, description }) },
+    ),
+
+  deleteSecret: (projectId: number, name: string) =>
+    request<{ ok: boolean; secrets: ProjectSecretSummary[] }>(
+      `/api/projects/${projectId}/backend/secrets/${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    ),
 };

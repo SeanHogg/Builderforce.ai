@@ -28,8 +28,8 @@ import { PmEmpty, PmError } from '@/components/pm/pmShared';
  * viewer sees the role hint, never a 403.
  */
 
-const TONE_COLOR: Record<ReasonTone, string> = { good: '#16a34a', warn: '#d97706', bad: '#dc2626' };
-const VERDICT_COLOR: Record<Verdict, string> = { yes: '#16a34a', at_risk: '#d97706', no: '#dc2626', no_data: '#6b7280' };
+const TONE_COLOR: Record<ReasonTone, string> = { good: 'var(--success)', warn: 'var(--warning)', bad: 'var(--error)' };
+const VERDICT_COLOR: Record<Verdict, string> = { yes: 'var(--success)', at_risk: 'var(--warning)', no: 'var(--error)', no_data: 'var(--text-muted)' };
 
 export function DeliveryVerdict({ days }: { days: number }) {
   const { currentProjectId } = useProjectScope();
@@ -61,7 +61,7 @@ function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslat
   return (
     <div
       style={{
-        background: 'var(--bg-elevated)', borderRadius: 12, padding: 20,
+        background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20,
         border: '1px solid var(--border-subtle)', borderLeft: `5px solid ${color}`,
       }}
     >
@@ -85,7 +85,7 @@ function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslat
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600,
                     color: TONE_COLOR[r.tone], background: 'var(--bg-base)', border: `1px solid ${TONE_COLOR[r.tone]}`,
-                    padding: '4px 10px', borderRadius: 999,
+                    padding: '4px 10px', borderRadius: 'var(--radius-full)',
                   }}
                 >
                   <span aria-hidden>{r.tone === 'good' ? '✓' : r.tone === 'warn' ? '!' : '✕'}</span>

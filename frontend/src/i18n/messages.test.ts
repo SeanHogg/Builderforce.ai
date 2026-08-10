@@ -7,6 +7,34 @@ import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES } from '@/lib/builderforceApi';
+import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
+import {
+  FOOTER_COLUMNS,
+  LEARN_COLUMNS,
+  PRODUCT_COLUMNS,
+  PRODUCT_STAGES,
+  productFacesFor,
+  NAV_GROUPS,
+  FOR_HIRE_NAV_GROUPS,
+  FREELANCER_NAV_GROUPS,
+  PUBLIC_DESTINATIONS,
+  SALES_NAV_GROUPS,
+  STAGES,
+  bottomNavFor,
+  destTaglineKey,
+  destTitleKey,
+} from '@/lib/navGroups';
+import { FAMILIES, FAMILY_IDS } from '@/lib/marketplaceFamilies';
+
+import { listWidgets } from '@/lib/widgets/registry';
+import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
+import { DELIVERY_PANELS } from '@/components/insights/deliveryPanels';
+import { DEVEX_PANELS } from '@/components/insights/devexPanels';
+import { FINANCE_PANELS } from '@/components/insights/finance/financePanels';
+
+/** Both mega-menus' columns — every one needs a heading, every row in one needs
+ *  a tagline. */
+const MENU_COLUMNS = [...PRODUCT_COLUMNS, ...LEARN_COLUMNS];
 
 /**
  * Catalog guard for the five message files.
@@ -69,6 +97,14 @@ const QUICK_START_KEYS = [
   'note',
 ] as const;
 
+const CREATION_CANVAS_TOUR_CONTROL_KEYS = [
+  'back',
+  'next',
+  'startCreating',
+  'tourCancel',
+  'tourClose',
+] as const;
+
 /** Tag handlers for `t.rich` — every tag renders its chunks unchanged. */
 const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> =>
   Object.fromEntries(
@@ -90,6 +126,95 @@ describe('message catalogs', () => {
       const key = `manager.stalls.cause.${cause}`;
       return t(key as never) === key;
     });
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every creation canvas object kind', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = CREATION_OBJECT_REGISTRY
+      .map(({ kind }) => kind)
+      .filter((kind) => t(`creationCanvas.object.${kind}` as never) === `creationCanvas.object.${kind}`);
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every creation canvas tour control', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = CREATION_CANVAS_TOUR_CONTROL_KEYS.filter((control) => {
+      const key = `creationCanvas.${control}`;
+      return t(key as never) === key;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s keeps the Twilio AI journey starter addressable and complete', (locale) => {
+    const promptUseCases = CATALOGS[locale].promptUseCases as { items?: Array<Record<string, unknown>> } | undefined;
+    const starter = promptUseCases?.items?.find((item) => item.id === 'twilio-ai-journey');
+    expect(starter).toMatchObject({ category: 'apps' });
+    expect(String(starter?.label || '')).toContain('Twilio');
+    expect(String(starter?.prompt || '')).toContain('twilio');
+    expect(String(starter?.prompt || '').length).toBeGreaterThan(200);
+  });
+
+  it.each(LOCALES)('%s resolves every registry-backed localization key', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    const navGroups = [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS, ...FREELANCER_NAV_GROUPS, ...SALES_NAV_GROUPS];
+    const bottomNav = [
+      ...bottomNavFor(false, false),
+      ...bottomNavFor(true, false),
+      ...bottomNavFor(true, true),
+      ...bottomNavFor(true, false, true),
+      ...bottomNavFor(true, false, false, true),
+    ];
+    const familyKeys = FAMILY_IDS.flatMap((id) => {
+      const family = FAMILIES[id];
+      return [family.labelKey, family.publishKey, family.noteKey, ...family.kinds.map((kind) => `kind.${kind}`)]
+        .map((key) => `marketplace.family.${key}`);
+    });
+    const panelKeys = [
+      ...Object.values(AI_INSIGHT_PANELS).flatMap((panel) => [`insights.aihub.${panel.titleKey}`, `insights.aihub.${panel.descKey}`]),
+      ...Object.values(DELIVERY_PANELS).flatMap((panel) => [`insights.delivhub.${panel.titleKey}`, `insights.delivhub.${panel.descKey}`]),
+      ...Object.values(DEVEX_PANELS).flatMap((panel) => [`insights.devexhub.${panel.titleKey}`, `insights.devexhub.${panel.descKey}`]),
+      ...FINANCE_PANELS.flatMap((panel) => [`insights.${panel.titleKey}`, `insights.${panel.subtitleKey}`]),
+    ];
+    const keys = new Set([
+      // Every public destination's title, and a tagline for the ones a mega-menu
+      // column renders. This is the assertion that would have caught the Learn
+      // menu shipping without one.
+      ...PUBLIC_DESTINATIONS.map((entry) => destTitleKey(entry)),
+      ...PUBLIC_DESTINATIONS.filter((entry) => MENU_COLUMNS.includes(entry.placement as never)).map(destTaglineKey),
+      ...LEARN_COLUMNS.map((column) => `marketingNav.column.${column}`),
+      // The Product menu IS the rail, so every rail row it shows needs a name
+      // (the rail's own) and a one-liner (its explainer's, or its own).
+      ...PRODUCT_STAGES.flatMap((stage) => [
+        `nav.stage.${stage}`,
+        ...productFacesFor(stage).flatMap((face) => [`nav.${face.titleKey}`, face.taglineKey]),
+      ]),
+      // The panel's index-rail labels. They are no longer reachable from the
+      // registry — a reference page hands `ReferencePage` the same array it
+      // renders its anchors from — so the keys are listed here directly. Only
+      // the fixed-section pages key their labels in the catalog at all;
+      // `/integrations` and the domain explainers label their rail from the copy
+      // they are already rendering.
+      ...['label', 'report', 'criteria', 'how', 'audits', 'faq', 'start']
+        .map((section) => `referencePanel.section.${section}`),
+      'marketingNav.megaFoot',
+      'marketingNav.megaFootLearn',
+      // `referencePanel.crumb` is deliberately absent: it takes a `{seat}`
+      // argument, and this list formats with none. The every-message-formats
+      // test below covers it, deriving arguments from the message itself.
+      ...navGroups.flatMap((group) => [
+        `nav.${group.labelKey}`,
+        ...(group.tabs ?? []).map((tab) => `nav.${tab.labelKey}`),
+      ]),
+      ...bottomNav.map(({ labelKey }) => `nav.${labelKey}`),
+      ...STAGES.flatMap((stage) => [`nav.stage.${stage}`, `featuresPage.arcQuestion.${stage}`]),
+      ...['domains', 'seats', 'destinations', 'features'].map((stat) => `featuresPage.stat.${stat}`),
+      ...FOOTER_COLUMNS.map((column) => `footer.${column.titleKey}`),
+      ...familyKeys,
+      ...listWidgets().flatMap(({ titleKey, group }) => [`widgets.title.${titleKey}`, `widgets.group.${group}`]),
+      ...panelKeys,
+    ]);
+    const missing = [...keys].filter((key) => t(key as never) === key).sort();
     expect(missing).toEqual([]);
   });
 

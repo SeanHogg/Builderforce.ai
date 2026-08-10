@@ -18,21 +18,21 @@ import {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#dc2626', high: '#f4726e', medium: '#f59e0b', low: '#3b82f6', info: '#6b7280',
+  critical: 'var(--error)', high: 'var(--orange-bright)', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
 };
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 
 /** Score band → colour (>=80 good, >=50 fair, else poor). */
 function scoreColor(score: number): string {
-  if (score >= 80) return '#22c55e';
-  if (score >= 50) return '#f59e0b';
-  return '#dc2626';
+  if (score >= 80) return 'var(--success)';
+  if (score >= 50) return 'var(--warning)';
+  return 'var(--error)';
 }
 
 function ScoreGauge({ score, label }: { score: number; label: string }) {
@@ -116,10 +116,10 @@ export function WebSecurityScanPanel() {
   const sevLabel = (s: string) => t(`sev_${s}` as 'sev_critical');
   const deltaChip = (delta: number) => {
     const up = delta >= 0;
-    const color = up ? '#22c55e' : '#dc2626';
+    const color = up ? 'var(--success)' : 'var(--error)';
     return (
       <span style={{
-        fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
+        fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-full)',
         background: `color-mix(in srgb, ${color} 15%, transparent)`, color,
       }}>
         {t('webScoreDelta', { delta: `${up ? '+' : ''}${delta}` })}
@@ -146,7 +146,7 @@ export function WebSecurityScanPanel() {
           style={{
             flex: '1 1 240px', minWidth: 0, padding: '9px 12px', fontSize: 13,
             background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
           }}
         />
         <button
@@ -156,7 +156,7 @@ export function WebSecurityScanPanel() {
           style={{
             padding: '9px 14px', fontSize: 13, fontWeight: 600, flexShrink: 0,
             background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
             cursor: saving ? 'default' : 'pointer', opacity: (!target.trim() || target.trim() === savedTarget) ? 0.5 : 1,
           }}
         >
@@ -168,8 +168,8 @@ export function WebSecurityScanPanel() {
           disabled={running || !target.trim()}
           style={{
             padding: '9px 16px', fontSize: 13, fontWeight: 700, flexShrink: 0,
-            background: 'var(--coral-bright, #f4726e)', color: '#fff',
-            border: 'none', borderRadius: 8,
+            background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+            border: 'none', borderRadius: 'var(--radius-md)',
             cursor: running || !target.trim() ? 'default' : 'pointer', opacity: running || !target.trim() ? 0.7 : 1,
           }}
         >
@@ -181,7 +181,7 @@ export function WebSecurityScanPanel() {
 
       {/* Latest result */}
       {result && (
-        <div style={{ marginTop: 16, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16 }}>
+        <div style={{ marginTop: 16, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <ScoreGauge score={result.score} label={t('webScore')} />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
@@ -190,10 +190,10 @@ export function WebSecurityScanPanel() {
                 : deltaChip(result.baseline.scoreDelta)}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {result.baseline.newFindings > 0 && (
-                  <span style={{ fontSize: 11, color: '#f4726e' }}>{t('webNewFindings', { count: result.baseline.newFindings })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--orange-bright)' }}>{t('webNewFindings', { count: result.baseline.newFindings })}</span>
                 )}
                 {result.baseline.resolvedFindings > 0 && (
-                  <span style={{ fontSize: 11, color: '#22c55e' }}>{t('webResolved', { count: result.baseline.resolvedFindings })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--success-text)' }}>{t('webResolved', { count: result.baseline.resolvedFindings })}</span>
                 )}
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('webFindingsFiled', { count: result.recorded })}</span>
@@ -202,18 +202,18 @@ export function WebSecurityScanPanel() {
 
           <div style={{ marginTop: 14, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
             {result.findings.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#22c55e', fontWeight: 600 }}>✓ {t('webNoIssues')}</div>
+              <div style={{ fontSize: 13, color: 'var(--success-text)', fontWeight: 600 }}>✓ {t('webNoIssues')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {sortedFindings(result.findings).map((f) => {
                   const color = SEVERITY_COLOR[f.severity] ?? 'var(--text-muted)';
                   const isOpen = openFinding === f.checkId;
                   return (
-                    <div key={f.checkId} style={{ background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '10px 12px' }}>
+                    <div key={f.checkId} style={{ background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flexWrap: 'wrap' }}
                         onClick={() => setOpenFinding(isOpen ? null : f.checkId)}>
                         <span style={{
-                          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, flexShrink: 0,
+                          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-full)', flexShrink: 0,
                           background: `color-mix(in srgb, ${color} 15%, transparent)`, color,
                           border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
                         }}>{sevLabel(f.severity)}</span>
@@ -249,7 +249,7 @@ export function WebSecurityScanPanel() {
             {scans.map((s) => {
               const sev = s.countsBySeverity ?? {};
               return (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, flexWrap: 'wrap' }}>
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', flexWrap: 'wrap' }}>
                   {s.score != null && (
                     <span style={{ fontWeight: 800, color: scoreColor(s.score), flexShrink: 0 }}>{s.score}</span>
                   )}

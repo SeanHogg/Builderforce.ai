@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
 import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
+import { indexableTeaserRoutes } from '@/lib/routeMarketing';
 
 const BASE = 'https://builderforce.ai';
 
@@ -24,6 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
+    { url: `${BASE}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${BASE}/evermind`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
     { url: `${BASE}/product`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
     { url: `${BASE}/creation-canvas`, lastModified: now, changeFrequency: 'weekly', priority: 0.95 },
@@ -31,9 +33,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/integrations`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${BASE}/blog`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
+    { url: `${BASE}/tutorials`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${BASE}/marketplace`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
     { url: `${BASE}/prompts`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
     { url: `${BASE}/media`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/sell-builderforce`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools/agentic-maturity`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools/ai-dev-maturity`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
@@ -46,23 +50,49 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/tools/tech-debt-estimator`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/tools/build-buy-agent`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/agents`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+    // /agents sub-pages — each is a real, crawlable marketing surface in
+    // PUBLIC_SHELL_PREFIXES (shellRouting.ts), so they belong here alongside
+    // their parent rather than being reachable only by in-page link.
+    { url: `${BASE}/agents/showcase`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+    { url: `${BASE}/agents/skills`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+    { url: `${BASE}/agents/integrations`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/agents/workflow-builder`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/agents/shoutouts`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${BASE}/agents/acknowledgements`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${BASE}/agents/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    // Trust surface. /soc2 and the seven /legal pages are the pages a buyer's
+    // security reviewer looks for by name; they were indexable but unlisted.
+    { url: `${BASE}/soc2`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}/legal/compliance`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/legal/privacy-rights`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/cookies`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${BASE}/legal/subprocessors`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/dpa`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/ai-transparency`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/legal/accessibility`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    // Demand-capture surfaces.
+    { url: `${BASE}/book-demo`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}/demo`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/login`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    // Feature routes — render a rich marketing page (RouteMarketing) to logged-out
-    // visitors and crawlers, so they're indexable entry points to the product.
-    { url: `${BASE}/brainstorm`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/ide`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/training`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/workflows`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/projects`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/workforce`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/skills`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/personas`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/security`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/dashboard`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/contributors`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/content-manager`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
   ];
+
+  // Feature routes — every authenticated route renders a rich marketing page
+  // (RouteMarketing) to logged-out visitors and crawlers, so each is a real
+  // indexable entry point to the product.
+  //
+  // DERIVED from the same registry that renders them, not hand-listed. The
+  // hand-listed version named twelve of these and silently omitted the rest, so
+  // a surface added to the registry never reached the sitemap and nobody found
+  // out. `indexableTeaserRoutes()` also drops the operator-only routes (admin,
+  // workspaces, settings, agent worker), which keep their teaser but must not
+  // be indexed.
+  const teaserPages: MetadataRoute.Sitemap = indexableTeaserRoutes().map((route) => ({
+    url: `${BASE}${route}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.6,
+  }));
 
   const blogPages: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${BASE}/blog/${post.slug}`,
@@ -104,5 +134,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages, ...talentPages];
+  return [...staticPages, ...teaserPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages, ...talentPages];
 }

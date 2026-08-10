@@ -41,7 +41,7 @@ const cardGrid: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
   display: 'flex',
   flexDirection: 'column',
@@ -51,11 +51,11 @@ const cardStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 type PanelTab = 'credentials' | 'connections' | 'activity';
@@ -164,13 +164,13 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.label}</span>
-                        <span style={{ fontSize: 11, color: count > 0 ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 11, color: count > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                           {count > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {p.supportsDiscovery && (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '1px 6px' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>
                             {t('gallery.migratable')}
                           </span>
                         )}
@@ -289,14 +289,14 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: Retur
           <span style={{ flex: 1, minWidth: 120, fontSize: 13, color: 'var(--text-primary)' }}>
             {c.externalBoardId || t('connections.allBoards')}
           </span>
-          <span style={{ fontSize: 11, color: c.status === 'active' ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>● {c.status}</span>
+          <span style={{ fontSize: 11, color: c.status === 'active' ? 'var(--success)' : 'var(--text-muted)' }}>● {c.status}</span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {c.lastPolledAt ? t('connections.lastPolled', { time: new Date(c.lastPolledAt).toLocaleString() }) : t('connections.neverPolled')}
           </span>
           <button type="button" style={btnSubtle} disabled={syncing === c.id} onClick={() => syncNow(c.id)}>
             {syncing === c.id ? t('connections.syncing') : t('connections.syncNow')}
           </button>
-          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(c.id)}>{t('connections.remove')}</button>
+          <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(c.id)}>{t('connections.remove')}</button>
         </div>
       ))}
     </div>
@@ -335,12 +335,12 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
           <div key={c.id}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>{c.name}</span>
-              {ok != null && <span style={{ fontSize: 11, color: ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>{ok ? t('activity.healthy') : t('activity.failing')}</span>}
+              {ok != null && <span style={{ fontSize: 11, color: ok ? 'var(--success)' : 'var(--danger)' }}>{ok ? t('activity.healthy') : t('activity.failing')}</span>}
               <button type="button" style={btnSubtle} disabled={testing === c.id} onClick={() => test(c.id)}>
                 {testing === c.id ? t('activity.testing') : t('activity.runDiagnostic')}
               </button>
             </div>
-            {r && !r.ok && <div style={{ fontSize: 11, color: 'var(--danger, #dc2626)', marginBottom: 6 }}>{r.message}</div>}
+            {r && !r.ok && <div style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>{r.message}</div>}
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{t('activity.history')}</div>
             {(logs[c.id] ?? []).length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('activity.noRuns')}</div>
@@ -348,10 +348,10 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {(logs[c.id] ?? []).map((l) => (
                   <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                    <span style={{ color: l.status === 'success' ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>● {l.status}</span>
+                    <span style={{ color: l.status === 'success' ? 'var(--success)' : 'var(--danger)' }}>● {l.status}</span>
                     <span>{new Date(l.startedAt).toLocaleString()}</span>
                     <span>{t('activity.processed', { count: l.itemsProcessed })}</span>
-                    {l.itemsErrored > 0 && <span style={{ color: 'var(--danger, #dc2626)' }}>{t('activity.errored', { count: l.itemsErrored })}</span>}
+                    {l.itemsErrored > 0 && <span style={{ color: 'var(--danger)' }}>{t('activity.errored', { count: l.itemsErrored })}</span>}
                   </div>
                 ))}
               </div>

@@ -51,15 +51,26 @@ export interface StackedBarProps {
   ariaLabel?: string;
 }
 
-/** Perceived luminance of a #rgb/#rrggbb fill → which ink stays legible on it. */
+/**
+ * Which ink stays legible on a segment's fill.
+ *
+ * A TOKEN cannot be measured here and must not be: `var(--violet-bright)` has no
+ * value until the browser resolves it, and it resolves to a DIFFERENT value per
+ * theme — pale on slate, deep on paper. That is one relationship across the whole
+ * categorical family, so it is one token (`--ink-on-categorical`) rather than a
+ * computation this function is in no position to run. Callers may still pass a
+ * literal (a caller-supplied brand fill), and for those the luminance test is
+ * still the right answer.
+ */
 function inkOn(color: string, override?: 'light' | 'dark'): string {
-  if (override) return override === 'light' ? '#fff' : '#0b1220';
+  if (override) return override === 'light' ? 'var(--text-on-accent)' : 'var(--ink-on-light)';
+  if (color.trim().startsWith('var(')) return 'var(--ink-on-categorical)';
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
-  if (!m) return '#fff';
+  if (!m) return 'var(--ink-on-categorical)';
   const hex = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1];
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
   // Rec. 709 relative luminance — good enough to pick ink, cheap to compute.
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? '#0b1220' : '#fff';
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? 'var(--ink-on-light)' : 'var(--text-on-accent)';
 }
 
 const legendRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem' };
@@ -82,7 +93,7 @@ export function StackedBar({
         role="img"
         aria-label={ariaLabel}
         style={{
-          display: 'flex', gap: 2, height: thickness, borderRadius: 5, minWidth: 0,
+          display: 'flex', gap: 2, height: thickness, borderRadius: 'var(--radius-sm)', minWidth: 0,
           // Empty state: an inert track so the row keeps its geometry.
           background: total > 0 ? 'transparent' : 'var(--border-subtle)',
         }}
@@ -118,7 +129,7 @@ export function StackedBar({
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', minWidth: 0 }}>
           {segments.map((s) => (
             <span key={s.key} style={legendRow}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
               <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatValue(s.value)}</span>
             </span>
@@ -140,7 +151,7 @@ export function StackedBarLegend({ items }: { items: Array<{ key: string; label:
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', minWidth: 0 }}>
       {items.map((s) => (
         <span key={s.key} style={legendRow}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+          <span style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: s.color, flexShrink: 0 }} />
           <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
         </span>
       ))}

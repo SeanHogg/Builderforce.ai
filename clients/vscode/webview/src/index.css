@@ -345,11 +345,12 @@ select option {
 
 .bf-composer {
   flex: 0 0 auto;
-  border-top: 1px solid var(--bf-border);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  margin: 8px 10px;
+  --prompt-panel-bg: var(--vscode-input-background);
+  --prompt-panel-border: var(--vscode-input-border, var(--bf-border));
+  --prompt-panel-active-border: var(--bf-accent);
+  --prompt-panel-active-ring: 0 0 0 1px var(--bf-accent);
+  --prompt-panel-shadow: none;
 }
 
 .bf-composer--drag {
@@ -360,13 +361,9 @@ select option {
 /* When the user is focused in / has typed into the composer, highlight the
    whole section in BuilderForce blue. Clears back to the normal border when
    the input is empty and unfocused. */
-.bf-composer--active {
-  border-top-color: var(--bf-accent);
-}
-
 .bf-composer--active .bf-input {
-  border-color: var(--bf-accent);
-  box-shadow: 0 0 0 1px var(--bf-accent);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .bf-attachments {
@@ -441,10 +438,10 @@ select option {
   font-family: inherit;
   font-size: 13px;
   color: var(--vscode-input-foreground);
-  background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, var(--bf-border));
-  border-radius: 8px;
-  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 6px 4px;
 }
 
 .bf-input:focus {
@@ -456,34 +453,11 @@ select option {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .bf-composer__actions {
   flex-wrap: wrap;
-}
-
-.bf-model {
-  font-size: 11px;
-  color: var(--bf-text-muted);
-  font-family: var(--bf-font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-}
-
-/* Model chip as a button (opens the model picker). Inherits .bf-model sizing. */
-.bf-model--btn {
-  border: 1px solid var(--bf-border);
-  background: transparent;
-  border-radius: 999px;
-  padding: 2px 9px;
-  cursor: pointer;
-}
-
-.bf-model--btn:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
-  color: var(--bf-text);
 }
 
 /* Square icon button used across the composer toolbar (+, /, mic, send). */

@@ -16,7 +16,7 @@
  */
 
 import { getCatalog } from './vendors';
-import { byoVendorIdsFromSummaries, type ProviderKeySummary } from './tenantProviderKeyService';
+import { byoVendorIdFor, type ProviderKeySummary } from './tenantProviderKeyService';
 
 /** Convert a catalog entry into the canonical route that uses the tenant's key.
  *  Prefixing every model as `<vendor>/<id>` is incorrect:
@@ -40,9 +40,21 @@ function byoModelRef(entry: { id: string; vendor: string }): string {
  *  ChatGPT/SuperGrok subscription serves `openai-codex/…` / `xai-oauth/…` models,
  *  NOT the `direct/<vendor>/…` api-key ones the tenant has no key for. */
 export function byoModelsFor(summaries: readonly ProviderKeySummary[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
-  const vendorIds = byoVendorIdsFromSummaries(summaries);
-  if (vendorIds.size === 0) return [];
-  return getCatalog()
-    .filter((e) => vendorIds.has(e.vendor))
-    .map((e) => ({ id: byoModelRef(e), vendor: e.vendor, tier: e.tier, ...(e.contextWindow ? { contextWindow: e.contextWindow } : {}) }));
+  const catalog = getCatalog();
+  const seen = new Set<string>();
+  // `summaries` is already sorted by the tenant's precedence. Walk it first, then
+  // the models within that provider, rather than filtering the registry catalog:
+  // filtering preserved registry order and silently discarded the user's ordering
+  // before the picker ever received it.
+  return summaries.flatMap((summary) => {
+    const vendor = byoVendorIdFor(summary.provider, summary.authType);
+    return catalog
+      .filter((entry) => entry.vendor === vendor)
+      .map((entry) => ({ id: byoModelRef(entry), vendor: entry.vendor, tier: entry.tier, ...(entry.contextWindow ? { contextWindow: entry.contextWindow } : {}) }))
+      .filter((entry) => {
+        if (seen.has(entry.id)) return false;
+        seen.add(entry.id);
+        return true;
+      });
+  });
 }

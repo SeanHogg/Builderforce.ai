@@ -29,6 +29,28 @@ export function isReleaseNoteCategory(value: unknown): value is ReleaseNoteCateg
   return typeof value === 'string' && (RELEASE_NOTE_CATEGORIES as readonly string[]).includes(value);
 }
 
+/**
+ * The lifecycle stage of an update — orthogonal to its category. Category says
+ * what KIND of change it is ('new'/'improvement'/'fix'); stage says how far
+ * along it is, and that is what decides whether it can be joined ('*_beta') or
+ * is being withdrawn ('sunset').
+ */
+export const RELEASE_NOTE_STAGES = ['in_development', 'private_beta', 'public_beta', 'live', 'sunset'] as const;
+export type ReleaseNoteStage = (typeof RELEASE_NOTE_STAGES)[number];
+
+export function isReleaseNoteStage(value: unknown): value is ReleaseNoteStage {
+  return typeof value === 'string' && (RELEASE_NOTE_STAGES as readonly string[]).includes(value);
+}
+
+/** THE gate for "can this person put themselves in this beta?", in one place so
+ *  the banner, the panel and the join endpoint cannot disagree about it: it must
+ *  be published, on a beta stage, and explicitly opened for self-enrolment. */
+export function isJoinableBeta(note: Pick<ReleaseNote, 'stage' | 'betaOptIn' | 'publishedAt'>): boolean {
+  return note.publishedAt != null
+    && note.betaOptIn
+    && (note.stage === 'public_beta' || note.stage === 'private_beta');
+}
+
 /** The wire/UI shape — timestamps as ISO strings so the cached value is pure JSON. */
 export interface ReleaseNote {
   id: string;
@@ -36,6 +58,10 @@ export interface ReleaseNote {
   title: string;
   body: string | null;
   category: string;
+  stage: string;
+  betaOptIn: boolean;
+  betaTerms: string | null;
+  stageEndsAt: string | null;
   publishedAt: string | null;
   emailedAt: string | null;
   createdAt: string;
@@ -55,6 +81,10 @@ function toWire(row: Row): ReleaseNote {
     title: row.title,
     body: row.body,
     category: row.category,
+    stage: row.stage,
+    betaOptIn: row.betaOptIn,
+    betaTerms: row.betaTerms,
+    stageEndsAt: row.stageEndsAt ? row.stageEndsAt.toISOString() : null,
     publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     emailedAt: row.emailedAt ? row.emailedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
@@ -95,8 +125,21 @@ export interface ReleaseNoteInput {
   title: string;
   body?: string | null;
   category?: ReleaseNoteCategory;
+  stage?: ReleaseNoteStage;
+  betaOptIn?: boolean;
+  betaTerms?: string | null;
+  /** ISO date; null clears it. */
+  stageEndsAt?: string | null;
   /** true → published now; false/omitted → draft. */
   publish?: boolean;
+}
+
+/** ISO string → Date, treating a blank/invalid value as "no date" rather than an
+ *  Invalid Date the driver would reject at insert time. */
+function toDate(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export async function createReleaseNote(env: Env, db: Db, input: ReleaseNoteInput): Promise<ReleaseNote> {
@@ -107,6 +150,10 @@ export async function createReleaseNote(env: Env, db: Db, input: ReleaseNoteInpu
       title: input.title,
       body: input.body ?? null,
       category: input.category ?? 'improvement',
+      stage: input.stage ?? 'live',
+      betaOptIn: input.betaOptIn ?? false,
+      betaTerms: input.betaTerms ?? null,
+      stageEndsAt: toDate(input.stageEndsAt),
       publishedAt: input.publish ? new Date() : null,
     })
     .returning();
@@ -119,6 +166,10 @@ export interface ReleaseNotePatch {
   title?: string;
   body?: string | null;
   category?: ReleaseNoteCategory;
+  stage?: ReleaseNoteStage;
+  betaOptIn?: boolean;
+  betaTerms?: string | null;
+  stageEndsAt?: string | null;
   /** true → publish (keeps an existing publishedAt); false → back to draft. */
   publish?: boolean;
 }
@@ -134,6 +185,10 @@ export async function updateReleaseNote(env: Env, db: Db, id: string, patch: Rel
       ...(patch.title !== undefined ? { title: patch.title } : {}),
       ...(patch.body !== undefined ? { body: patch.body } : {}),
       ...(patch.category !== undefined ? { category: patch.category } : {}),
+      ...(patch.stage !== undefined ? { stage: patch.stage } : {}),
+      ...(patch.betaOptIn !== undefined ? { betaOptIn: patch.betaOptIn } : {}),
+      ...(patch.betaTerms !== undefined ? { betaTerms: patch.betaTerms } : {}),
+      ...(patch.stageEndsAt !== undefined ? { stageEndsAt: toDate(patch.stageEndsAt) } : {}),
       ...(patch.publish !== undefined
         ? { publishedAt: patch.publish ? (existing.publishedAt ?? new Date()) : null }
         : {}),

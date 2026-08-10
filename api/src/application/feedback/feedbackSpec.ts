@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../domain/shared/hash';
 /**
  * Feedback spec — the pure, DB-free half of the Product Feedback pillar.
  *
@@ -97,11 +98,6 @@ export function normalizeFeedback(raw: unknown): { ok: true; value: NormalizedFe
 }
 
 /** SHA-256 hex of a string (WebCrypto — available in the Workers runtime). */
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 /**
  * Duplicate-collapse key: the same request re-submitted (a double-click, a user
  * re-reporting the identical wording) maps to one submission and one ticket.

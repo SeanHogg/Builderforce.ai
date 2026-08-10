@@ -20,6 +20,7 @@ import { projectFacts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { isExpired } from '../../domain/memory/memoryScope';
 
 const RECALL_DEFAULT = 6;
 const RECALL_MAX = 20;
@@ -37,6 +38,9 @@ export const QA_CACHE_SOURCE = 'qa-cache';
 export interface ProjectFact {
   key: string;
   content: string;
+  /** Included so a cached row can be revalidated against wall-clock time on every
+   * recall; time passing does not bump the cache's version token. */
+  expiresAt?: string | null;
 }
 
 function versionKey(tenantId: number, projectId: number): string {
@@ -168,7 +172,7 @@ export async function recallProjectFacts(
   const query = (opts?.query ?? '').trim();
   try {
     const token = await getCacheVersion(env, versionKey(tenantId, projectId));
-    return await getOrSetCached(
+    const cached = await getOrSetCached(
       env,
       `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}:${query}`,
       async () => {
@@ -185,15 +189,22 @@ export async function recallProjectFacts(
         );
         const words = tokenize(query);
         const where: SQL | undefined = words.length > 0 ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`)))) : base;
-        return db
-          .select({ key: projectFacts.key, content: projectFacts.content })
+        const rows = await db
+          .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt })
           .from(projectFacts)
           .where(where)
           .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
           .limit(limit);
+        return rows.map((row) => ({
+          key: row.key,
+          content: row.content,
+          expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+        }));
       },
       { kvTtlSeconds: 60 },
     );
+    const now = new Date();
+    return cached.filter((fact) => !isExpired(fact.expiresAt, now));
   } catch {
     return [];
   }

@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../domain/shared/hash';
 /**
  * The canonical error-event spec — Builderforce's own product-quality wire format.
  *
@@ -95,11 +96,6 @@ export function normalizeErrorMessage(message: string): string {
 }
 
 /** SHA-256 hex of a string (Web Crypto — Worker-compatible). */
-async function sha256Hex(value: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 /**
  * Stable grouping fingerprint for an event. Honors an explicit `fingerprint` when
  * the source supplied one (e.g. Sentry issue id); otherwise derives a stable hash

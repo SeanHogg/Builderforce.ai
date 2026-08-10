@@ -80,6 +80,24 @@ export const BUILTIN_KIND_ROLE_KEYS: Readonly<Record<string, string[]>> = {
   product_owner: ['product-owner', 'product-manager', 'business-analyst'],
   // The delivery-manager role, and the coordination half of team leadership.
   manager: ['manager', 'team-lead'],
+
+  // ── THE BUSINESS SEATS (migration 0436) — DELIBERATELY EMPTY ─────────────────
+  //
+  // `BUILTIN_KIND_ROLE_KEYS` is an authoritative boundary, and empty is a claim,
+  // not an omission: these six fill PRD 20 §3 domain seats (growth, finance,
+  // revenue, hiring, people, investor), and the role catalog above is the
+  // DELIVERY role catalog — it has no CMO, CFO, CRO, Recruiter, HR or CEO row for
+  // them to be capable of. Listing them here rather than letting them fall
+  // through to the fuzzy title/skill match is the point: unlisted, a CRO whose
+  // title reads "owns revenue: pipeline, deals" is one loose keyword away from
+  // being staffed onto an engineering lane. A seat that should fill a delivery
+  // role gets its keys here, explicitly, in the pass that gives it one.
+  cmo: [],
+  cfo: [],
+  cro: [],
+  recruiter: [],
+  hr: [],
+  ceo: [],
 };
 
 /**

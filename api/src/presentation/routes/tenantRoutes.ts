@@ -3,7 +3,19 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
-import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
+import {
+  acceptInvitation,
+  acceptInvitationStatement,
+  findByTokenHash,
+  findPendingByEmail,
+  invalidateInvitations,
+  invite,
+  listPending,
+  revokeInvitation,
+} from '../../application/kernel/InvitationService';
+import { getObject } from '../../application/kernel/ObjectRegistry';
+import { sha256Hex } from '../../domain/shared/hash';
+import { TenantRole, TenantBillingCycle, TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
@@ -29,12 +41,12 @@ import {
   agentHosts,
   agentHostProjects,
   sourceControlIntegrations,
-  creationSessionInvites,
   creationSessionMembers,
-  tenantInvitations,
   tenantMembers,
   tenants,
   users,
+  salesReferrals,
+  carts,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
@@ -44,6 +56,18 @@ import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltin
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { getTeamSpendOverview, invalidateTeamSpendCaches, usdToMillicents } from '../../application/consumption/memberSpend';
+import {
+  attachDiscountCheckout,
+  releaseDiscountReservation,
+  reserveDiscount,
+} from '../../application/tenant/discountCodeService';
+import { getPublishedPricing } from '../../application/tenant/pricingConfiguration';
+import { getBusinessPhoneSubscription } from '../../application/tenant/businessPhoneSubscription';
+import {
+  readNavigationFeatures,
+  validateNavigationFeatures,
+  writeNavigationFeatures,
+} from '../../application/tenant/navigationFeatures';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -88,11 +112,6 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
   return Boolean(row);
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 /**
  * Drop the cached human assignee list for a tenant. Called from every membership
  * add/remove path so GET /api/tasks/assignees re-loads immediately instead of
@@ -101,15 +120,6 @@ async function sha256Hex(value: string): Promise<string> {
  */
 async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void> {
   await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
-}
-
-/** Cache key for a tenant's pending-invitation roster (GET /:id/invitations). */
-function invitationsCacheKey(tenantId: number): string {
-  return `tenant-invitations:tenant:${tenantId}`;
-}
-
-async function invalidateInvitations(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, invitationsCacheKey(tenantId));
 }
 
 /**
@@ -132,15 +142,14 @@ async function acceptPendingInvitations(
   const normalized = email.toLowerCase().trim();
   if (!normalized) return;
 
-  const pending = await db
-    .select({
-      id: tenantInvitations.id,
-      tenantId: tenantInvitations.tenantId,
-      role: tenantInvitations.role,
-      invitedByUserId: tenantInvitations.invitedByUserId,
-    })
-    .from(tenantInvitations)
-    .where(and(eq(tenantInvitations.email, normalized), eq(tenantInvitations.status, 'pending')));
+  // One definition of "pending" (kernel `InvitationService`), so a revoked or
+  // expired row cannot be accepted here while the members page shows it gone.
+  const pending = (await findPendingByEmail(db, normalized, 'tenant')).map((row) => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    role: row.role,
+    invitedByUserId: row.invitedBy,
+  }));
 
   // Per-tenant live seat tally, fetched lazily on first use and incremented as we
   // seat invites within this run, so a batch of invites for the same tenant can't
@@ -164,7 +173,7 @@ async function acceptPendingInvitations(
         // frees up or they upgrade) instead of silently auto-accepting past the cap.
         let state = seatState.get(invite.tenantId);
         if (!state) {
-          const cap = await seatCapacityForTenant(db, invite.tenantId);
+          const cap = await seatCapacityForTenant(db, env, invite.tenantId);
           state = { plan: cap.plan, seated: cap.members };
           seatState.set(invite.tenantId, state);
         }
@@ -174,12 +183,8 @@ async function acceptPendingInvitations(
         await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
         state.seated += 1;
       }
-      await db
-        .update(tenantInvitations)
-        .set({ status: 'accepted', acceptedAt: new Date() })
-        .where(eq(tenantInvitations.id, invite.id));
+      await acceptInvitation(db, env, { id: invite.id, tenantId: invite.tenantId, inviteeRef: userId });
       await invalidateTaskAssignees(env, invite.tenantId);
-      await invalidateInvitations(env, invite.tenantId);
     } catch (error) {
       // A transient error on one tenant must not block the user's login or the
       // other tenants' invites — leave the row pending so it retries next visit.
@@ -200,6 +205,16 @@ function forbidCrossTenant(c: Context<HonoEnv>, id: number): Response | undefine
 
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // Public published plan contract shared by every marketing pricing surface.
+  router.get('/pricing', async (c) => {
+    const contract = await getPublishedPricing(db, c.env as Env);
+    const etag = `W/\"pricing-${contract.publishedAt}\"`;
+    if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+    c.header('ETag', etag);
+    return c.json(contract);
+  });
 
   // GET /api/tenants/mine  – WebJWT required; returns tenants the caller belongs to
   // Used by the tenant picker immediately after login (before a tenant JWT exists)
@@ -247,24 +262,24 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     // This is the sole deliberate cross-tenant read: the unguessable one-time
     // token is the lookup key and the selected tenantId becomes the scope for
     // every subsequent membership check and write.
-    const [invitation] = await db.select({
-      id: creationSessionInvites.id,
-      sessionId: creationSessionInvites.sessionId,
-      tenantId: creationSessionInvites.tenantId,
-      email: creationSessionInvites.email,
-      role: creationSessionInvites.role,
-      expiresAt: creationSessionInvites.expiresAt,
-      acceptedAt: creationSessionInvites.acceptedAt,
-      revokedAt: creationSessionInvites.revokedAt,
-      createdBy: creationSessionInvites.createdBy,
-    }).from(creationSessionInvites)
-      .where(eq(creationSessionInvites.tokenHash, tokenHash)).limit(1);
-    if (!invitation || invitation.revokedAt || invitation.acceptedAt || invitation.expiresAt.getTime() <= Date.now()) {
+    // `findByTokenHash` returns pending rows only — revoked, accepted and expired
+    // are excluded by the service's single `isPending()`, so this route no longer
+    // re-derives "still usable" from four nullable columns.
+    const invitation = await findByTokenHash(db, tokenHash);
+    if (!invitation || invitation.kind !== 'session') {
       return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     }
-    if (!account?.email || account.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
+    if (!account?.email || !invitation.email
+      || account.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
       return c.json({ error: 'Sign in with the email address that received this invitation' }, 403);
     }
+    // The session it grants access to is the registry entry it points at —
+    // `creation_session_invites.session_id` was dropped by migration 0435.
+    const target = invitation.objectId
+      ? await getObject(db, c.env as Env, invitation.tenantId, invitation.objectId)
+      : null;
+    if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    const sessionId = target.refId;
     await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
     if (!(await assertTenantMember(db, invitation.tenantId, userId))) {
       return c.json({ error: 'The invited workspace cannot add another member yet', code: 'TENANT_SEAT_LIMIT' }, 409);
@@ -274,16 +289,13 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       : null;
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
     await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId: invitation.sessionId, userId, role, invitedBy: invitation.createdBy })
+      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
         .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
-      db.update(creationSessionInvites).set({ acceptedBy: userId, acceptedAt: new Date() }).where(and(
-        eq(creationSessionInvites.id, invitation.id),
-        eq(creationSessionInvites.tenantId, invitation.tenantId),
-        isNull(creationSessionInvites.acceptedAt),
-        isNull(creationSessionInvites.revokedAt),
-      )),
+      acceptInvitationStatement(db, { id: invitation.id, tenantId: invitation.tenantId, inviteeRef: userId }),
     ]);
-    return c.json({ sessionId: invitation.sessionId, tenantId: invitation.tenantId, role });
+    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
+    await invalidateInvitations(c.env as Env, invitation.tenantId);
+    return c.json({ sessionId, tenantId: invitation.tenantId, role });
   });
 
   // PATCH /api/tenants/:id/name  – WebJWT required; renames a workspace (owner/manager only)
@@ -365,6 +377,35 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
   });
 
+  // Workspace menu preferences. Any workspace member may tailor the shared
+  // module set from Settings; core navigation is not represented in this list
+  // and therefore can never be hidden. Missing preferences default to all on so
+  // existing workspaces retain their current navigation after deployment.
+  router.get('/:id/navigation-features', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    return c.json({ enabled: readNavigationFeatures(row.settings) });
+  });
+
+  router.put('/:id/navigation-features', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({} as { enabled?: unknown }));
+    const enabled = validateNavigationFeatures(body.enabled);
+    if (!enabled) return c.json({ error: 'enabled must contain only known navigation feature ids' }, 400);
+    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    await db.update(tenants).set({
+      settings: writeNavigationFeatures(row.settings, enabled),
+      updatedAt: new Date(),
+    }).where(eq(tenants.id, id));
+    return c.json({ enabled });
+  });
+
   // GET /api/tenants/:id/subscription
   router.get('/:id/subscription', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
     const tenantId = Number(c.req.param('id'));
@@ -373,6 +414,44 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const subscription = await tenantService.getSubscription(tenantId);
     return c.json(subscription);
+  });
+
+  router.get('/:id/add-ons/business-phone', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    return c.json({ subscription: await getBusinessPhoneSubscription(db, tenantId) });
+  });
+
+  router.post('/:id/add-ons/business-phone/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json<{ billingEmail?: string }>();
+    if (!body.billingEmail?.trim()) return c.json({ error: 'billingEmail is required' }, 400);
+    const pricing = await getPublishedPricing(db, c.env as Env);
+    const existing = await getBusinessPhoneSubscription(db, tenantId);
+    if (existing?.status === 'active') return c.json({ error: 'Business Phone is already active' }, 409);
+    const baseSubscription = await tenantService.getSubscription(tenantId);
+    if (baseSubscription.billingStatus !== TenantBillingStatus.ACTIVE || baseSubscription.effectivePlan === TenantPlan.FREE) {
+      return c.json({ error: 'Business Phone requires an active Pro or Teams plan' }, 403);
+    }
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
+    const activationCents = Math.round(pricing.businessPhone.activation * 100);
+    const monthlyCents = Math.round(pricing.businessPhone.monthly * 100);
+    const [cart] = await db.insert(carts).values({ tenantId, buyerRef: c.get('userId') as string, currency: pricing.currency, subtotalCents: activationCents + monthlyCents, totalCents: activationCents + monthlyCents }).returning({ id: carts.id });
+    if (!cart) throw new Error('Business Phone cart was not created');
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createBusinessPhoneCheckoutSession(tenantId, {
+        cartId: cart.id,
+        billingEmail: body.billingEmail.trim(), currency: pricing.currency,
+        activationCents, monthlyCents,
+        successUrl: `${appUrl}/crm/phone?purchase=success`, cancelUrl: `${appUrl}/pricing?phone=cancelled`,
+      });
+    } catch (error) {
+      await db.update(carts).set({ status: 'abandoned', updatedAt: sql`now()` }).where(and(eq(carts.id, cart.id), eq(carts.tenantId, tenantId)));
+      throw error;
+    }
+    return c.json(result);
   });
 
   /**
@@ -387,6 +466,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
    *   seats               number                 required when targetPlan="teams"
    *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
+   *   discountCode       string                 optional; retained signup offer
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
@@ -402,27 +482,94 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       billingEmail: string;
       successUrl?: string;
       cancelUrl?: string;
+      discountCode?: string;
     }>();
 
     if (!body.billingCycle || !body.billingEmail) {
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
+    if (body.billingCycle !== TenantBillingCycle.MONTHLY && body.billingCycle !== TenantBillingCycle.YEARLY) {
+      return c.json({ error: 'billingCycle must be monthly or yearly' }, 400);
+    }
 
     const targetPlan = body.targetPlan === 'teams' ? TenantPlan.TEAMS : TenantPlan.PRO;
+    const publishedPricing = await getPublishedPricing(db, c.env as Env);
+    const publishedPlan = publishedPricing.plans.find((plan) => plan.id === targetPlan);
+    if (!publishedPlan) return c.json({ error: 'Published plan pricing is unavailable' }, 503);
+    const unitAmount = body.billingCycle === TenantBillingCycle.YEARLY
+      ? publishedPlan.yearly
+      : publishedPlan.monthly;
 
     if (targetPlan === TenantPlan.TEAMS && (!body.seats || body.seats < 1)) {
       return c.json({ error: 'seats (≥1) is required for the Teams plan' }, 400);
     }
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      targetPlan,
-      seats: body.seats,
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
-      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
-    });
+    const discount = body.discountCode
+      ? await reserveDiscount(db, {
+          tenantId,
+          rawCode: body.discountCode,
+          targetPlan,
+          billingCycle: body.billingCycle,
+        })
+      : undefined;
+
+    const [pendingReferral] = await db.select({ id: salesReferrals.id, tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(
+      eq(salesReferrals.referredUserId, c.get('userId') as string), isNull(salesReferrals.convertedAt),
+    )).limit(1);
+
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createCheckoutSession(tenantId, {
+        targetPlan,
+        seats: body.seats,
+        billingCycle: body.billingCycle,
+        billingEmail: body.billingEmail,
+        currency: publishedPricing.currency,
+        unitAmountCents: Math.round(unitAmount * 100),
+        productName: `Builderforce.ai ${publishedPlan.name}`,
+        successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
+        cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
+        discount: discount ? {
+          id: discount.discountId,
+          code: discount.code,
+          percentOff: discount.percentOff,
+          durationYears: discount.durationYears,
+          redemptionId: discount.redemptionId,
+        } : undefined,
+        salesReferralId: pendingReferral?.id,
+      });
+    } catch (error) {
+      if (discount) {
+        await releaseDiscountReservation(db, tenantId, discount.redemptionId).catch((releaseError) => {
+          reportCaughtError(releaseError, { source: 'presentation/routes/tenantRoutes.ts', operation: 'releaseDiscountReservation' });
+        });
+      }
+      throw error;
+    }
+    if (discount) {
+      await attachDiscountCheckout(db, tenantId, discount.redemptionId, result.sessionId).catch((error) => {
+        reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'attachDiscountCheckout' });
+      });
+    }
+
+    // Bind attribution to the exact workspace entering checkout. This is more
+    // accurate than assuming the first workspace owner was the purchaser and
+    // lets the signed activation webhook resolve the referral deterministically.
+    if (pendingReferral) {
+      try {
+        // Latest valid checkout owns the still-pending attribution. Clear an
+        // abandoned earlier checkout before binding this one, atomically.
+        await db.batch([
+          db.update(salesReferrals).set({ tenantId: null }).where(and(eq(salesReferrals.tenantId, tenantId), isNull(salesReferrals.convertedAt))),
+          db.update(salesReferrals).set({ tenantId }).where(eq(salesReferrals.id, pendingReferral.id)),
+        ]);
+      } catch (error) {
+        // Checkout already exists at the provider at this point. Attribution must
+        // never turn a valid payment session into a 500.
+        reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'bindSalesReferralAttribution' });
+      }
+    }
 
     return c.json(result);
   });
@@ -918,30 +1065,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
     }
 
-    // No account: upsert the pending invitation (the partial-unique index allows
-    // only one open invite per email, so re-inviting refreshes role + timestamp).
-    const [existing] = await db
-      .select({ id: tenantInvitations.id })
-      .from(tenantInvitations)
-      .where(and(
-        eq(tenantInvitations.tenantId, id),
-        eq(tenantInvitations.email, email),
-        eq(tenantInvitations.status, 'pending'),
-      ))
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(tenantInvitations)
-        .set({ role, invitedByUserId: actorUserId, createdAt: new Date() })
-        .where(eq(tenantInvitations.id, existing.id));
-    } else {
-      await db
-        .insert(tenantInvitations)
-        .values({ tenantId: id, email, role, invitedByUserId: actorUserId });
-    }
-
-    await invalidateInvitations(c.env as Env, id);
+    // No account: the kernel invitation. `invite()` is find-or-refresh on
+    // (tenant, kind, email), which is what the select-then-insert here used to
+    // approximate — with a race between the two statements — and it invalidates
+    // the tenant's cached roster itself.
+    await invite(db, c.env as Env, {
+      tenantId: id,
+      kind: 'tenant',
+      email,
+      role,
+      invitedBy: actorUserId,
+    });
 
     emitMemberActivity(c, db, 'member.invited', {
       targetId: email, targetLabel: email,
@@ -990,19 +1124,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const invitations = await getOrSetCached(c.env as Env, invitationsCacheKey(tenantId), async () => {
-      const rows = await db
-        .select({
-          id: tenantInvitations.id,
-          email: tenantInvitations.email,
-          role: tenantInvitations.role,
-          createdAt: tenantInvitations.createdAt,
-        })
-        .from(tenantInvitations)
-        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.status, 'pending')))
-        .orderBy(desc(tenantInvitations.createdAt));
-      return rows;
-    });
+    // Same cached read the seat guard counts, so the page and the cap can never
+    // disagree. The response shape is unchanged for the frontend.
+    const rows = await listPending(db, c.env as Env, tenantId, 'tenant');
+    const invitations = rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      createdAt: row.createdAt,
+    }));
 
     return c.json({ invitations });
   });
@@ -1016,16 +1146,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const invId = c.req.param('invId');
     if (!invId) return c.json({ error: 'invId is required' }, 400);
 
-    await db
-      .update(tenantInvitations)
-      .set({ status: 'revoked', revokedAt: new Date() })
-      .where(and(
-        eq(tenantInvitations.id, invId),
-        eq(tenantInvitations.tenantId, tenantId),
-        eq(tenantInvitations.status, 'pending'),
-      ));
-
-    await invalidateInvitations(c.env as Env, tenantId);
+    // THE revocation path (§2): one, and it drops the cached roster itself.
+    await revokeInvitation(db, c.env as Env, { id: invId, tenantId });
     return c.json({ ok: true });
   });
 
@@ -1226,6 +1348,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         .where(
           and(
             eq(authTokens.userId, userId),
+            eq(authTokens.tenantId, tenantId),
             inArray(authTokens.sessionId, sessionIds),
             isNull(authTokens.revokedAt),
             gt(authTokens.expiresAt, new Date()),
@@ -1309,7 +1432,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1334,7 +1457,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1355,7 +1478,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });

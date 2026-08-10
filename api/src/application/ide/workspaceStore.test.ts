@@ -4,7 +4,7 @@
  * produced real production corruption: silent-empty reads, cross-wired content
  * persisted to the wrong path, unvalidated keys, and cross-project bleed.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   validateWorkspacePath,
   validateWorkspaceContent,
@@ -13,6 +13,7 @@ import {
   listWorkspaceFiles,
   readWorkspaceFile,
   writeWorkspaceFile,
+  writeWorkspaceBinary,
   deleteWorkspaceFile,
 } from './workspaceStore';
 
@@ -44,6 +45,13 @@ const asBucket = (r2: ReturnType<typeof fakeR2>) => r2 as unknown as R2Bucket;
 // ---------------------------------------------------------------------------
 
 describe('workspaceStore round-trip', () => {
+  it('stores binary media without applying the text content guard', async () => {
+    const put = vi.fn(async () => undefined);
+    const bucket = { put } as unknown as R2Bucket;
+    const bytes = new Uint8Array([0, 1, 2, 255]);
+    expect(await writeWorkspaceBinary(bucket, 7, 'recordings/live.webm', bytes, 'video/webm')).toEqual({ ok: true });
+    expect(put).toHaveBeenCalledWith('ide/projects/7/recordings/live.webm', bytes, { httpMetadata: { contentType: 'video/webm' } });
+  });
   it.each([
     ['plain source', 'App.js', "export default function App() { return null; }"],
     ['unicode + emoji', 'App.js', "const label = 'héllo wörld 🚀 — ñ 中文';"],

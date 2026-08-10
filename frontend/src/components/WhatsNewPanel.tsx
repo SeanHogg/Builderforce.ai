@@ -1,20 +1,36 @@
 'use client';
 
 /**
- * "What's new" — the platform changelog, opened by clicking the version number
+ * Product Updates — the platform changelog, opened by clicking the version number
  * in the footer (and auto-opened by `?whatsnew=1`, the deep link the weekly
- * digest email's CTA uses). Renders the PUBLIC published release notes,
- * newest first, in the canonical SlideOutPanel.
+ * digest email's CTA uses). Renders the PUBLIC published release notes, newest
+ * first, in the canonical SlideOutPanel.
+ *
+ * Each update carries its lifecycle STAGE, so "what changed" and "what is still
+ * in beta" are one list rather than two: an update on an open beta stage offers
+ * the same join/leave flow the banner does, through the same panel and the same
+ * store — join here and the banner is gone before the next render.
  *
  * The list is fetched once per page lifetime (module-level promise cache):
  * the API side is already read-through-cached, this just avoids refetching on
  * every reopen of the panel.
  */
 
-import { useEffect, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from './SlideOutPanel';
-import { fetchReleaseNotes, type ReleaseNote } from '@/lib/releaseNotesApi';
+import BetaJoinPanel from './beta/BetaJoinPanel';
+import {
+  CategoryBadge,
+  ReleaseNoteBody,
+  StageBadge,
+  isBetaStage,
+  useReleaseNoteDate,
+  useReleaseNoteMonth,
+} from './releaseNotes/ReleaseNoteParts';
+import { useBetaPrograms } from '@/lib/betaPrograms';
+import { fetchReleaseNotes, type BetaProgram, type ReleaseNote } from '@/lib/releaseNotesApi';
+import styles from './WhatsNewPanel.module.css';
 
 let notesPromise: Promise<ReleaseNote[]> | null = null;
 
@@ -28,23 +44,25 @@ function loadNotesOnce(): Promise<ReleaseNote[]> {
   return notesPromise;
 }
 
-/** Mid-tone accents read on BOTH themes; backgrounds derive from them via
- *  color-mix so no literal light-only/dark-only surface color exists here. */
-const CATEGORY_ACCENT: Record<'new' | 'improvement' | 'fix', string> = {
-  new: '#6366f1',
-  improvement: '#10b981',
-  fix: '#f59e0b',
-};
+type CategoryFilter = 'all' | 'new' | 'improvement' | 'fix';
 
-function categoryKey(category: string): 'new' | 'improvement' | 'fix' {
-  return category === 'new' || category === 'fix' ? category : 'improvement';
+const FILTERS: CategoryFilter[] = ['all', 'new', 'improvement', 'fix'];
+
+function noteTimestamp(note: ReleaseNote): string {
+  return note.publishedAt ?? note.createdAt;
 }
 
 export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useTranslations('whatsNew');
-  const locale = useLocale();
+  const tBeta = useTranslations('beta');
+  const fmtDate = useReleaseNoteDate();
+  const fmtMonth = useReleaseNoteMonth();
+  const { betas } = useBetaPrograms();
   const [notes, setNotes] = useState<ReleaseNote[] | null>(null);
   const [error, setError] = useState(false);
+  const [joining, setJoining] = useState<BetaProgram | null>(null);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<CategoryFilter>('all');
 
   useEffect(() => {
     if (!open || notes !== null) return;
@@ -56,71 +74,154 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
     return () => { cancelled = true; };
   }, [open, notes]);
 
-  const fmtDate = (iso: string) =>
-    new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(iso));
+  // The changelog is public; enrolment is per person. Indexing the betas the
+  // signed-in user can act on lets a note render its own join state without this
+  // panel re-deciding who is eligible — the server already did.
+  const joinable = useMemo(() => new Map(betas.map((b) => [b.id, b])), [betas]);
+
+  const visibleNotes = useMemo(() => {
+    if (notes === null) return [];
+    const needle = query.trim().toLocaleLowerCase();
+    return notes.filter((note) => {
+      const matchesCategory = category === 'all' || note.category === category;
+      const searchable = `${note.title} ${note.body ?? ''} ${note.version}`.toLocaleLowerCase();
+      return matchesCategory && (!needle || searchable.includes(needle));
+    });
+  }, [category, notes, query]);
+
+  const groupedNotes = useMemo(() => {
+    const groups: Array<{ month: string; notes: ReleaseNote[] }> = [];
+    visibleNotes.forEach((note) => {
+      const month = fmtMonth(noteTimestamp(note));
+      const previous = groups.at(-1);
+      if (previous?.month === month) previous.notes.push(note);
+      else groups.push({ month, notes: [note] });
+    });
+    return groups;
+  }, [fmtMonth, visibleNotes]);
+
+  const resetFilters = () => {
+    setQuery('');
+    setCategory('all');
+  };
 
   return (
-    <SlideOutPanel open={open} onClose={onClose} title={t('title')}>
-      {error ? (
-        <p style={{ color: 'var(--text-secondary, #94a3b8)', padding: '8px 0' }}>{t('error')}</p>
-      ) : notes === null ? (
-        <p style={{ color: 'var(--text-secondary, #94a3b8)', padding: '8px 0' }}>{t('loading')}</p>
-      ) : notes.length === 0 ? (
-        <p style={{ color: 'var(--text-secondary, #94a3b8)', padding: '8px 0' }}>{t('empty')}</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {notes.map((note) => {
-            const key = categoryKey(note.category);
-            const accent = CATEGORY_ACCENT[key];
-            return (
-              <article
-                key={note.id}
-                style={{
-                  borderBottom: '1px solid var(--border, #33415555)',
-                  paddingBottom: 16,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: 0.4,
-                      textTransform: 'uppercase',
-                      borderRadius: 9999,
-                      padding: '2px 10px',
-                      color: accent,
-                      background: `color-mix(in srgb, ${accent} 15%, transparent)`,
-                    }}
+    <>
+      <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="wide">
+        <div className={styles.catalog}>
+          <div className={styles.intro}>
+            <span className="ui-eyebrow">{t('eyebrow')}</span>
+            <p>{t('description')}</p>
+            {notes !== null && notes.length > 0 && (
+              <span className={styles.total}>{t('updateCount', { count: notes.length })}</span>
+            )}
+          </div>
+
+          {notes !== null && notes.length > 0 && (
+            <div className={styles.controls}>
+              <label className={styles.search}>
+                <svg aria-hidden viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-4-4" />
+                </svg>
+                <span className="sr-only">{t('searchLabel')}</span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t('searchPlaceholder')}
+                />
+              </label>
+              <div className={styles.filters} aria-label={t('filterLabel')}>
+                {FILTERS.map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    className={category === filter ? styles.filterActive : undefined}
+                    aria-pressed={category === filter}
+                    onClick={() => setCategory(filter)}
                   >
-                    {t(`categories.${key}`)}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', fontFamily: 'var(--mono, monospace)' }}>
-                    v{note.version}
-                  </span>
-                  {note.publishedAt && (
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)' }}>
-                      {fmtDate(note.publishedAt)}
-                    </span>
-                  )}
-                </div>
-                <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #e2e8f0)' }}>
-                  {note.title}
-                </h3>
-                {(note.body ?? '')
-                  .split(/\n{2,}/)
-                  .map((para) => para.trim())
-                  .filter(Boolean)
-                  .map((para, i) => (
-                    <p key={i} style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary, #cbd5e1)' }}>
-                      {para}
-                    </p>
-                  ))}
-              </article>
-            );
-          })}
+                    {filter === 'all' ? t('filters.all') : t(`categories.${filter}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error ? (
+            <div className={styles.state}>{t('error')}</div>
+          ) : notes === null ? (
+            <div className={styles.loading} role="status" aria-label={t('loading')}>
+              <span /><span /><span />
+            </div>
+          ) : notes.length === 0 ? (
+            <div className={styles.state}>{t('empty')}</div>
+          ) : visibleNotes.length === 0 ? (
+            <div className={styles.state}>
+              <strong>{t('noResultsTitle')}</strong>
+              <span>{t('noResultsBody')}</span>
+              <button type="button" className="btn-ghost" onClick={resetFilters}>
+                {t('clearFilters')}
+              </button>
+            </div>
+          ) : (
+            <div className={styles.timeline}>
+              <div className={styles.results} aria-live="polite">
+                {t('showingCount', { count: visibleNotes.length })}
+              </div>
+              {groupedNotes.map((group) => (
+                <section key={group.month} className={styles.monthGroup} aria-label={group.month}>
+                  <div className={styles.monthHeading}>
+                    <span>{group.month}</span>
+                    <i aria-hidden />
+                  </div>
+                  {group.notes.map((note) => {
+                    const beta = joinable.get(note.id) ?? null;
+                    return (
+                      <article key={note.id} className={styles.note} data-category={note.category}>
+                        <div className={styles.noteMeta}>
+                          <CategoryBadge category={note.category} />
+                          {/* 'live' is the resting state — badging every shipped note
+                              with it would say nothing. Stages that mean something to a
+                              reader (in development, in beta, sunsetting) are shown. */}
+                          {note.stage !== 'live' && <StageBadge stage={note.stage} />}
+                          {note.id === notes[0]?.id && <span className={styles.latest}>{t('latest')}</span>}
+                          <span className={styles.version}>v{note.version}</span>
+                          {note.publishedAt && (
+                            <span className={styles.date}>{fmtDate(note.publishedAt)}</span>
+                          )}
+                        </div>
+                        <h3 className={styles.noteTitle}>{note.title}</h3>
+                        <ReleaseNoteBody body={note.body} />
+
+                        {note.stageEndsAt && isBetaStage(note.stage) && (
+                          <p className={styles.rollout}>
+                            {tBeta('rollsOut', { date: fmtDate(note.stageEndsAt) })}
+                          </p>
+                        )}
+
+                        {beta && (
+                          <button
+                            type="button"
+                            className={beta.myStatus === 'joined' ? 'btn-ghost' : 'btn-secondary'}
+                            onClick={() => setJoining(beta)}
+                          >
+                            {beta.myStatus === 'joined' ? tBeta('manage') : tBeta('join')}
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
+                </section>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-    </SlideOutPanel>
+      </SlideOutPanel>
+
+      {/* One join surface for every entry point — the banner opens this same
+          panel. Raised, because here it opens OVER the changelog drawer. */}
+      <BetaJoinPanel beta={joining} open={joining !== null} onClose={() => setJoining(null)} zIndex={10010} />
+    </>
   );
 }

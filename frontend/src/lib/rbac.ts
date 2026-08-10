@@ -74,6 +74,9 @@ export const CAPABILITIES = {
   // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
   // manager would collapse two distinct controls and make the approval queue moot.
   'runtime.execute':      'developer',
+  // Workspace-wide emergency execution override. Manager-only because it stops
+  // every member's manual runs as well as all autonomous/scheduled dispatch.
+  'runtime.control':      'manager',
   // REVERTING a finished run — closing the PR it opened and deleting the branch it
   // wrote. Mirrors requireRole(MANAGER) on POST /api/runtime/executions/:id/revert.
   // Deliberately a tier ABOVE runtime.execute: starting a run is the developer's
@@ -201,9 +204,14 @@ export function usePermission(cap: Capability): PermissionResult {
  * gig/for-hire account that sees only the Profile / Find Work / Timecard shell.
  * Undefined outside an AuthProvider so callers never crash the tree.
  */
-export function useAccountType(): 'standard' | 'freelancer' | undefined {
+export function useAccountType(): 'standard' | 'freelancer' | 'sales' | undefined {
   const auth = useOptionalAuth();
   return auth?.user?.accountType;
+}
+
+/** True for referral / sales-associate accounts. */
+export function useIsSalesAssociate(): boolean {
+  return useAccountType() === 'sales';
 }
 
 /** True when the signed-in user is a freelancer (restricted gig shell). The ONE

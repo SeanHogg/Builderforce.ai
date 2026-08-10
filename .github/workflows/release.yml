@@ -1,313 +1,407 @@
-name: Deploy Builderforce
+name: Release
 
-# Harden npm against transient registry network errors (ECONNRESET) in CI.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
 env:
   NPM_CONFIG_FETCH_RETRIES: "5"
   NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
 
-on:
-  push:
-    branches: [ main ]
-
-# Required for npm provenance attestation on `npm publish --provenance`.
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
-  deploy-api:
-    name: Deploy API (api.builderforce.ai)
+  package-npm:
+    name: Package npm
     runs-on: ubuntu-latest
-    # Dogfood: the API consumes the PUBLISHED @seanhogg/builderforce-quality just
-    # like any customer, so the publish must land before its npm install resolves
-    # the pinned version. (Version-gated: a no-op publish on unchanged versions
-    # still succeeds, so this never permanently blocks a deploy.)
-    needs: publish-quality
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: api/pnpm-lock.yaml
 
-      # pnpm --frozen-lockfile, NOT `npm install` — deploy must build the exact
-      # tree CI gated. Every type-check/test job in ci.yml installs from
-      # api/pnpm-lock.yaml, so resolving here with npm (which re-resolves against
-      # a package-lock.json no gate reads) meant the worker shipped to production
-      # could carry dependency versions nothing had ever type-checked or tested.
-      - name: Install API dependencies
-        working-directory: api
-        run: pnpm install --frozen-lockfile
-
-      # Release gate — CI runs on pull requests, but direct pushes to main reach this
-      # workflow without a CI run. The 2026.7.181 manager release demonstrated why the
-      # deploy must defend itself: package.json was bumped while src/version.ts was not,
-      # and the worker shipped diagnostics claiming the previous build. Run the full API
-      # suite plus type-check here before migrations or any external mutation.
-      - name: Guard — type-check and test the exact API release
-        working-directory: api
+      - name: Configure npm publishing
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          npm install --global npm@11
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+          fi
+
+      - name: Build, test, and publish packages with new versions
+        run: |
+          publish_package() {
+            package_dir="$1"
+            package_name="$2"
+
+            pushd "$package_dir"
+            if [ -f pnpm-lock.yaml ]; then
+              pnpm install --frozen-lockfile
+            else
+              npm install --no-audit --no-fund
+            fi
+            npm run type-check
+            npm test
+
+            version=$(node -p "require('./package.json').version")
+            if npm view "$package_name@$version" version >/dev/null 2>&1; then
+              echo "$package_name@$version already exists; skipping publish."
+            elif ! npm publish --provenance --access public; then
+              # A registry retry can publish successfully and still return an error.
+              npm view "$package_name@$version" version >/dev/null 2>&1 || exit 1
+            fi
+            popd
+          }
+
+          publish_package browser-sdk @seanhogg/builderforce-quality
+          publish_package sdk @seanhogg/builderforce-sdk
+          publish_package studio @seanhogg/builderforce-studio
+          publish_package studio-embedded @seanhogg/builderforce-studio-embedded
+          publish_package voice @seanhogg/builderforce-voice
+
+  # Marketplace copy lives in distribution/listing.json and is stamped into every
+  # channel payload. A listing that contradicts the product is what a buyer reads,
+  # so drift fails the release rather than shipping quietly.
+  verify-distribution:
+    name: Verify distribution payloads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node distribution/build.mjs --check
+
+  # ── VS Code extension → BOTH extension registries ────────────────────────
+  # Microsoft's marketplace licence restricts consumption to Microsoft products,
+  # so Open VSX is not a duplicate listing — it is the only way the same VSIX
+  # reaches Cursor, Windsurf, VSCodium and Gitpod. One package, two publishes.
+  publish-extension:
+    name: Publish VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and package the VSIX
+        working-directory: clients/vscode
+        run: |
+          pnpm install --frozen-lockfile || pnpm install
           npm run type-check
           npm test
+          npx --yes @vscode/vsce package --no-dependencies --out builderforce.vsix
 
-      - name: Run API migrations
+      # Publishing is version-gated: re-running the workflow on an unbumped
+      # version must be a no-op, not a hard failure, because this job shares a
+      # trigger with the deploys below.
+      - name: Publish to the Visual Studio Marketplace
+        working-directory: clients/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::warning::VSCE_PAT is not set — skipping Visual Studio Marketplace publish."
+            exit 0
+          fi
+          # Both registries reject a version that already exists. That is the
+          # expected outcome of re-running this workflow on an unbumped version,
+          # so it must not fail the release.
+          npx --yes @vscode/vsce publish --no-dependencies --packagePath builderforce.vsix \
+            || echo "::warning::Visual Studio Marketplace publish did not apply (most likely this version is already published)."
+
+      - name: Publish to Open VSX
+        working-directory: clients/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::warning::OVSX_PAT is not set — skipping Open VSX publish."
+            exit 0
+          fi
+          # ovsx exits non-zero when the version already exists; that is the
+          # expected outcome of a re-run, not a release failure.
+          npx --yes ovsx publish builderforce.vsix -p "$OVSX_PAT" \
+            || echo "::warning::Open VSX publish did not apply (most likely this version is already published)."
+
+  # ── GitHub Action → GitHub Marketplace ───────────────────────────────────
+  # The action is usable from this repo today
+  # (`SeanHogg/Builderforce.ai/actions/dispatch-agent@main`), but GitHub only
+  # lists an action whose `action.yml` sits at a repository ROOT. So the
+  # marketplace copy is a mirror: this job pushes the action directory to a
+  # dedicated repo and tags it, which is what the Marketplace listing tracks.
+  # No mirror secret → skipped, not failed; the in-repo action still works.
+  publish-action:
+    name: Mirror the GitHub Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push the action to its standalone repository
+        env:
+          MIRROR_TOKEN: ${{ secrets.ACTION_MIRROR_TOKEN }}
+          MIRROR_REPO: ${{ secrets.ACTION_MIRROR_REPO }}
+        run: |
+          if [ -z "$MIRROR_TOKEN" ] || [ -z "$MIRROR_REPO" ]; then
+            echo "::warning::ACTION_MIRROR_TOKEN/ACTION_MIRROR_REPO not set — skipping the GitHub Marketplace mirror."
+            exit 0
+          fi
+          version=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+          [ -n "$version" ] || version=$(date -u +%Y.%m.%d)
+
+          work=$(mktemp -d)
+          cp -R actions/dispatch-agent/. "$work"/
+          cp LICENSE "$work"/ 2>/dev/null || true
+          cd "$work"
+          git init -q
+          git config user.name "builderforce-release"
+          git config user.email "release@builderforce.ai"
+          git add -A
+          git commit -qm "Builderforce dispatch-agent action $version"
+          git remote add origin "https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git"
+          # The mirror is a projection of this directory, never a place work
+          # happens, so a force push to a fresh history is the correct shape.
+          git push -q --force origin HEAD:main
+          git tag -f "v${version}"
+          git push -q --force origin "v${version}"
+          echo "Mirrored dispatch-agent $version to ${MIRROR_REPO}"
+
+  # ── Builderforce as a listed remote MCP server ───────────────────────────
+  # `server.json` describes the public /mcp endpoint the API serves. It is
+  # published AFTER the API deploy so the registry never advertises an endpoint
+  # that isn't live yet. OIDC proves the io.github.SeanHogg/* namespace, so
+  # there is no long-lived registry token to hold.
+  publish-mcp-registry:
+    name: Publish MCP Registry listing
+    runs-on: ubuntu-latest
+    needs: [deploy-api, verify-distribution]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Verify the endpoint is live before advertising it
+        run: |
+          # A registry listing pointing at a dead endpoint is worse than no
+          # listing: every client that discovers it fails on first connect.
+          #
+          # The probe is the shape a real client uses — an unauthenticated
+          # JSON-RPC POST — and 401 is the correct answer to it: it proves the
+          # route is mounted AND that the challenge a client must satisfy is the
+          # one server.json documents. Retried because the API deploy this job
+          # waits on has only just propagated.
+          code=000
+          : >body.txt; : >headers.txt; : >curl-error.txt
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o body.txt -D headers.txt -w '%{http_code}' --max-time 30 \
+              -X POST https://api.builderforce.ai/mcp \
+              -H 'content-type: application/json' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>curl-error.txt || true)
+            if [ "$code" = "401" ]; then break; fi
+            if [ "$attempt" -lt 3 ]; then sleep 15; fi
+          done
+
+          if [ "$code" = "401" ]; then
+            echo "POST /mcp answered 401 — the route is mounted and challenges as server.json documents."
+            exit 0
+          fi
+
+          # Whatever went wrong, say what the endpoint ACTUALLY answered. A bare
+          # status code cannot distinguish an unmounted route from an edge that
+          # never let the request reach the worker, and that distinction is the
+          # whole diagnosis.
+          echo "::group::What https://api.builderforce.ai/mcp answered"
+          echo "status: $code"
+          cat curl-error.txt || true
+          cat headers.txt || true
+          head -c 2000 body.txt || true
+          echo
+          echo "::endgroup::"
+
+          # Cloudflare mitigating the probe at the EDGE is a different failure
+          # from a broken deploy, and a more serious one to find here: the
+          # challenge is served to any caller whose IP scores as automated, which
+          # is precisely the audience of this listing — Anthropic connectors, AWS,
+          # hosted agents, every server-side MCP client. Publishing under that
+          # condition advertises a URL that answers interactive-challenge HTML to
+          # everyone who discovers it.
+          if grep -qi '^cf-mitigated:' headers.txt; then
+            echo "::error::Cloudflare served a $code managed challenge for https://api.builderforce.ai/mcp, so the endpoint is unreachable to non-browser clients — including every remote MCP client this listing would send here. The fix is the ZONE, not this check: turn off Bot Fight Mode for builderforce.ai, or add a WAF rule that SKIPS bot mitigation for api.builderforce.ai and builderforce.ai/gateway/*. Not publishing."
+            exit 1
+          fi
+
+          echo "::error::https://api.builderforce.ai/mcp answered $code, expected 401. Not publishing."
+          exit 1
+
+      - name: Publish server.json
+        run: |
+          name=$(jq -r '.name' server.json)
+          version=$(jq -r '.version' server.json)
+
+          # Registry versions are immutable. A release runs on every push to
+          # main, so an unchanged manifest is an expected no-op rather than a
+          # failed release.
+          if curl -fsSG 'https://registry.modelcontextprotocol.io/v0.1/servers' \
+            --data-urlencode "search=$name" \
+            | jq -e --arg name "$name" --arg version "$version" \
+              '.servers[]? | select(.server.name == $name and .server.version == $version)' \
+              >/dev/null; then
+            echo "$name@$version is already published; skipping."
+            exit 0
+          fi
+
+          ./mcp-publisher login github-oidc
+          # If another run publishes between the lookup and this call, accept
+          # only the registry's explicit duplicate-version response. Preserve
+          # all other failures.
+          set +e
+          output=$(./mcp-publisher publish 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            if printf '%s' "$output" | grep -Fq 'invalid version: cannot publish duplicate version'; then
+              echo "$name@$version was published concurrently; continuing."
+            else
+              exit "$status"
+            fi
+          fi
+
+  deploy-api:
+    name: Deploy API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --global wrangler
+
+      - name: Verify and deploy API
         working-directory: api
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: npm run db:migrate
-
-      # Retried, because the failure this guards against is on Cloudflare's side and
-      # says nothing about the build. Observed 2026-07-28 (run 30325003865): the worker
-      # uploaded, the agent container built and pushed, the QA-runner image built and
-      # EVERY layer pushed — and the final manifest PUT to registry.cloudflare.com
-      # returned `500 Internal Server Error`, so wrangler exited 1 and the release went
-      # red. The next push succeeded unchanged.
-      #
-      # `wrangler deploy` is idempotent: a re-run re-uploads the same worker version and
-      # skips every layer already in the registry, so a retry costs seconds and cannot
-      # half-apply anything. Three attempts, so a genuine failure still fails — it just
-      # has to fail three times rather than lose a release to one bad response.
-      - name: Deploy API worker
-        working-directory: api
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          for attempt in 1 2 3; do
-            if npm run deploy:worker; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "::warning::wrangler deploy failed (attempt $attempt/3) — retrying in 30s. A transient registry/API 5xx is the expected cause; see the comment in release.yml."
-              sleep 30
-            fi
-          done
-          echo "::error::wrangler deploy failed 3 times — this is not a transient registry error."
-          exit 1
+          pnpm install --frozen-lockfile
+          npm run type-check
+          npm test
+          npm run db:migrate
 
-      # Refresh the sales-demo persona tenants so any visitor-made changes are
-      # wiped on every deploy. Skips quietly when the secret isn't configured
-      # (set the same value as `wrangler secret put DEMO_RESEED_SECRET`);
-      # non-fatal so a reseed hiccup never fails the deploy — the nightly cron
-      # backstop reseeds anyway.
+          for attempt in 1 2 3; do
+            npm run deploy:worker && break
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 30
+          done
+
       - name: Refresh demo accounts
         env:
           DEMO_RESEED_SECRET: ${{ secrets.DEMO_RESEED_SECRET }}
         run: |
-          if [ -z "$DEMO_RESEED_SECRET" ]; then
-            echo "DEMO_RESEED_SECRET not set — skipping demo reseed."
-            exit 0
+          if [ -n "$DEMO_RESEED_SECRET" ]; then
+            curl -fsS -X POST "https://api.builderforce.ai/api/demo/reseed" \
+              -H "x-demo-reseed-secret: $DEMO_RESEED_SECRET" \
+              --max-time 300 \
+              || echo "::warning::Demo account reseed failed."
           fi
-          curl -fsS -X POST "https://api.builderforce.ai/api/demo/reseed" \
-            -H "x-demo-reseed-secret: $DEMO_RESEED_SECRET" \
-            --max-time 300 \
-            || echo "::warning::Demo account reseed failed (nightly cron will retry)."
 
-  build-and-deploy:
+  deploy-frontend:
+    name: Deploy frontend
     runs-on: ubuntu-latest
-    # Dogfood: the frontend consumes the PUBLISHED @seanhogg/builderforce-quality
-    # (not a local link:), so the publish must land before pnpm install resolves it.
-    needs: publish-quality
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # No root package.json in this repo — pnpm lives in frontend/, so point
-      # action-setup at frontend/package.json to read its `packageManager` pin.
-      # Do not also set `version:` here — action-setup@v4 errors if both exist.
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         with:
-          package_json_file: frontend/package.json
+          version: 10
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      # Frontend's `link:` deps don't auto-build the linked packages' dist/.
-      # Each linked package's `prepare` script runs its build on install, so
-      # installing here is sufficient to produce dist/.
-      #
-      # All four use pnpm --frozen-lockfile so the artifacts bundled into the
-      # deployed frontend are built from the SAME dependency tree ci.yml's
-      # type-check/test matrix gated (it installs each of these from its own
-      # pnpm-lock.yaml). `npm install` re-resolved instead, so a linked package
-      # could ship built against versions no gate had exercised.
-      - name: Install + build SDK
-        working-directory: sdk
-        run: pnpm install --frozen-lockfile
+      - name: Install Wrangler
+        run: npm install --global wrangler
 
-      - name: Install + build Studio engine
-        working-directory: studio
-        run: pnpm install --frozen-lockfile
-
-      # Must follow the engine build — studio-embedded file:-depends on it.
-      - name: Install + build Studio embedded
-        working-directory: studio-embedded
-        run: pnpm install --frozen-lockfile
-
-      # brain-embedded's committed dist/ can drift or be deleted; its `prepare`
-      # script (tsup) rebuilds dist/ on install so the frontend `link:` dep
-      # (@seanhogg/builderforce-brain-embedded) always resolves.
-      - name: Install + build Brain embedded
-        working-directory: brain-embedded
-        run: pnpm install --frozen-lockfile
-
-      # Must follow brain-embedded — brain-ui link:-depends on it for its DTS.
-      # Uses pnpm (not npm): brain-ui has a `link:` dep npm can't parse, and its
-      # own pnpm-lock.yaml. `pnpm install` runs its `prepare` (tsup) to build
-      # dist/*.d.ts so the frontend `link:` dep (@seanhogg/builderforce-brain-ui)
-      # resolves types instead of `any`.
-      - name: Install + build Brain UI
-        working-directory: packages/brain-ui
-        run: pnpm install --frozen-lockfile || pnpm install
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: pnpm install --frozen-lockfile || pnpm install
-
-      - name: Build Next.js
+      # The linked local packages (`link:../studio`, …) install themselves: each
+      # consumer's `postinstall` runs scripts/ensure-linked-deps.mjs, which walks
+      # its link targets and installs any whose dependencies are missing. This
+      # step used to be a hand-maintained list here, which only this job had —
+      # the VS Code job did not, so brain-ui's shipped `.d.ts` type-checked
+      # against an unresolved brain-embedded and the publish failed on members
+      # that plainly exist.
+      - name: Build and deploy frontend
         working-directory: frontend
         env:
-          NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
-          # Public bfq_ ingest key baked into the statically-rendered root layout so
-          # the web app self-reports browser errors to the Product Quality pillar.
+          # Vercel's artifact collection exceeded Node's default ~4 GiB heap
+          # after building the 90-route frontend. The hosted runner has enough
+          # memory for a 6 GiB old-space ceiling.
+          NODE_OPTIONS: --max-old-space-size=6144
           NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
-        run: pnpm exec next build
-
-      - name: Generate Cloudflare Worker (next-on-pages)
-        working-directory: frontend
-        run: pnpm exec next-on-pages
-
-      - name: Create .assetsignore (prevent _worker.js from being uploaded as asset)
-        working-directory: frontend
-        run: |
-          printf '_worker.js\n' > .vercel/output/static/.assetsignore
-          echo "✅ Created .assetsignore:"
-          cat .vercel/output/static/.assetsignore
-
-      - name: Strip ORT/WASM from worker (keep under 3 MiB; serve from static)
-        working-directory: frontend
-        run: node scripts/strip-worker-assets.js
-
-      - name: Patch r.fetch and add diagnostics
-        working-directory: frontend
-        run: |
-          worker_file=".vercel/output/static/_worker.js/index.js"
-          if [ -f "$worker_file" ]; then
-            sed -i 's/\br\.fetch\b/(r||self).fetch/g' "$worker_file" || true
-            sed -i 's/async function k(e,{request:t,assetsFetcher:r,ctx:s})/async function k(e,{request:t,assetsFetcher:r,ctx:s}){if(!r)console.log("k assetsFetcher undefined",e);/' "$worker_file" || true
-            sed -i 's/var Ts={async fetch(e,t,r){/var Ts={async fetch(e,t,r){console.log("Ts.fetch",e.url);/' "$worker_file" || true
-          fi
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy via Wrangler
-        working-directory: frontend
-        env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
+          pnpm install --frozen-lockfile || pnpm install
+          # next-on-pages only reports a missing Edge Runtime AFTER the full Next
+          # build — ~6 minutes in, at the very end of cf-build. This static check
+          # answers the same question in milliseconds, so the deploy fails fast on
+          # a route that was localized without being moved to the Edge Runtime.
+          pnpm run check:edge-runtime
+          pnpm run cf-build
           wrangler deploy --no-bundle
 
-  publish-sdk:
-    name: Publish SDK (@seanhogg/builderforce-sdk)
-    uses: ./.github/workflows/publish-npm-package.yml
-    with:
-      package-dir: sdk
-      package-name: '@seanhogg/builderforce-sdk'
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-studio:
-    name: Publish Studio engine (@seanhogg/builderforce-studio)
-    uses: ./.github/workflows/publish-npm-package.yml
-    with:
-      package-dir: studio
-      package-name: '@seanhogg/builderforce-studio'
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-studio-embedded:
-    name: Publish Studio embedded (@seanhogg/builderforce-studio-embedded)
-    # Engine must publish first — the embedded package peer-depends on it.
-    needs: publish-studio
-    uses: ./.github/workflows/publish-npm-package.yml
-    with:
-      package-dir: studio-embedded
-      package-name: '@seanhogg/builderforce-studio-embedded'
-      # studio-embedded file:-depends on ../studio; build the engine (with its
-      # devDeps) first so the embedded install's prepare re-run finds tsup.
-      prebuild-package-dir: studio
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-voice:
-    name: Publish Voice client (@seanhogg/builderforce-voice)
-    uses: ./.github/workflows/publish-npm-package.yml
-    with:
-      package-dir: voice
-      package-name: '@seanhogg/builderforce-voice'
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-quality:
-    name: Publish Quality SDK (@seanhogg/builderforce-quality)
-    uses: ./.github/workflows/publish-npm-package.yml
-    with:
-      package-dir: browser-sdk
-      package-name: '@seanhogg/builderforce-quality'
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  deploy-docs:
-    name: Deploy Docs (builderforce.ai/docs)
+  deploy-help:
+    name: Deploy help
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # docs-site is the one deployed package with no pnpm-lock.yaml and no CI
-      # gate, so npm stays its resolver — but `npm ci` (lockfile-exact) rather
-      # than `npm install` (re-resolves and rewrites the lock), matching the
-      # frozen-lockfile idiom used everywhere else here. Falls back the same way
-      # the pnpm steps do so a lock/package.json drift can't block a docs deploy.
-      - name: Install dependencies
-        working-directory: docs-site
-        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+      - name: Install Wrangler
+        run: npm install --global wrangler
 
-      - name: Build Astro Starlight (base=/docs)
-        working-directory: docs-site
-        run: npm run build
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy Pages project
+      - name: Build and deploy docs
         working-directory: docs-site
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          npm run build
           wrangler pages deploy dist --project-name=builderforce-docs --branch=main

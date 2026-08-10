@@ -13,11 +13,11 @@ import { timeApi, pmoApi, type MemberDailyHours, type MemberKind, type SpineNode
  * (enforced server-side). Fully localized.
  */
 const field: React.CSSProperties = {
-  padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '6px 8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 12,
 };
 const btn: React.CSSProperties = {
-  ...field, cursor: 'pointer', background: 'var(--accent, #6366f1)', color: '#fff', border: 'none', fontWeight: 600,
+  ...field, cursor: 'pointer', background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', fontWeight: 600,
 };
 
 function fmtH(h: number): string { return h >= 10 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`; }
@@ -62,20 +62,20 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600 }}>{t('title')}</span>
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('windowTotal', { days, hours: fmtH(data?.totalHours ?? 0) })}</span>
       </div>
 
-      {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 11 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 11 }}>{error}</div>}
 
       {/* Daily bars */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 56 }}>
         {(data?.daily ?? []).map((d) => (
           <div key={d.date} title={`${d.date}: ${fmtH(d.hours)}`}
             style={{ flex: 1, minWidth: 2, height: `${Math.max(2, (d.hours / maxHours) * 100)}%`,
-              background: d.hours > 0 ? 'var(--accent, #6366f1)' : 'var(--border-subtle)', borderRadius: 2, alignSelf: 'flex-end' }} />
+              background: d.hours > 0 ? 'var(--accent)' : 'var(--border-subtle)', borderRadius: 'var(--radius-sm)', alignSelf: 'flex-end' }} />
         ))}
         {data == null && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('loading')}</span>}
       </div>

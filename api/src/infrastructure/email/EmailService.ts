@@ -32,6 +32,19 @@ interface EmailProvider {
   send(message: EmailMessage): Promise<void>;
 }
 
+/** Safe provider failure metadata persisted for SuperAdmin diagnostics. */
+export class EmailDeliveryError extends Error {
+  constructor(
+    message: string,
+    readonly provider: 'resend' | 'sendpulse',
+    readonly status: number | null,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'EmailDeliveryError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Resend provider
 // ---------------------------------------------------------------------------
@@ -48,6 +61,7 @@ class ResendEmailProvider implements EmailProvider {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
+        'User-Agent': 'Builderforce/2026.7.206',
       },
       body: JSON.stringify({
         from: message.from ?? this.fromEmail,
@@ -60,7 +74,94 @@ class ResendEmailProvider implements EmailProvider {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error(`[email:resend] error: ${body}`);
-      throw new Error(`Resend rejected email delivery with status ${res.status}`);
+      // Resend's response is useful operational evidence, but cap it so an
+      // upstream proxy can never make the failure ledger unbounded.
+      const detail = body.trim().slice(0, 1_500);
+      let code: string | undefined;
+      try {
+        const parsed = JSON.parse(body) as { name?: unknown; type?: unknown };
+        const candidate = parsed.name ?? parsed.type;
+        if (typeof candidate === 'string') code = candidate;
+      } catch {
+        code = undefined;
+      }
+      throw new EmailDeliveryError(
+        `Resend rejected email delivery with status ${res.status}${detail ? `: ${detail}` : ''}`,
+        'resend',
+        res.status,
+        code,
+      );
+    }
+  }
+}
+
+function splitSender(value: string): { name: string; email: string } {
+  const match = value.match(/^\s*(.*?)\s*<([^<>]+)>\s*$/);
+  return match
+    ? { name: match[1]!.trim() || 'Builderforce', email: match[2]!.trim() }
+    : { name: 'Builderforce', email: value.trim() };
+}
+
+function base64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+class SendPulseEmailProvider implements EmailProvider {
+  constructor(
+    private readonly apiKey: string,
+    private readonly fromEmail: string,
+  ) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    const sender = splitSender(message.from ?? this.fromEmail);
+    const res = await fetch('https://api.sendpulse.com/smtp/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+        'User-Agent': 'Builderforce/2026.7.206',
+      },
+      body: JSON.stringify({
+        email: {
+          html: base64Utf8(message.html),
+          subject: message.subject,
+          from: sender,
+          to: [{ email: message.to }],
+        },
+      }),
+    });
+    console.log(`[email:sendpulse] status=${res.status} to=${message.to} subject="${message.subject}"`);
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).trim().slice(0, 1_500);
+      throw new EmailDeliveryError(
+        `SendPulse rejected email delivery with status ${res.status}${detail ? `: ${detail}` : ''}`,
+        'sendpulse',
+        res.status,
+      );
+    }
+  }
+}
+
+class QuotaFallbackEmailProvider implements EmailProvider {
+  constructor(
+    private readonly primary: EmailProvider,
+    private readonly fallback: EmailProvider,
+  ) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    try {
+      await this.primary.send(message);
+    } catch (error) {
+      const quotaExhausted = error instanceof EmailDeliveryError
+        && error.provider === 'resend'
+        && (error.code === 'daily_quota_exceeded' || error.code === 'monthly_quota_exceeded');
+      if (!quotaExhausted) throw error;
+      await this.fallback.send(message);
     }
   }
 }
@@ -71,16 +172,43 @@ class ResendEmailProvider implements EmailProvider {
 
 export type EmailEnv = {
   RESEND_API_KEY?: string;
+  SENDPULSE_API_KEY?: string;
   NOTIFICATION_EMAIL_FROM?: string;
 };
 
 function getEmailProvider(env: EmailEnv): EmailProvider | null {
-  if (!env.RESEND_API_KEY) {
-    console.warn('[email] Missing RESEND_API_KEY — email disabled');
-    return null;
-  }
   const from = env.NOTIFICATION_EMAIL_FROM ?? 'Builderforce <notifications@builderforce.ai>';
-  return new ResendEmailProvider(env.RESEND_API_KEY, from);
+  const resend = env.RESEND_API_KEY ? new ResendEmailProvider(env.RESEND_API_KEY, from) : null;
+  const sendPulse = env.SENDPULSE_API_KEY ? new SendPulseEmailProvider(env.SENDPULSE_API_KEY, from) : null;
+  if (resend && sendPulse) return new QuotaFallbackEmailProvider(resend, sendPulse);
+  if (resend) return resend;
+  if (sendPulse) return sendPulse;
+  console.warn('[email] Missing RESEND_API_KEY and SENDPULSE_API_KEY — email disabled');
+  return null;
+}
+
+/**
+ * Send a fully-composed message as-is.
+ *
+ * Every other sender in this file renders a PLATFORM template — our chrome, our
+ * footer, our From. Tenant marketing campaigns are the one case where the body
+ * and the From belong to the tenant (they authored it and verified the sending
+ * domain), so they cannot go through `deliver`. They must still go through the
+ * same provider cascade — Resend with the SendPulse quota fallback — rather than
+ * standing up a second HTTP client, which is what this exports.
+ *
+ * Throws `EmailDeliveryError` when no provider is configured: a campaign that
+ * silently sends to nobody is worse than one that fails loudly.
+ */
+export async function sendRawEmail(
+  env: EmailEnv,
+  message: { to: string; subject: string; html: string; from?: string },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) {
+    throw new EmailDeliveryError('No email provider is configured', 'resend', null);
+  }
+  await provider.send(message);
 }
 
 // ---------------------------------------------------------------------------
@@ -205,10 +333,17 @@ async function deliver(
     copy: EmailCopy;
     vars?: Record<string, string>;
     unsubscribeUrl?: string;
+    /** Account-critical messages cannot silently no-op when the key is absent. */
+    requireProvider?: boolean;
   },
 ): Promise<void> {
   const provider = getEmailProvider(env);
-  if (!provider) return;
+  if (!provider) {
+    if (args.requireProvider) {
+      throw new EmailDeliveryError('RESEND_API_KEY is not configured', 'resend', null);
+    }
+    return;
+  }
 
   const html = render(HEADER + args.body + footer(args.copy, args.unsubscribeUrl), {
     Subject: args.subject,
@@ -293,6 +428,7 @@ export async function sendVerificationCodeEmail(
     locale,
     copy,
     vars: { RecipientName: name || to, Code: code },
+    requireProvider: true,
   });
 }
 

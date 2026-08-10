@@ -24,6 +24,7 @@ import { createDrizzleStore, loadConnectionCredentials } from '../../application
 import { createBoardProvider } from '../../application/boardsync/providers';
 import { isItsmProvider, syncItsmConnection } from '../../application/boardsync/itsmIngest';
 import { BOARD_PROVIDERS, BOARD_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
+import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
 
 export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -78,6 +79,9 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
       })
       .returning();
 
+    // The projects widget shows this connection as a status chip; bust its cache
+    // so a freshly-bound board appears on the card immediately.
+    await invalidateProjectConnections(c.env as Env, tenantId);
     return c.json(row, 201);
   });
 
@@ -145,6 +149,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
       })
       .where(and(eq(boardConnections.id, id), eq(boardConnections.tenantId, tenantId)))
       .returning();
+    await invalidateProjectConnections(c.env as Env, tenantId);
     return c.json(updated);
   });
 
@@ -158,6 +163,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(boardConnections.id, id), eq(boardConnections.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Connection not found' }, 404);
     await db.delete(boardConnections).where(and(eq(boardConnections.id, id), eq(boardConnections.tenantId, tenantId)));
+    await invalidateProjectConnections(c.env as Env, tenantId);
     return c.body(null, 204);
   });
 

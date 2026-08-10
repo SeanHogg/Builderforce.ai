@@ -189,7 +189,7 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     fireEvent.click((await screen.findByText('Kimi')).closest('[role="button"]')!);
     fireEvent.click(await screen.findByText('providerKeys.diagnostic.test'));
 
-    await screen.findByText('Stored credential could not be used (revoked).');
+    await screen.findByText(/providerKeys\.diagnostic\.failedFallback/);
     expect(screen.queryByText('providerKeys.diagnostic.copyTrace')).not.toBeInTheDocument();
   });
 

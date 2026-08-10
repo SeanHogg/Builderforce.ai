@@ -13,6 +13,8 @@
  */
 
 import type { SemanticCache } from '@seanhogg/builderforce-memory';
+import { AUTH_API_URL, getStoredTenantToken } from './auth';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /** True only where an on-device WebGPU SSM embedder can exist. Shared with
  *  `MambaModelProvider` so the WebGPU gate lives in exactly one place (DRY). */
@@ -23,7 +25,7 @@ export function hasWebGPU(): boolean {
 /** Cosine-similarity threshold above which a stored answer is reused. */
 const DEFAULT_THRESHOLD = 0.92;
 
-let cachePromise: Promise<SemanticCache | null> | undefined;
+const CACHE_KEY = 'semantic-response-cache:runtime';
 
 /**
  * Lazily build (once) the semantic response cache backed by an on-device SSM embedder.
@@ -31,7 +33,7 @@ let cachePromise: Promise<SemanticCache | null> | undefined;
  * degrade to a direct network call.
  */
 export function getSemanticResponseCache(): Promise<SemanticCache | null> {
-  return (cachePromise ??= buildSemanticResponseCache());
+  return getOrSetClientCached(CACHE_KEY, () => buildSemanticResponseCache());
 }
 
 async function buildSemanticResponseCache(): Promise<SemanticCache | null> {
@@ -41,9 +43,13 @@ async function buildSemanticResponseCache(): Promise<SemanticCache | null> {
     // Browser uses the global WebGPU/IndexedDB automatically; modelSize keeps the
     // embedding model light. Asset/WebGPU failures throw → caught → null (no cache).
     const runtime = await mod.SSM.create({ session: { modelSize: 'small' } });
+    const token = getStoredTenantToken();
+    const l2 = token ? new mod.FetchSemanticCacheBackend({ baseUrl: AUTH_API_URL, apiKey: token, namespace: 'web-model-provider-v1' }) : undefined;
     return new mod.SemanticCache({
       embed: (text: string) => runtime.embed(text),
       threshold: DEFAULT_THRESHOLD,
+      l2,
+      ttlMs: 24 * 60 * 60 * 1_000,
     });
   } catch (err) {
     console.warn('[semantic-cache] unavailable — cloud responses uncached:', err);
@@ -81,5 +87,5 @@ export async function withSemanticResponseCache(
 
 /** Reset the memoised cache (tests / disposal). */
 export function resetSemanticResponseCache(): void {
-  cachePromise = undefined;
+  invalidateClientCache(CACHE_KEY);
 }

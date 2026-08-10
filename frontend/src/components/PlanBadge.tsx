@@ -46,10 +46,10 @@ export function PlanBadge() {
   // with headroom is a call to action; a paid plan is neutral reassurance. All
   // three are theme tokens, so the chip is legible in light AND dark themes.
   const tone = exhausted
-    ? 'var(--error-text, #dc2626)'
+    ? 'var(--error-text)'
     : isFree
-      ? 'var(--accent, #3b82f6)'
-      : 'var(--text-muted, #6b7280)';
+      ? 'var(--accent)'
+      : 'var(--text-muted)';
 
   return (
     <Link
@@ -67,13 +67,13 @@ export function PlanBadge() {
         minWidth: 0,
         maxWidth: '100%',
         padding: '1px 7px',
-        fontSize: 9,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
         whiteSpace: 'nowrap',
         border: '1px solid currentColor',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         background: 'transparent',
         color: tone,
         textDecoration: 'none',

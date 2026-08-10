@@ -33,8 +33,44 @@ export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } fro
 export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
 export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBanner';
 
-export { ConsolidateForkControl, DEFAULT_CONSOLIDATE_FORK_LABELS } from './ConsolidateForkControl';
-export type { ConsolidateForkControlProps, ConsolidateForkLabels } from './ConsolidateForkControl';
+export { PromptPanel } from './PromptPanel';
+export type { PromptPanelProps } from './PromptPanel';
+
+// The composer's `/` control — run shaping, the model in use, and the model
+// picker in ONE affordance, so no host grows a second "which model" chip beside it.
+export { PromptOptionsMenu } from './promptOptions/PromptOptionsMenu';
+export type {
+  PromptOptionsMemory,
+  PromptOptionsAutoMode,
+  PromptOptionsMenuProps,
+  PromptOptionsMode,
+  PromptOptionsModeChoice,
+  PromptOptionsModel,
+  PromptOptionsSession,
+} from './promptOptions/PromptOptionsMenu';
+export { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabels } from './promptOptions/types';
+export type { PromptOptionsLabels } from './promptOptions/types';
+// The model-choice domain itself lives in brain-embedded (the extension host shares
+// it and cannot import React); re-exported here so a UI consumer has one import site.
+export type {
+  ChatModelOptions,
+  ChatModelSelection,
+  ModelCategory,
+  ModelChoiceLabels,
+  ModelItem,
+} from '@seanhogg/builderforce-brain-embedded';
+export {
+  buildModelItems,
+  filterModelItems,
+  activeModelKey,
+  modelCategoryLabel,
+  modelInUse,
+  premiumCostLabel,
+  perMillionUsd,
+  byoVendorLabel,
+  MODEL_CATEGORIES,
+  PROJECT_EVERMIND_MODEL_PREFIX,
+} from '@seanhogg/builderforce-brain-embedded';
 
 export { Avatar, ParticipantBadge, initialsOf, avatarColor } from './ParticipantBadge';
 export type { AvatarProps } from './ParticipantBadge';

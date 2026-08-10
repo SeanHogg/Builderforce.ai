@@ -64,11 +64,11 @@ export default function ImpersonationSessionsPanel() {
               <tr key={s.id}>
                 <td style={{ fontSize: 13 }}>{s.targetEmail}</td>
                 <td style={{ fontSize: 12 }}>{s.tenantName}</td>
-                <td><span className="badge" style={{ background: 'var(--bg-card)' }}>{s.roleOverride}</span></td>
+                <td><span className="badge" style={{ background: 'var(--surface-card)' }}>{s.roleOverride}</span></td>
                 <td style={{ fontSize: 12, maxWidth: 200 }}>{s.reason}</td>
                 <td style={{ fontSize: 12 }}>{fmtDateTime(s.startedAt)}</td>
-                <td style={{ fontSize: 12 }}>{s.endedAt ? fmtDateTime(s.endedAt) : <span style={{ color: '#f59e0b' }}>{t('impsessions.active')}</span>}</td>
-                <td style={{ fontSize: 12 }}>{durStr} / {t('impsessions.pages', { n: s.pagesVisited.length })} {s.writeBlockCount > 0 && <span style={{ color: '#ef4444' }}>{t('impsessions.blockedWrites', { n: s.writeBlockCount })}</span>}</td>
+                <td style={{ fontSize: 12 }}>{s.endedAt ? fmtDateTime(s.endedAt) : <span style={{ color: 'var(--warning-text)' }}>{t('impsessions.active')}</span>}</td>
+                <td style={{ fontSize: 12 }}>{durStr} / {t('impsessions.pages', { n: s.pagesVisited.length })} {s.writeBlockCount > 0 && <span style={{ color: 'var(--error-text)' }}>{t('impsessions.blockedWrites', { n: s.writeBlockCount })}</span>}</td>
               </tr>
             );
           })}

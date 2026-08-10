@@ -124,7 +124,49 @@
     "brainstorm": "头脑风暴（构思）",
     "mentionTitle": "指定给",
     "mentionAgent": "智能体",
-    "mentionHuman": "成员"
+    "mentionHuman": "成员",
+    "model": "模型",
+    "modelInUse": "当前使用的模型",
+    "searchModels": "搜索模型…",
+    "filterModels": "筛选模型",
+    "chooseModel": "选择模型",
+    "noModels": "没有匹配的模型",
+    "all": "全部",
+    "categoryAuto": "自动",
+    "categoryByo": "自带账号",
+    "categoryFree": "免费",
+    "categoryPlan": "套餐",
+    "categoryPaid": "付费",
+    "categoryConfigured": "已配置",
+    "autoDetail": "按每轮对话路由——优先使用你已连接的账号，然后才是你的套餐。",
+    "poolLabel": "自带账号池",
+    "poolDetail": "按“账户设置”中配置的顺序依次尝试你已连接的账号。",
+    "freeDetail": "免费 · BuilderForce 已包含",
+    "planDetail": "你的 BuilderForce 套餐已包含",
+    "paidDetail": "高级——按成本 + 每次请求 1 美分计费",
+    "byoDetail": "计入你自己的 {vendor} 账号——不消耗套餐额度。",
+    "configuredDetail": "已保存的工作区 LLM 配置",
+    "evermindLabel": "项目 Evermind",
+    "evermindDetail": "你项目自己学习得到的 Evermind 模型。",
+    "modelLocked": "选择模型需要付费套餐或已连接的服务商账号。",
+    "effortDesc_quick": "最快也最省——简短直接的回答。最多 {answer} 个回答 token。",
+    "effortDesc_balanced": "默认——常规深度。最多 {answer} 个回答 token。",
+    "effortDesc_thorough": "最深入也最慢——详尽作答并复核结果。最多 {answer} 个回答 token。",
+    "effortDescThinking": "外加 {thinking} 个思考 token。",
+    "thinkingOnDesc": "模型会先推理再作答，在此强度下有 {budget} 个思考 token 的预算。更慢，但更擅长难题。",
+    "thinkingOffDesc": "关闭——模型直接作答。开启后会在作答前先推理一轮。",
+    "paidCostDetail": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
+    "memory": "记忆",
+    "memoryOnHint": "本对话已开启回忆与学习。",
+    "memoryOffHint": "本对话不会被回忆或学习。",
+    "conversation": "对话",
+    "consolidate": "压缩整合",
+    "consolidating": "正在压缩…",
+    "consolidateHint": "将本对话总结为紧凑上下文，后续对话在此基础上继续",
+    "fork": "分叉",
+    "forking": "正在分叉…",
+    "forkHint": "总结本对话，并基于该总结在新对话中继续",
+    "sessionUnavailable": "需本对话已有若干条消息且当前没有正在进行的运行"
   },
   "repoContext": {
     "title": "添加仓库上下文",
@@ -381,7 +423,8 @@
         "models": "模型提供商",
         "apps": "应用集成",
         "developer": "开发者 API 密钥",
-        "embed": "嵌入"
+        "embed": "嵌入",
+        "connectors": "连接器"
       }
     }
   },
@@ -418,7 +461,19 @@
       "incidents": "事件",
       "monitoring": "监控",
       "reliability": "可靠性",
-      "agentOps": "智能体运维"
+      "agentOps": "智能体运维",
+      "sales": "销售中心",
+      "challenges": "挑战",
+      "growth": "增长",
+      "embedded": "嵌入式功能",
+      "seat": "团队",
+      "finance": "财务",
+      "revenue": "收入",
+      "people": "人员",
+      "hiring": "招聘",
+      "investor": "投资人",
+      "governance": "治理",
+      "support": "支持"
     },
     "tab": {
       "projects": "项目",
@@ -440,6 +495,7 @@
       "settings": "通用",
       "security": "安全",
       "billing": "账单",
+      "pricing": "定价",
       "tenant": "工作区",
       "apiKeys": "API 密钥",
       "sops": "作业程序",
@@ -447,6 +503,7 @@
       "docs": "文档",
       "training": "培训",
       "errors": "错误",
+      "emailDeliveries": "电子邮件投递",
       "ai": "AI 洞察",
       "space": "SPACE",
       "benchmarking": "基准对标",
@@ -486,7 +543,6 @@
       "calendar": "日历",
       "facts": "事实库",
       "snapshots": "定期回顾",
-      "persona": "角色视角",
       "plan": "人力规划",
       "incidents": "事件",
       "oncall": "值班",
@@ -500,15 +556,53 @@
       "autonomy": "自主",
       "coordination": "协同",
       "memory": "记忆",
-      "rehearsal": "预演"
+      "rehearsal": "预演",
+      "viewpoint": "视角"
     },
-    "primaryAria": "主导航"
+    "primaryAria": "主导航",
+    "destination": {
+      "canvasLibrary": "画布",
+      "newCanvas": "新建画布"
+    },
+    "workspaceLabel": "工作区",
+    "stage": {
+      "idea": "构想",
+      "make": "构建",
+      "run": "运营",
+      "measure": "衡量",
+      "market": "市场",
+      "admin": "管理",
+      "notYet": "尚未开放",
+      "lockHint": "登录后即可使用"
+    }
   },
   "alerts": {
     "title": "告警",
     "subtitle": "为平台指标定义阈值告警。每日扫描会评估每条规则，并在触发时通过 Slack 和电子邮件通知您的团队。",
     "loading": "加载中…",
     "days": "{n} 天",
+    "pricing": {
+      "title": "已发布定价",
+      "description": "编辑定价页面和可复用定价卡片的草稿。草稿在发布前保持私密。",
+      "publishedAt": "上次发布时间：{date}",
+      "currency": "货币",
+      "managedHost": "托管 AgentHost / 月",
+      "name": "方案名称",
+      "descriptionLabel": "说明",
+      "monthly": "月价",
+      "yearly": "年价",
+      "suffix": "价格后缀",
+      "minimumSeats": "最低席位数",
+      "features": "包含功能 — 每行一项",
+      "excluded": "不包含功能 — 每行一项",
+      "ctaLabel": "按钮文字",
+      "ctaHref": "按钮目标",
+      "saveDraft": "保存草稿",
+      "saving": "正在保存…",
+      "publish": "发布定价",
+      "publishing": "正在发布…",
+      "draftSaved": "草稿已保存；公开定价未更改。"
+    },
     "common": {
       "delete": "删除"
     },
@@ -585,7 +679,7 @@
   "projectCard": {
     "details": "详情",
     "taskBoard": "任务看板",
-    "openIde": "在 Builder 中打开",
+    "openBuilder": "在 Builder 中打开",
     "deleteProject": "删除项目",
     "agentLabel": "智能体：",
     "tasks": "{count, plural, other {# 个任务}}",
@@ -624,7 +718,9 @@
     "configPct": "已配置 {pct}%",
     "configMissingList": "尚需配置：{items}",
     "brainstormGoals": "头脑风暴目标",
-    "brainstormGoalsPrompt": "帮我为项目“{name}”头脑风暴出清晰的目标。先询问它的范围和成功标准，然后提出 3–5 个可转化为目标的具体目标。"
+    "brainstormGoalsPrompt": "帮我为项目“{name}”头脑风暴出清晰的目标。先询问它的范围和成功标准，然后提出 3–5 个可转化为目标的具体目标。",
+    "openOnCanvas": "在画布上打开项目",
+    "openOnCanvasTitle": "在「创建」画布中打开"
   },
   "projectInspection": {
     "title": "检查",
@@ -797,7 +893,8 @@
       "in_progress": "进行中",
       "in_review": "审核中",
       "done": "已完成",
-      "blocked": "受阻"
+      "blocked": "受阻",
+      "shipped": "已发布"
     },
     "epicPriority": {
       "low": "低",
@@ -1044,6 +1141,39 @@
     "saveMyResult": "保存我的结果",
     "saveMyResults": "保存我的结果"
   },
+  "toolReference": {
+    "lede": "可在此直接运行的免费诊断——无需登录。",
+    "section": {
+      "assess": "开始评估",
+      "how": "评分方式",
+      "canvas": "在画布中使用"
+    },
+    "how": {
+      "title": "评分方式",
+      "sub": "三个步骤，全部公开——与已登录工作区所用的评分引擎完全相同。",
+      "answer": {
+        "title": "作答",
+        "body": "全部在浏览器中作答——在你请求结果之前，不会发送任何内容。",
+        "bodyCounted": "{kind} · 共 {count} 道题，直接在浏览器中作答。"
+      },
+      "score": {
+        "title": "获得评级",
+        "body": "你会得到一个评级、支撑它的各项指标，以及一份从最薄弱环节开始排序的改进计划。"
+      },
+      "track": {
+        "title": "持续跟踪",
+        "body": "登录后可将本次运行保存到项目，并随时间观察评级变化。",
+        "bodyData": "登录后可保存本次运行——或切换到“来自你的数据”，用真实交付数据而非问卷答案来评分。"
+      }
+    },
+    "canvas": {
+      "title": "也可以在画布中运行",
+      "body": "每一项诊断同时也是一个画布对象。让 Brain 添加它，它就会带着评分落在画布上，并与你正在进行的其他工作相连——同一个引擎、同一个结果，就在你的工作旁边，而不是取而代之。",
+      "prompt": "把{name}添加到我的画布",
+      "cta": "打开画布"
+    },
+    "relatedHeading": "规划如何改进"
+  },
   "notFound": {
     "title": "页面未找到",
     "message": "您查找的页面不存在或已被移动。",
@@ -1102,6 +1232,25 @@
       "disconnectAria": "断开 {name} 的连接",
       "errorTitle": "无法断开 {name} 的连接",
       "errorGeneric": "断开连接失败，请重试。"
+    },
+    "renderingDiagram": "正在渲染图表…",
+    "skipToContent": "跳转到主要内容",
+    "signIn": "登录",
+    "getStarted": "立即开始 →",
+    "signInToOpen": "登录后可打开{label}",
+    "panelWidth": {
+      "label": "面板宽度",
+      "sheet": "窄 — 25%",
+      "wide": "宽 — 50%",
+      "full": "全宽 — 94%"
+    },
+    "viewMode": {
+      "board": "看板",
+      "card": "卡片",
+      "table": "列表",
+      "calendar": "日历",
+      "gantt": "甘特图",
+      "groupLabel": "视图模式"
     }
   },
   "prdCreate": {
@@ -1266,7 +1415,47 @@
     "privacyTitle": "隐私政策",
     "published": "发布于 {date}",
     "loading": "加载中…",
-    "close": "关闭"
+    "close": "关闭",
+    "eyebrow": "法律与合规",
+    "backToCenter": "合规中心",
+    "lastUpdated": "最后更新",
+    "navLabel": "法律与合规页面",
+    "resourcesHeading": "合规资源",
+    "contactHeading": "对本文件有疑问？",
+    "contactBody": "我们的隐私团队可以协助处理请求、合同和合规细节。",
+    "authoritativeNotice": "本文件以英文发布。英文版本为权威文本；如与任何译本存在差异，以英文版本为准。",
+    "nav": {
+      "overview": "概览",
+      "privacyRights": "隐私权利",
+      "cookies": "Cookie 选择",
+      "subprocessors": "次级处理方",
+      "dpa": "数据处理",
+      "aiTransparency": "AI 透明度",
+      "accessibility": "无障碍访问"
+    },
+    "titles": {
+      "compliance": "信任与合规中心",
+      "privacyRights": "隐私权利与申诉",
+      "cookies": "Cookie 政策",
+      "subprocessors": "次级处理方",
+      "dpa": "客户数据处理附录",
+      "aiTransparency": "AI 透明度",
+      "accessibility": "无障碍访问声明"
+    },
+    "center": {
+      "eyebrow": "BuilderForce 信任中心",
+      "lead": "BuilderForce.ai 由密歇根州有限责任公司 Fix Faster LLC 运营。这些公开的控制措施是对我们的服务条款和隐私政策的补充。",
+      "assuranceLead": "控制措施持续接受审查。",
+      "assuranceBody": "安全、隐私、AI、未成年人保护、违规响应、影响评估、数据留存和无障碍访问等控制措施，均由我们的合规审计智能体对照源代码仓库进行测试。",
+      "details": {
+        "privacyRights": "请求、删除、申诉与人工复核",
+        "cookies": "同意、可选分析与全球隐私控制",
+        "subprocessors": "服务提供商、数据用途与传输保障",
+        "dpa": "客户指令、安全与审计条款",
+        "aiTransparency": "智能体行为、用户控制与重大决策",
+        "accessibility": "我们的 WCAG 承诺、反馈与便利措施"
+      }
+    }
   },
   "llmUsage": {
     "byUser": "按用户 · 最近 7 天",
@@ -1310,6 +1499,32 @@
   },
   "settings": {
     "title": "设置",
+    "featuresTab": "功能",
+    "navigationFeatures": {
+      "title": "启用功能",
+      "description": "为工作区中的所有人开启或关闭模块。已停用的模块会从导航中隐藏；仪表板、画布和设置始终保持开启。",
+      "selectedCount": "已选择 {selected}/{total} 项功能",
+      "recommended": "推荐",
+      "all": "全部",
+      "clear": "清除",
+      "save": "保存",
+      "saved": "导航功能已保存。",
+      "saveFailed": "无法保存导航功能。",
+      "usageTitle": "用量和价格",
+      "usageDescription": "以上功能的本月用量。你当前使用 {plan} 套餐，其额度由已启用的模块共享。",
+      "comparePlans": "比较套餐",
+      "descriptions": {
+        "seat": "浏览角色名册并打开各个运营岗位。",
+        "challenges": "将简报或业务挑战转化为可运行的系统。",
+        "projects": "项目、任务、规划、项目组合、仪式和提案。",
+        "workforce": "人员、智能体、团队、会议、审批和协调。",
+        "insights": "人工智能、交付、财务、开发者体验和合规报告。",
+        "growth": "已连接的邮箱、营销活动和增长运营。",
+        "quality": "错误、收集器和产品反馈。",
+        "reliability": "事件、监控、值班、升级和报告。",
+        "knowledge": "知识、技能、角色、提示词和结构化事实。"
+      }
+    },
     "profile": "个人资料",
     "workspace": "工作区",
     "language": "语言",
@@ -1353,9 +1568,9 @@
       "error": "无法更新你的接单状态，请重试。"
     },
     "accountTab": "账户",
-    "sessionsTab": "会话",
     "subnavLabel": "设置分区",
     "emailTab": "邮件",
+    "logsTab": "日志",
     "emailPrefs": {
       "title": "邮件偏好设置",
       "whatWeSend": "我们会发送什么",
@@ -1420,7 +1635,12 @@
     "managerDefaultsSubtitle": "AI 经理在本工作区所有项目中的默认行为。各项目可在自己的“经理”标签页中进一步调整，但绝不能自行获得你在此处保留的权限。",
     "managerDefaultsError": "无法加载工作区 AI 经理默认设置。",
     "managerDefaultsProjectHint": "若只想更改某一个项目：",
-    "managerDefaultsProjectLink": "打开该项目的经理设置"
+    "managerDefaultsProjectLink": "打开该项目的经理设置",
+    "groupYou": "个人",
+    "groupWorkspace": "工作区",
+    "logsRuntimeTab": "运行时与时间线",
+    "logsAuditTab": "审计日志",
+    "logSectionsLabel": "日志分区"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -2007,7 +2227,14 @@
         "subtitle": "价值如何在各项举措间流动——以及在何处受阻。",
         "criticalPath": "关键路径",
         "cycle": "⚠ 依赖循环",
-        "noDeps": "暂无举措依赖——在项目组合中关联阻塞项以绘制价值流。"
+        "noDeps": "暂无举措依赖——在项目组合中关联阻塞项以绘制价值流。",
+        "completion": "已交付 {pct}%",
+        "status": {
+          "proposed": "已提出",
+          "active": "进行中",
+          "completed": "已完成",
+          "archived": "已归档"
+        }
       }
     },
     "aiImpact": {
@@ -2452,6 +2679,33 @@
         "tenant_token_limit": "工作区已用完令牌额度，因此其所有工单的自主执行都已暂停，直到额度重置或升级套餐。",
         "cloud_run_limit": "工作区已用完本月云端运行额度。重试无法解除——请升级套餐或等待重置。本地和 VS Code 运行不受限制。"
       }
+    },
+    "chatModes": {
+      "title": "对话与执行",
+      "subtitle": "在这里发起的内容中，有多少是提问，有多少是交办的工作，以及其中有多少确实被代理接手执行。",
+      "mode": {
+        "chat": "对话",
+        "work": "执行"
+      },
+      "verdict": "{work} 个执行对话，{chat} 个普通对话。在其开出的工作中，{linked} 个工单里有 {dispatched} 个实际派发给了代理。",
+      "verdictNoWork": "{chat} 个对话与 {work} 个执行对话。此时间窗内未关联任何工单，因此尚无执行率。",
+      "canvasNote": "此时间窗内的画布会话：{sessions} 个（其中 {work} 个处于执行模式）。",
+      "workShareSub": "已发起的 {total} 个对话中有 {work} 个处于{mode}模式",
+      "executionRateSub": "{linked} 个已关联工单中有 {dispatched} 个已派发执行",
+      "costShareSub": "{mode}模式下花费 {cost}",
+      "noWorkLinked": "尚未关联任何工单",
+      "noTickets": "此时间窗内未关联工单",
+      "empty": "此时间窗内没有对话",
+      "loadFailed": "无法加载模式使用数据",
+      "mixAria": "按模式统计的已发起对话数",
+      "funnelAria": "按模式统计的已派发工单与已关联工单",
+      "colMode": "模式",
+      "colConversations": "对话数",
+      "colEngaged": "已使用",
+      "colLinked": "已关联工单",
+      "colDispatched": "已派发",
+      "colExecutionRate": "执行率",
+      "colCost": "成本"
     }
   },
   "cloudAgentForm": {
@@ -2679,7 +2933,7 @@
     "integrationKeys": "项目集成密钥",
     "workspaceTitle": "工作区",
     "workspaceDesc": "此项目的工作区和文件系统。打开 Builder 以编辑文件。",
-    "openInIde": "在 Builder 中打开",
+    "openInBuilder": "在 Builder 中打开",
     "dueDateLabel": "截止日期",
     "dueDateHint": "设置项目截止日期。留空则使用最晚的任务截止日期。",
     "deadline": "截止时间",
@@ -3413,10 +3667,9 @@
     "tabs": {
       "projects": "项目",
       "workforce": "人才 / 团队",
-      "ide": "Builder",
-      "ideas": "想法 / 头脑风暴",
       "quality": "质量",
-      "knowledge": "知识库"
+      "knowledge": "知识库",
+      "create": "创建"
     },
     "ideas": {
       "loading": "正在加载对话……",
@@ -3461,6 +3714,20 @@
         "working": "工作中",
         "workingOn": "正在处理 {task}"
       }
+    },
+    "title": "仪表板",
+    "sessionLimitReached": "已达到已保存会话数量上限。请归档一个会话或升级后再创建。",
+    "widgetsLabel": "仪表板组件",
+    "panel": {
+      "promptSubtitle": "开始一个新的创作会话",
+      "aiUsage": "AI 用量",
+      "pulse": "团队状态",
+      "pulseSubtitle": "当前团队情绪",
+      "create": "创建新内容",
+      "createSubtitle": "选择一个起点，让想法成为现实",
+      "creations": "创作",
+      "creationsSubtitle": "打开并继续你创建的一切",
+      "workspaceWidget": "工作区组件"
     }
   },
   "dashboards": {
@@ -3611,7 +3878,8 @@
       "empPerformers": "绩效",
       "empInitiatives": "战略分布",
       "forecast": "预测",
-      "autonomy": "自主"
+      "autonomy": "自主",
+      "chatModes": "对话与执行"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -3727,7 +3995,13 @@
       "autoStallGates": "自主执行停滞之处",
       "autoOriginMix": "谁在创建工作",
       "autoFunnelTable": "自主漏斗（表格）",
-      "autoCoverage": "审计覆盖范围"
+      "autoCoverage": "审计覆盖范围",
+      "chatModeWorkShare": "执行占比",
+      "chatModeExecutionRate": "执行率",
+      "chatModeCostShare": "执行成本占比",
+      "chatModeMix": "按模式统计的对话",
+      "chatModeFunnel": "已派发与已关联",
+      "chatModeTable": "模式明细"
     },
     "loading": "加载中…",
     "overview": {
@@ -3922,6 +4196,11 @@
       "exportCsv": "导出 CSV",
       "exporting": "导出中…",
       "focusMix": "专注度"
+    },
+    "desc": {
+      "chatModeWorkShare": "以交办工作（而非提问）方式发起的对话占比。",
+      "chatModeExecutionRate": "执行对话开出的工单中，实际由代理启动的比例。",
+      "chatModeCostShare": "用于执行（而非对话）的 AI 支出占比。"
     }
   },
   "compile": {
@@ -4295,9 +4574,10 @@
     "viewWorkflows": "查看工作流",
     "workflows": "工作流",
     "workflowsWithCount": "工作流（{count}）",
-    "openIde": "在 Builder 中打开",
+    "openBuilder": "在 Builder 中打开",
     "delete": "删除",
-    "openChat": "打开项目聊天"
+    "openChat": "打开项目聊天",
+    "connections": "连接"
   },
   "diagnosticsStrip": {
     "title": "诊断",
@@ -4324,6 +4604,19 @@
     },
     "eyebrow": "认识 Evermind",
     "tagline": "一款边工作边学习的模型——永不过时",
+    "visual": {
+      "aria": "Evermind 通过四个协作系统接收键控项目更新的实时图示",
+      "kicker": "实时项目记忆",
+      "runtime": "WebGPU / 设备端",
+      "system": "Builderforce / 02",
+      "core": "随工作变化学习",
+      "status": "写入已接受",
+      "key": "project.release.status",
+      "previous": "之前",
+      "current": "当前",
+      "previousValue": "已阻止",
+      "currentValue": "就绪"
+    },
     "title": "Evermind — <grad>Builderforce.ai LLM</grad>",
     "law": {
       "heading": "写穿认知（Write-Through Cognition）",
@@ -4546,9 +4839,9 @@
       "longDesc": "闭合循环：训练一个定制智能体（浏览器内 WebGPU LoRA + AI 评估），将其发布到 Workforce Registry，然后雇用它并从你自己的智能体内部调用它。你训练出的专家成为主智能体可委派的工具——一支你拥有并编排的、完全自主的智能体队伍。"
     },
     {
-      "title": "无需离开 VS Code",
-      "shortDesc": "通过 VS Code 扩展运行你的整支队伍。",
-      "longDesc": "BuilderForce VS Code 扩展将整个平台带入你的编辑器：与智能体对话、分配并运行任务、审查并验证它们的工作，以及管理你的整支智能体队伍——全程无需离开 VS Code。人在回路的审批就发生在你编写代码的地方。"
+      "title": "面向工程团队的 VS Code 界面",
+      "shortDesc": "将画布上下文、智能体、审阅和交付带入编辑器。",
+      "longDesc": "BuilderForce 扩展为工程团队提供相关平台工作的编辑器原生视图，包括代码库和诊断上下文、智能体任务、审阅与审批。"
     },
     {
       "title": "Agentic Tester —— 自主 QA",
@@ -4561,19 +4854,19 @@
       "longDesc": "除了 AI 智能体，还能雇用真人：人才市场列出经过审核的自由职业开发者、DBA、设计师和专家，附带简历（由 hired.video 提供支持）、技能和时薪。面试、在任何项目中雇用，并看到计费工时从他们在门户和 VS Code 中的工作自动捕捉——每张工时单都由你在付款前审批。人类与智能体在同一看板上并肩协作。"
     },
     {
-      "title": "AI CTO",
-      "shortDesc": "构建、训练并部署你的 AI 队伍。",
-      "longDesc": "你的 AI CTO 构建、训练并部署你的 AI 智能体队伍——浏览器内 WebGPU LoRA 微调、AI 评估，以及一键发布到 Workforce Registry。"
+      "title": "模型工作室与智能体训练",
+      "shortDesc": "训练、评估并发布专业模型和智能体。",
+      "longDesc": "使用 WebGPU LoRA 微调、评估和发布工具，为受支持的智能体工作流准备专业模型。"
     },
     {
-      "title": "AI CIO",
-      "shortDesc": "连接并编排你的各类系统。",
-      "longDesc": "你的 AI CIO 通过加密凭据连接到你的系统——GitHub、Jira、Confluence 等等——并通过 Brain 助手的工具注册表来编排工作。"
+      "title": "互联系统与编排",
+      "shortDesc": "连接受支持的工具并协调工作。",
+      "longDesc": "通过加密凭据连接受支持的系统，并将已批准的操作提供给工作流和 Brain 工具注册表。"
     },
     {
-      "title": "AI 安全官",
-      "shortDesc": "以审批与审计治理每一个操作。",
-      "longDesc": "你的 AI 安全官治理每一个操作：人在回路的审批关卡、完整的审计追踪、按租户隔离，以及 AES-256-GCM 加密凭据。"
+      "title": "智能体治理与安全",
+      "shortDesc": "应用权限、审批、隔离和执行记录。",
+      "longDesc": "通过基于角色的访问、已配置操作的人工审批、租户隔离、加密凭据和执行记录，让负责人始终掌控工作。"
     },
     {
       "title": "Planning Spine —— 从组合到任务",
@@ -4631,7 +4924,7 @@
       "longDesc": "一个以嵌入为键的缓存会在新提示词与已回答过的提示词含义相同时复用此前的答案，因此前沿模型绝不会为同一项工作被计费两次。两个层级：一个免费的设备本地层（SSM 嵌入，运行于你的浏览器和每个智能体中），外加一个共享网关层——因此 Web 应用中的一次缓存命中也能为你的智能体节省 token。"
     },
     {
-      "title": "完整 IDE 工作区",
+      "title": "Canvas Builder 工作区",
       "shortDesc": "Monaco 编辑器、终端、AI 对话——集于一体。",
       "longDesc": "Monaco 编辑器、终端、AI 对话、文件浏览器——你在一个协作式项目工作区中所需的一切。"
     },
@@ -5347,7 +5640,10 @@
       "faqHeading": "常见问题",
       "seeFullComparison": "查看完整对比",
       "relatedHeading": "相关阅读",
-      "vsLabel": "Builderforce.ai 对比 {name}"
+      "vsLabel": "Builderforce.ai 对比 {name}",
+      "criteriaTitle": "基于评估标准的选型指南",
+      "criteriaSummary": "根据你需要完成的工作比较 Builderforce.ai 与 {name}：可视化创作、互联成果物、协作、智能体执行、治理、部署与所有权。",
+      "criteriaNote": "厂商产品、套餐和价格会变化。请用这些标准建立评估框架，并通过最新厂商文档和实际试用核实关键要求。"
     },
     "competitors": {
       "copilot": {
@@ -5387,58 +5683,390 @@
       }
     }
   },
+  "promptUseCases": {
+    "tabLabel": "选择起点",
+    "heading": "想要创建什么？",
+    "searchPlaceholder": "搜索用例…",
+    "searchLabel": "搜索创作用例",
+    "noResults": "没有符合搜索条件的受支持用例。",
+    "categories": {
+      "start": "开始",
+      "apps": "应用与自动化",
+      "business": "业务",
+      "learning": "学习与职业",
+      "documents": "文档与数据",
+      "ai": "AI 与智能体",
+      "creative": "创意与沉浸体验"
+    },
+    "items": [
+      {
+        "category": "start",
+        "label": "空白画布",
+        "prompt": "从空白画布开始，帮助我完善想法。"
+      },
+      {
+        "category": "apps",
+        "label": "网站",
+        "prompt": "设计并构建包含完整内容、导航和可发布实现的响应式网站。"
+      },
+      {
+        "category": "apps",
+        "label": "Web 应用",
+        "prompt": "构建包含核心流程、界面、数据模型和可运行项目的 Web 应用。"
+      },
+      {
+        "category": "apps",
+        "label": "移动应用",
+        "prompt": "构建包含关键页面、用户流程和可运行移动项目的移动应用。"
+      },
+      {
+        "category": "apps",
+        "label": "UI 模型",
+        "prompt": "为核心产品体验创建高保真 UI 模型。"
+      },
+      {
+        "category": "apps",
+        "label": "线框图",
+        "prompt": "创建展示主要布局和交互方式的线框图。"
+      },
+      {
+        "category": "apps",
+        "label": "工作流自动化",
+        "prompt": "构建包含已配置步骤、输入、审批和集成的可执行工作流。"
+      },
+      {
+        "id": "twilio-ai-journey",
+        "category": "apps",
+        "label": "Twilio AI 客户旅程",
+        "prompt": "围绕一个清晰的角色 → 故事 → 可衡量结果，构建可复用的 Twilio AI 客户旅程。创建一个可执行工作流：先展示明确的 AI 决策步骤，再调用现有 twilio 连接器的真实操作（短信、WhatsApp 或语音），包含必需输入、人工审批、失败处理和生产就绪细节，并完成构建和验证。再添加简明体验说明、轻量架构图、针对创意、长期用户影响、市场潜力和技术可行性的质量评估、真实端到端演示脚本、可衡量的成功证据，以及复用 BuilderForce Embedded 的 Idea-to-Real 网站嵌入交付，包含主站安装代码、选定的客户侧能力、身份/事件契约和测试清单。添加覆盖设置、AI 决策、Twilio 交付、安全措施、证据、网站嵌入和演示步骤的导览。复用画布上已有的 Twilio 对象、连接和嵌入能力；不要创建重复的工作流、连接器或嵌入系统。"
+      },
+      {
+        "category": "apps",
+        "label": "语音智能体",
+        "prompt": "创建并配置包含脚本、声音、工具、通话流程和评估标准的语音智能体。"
+      },
+      {
+        "category": "business",
+        "label": "销售指挥中心",
+        "prompt": "创建包含目标市场、联系人、营销活动、销售管道、目标、会议和销售教练智能体的销售中心。"
+      },
+      {
+        "category": "business",
+        "label": "招聘工作区",
+        "prompt": "创建包含岗位评分卡、候选人管道、人才搜寻、结构化面试、评估和招聘智能体的工作区。"
+      },
+      {
+        "category": "business",
+        "label": "邮件营销活动",
+        "prompt": "创建包含受众、可复用模板、主题、响应式内容、发送工作流和成功指标的邮件活动。"
+      },
+      {
+        "category": "business",
+        "label": "产品探索",
+        "prompt": "创建汇总客户证据、确定机会优先级并将最佳概念扩展为模型的产品探索工作区。"
+      },
+      {
+        "category": "business",
+        "label": "路演竞赛",
+        "prompt": "创建包含申请、计时路演、评委评分卡、问答演练、演示文稿和教练智能体的竞赛工作区。"
+      },
+      {
+        "category": "business",
+        "label": "项目路线图",
+        "prompt": "创建产品需求文档及关联的交付路线图，包含里程碑、发布和优先任务。"
+      },
+      {
+        "category": "business",
+        "label": "团队站会",
+        "prompt": "创建包含成员、智能体、当前工作、阻碍、决策和后续任务的协作站会。"
+      },
+      {
+        "category": "learning",
+        "label": "互动式 LMS",
+        "prompt": "创建包含模块、课程、练习、评估、进度跟踪、综合项目和专业 AI 教师的完整 LMS 课程。"
+      },
+      {
+        "category": "learning",
+        "label": "简历",
+        "prompt": "创建层次清晰、突出成就且可导出的专业简历。"
+      },
+      {
+        "category": "learning",
+        "label": "视频简历",
+        "prompt": "创建专业简历、简洁的视频简历脚本和故事板，以及关联的视频展示。"
+      },
+      {
+        "category": "documents",
+        "label": "演示文稿",
+        "prompt": "创建叙事清晰、视觉方向明确的精美演示文稿。"
+      },
+      {
+        "category": "documents",
+        "label": "文档",
+        "prompt": "起草一份结构清晰、可供审阅、导出和分享的文档。"
+      },
+      {
+        "category": "documents",
+        "label": "研究",
+        "prompt": "从引用来源研究该主题，创建支持数据集，并将结果整理为可执行洞察。"
+      },
+      {
+        "category": "documents",
+        "label": "数据仪表板",
+        "prompt": "创建包含有来源数据、计算 KPI、图表和高管摘要的决策仪表板。"
+      },
+      {
+        "category": "documents",
+        "label": "数据故事",
+        "prompt": "将数据集转化为经过验证的图表、仪表板和关联的高管演示文稿。"
+      },
+      {
+        "category": "documents",
+        "label": "图表",
+        "prompt": "创建清楚说明系统、流程或关系的可编辑图表。"
+      },
+      {
+        "category": "documents",
+        "label": "HTML 邮件",
+        "prompt": "设计一封内容和行动号召清晰的响应式 HTML 邮件。"
+      },
+      {
+        "category": "documents",
+        "label": "配色 + 字体",
+        "prompt": "创建符合无障碍要求的配色和字体组合，并提供使用指南。"
+      },
+      {
+        "category": "ai",
+        "label": "AI 智能体",
+        "prompt": "构建包含指令、个性、工具、编写知识和评分评估的可运行 AI 智能体。"
+      },
+      {
+        "category": "ai",
+        "label": "Evermind 模型",
+        "prompt": "创建包含知识、教学与调优阶段、评估和可发布智能体的 Evermind 模型实验室。"
+      },
+      {
+        "category": "ai",
+        "label": "LLM 评估",
+        "prompt": "创建包含代表性提示、预期信号、质量标准、安全检查和发布评分卡的 LLM 评估套件。"
+      },
+      {
+        "category": "creative",
+        "label": "视频",
+        "prompt": "创建包含概念、脚本、故事板、视觉方向和生成预览的视频。"
+      },
+      {
+        "category": "creative",
+        "label": "动画",
+        "prompt": "创建包含故事板、节奏、视觉风格和生成预览的动画。"
+      },
+      {
+        "category": "creative",
+        "label": "图像",
+        "prompt": "根据艺术指导创建精美图像并准备导出。"
+      },
+      {
+        "category": "creative",
+        "label": "播客",
+        "prompt": "创建包含概念、结构化脚本、声音指导、文字记录和音频输出的播客节目。"
+      },
+      {
+        "category": "creative",
+        "label": "漫画",
+        "prompt": "创建包含故事、分镜计划、对白、视觉风格和可导出画稿的漫画。"
+      },
+      {
+        "category": "creative",
+        "label": "浏览器游戏",
+        "prompt": "设计并构建包含机制、控制、视觉效果和评估的可玩浏览器游戏。"
+      },
+      {
+        "category": "creative",
+        "label": "Roblox 游戏",
+        "prompt": "设计包含机制、世界方向、控制、评估和 Roblox 发布目标的可玩 Roblox 体验。"
+      },
+      {
+        "category": "creative",
+        "label": "CAD 图纸",
+        "prompt": "创建包含尺寸、单位、几何图形和可导出输出的可编辑 CAD 图纸。"
+      },
+      {
+        "category": "creative",
+        "label": "3D 模型",
+        "prompt": "创建包含形态、材质、尺寸、展示视图和可导出几何体的 3D 模型。"
+      }
+    ]
+  },
   "home": {
-    "heroBadge": "一个画布 · 人类 + AI 智能体",
-    "heroTitle": "尽情想象，<em>创造。</em>",
-    "heroSub": "从一句提示开始，在同一个可视化会话中创建工作流、网站、数据故事、模型、语音体验并交付真实成果。",
+    "heroBadge": "画布 · 人类 + AI 智能体",
+    "heroTitle": "每个想法都变成<em>现实。</em>",
+    "heroSub": "一块画布，让你的团队与 AI 智能体共同设计、构建、评审并交付——无需在多个工具之间来回切换。",
     "heroPromptPlaceholder": "你想创造什么？",
     "heroPromptAria": "描述你想创造的内容",
     "heroGetStarted": "开始创作",
-    "heroExamples": [
-      "设计营销活动及其落地页",
-      "可视化客户反馈并制作热门功能原型",
-      "构建、评估并交付客户支持智能体"
-    ],
+    "canvas": {
+      "boardAria": "创作画布示例——可直接作为起点的关联对象",
+      "objectAction": "从这个对象开始：{title}",
+      "agentInitials": "收益",
+      "agentPresence": "在线 · 可指派",
+      "sessionTitle": "启动营销活动 · 实时会话",
+      "presenceAria": "三人正在此会话中",
+      "presenceInitials": [
+        "SH",
+        "JR",
+        "TK"
+      ],
+      "alwaysOn": "随时在线",
+      "teammateAction": "邀请 {name} 加入此画布",
+      "team": [
+        {
+          "short": "CM",
+          "name": "CMO",
+          "prefill": "邀请 CMO 来规划这次营销活动及其落地页"
+        },
+        {
+          "short": "CF",
+          "name": "CFO",
+          "prefill": "邀请 CFO 来预测这次营销活动的预算"
+        },
+        {
+          "short": "CT",
+          "name": "CTO",
+          "prefill": "添加一名 CTO 智能体和一份与其关联的生产就绪评审，涵盖架构、安全、部署、可观测性、回滚和发布门槛。请写明合理假设和待确认问题，而不要索要更多上下文。"
+        }
+      ],
+      "guestNote": "这是一块真实的画布。在你登录之前，内容不会离开本设备。",
+      "narrowNote": "在更大的屏幕上打开可使用完整画布。",
+      "objects": [
+        {
+          "kind": "数据集",
+          "title": "Q3_pipeline.csv",
+          "detail": "1,284 行 · 9 列",
+          "prefill": "用这个数据集绘制各渠道的赢单率"
+        },
+        {
+          "kind": "图表",
+          "title": "各渠道赢单率",
+          "detail": "由数据集计算得出，而非手动录入",
+          "prefill": "把这张图表整理成一页董事会汇报"
+        },
+        {
+          "kind": "智能体",
+          "title": "收益分析师",
+          "detail": "读取数据，撰写简报",
+          "prefill": "让收益分析师评审本季度的销售管道"
+        },
+        {
+          "kind": "工作流",
+          "title": "续约触达",
+          "detail": "4 个步骤 · 2 次审批",
+          "prefill": "创建一个带两次审批的续约触达工作流"
+        },
+        {
+          "kind": "文档",
+          "title": "董事会一页纸",
+          "detail": "根据上方图表起草",
+          "prefill": "根据这份分析起草一页董事会汇报"
+        },
+        {
+          "kind": "想法",
+          "title": "续约机会",
+          "detail": "问题 · 客户 · 初步设想",
+          "prefill": "把这个续约机会整理成发布计划"
+        },
+        {
+          "kind": "调研",
+          "title": "客户访谈",
+          "detail": "12 次通话 · 信号 + 异议",
+          "prefill": "将这些客户访谈总结为产品需求"
+        },
+        {
+          "kind": "原型",
+          "title": "续约门户",
+          "detail": "实时概念 · 可供测试",
+          "prefill": "根据这个原型构建可测试的续约门户"
+        }
+      ]
+    },
     "createCanvas": {
       "eyebrow": "认识 Create",
-      "heading": "Create Canvas — 让想法成为可运行的系统",
+      "heading": "一个画布，承载你的所有想象。",
       "blurb": "保留提示词的速度，并超越聊天。将工作流、网站、数据、模型、人员和智能体放在同一个多人画布上，让每个对象始终可用、互联并随时可以交付。",
       "features": [
-        { "title": "从意图开始", "desc": "描述你的目标，立即进入私密的本地画布。只有在需要协作或交付时，才添加账号或项目。" },
-        { "title": "用真实对象创作", "desc": "使用可编辑的工作流、原型、数据集、仪表盘、模型、任务、人员和智能体，而不是扁平的聊天附件。" },
-        { "title": "从想法走向成果", "desc": "让 Brain 跨画布推理，审阅它提出的变更，再将批准的工作送入受治理的执行流程。" }
+        {
+          "title": "从意图开始",
+          "desc": "描述你的目标，立即进入私密的本地画布。只有在需要协作或交付时，才添加账号或项目。"
+        },
+        {
+          "title": "用真实对象创作",
+          "desc": "使用可编辑的工作流、原型、数据集、仪表盘、模型、任务、人员和智能体，而不是扁平的聊天附件。"
+        },
+        {
+          "title": "从想法走向成果",
+          "desc": "让 Brain 跨画布推理，审阅它提出的变更，再将批准的工作送入受治理的执行流程。"
+        }
       ],
       "startCta": "免费开始创作",
       "exploreCta": "探索 Create",
       "previewAria": "包含互联实时对象的 Creation Canvas 示例",
       "sessionLabel": "营销活动发布 · 实时会话",
       "objects": [
-        { "title": "营销活动工作流", "meta": "受众 → 创建 → 审批 → 发布" },
-        { "title": "交互式落地页", "meta": "实时 WYSIWYG 网站原型" },
-        { "title": "营销活动预测", "meta": "数据绑定的漏斗和渠道指标" },
-        { "title": "营销活动策略师", "meta": "AI 智能体 · 已配置且可分配" }
+        {
+          "title": "营销活动工作流",
+          "meta": "受众 → 创建 → 审批 → 发布"
+        },
+        {
+          "title": "交互式落地页",
+          "meta": "实时 WYSIWYG 网站原型"
+        },
+        {
+          "title": "营销活动预测",
+          "meta": "数据绑定的漏斗和渠道指标"
+        },
+        {
+          "title": "营销活动策略师",
+          "meta": "AI 智能体 · 已配置且可分配"
+        }
       ],
-      "flow": ["提示", "上下文", "成果物", "审阅", "交付", "结果"]
+      "flow": [
+        "提示",
+        "上下文",
+        "成果物",
+        "审阅",
+        "交付",
+        "结果"
+      ]
+    },
+    "carousel": {
+      "label": "平台导览",
+      "kicker": "BuilderForce / 平台",
+      "deliveryEyebrow": "了解交付",
+      "pause": "暂停自动轮播",
+      "resume": "恢复自动轮播",
+      "previous": "上一张幻灯片",
+      "next": "下一张幻灯片",
+      "chooseSlide": "选择幻灯片",
+      "evermindDifference": "Evermind / 差异"
     },
     "evermindHeadingSuffix": "一个在工作中持续学习、永不过时的模型",
-    "pillarsHeading": "人在回路。完全自主。",
-    "pillarsLead": "训练你自己的智能体，让它们在你的智能体内部投入工作，并对每一步保持掌控——一切尽在一处。",
+    "pillarsHeading": "自由创作，受控交付。",
+    "pillarsLead": "将想法、人员和 AI 智能体带入同一个可视化空间，并决定哪些内容要修改、交付或保持私密。",
     "pillars": [
       {
-        "title": "训练智能体，在你的智能体内部使用它们",
-        "desc": "在浏览器中训练一个定制智能体（WebGPU LoRA + 评估），将其发布到 Workforce Registry，然后雇用它并从你自己的智能体内部调用它。你的专家成为主智能体可委派的工具。"
+        "title": "创作不止于文档",
+        "desc": "将网站、工作流、原型、数据故事、模型和交付计划构建为彼此关联的可编辑对象，而不是分散的文件。"
       },
       {
-        "title": "在看板上管理你的队伍",
-        "desc": "在实时看板上规划、分配并跟踪每一项任务——人类与 AI 智能体同处一块看板，另有表格、日历和甘特图视图。工作从待办流转到完成，全程实时。"
+        "title": "与智能体协作，而不只是聊天",
+        "desc": "将专业智能体放在工作旁边，让它们参与创作、评估和执行，同时让团队始终参与其中。"
       },
       {
-        "title": "无需离开 VS Code",
-        "desc": "BuilderForce VS Code 扩展在你的编辑器中运行整个平台：与智能体对话、分配并运行任务、审查并验证它们的工作，以及审批人在回路的操作——无需离开你的代码。"
+        "title": "交付前先审阅",
+        "desc": "检查建议的变更、保留检查点，并只将已批准的工作送入项目、任务和智能体执行。"
       }
     ],
-    "rolesHeading": "一个记录系统。每个角色各自的运营全景。",
-    "rolesLead": "因为每一个操作——无论人类还是智能体——都被记录、计成本并归因，整个组织得以基于同一个事实来源协作。无需六套工具堆叠，无需用电子表格对账谁以多少成本做了什么。企业级的可见性，以平台的价格呈现。",
+    "rolesHeading": "一段创作旅程，为每个角色提供合适视角。",
+    "rolesLead": "将最初想法与成果物、决策、交付活动、模型使用、审批和可用成本数据连接起来，无需从多个独立工具中重新拼接过程。",
     "roles": [
       {
         "role": "CEO",
@@ -5467,71 +6095,128 @@
     ],
     "stats": [
       {
-        "label": "参数\n浏览器内"
+        "label": "互联的\n创作画布"
       },
       {
-        "label": "数据集\n生成"
+        "label": "实时可编辑\n成果物"
       },
       {
-        "label": "硬件\n加速"
+        "label": "人类 + AI\n协作"
       },
       {
-        "label": "私有——运行\n于你的浏览器"
+        "label": "可审阅的\n变更"
       }
     ],
-    "comparisonHeading": "Builderforce 对比传统工作流",
-    "comparisonLead": "从底层为 AI 智能体而生——而非又一个云笔记本或插件。",
+    "workflowProof": {
+      "heading": "三个可验证的工作流",
+      "lead": "这些测试版流程明确标注边界、仓库内证据和当前限制。",
+      "cta": "查看能力与集成证据",
+      "demos": [
+        {
+          "title": "从想法到交互体验",
+          "audience": "创意与产品团队",
+          "outcome": "创建相互连接的网站、数据和原型对象，审核后交付受支持的结果。",
+          "steps": [
+            "启动创作会话",
+            "创建并连接可编辑成果",
+            "审核并交付受支持的输出"
+          ],
+          "evidence": "证据：创作画布流程与对象注册测试。"
+        },
+        {
+          "title": "受治理的智能体交付",
+          "audience": "工程与运营团队",
+          "outcome": "仅在获得有效策略决策后下发已批准的工作。",
+          "steps": [
+            "选择交付工作",
+            "解析审批策略",
+            "有效决策后再下发"
+          ],
+          "evidence": "证据：运行时策略门控测试，包括失败时关闭。"
+        },
+        {
+          "title": "从信号到有引用的决策",
+          "audience": "产品与营收负责人",
+          "outcome": "评估受支持的数据，并在会话上下文中保留决策。",
+          "steps": [
+            "连接证据",
+            "运行跨对象评估",
+            "审核引用并应用决策"
+          ],
+          "evidence": "证据：画布 AI 评估契约测试。"
+        }
+      ]
+    },
+    "comparisonHeading": "一个互联画布，而不是又一个孤立的 AI 工具",
+    "comparisonLead": "从创作成果出发，只在确有帮助时引入专业工具。",
     "comparisonColFeature": "功能",
     "comparisonColBuilderforce": "Builderforce",
     "comparisonColNotebooks": "通用笔记本",
     "comparisonColCloud": "云端训练",
     "comparisonRows": [
-      "浏览器内 LoRA 训练",
-      "数据集生成向导",
-      "AI 评估引擎",
-      "智能体注册表与技能",
-      "全球 Workforce 市场",
-      "零 GPU 账单"
+      "从想法到成果的可视化空间",
+      "实时互联的成果物",
+      "人员与专业智能体共同协作",
+      "可审阅变更与检查点",
+      "受治理的交付路径",
+      "面向工程的可选 VS Code 界面"
     ],
-    "stepsHeading": "三步即可上手运行",
+    "stepsHeading": "三步从 <em>IDEA 走向 REAL</em>",
     "steps": [
       {
-        "title": "创建账户",
-        "desc": "用你的邮箱注册并开启一个免费工作区。14 天 Pro 试用，无需信用卡。"
+        "title": "带来想法",
+        "desc": "从你想创造的内容开始，无需先把它翻译成工单、提示词或特定工具的格式。"
       },
       {
-        "title": "生成数据集",
-        "desc": "使用向导从单条能力提示词撰写一份指令微调数据集。"
+        "title": "在同一处塑造它",
+        "desc": "人员与智能体共享同一个想法、决策和上下文，工作推进时无需一遍遍重述。"
       },
       {
-        "title": "训练并发布",
-        "desc": "在你的浏览器中运行 LoRA 训练、评估结果，并将你的智能体发布到 Workforce Registry。"
+        "title": "让它成为现实",
+        "desc": "审核、批准并投入生产：已经上线、正常工作，任何人都能立即使用。"
       }
     ],
-    "featuresHeading": "你的 AI 队伍所能做的一切",
+    "featuresHeading": "你可以带到画布上的一切",
     "pricingHeading": "定价",
+    "pricingTitle": "免费开始，需要时再组建团队。",
+    "currentPricing": "查看当前价格",
+    "pricePerMonth": "/月",
+    "customPricing": "定制",
     "pricingTeaser": [
       {
+        "id": "free",
         "name": "免费版",
-        "price": "$0",
         "perks": [
-          "Evermind 模型（设备本地）",
-          "WebGPU 训练",
-          "浏览 Workforce"
-        ]
+          "私密创作工作区",
+          "1 个 AgentHost",
+          "5 个项目"
+        ],
+        "cta": "免费开始创作"
       },
       {
+        "id": "pro",
         "name": "Pro",
-        "price": "$29/席位",
         "perks": [
-          "不限智能体数量",
-          "私有模型",
-          "优先支持"
-        ]
+          "最多 3 个 AgentHost",
+          "无限项目",
+          "已配置的审批工作流",
+          "完整的高管智能体团队"
+        ],
+        "cta": "查看当前价格"
+      },
+      {
+        "id": "teams",
+        "name": "团队版",
+        "perks": [
+          "按席位设置支出限额",
+          "角色、审批与审计",
+          "接入你自己的模型"
+        ],
+        "cta": "联系我们"
       }
     ],
     "blogHeading": "博客最新文章",
-    "blogLead": "构建与部署 AI 智能体的深度解析、教程和最佳实践——从 WebGPU LoRA 训练到多智能体编排。",
+    "blogLead": "用 AI 创作的观点与实用指南——涵盖可视化工作流、互联成果物、模型、智能体、治理与交付。",
     "blogReadAll": "阅读全部文章",
     "newsletterHeading": "保持同步",
     "newsletterLead": "获取关于新功能、新智能体和平台改进的更新。无垃圾邮件，随时可退订。",
@@ -5541,9 +6226,31 @@
     "newsletterSubscribedConfirm": "已订阅 ✓",
     "newsletterError": "无法订阅。请重试。",
     "faqHeading": "常见问题",
-    "ctaTitle": "让你的 AI CTO 投入工作",
-    "ctaDesc": "描述你的需求，登录，你的 AI 大脑便开始工作——构建智能体、连接你的系统，并治理每一个操作。无需信用卡。",
-    "ctaSeeLiveAgents": "查看实时智能体",
+    "ctaTitle": "你想创造什么？",
+    "ctaDesc": "从一句提示开始，与团队和 AI 智能体一起，把它变成相互连接、可审核、可交付的成果。无需信用卡。",
+    "ctaSeeLiveAgents": "探索画布",
+    "homepageFaq": [
+      {
+        "question": "开始使用需要账户吗？",
+        "answer": "不需要。第一个画布是私密的，并保存在你的浏览器本地；登录前不会有任何内容离开设备。登录后，你已经开始的草稿会被接入工作区，而不会被丢弃。"
+      },
+      {
+        "question": "AI 智能体究竟是什么？",
+        "answer": "它们是团队中承担具体角色的专家，例如 CFO、CMO、CTO 等。它们与受邀成员一起显示在每个画布底部。把智能体拖到看板上，它会读取工作、接受任务，并产出可供你审查的变更。"
+      },
+      {
+        "question": "我可以使用自己的模型吗？",
+        "answer": "可以。连接你自己的模型提供商账户，工作就会通过该账户运行。如果工作区没有连接提供商，平台路由会选择合适的模型，费用计入工作区用量。"
+      },
+      {
+        "question": "这与 AI 聊天工具有什么不同？",
+        "answer": "聊天工具生成的是需要再搬到别处的文本。Builderforce 生成的是相互关联的对象——在线页面、运行中的工作流或绑定的数据集——它们彼此引用，并保留从最初想法到生产环境的可审查历史。"
+      },
+      {
+        "question": "智能体自主完成的工作会如何处理？",
+        "answer": "每项变更都有作者和差异记录。任何涉及生产环境、代表你发送内容或超过支出限额的操作，都会等待看板上指定人员的批准。"
+      }
+    ],
     "faq": [
       {
         "question": "什么是 Evermind？",
@@ -5551,7 +6258,7 @@
       },
       {
         "question": "什么是 Builderforce.ai？",
-        "answer": "Builderforce.ai 是面向智能体时代的创新平台——一个单一的记录系统，其中每一单位工作，无论由人类还是 AI 智能体完成，都会从创意到交付再到学习被记录、计成本并归因。你用一支由人类和智能体组成的队伍在看板上规划、构建、交付并度量，在浏览器中训练你自己的智能体（数据集生成、WebGPU LoRA 训练、AI 评估，以及 Workforce Registry），连接到你的系统与数据，并以角色、审批关卡和完整审计追踪来治理每一个操作——全程无需离开 VS Code。"
+        "answer": "Builderforce.ai 是一个创作画布，团队和 AI 智能体可以在其中把想法变成有用成果。在同一可视化空间中创建网站、工作流、原型、数据故事、模型、文档和交付计划，再将批准的工作送入受治理的执行流程。"
       },
       {
         "question": "Builderforce.ai 是企业级平台吗？",
@@ -5563,7 +6270,7 @@
       },
       {
         "question": "管理我的智能体必须离开 VS Code 吗？",
-        "answer": "不必。BuilderForce VS Code 扩展将整个平台带入你的编辑器：与智能体对话、在看板上分配并运行任务、审查并验证它们的工作，以及审批人在回路的操作——全程无需离开 VS Code。"
+        "answer": "不必。Builderforce.ai 首先是基于网页的创作画布。工程团队还可以使用 VS Code 扩展，将代码库上下文、诊断、智能体工作、审阅和审批带到更靠近代码的位置。"
       },
       {
         "question": "Builderforce 有看板和项目管理吗？",
@@ -5591,7 +6298,7 @@
       },
       {
         "question": "Builderforce 是免费的吗？",
-        "answer": "是的——免费层永久 $0/月，无需信用卡。它包含 WebGPU 训练、数据集生成、AI 评估，以及公开的 Workforce 浏览。Pro 套餐（$29/席位/月）解锁私有智能体、不限量训练和优先支持。"
+        "answer": "是的——免费层永久 $0/月，无需信用卡。它包含 WebGPU 训练、数据集生成、AI 评估，以及公开的 Workforce 浏览。Pro 套餐解锁私有智能体、不限量训练和优先支持。"
       },
       {
         "question": "我如何在我的浏览器中训练一个模型？",
@@ -5646,16 +6353,75 @@
         "answer": "可以。将一套交付流程——泳道、必需角色、审阅关卡和推荐名单——打包为看板模板并发布到市场出售或共享。任何团队都可以一键将经过验证的模板安装到项目中，继承一套受治理、按角色放行的工作流，而无需从零构建。"
       }
     ],
-    "newsletterPlaceholder": "your@email.com"
+    "newsletterPlaceholder": "your@email.com",
+    "beat": {
+      "howItWorks": "工作方式",
+      "proof": "实证",
+      "breadth": "你能构建什么",
+      "compare": "为何选择 Builderforce",
+      "pricing": "价格",
+      "questions": "常见问题",
+      "writing": "文章",
+      "keepUp": "保持关注"
+    },
+    "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。",
+    "tension": {
+      "eyebrow": "问题所在",
+      "heading": "让想法成为现实",
+      "body": "每次在文档、聊天、看板、编辑器和表格之间切换，都会浪费时间，并迫使人们重复上下文。Builderforce 让整个过程保持连接——从最初的想法，到已上线且立即可用的成果。",
+      "fragments": [
+        "文档",
+        "聊天",
+        "看板",
+        "编辑器",
+        "表格"
+      ],
+      "diagramAlt": "通常从想法到生产会在五种工具之间损失时间和上下文；Builderforce 提供从 IDEA 到 REAL 的连续路径。",
+      "oldWayLabel": "通常方式",
+      "ideaLabel": "IDEA",
+      "switchCost": "时间流失 · 上下文重复",
+      "canvasLabel": "一个连续的上下文",
+      "realLabel": "REAL",
+      "realDefinition": "已上线。立即可用。"
+    }
+  },
+  "shoppingCart": {
+    "title": "购物车",
+    "close": "关闭购物车",
+    "empty": "购物车为空",
+    "browse": "浏览市场",
+    "free": "免费",
+    "use": "次使用",
+    "plusActivation": "+ ${price} 开通费",
+    "remove": "移除{name}",
+    "dueToday": "今日应付",
+    "thenMonthly": "之后每月",
+    "renewsMonthly": "每月续订",
+    "renewsYearly": "每年续订",
+    "checkout": "安全结账",
+    "redirecting": "正在跳转…",
+    "checkoutFailed": "无法启动结账",
+    "mixedCheckout": "套餐、附加服务和市场商品必须分开结账。",
+    "workspaceRequired": "购买此服务前请选择工作区。",
+    "unsupportedCheckout": "一个或多个商品暂时无法通过此结账流程购买。",
+    "purchaseComplete": "已完成 {count} 笔购买。",
+    "purchaseHistory": "购买记录",
+    "clear": "清空购物车",
+    "signInPrompt": "请登录以完成购买",
+    "createAccount": "创建账户",
+    "signIn": "登录"
   },
   "pricing": {
+    "enabledModulesTitle": "已启用的模块（{count}）",
+    "enabledModulesDescription": "套餐价格和共享用量额度适用于此功能组合。",
+    "manageEnabledModules": "管理功能",
     "seo": {
       "title": "定价 — 免费版、Pro 版和 Teams 版",
-      "description": "Builderforce.ai 定价：免费版（永久 $0/月）、Pro 版（$29/席位/月）和 Teams 版（$20/席位/月）。包含 WebGPU LoRA 训练、数据集生成、AI 评估和 Workforce Registry。",
+      "description": "比较 Builderforce.ai 免费版、Pro 版和 Teams 版，了解 WebGPU LoRA 训练、数据集生成、AI 评估和 Workforce Registry。",
       "ogTitle": "Builderforce.ai 定价 — 免费版、Pro 版和 Teams 版",
-      "ogDescription": "永久免费版，含 WebGPU 训练。Pro 版 $29/席位/月，可无限创建智能体。Teams 版 $20/席位/月，含共享审批收件箱。",
+      "ogDescription": "比较免费版、Pro 版和 Teams 版的 WebGPU 训练、智能体和共享审批工作流。",
       "twitterTitle": "Builderforce.ai 定价",
-      "twitterDescription": "永久免费。Pro 版 $29/席位/月。Teams 版 $20/席位/月。含 WebGPU LoRA 训练。"
+      "twitterDescription": "比较免费版、Pro 版和 Teams 版。包含 WebGPU LoRA 训练。"
     },
     "titleAnon": "简单、透明的定价",
     "titleConsole": "定价与账单",
@@ -5663,10 +6429,28 @@
     "subtitleConsole": "管理您的订阅和账单详情。",
     "loading": "正在加载订阅…",
     "errorLoad": "加载订阅失败",
+    "errorPricingContract": "无法验证当前价格（{reason}）。购买前请重试。",
+    "pricingUnavailable": "当前价格不可用。购买前请重试。",
     "anonBannerTitle": "从免费版开始",
     "anonBannerDesc": "永久 $0/月 — 1 个 AgentHost、5 个项目、WebGPU LoRA 训练。随时可升级。",
     "anonBannerCta": "创建免费账户",
     "currentPlan": "当前套餐",
+    "billingFrequency": "计费周期",
+    "annualSavingsSummary": "按年计费可享受当前套餐的最高优惠。",
+    "monthlyFlexibility": "按月支付，无需年度承诺。",
+    "cycleAnnualWithSavings": "按年 — 最高节省 20%",
+    "perYear": "/年",
+    "perMonth": "/月",
+    "perSeatYear": "/席位/年",
+    "perSeatMonth": "/席位/月",
+    "teamMembers": "团队成员",
+    "seatCount": "{seats} 个席位",
+    "teamsAnnualCalculation": "每席位每年 ${price} × {seats} = 每年 ${total}",
+    "teamsMonthlyCalculation": "每席位每月 ${price} × {seats} = 每月 ${total}",
+    "planAnnualSaving": "按年计费可节省 {pct}%",
+    "cartPlanName": "{plan} 套餐",
+    "cartPerYear": "/年",
+    "cartPerMonth": "/月",
     "fieldBillingCycle": "计费周期",
     "fieldSeats": "席位",
     "fieldBillingEmail": "账单邮箱",
@@ -5691,6 +6475,9 @@
     "labelSeats": "席位",
     "labelBillingEmail": "账单邮箱",
     "placeholderBillingEmail": "billing@example.com",
+    "labelDiscountCode": "优惠码",
+    "placeholderDiscountCode": "可选",
+    "discountVerificationNote": "优惠将在付款前验证。",
     "redirectNote": "您将被重定向到我们的支付服务商，以安全地输入您的卡片详情。",
     "total": "合计：${price}/{unit}",
     "totalForSeats": "{seats, plural, one {共 # 个席位} other {共 # 个席位}}",
@@ -5711,9 +6498,24 @@
     "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
     "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
+    "phone": {
+      "eyebrow": "客户留存附加服务",
+      "title": "企业电话",
+      "description": "为企业提供专属美国号码，支持语音、短信和彩信，无需添置硬件。",
+      "dedicatedNumber": "专属企业号码",
+      "forwarding": "来电可转接至现有手机",
+      "allowance": "每月含 {minutes} 分钟、{sms} 条短信和 {mms} 条彩信",
+      "overages": "超额费用：每分钟 ${minute}、每个短信分段 ${sms}、每条彩信 ${mms}。",
+      "learnMore": "了解企业电话",
+      "addonFor": "Pro 和 Teams 附加服务",
+      "perMonth": "/月",
+      "activation": "一次性开通费 ${price}",
+      "addToCart": "加入购物车",
+      "viewCart": "查看购物车",
+      "eligibility": "需要有效的 Pro 或 Teams 订阅。"
+    },
     "relatedHeading": "在您决定之前",
     "planFeatures": [
-      "Evermind 自更新模型（设备端）",
       "1 个 AgentHost",
       "最多 3 个 AgentHosts",
       "无限 AgentHosts",
@@ -5727,10 +6529,18 @@
       "完整遥测 + 审计追踪",
       "自定义智能体角色",
       "共享团队审批收件箱",
-      "按席位成本控制",
-      "优先支持",
-      "社区支持"
+      "按席位成本控制"
     ]
+  },
+  "phonePage": {
+    "seoTitle": "企业电话 — Builderforce.ai",
+    "seoDescription": "支持语音、短信和彩信的专属企业号码。",
+    "active": "企业电话已启用",
+    "provisioning": "你的号码已可配置和分配。",
+    "loading": "正在加载价格…",
+    "createAccount": "创建账户",
+    "voiceMessaging": "语音与消息",
+    "transparentUsage": "透明的用量定价"
   },
   "product": {
     "seo": {
@@ -5738,20 +6548,87 @@
       "description": "全面体验 Builderforce.ai 所提供的一切：浏览器内 WebGPU LoRA 训练、AI 评估引擎、技能与人格市场、工作流编排、团队网格，以及完整的审批与审计。在注册之前先了解整个平台。",
       "ogTitle": "Builderforce.ai 平台 — 构建、训练、编排与治理"
     },
-    "eyebrow": "平台",
-    "title": "AI 团队所需的一切，尽在一处",
-    "sub": "Builderforce.ai 是你的 AI CTO、CIO 兼安全官。它构建并训练你的智能体，在主机网格中对它们进行编排，并通过审批和审计轨迹治理每一项操作。这里就是整个平台 — 在注册之前自由探索任意部分。",
+    "eyebrow": "创意画布",
+    "title": "创造一切，让一切保持连接。",
+    "sub": "把想法、成果、协作者和 AI 智能体汇聚到一个可视化工作空间。自由设计、共同审核，并交付已批准的工作，无需拼接十几种工具。",
     "statLabels": [
-      "参数规模\n浏览器内",
-      "数据集\n生成",
-      "硬件\n加速",
-      "私密 — 运行于\n你的浏览器中"
+      "互联的\n创意画布",
+      "可编辑的\n实时成果",
+      "人与 AI\n协作",
+      "可审核的\n变更"
     ],
     "exploreCta": "探索",
-    "ctaTitle": "让你的 AI 团队投入工作",
-    "ctaDesc": "免费开始 — 无需信用卡。在几分钟内完全在浏览器中构建、训练并部署你的第一个智能体。",
-    "ctaBrowseWorkforce": "浏览团队",
+    "ctaTitle": "从你想创造的内容开始",
+    "ctaDesc": "从一句提示打开私密画布，在准备协作或交付时再邀请你的团队。",
+    "ctaBrowseWorkforce": "探索画布",
     "relatedHeading": "深入了解",
+    "proofNote": "能力标记说明当前成熟度以及执行或数据处理发生的位置。连接服务需要各自的凭据和条款。",
+    "limitationLabel": "当前限制",
+    "disclosure": {
+      "label": "能力详情",
+      "owner": "负责人",
+      "prerequisites": "前置条件",
+      "limits": "当前限制",
+      "exports": "导出与交接",
+      "verified": "最近验证",
+      "example": "打开工作界面",
+      "none": "无"
+    },
+    "workflowLimitations": [
+      "交付目标仅限创作画布中列明的成果与交接类型。",
+      "审批仅适用于已连接有效策略解析器的执行路径。",
+      "来源新鲜度和引用覆盖取决于已配置的连接系统。"
+    ],
+    "integrationMatrix": {
+      "title": "具名集成覆盖",
+      "lead": "仅列出明确标注状态、方向、认证、限制、证据和验证日期的连接器。",
+      "integration": "集成",
+      "status": "状态",
+      "direction": "方向",
+      "auth": "认证",
+      "boundary": "边界",
+      "limits": "限制",
+      "verified": "已验证",
+      "directions": {
+        "import": "导入",
+        "export": "导出",
+        "two-way": "双向",
+        "event-ingest": "事件摄取"
+      },
+      "items": [
+        {
+          "auth": "GitHub 凭据或应用配置",
+          "limitation": "仓库、拉取请求和 webhook 行为取决于已安装权限。"
+        },
+        {
+          "auth": "提供商凭据",
+          "limitation": "看板和字段映射需按工作区配置。"
+        },
+        {
+          "auth": "提供商凭据",
+          "limitation": "导入内容仍受来源权限和刷新行为约束。"
+        },
+        {
+          "auth": "Webhook 或提供商凭据",
+          "limitation": "仅摄取已配置项目和受支持字段。"
+        },
+        {
+          "auth": "Webhook 配置",
+          "limitation": "覆盖仅限已配置来源和映射。"
+        }
+      ]
+    },
+    "capabilityStatus": {
+      "available": "可用",
+      "beta": "测试版",
+      "planned": "计划中"
+    },
+    "dataBoundary": {
+      "browser": "浏览器",
+      "workspace-cloud": "工作区云端",
+      "connected-service": "连接服务",
+      "hybrid": "混合"
+    },
     "sections": [
       {
         "id": "build",
@@ -5771,7 +6648,7 @@
             "desc": "用平实的语言描述你的需求；Brain 会将其转化为项目、数据集和智能体。"
           },
           {
-            "title": "IDE 工作区",
+            "title": "Canvas Builder 工作区",
             "desc": "Monaco 编辑器、终端、AI 聊天与文件浏览器，集于一个协作式项目工作区。"
           },
           {
@@ -5795,7 +6672,7 @@
           },
           {
             "title": "项目 / 任务",
-            "desc": "将工作组织进项目工作区 — 每个工作区都配有完整的 IDE、智能体和任务看板 — 随后在看板、表格、日历或甘特视图中规划、分配并观察任务在你的智能体团队中流转。"
+            "desc": "将工作组织进项目工作区 — 每个工作区都配有 Canvas Builder、智能体和任务看板 — 随后在看板、表格、日历或甘特视图中规划、分配并观察任务在你的智能体团队中流转。"
           },
           {
             "title": "规划主线与组合",
@@ -5849,19 +6726,19 @@
       {
         "id": "govern",
         "title": "治理与运营",
-        "blurb": "审批、安全与完整的可观测性 — 你的 AI 安全官。",
+        "blurb": "通过权限、审批、安全控制和运营可见性，让负责人始终掌控工作。",
         "surfaces": [
           {
             "title": "审批",
-            "desc": "对智能体执行的每一项敏感操作设置人工参与的审批门控。"
+            "desc": "在已配置的智能体执行路径上设置人工审批；策略解析失败时将阻止任务下发。"
           },
           {
             "title": "安全",
-            "desc": "每个租户隔离，以及对每个集成采用 AES-256-GCM 加密的凭据。"
+            "desc": "提供工作区范围的访问控制，并对受支持集成所存储的凭据采用 AES-256-GCM 加密。"
           },
           {
             "title": "可观测性",
-            "desc": "对每一项智能体操作、每个 token 和每次工具调用提供完整的遥测和审计轨迹。"
+            "desc": "为已接入监测的平台工作流提供执行、token 与工具调用遥测，并按界面说明覆盖范围。"
           },
           {
             "title": "质量与错误跟踪",
@@ -6019,6 +6896,21 @@
     "error": "暂时无法订阅，请重试。",
     "success": "感谢 — 您已成功加入列表。"
   },
+  "exitIntent": {
+    "badge": "保持联系",
+    "title": "离开之前…",
+    "description": "获取使用 AI 智能体进行构建的实用思路，以及 Builderforce.ai 新功能动态。",
+    "emailAria": "电子邮箱地址",
+    "emailPlaceholder": "your@email.com",
+    "submit": "订阅最新动态",
+    "submitting": "订阅中…",
+    "privacy": "无垃圾邮件，可随时退订。",
+    "successTitle": "您已加入名单！",
+    "successDescription": "我们会通过邮件发送实用的产品动态。",
+    "error": "暂时无法订阅，请重试。",
+    "close": "关闭",
+    "closeAria": "关闭离站提示"
+  },
   "blog": {
     "seo": {
       "title": "博客 — AI 智能体指南、教程与工具对比",
@@ -6032,7 +6924,8 @@
     "paginationLabel": "博客分页",
     "prevPage": "上一页",
     "nextPage": "下一页",
-    "pageN": "第 {n} 页"
+    "pageN": "第 {n} 页",
+    "title": "Builderforce 博客"
   },
   "brain": {
     "timeline": {
@@ -6148,19 +7041,12 @@
     "captureHasTrace": "将本次运行（大模型步骤、工具链、错误和会话记录）复制到剪贴板",
     "captureNoTrace": "尚未捕获任何执行——请先发送一条消息",
     "captureExecutionAria": "捕获执行",
-    "consolidate": "整合",
-    "consolidating": "整合中…",
-    "fork": "分支",
-    "forking": "分支中…",
     "forkOf": "{title} 的分支",
     "newChatFallback": "新对话",
     "nothingToConsolidate": "对话内容还不足以整合。",
     "nothingToFork": "对话内容还不足以分支。",
     "consolidateFailed": "整合失败",
     "forkFailed": "分支失败",
-    "memoryToggleLabel": "记忆",
-    "memoryOnTooltip": "项目记忆已开启——此对话会从项目的 Evermind 中回忆并学习",
-    "memoryOffTooltip": "此对话的项目记忆已关闭——已停用 Evermind 的回忆与学习",
     "brainDefault": "Brain（默认）",
     "noChatsYet": "还没有会话。点击“+ 新建”开始。",
     "noChatsMatch": "没有匹配搜索的会话。",
@@ -6273,10 +7159,9 @@
     "assignChatToProjectAria": "将会话分配到项目",
     "addProject": "+ 项目",
     "workflowsArrow": "工作流 →",
-    "openInIde": "在 Builder 中打开 →",
+    "openInBuilder": "在 Builder 中打开 →",
     "brainModality": "Brain — {modality}",
     "brainAs": "以 {name} 身份运行的 Brain",
-    "chatHistory": "会话历史",
     "upgrade": "升级",
     "upgradeToPlan": "升级到 {plan}",
     "addCard": "添加银行卡",
@@ -6292,7 +7177,64 @@
     "onboardMe": "帮我快速上手",
     "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。",
     "providerCapBanner": "你的 {providers} API 密钥已达用量上限——本次运行已回退到共享模型池。",
-    "manageApiKeys": "管理你的 API 密钥 →"
+    "manageApiKeys": "管理你的 API 密钥 →",
+    "tabChat": "对话",
+    "tabHistory": "历史记录",
+    "sectionsAria": "Brain 版块",
+    "chatActions": "对话操作",
+    "chatActionsAria": "“{title}”的操作",
+    "aiDisclosureAria": "AI 声明",
+    "aiDisclosureBody": "您正在与 AI 智能体互动。输出结果可能不准确；在依据重要结果采取行动前请先复核。除非您明确启用自动批准，否则更改数据的操作都需要您的批准。",
+    "aiDisclosureLink": "AI 的工作方式、解释说明与人工复核",
+    "emptyHintWork": "描述这项工作。我会把它建成可跟踪的任务，配置人员，并派出代理执行。",
+    "newChatProjectLabel": "项目",
+    "newChatProjectAria": "此新对话所属的项目",
+    "modes": {
+      "pickerAria": "对话模式",
+      "chat": {
+        "label": "对话",
+        "hint": "提问、探索、获得答案。不会向看板添加任何内容。"
+      },
+      "work": {
+        "label": "执行",
+        "hint": "交办一项工作：它将成为可跟踪的工单，配置人员并派发给代理。"
+      }
+    },
+    "workOptions": {
+      "pickerAria": "您希望完成什么？",
+      "tilesHint": "……或者交办以下任务之一",
+      "audit_spreadsheet": {
+        "label": "审查电子表格",
+        "hint": "检查公式，找出错误和脆弱之处。",
+        "brief": "审查我提供的电子表格——检查公式，找出错误和脆弱的部分，标记出如果某行移动或某个值改变会导致中断的地方，并修复我批准的问题。在做任何修改之前，先给我看问题清单。"
+      },
+      "review_draft": {
+        "label": "审阅草稿",
+        "hint": "在发出之前审读，指出薄弱之处。",
+        "brief": "在我发送之前审阅这份草稿——告诉我哪些地方表述不清，持怀疑态度的读者会对哪些内容提出质疑，以及缺少了什么。标记出任何夸大我们实际交付能力的表述。请给出具体的修改建议，而不是泛泛而谈。"
+      },
+      "chase_blockers": {
+        "label": "追查阻碍",
+        "hint": "找出卡在哪里、为什么，以及谁需要行动。",
+        "brief": "找出该项目当前所有被阻塞的事项，弄清每一项卡住的原因以及需要谁采取行动才能解除阻塞，然后为每个真实的阻碍创建工单并指定负责人。告诉我哪些需要我亲自出面解决。"
+      },
+      "triage_backlog": {
+        "label": "梳理待办事项",
+        "hint": "理清重要事项，关闭无关事项。",
+        "brief": "梳理待办事项列表：归并重复项，关闭已不再有效的条目，并按实际解锁价值对剩余事项排序。告诉我最重要的五项及其原因。在删除任何内容之前，请先列出清单供我确认。"
+      },
+      "research_and_brief": {
+        "label": "调研并汇报",
+        "hint": "去查证，然后附上来源写成汇报。",
+        "brief": "调研我给出的问题：请实际查阅真实来源，而不是凭记忆作答；写出你的发现并为每项论断附上证据，同时明确说明哪些内容无法确证。然后为任何需要我决策的事项创建后续工单。"
+      },
+      "ship_fix": {
+        "label": "修复并交付",
+        "hint": "把缺陷一路推进到已派发的执行。",
+        "brief": "针对我描述的缺陷，找出根本原因而非表面症状，将其建为工单并指定合适的负责人，然后派出代理处理。告诉我派发结果——如果实际上并未启动，请准确说明是什么阻碍了它。"
+      }
+    },
+    "memoryUnavailable": "本对话没有可调取的项目记忆 — 请先将其关联到某个项目"
   },
   "chatMessage": {
     "copy": "复制",
@@ -6580,7 +7522,7 @@
     "targetsHint": "此项目为其贡献学习的所有 Evermind。",
     "targetsEmpty": "尚未为此项目解析出任何 Evermind。",
     "targetSelfBadge": "本项目",
-    "targetBuildBadge": "IDE 构建",
+    "targetBuildBadge": "Canvas 构建",
     "targetSeeded": "v{version}",
     "targetUnseeded": "未初始化",
     "targetInferenceOn": "推理",
@@ -7348,8 +8290,8 @@
     }
   },
   "marketplace": {
-    "title": "人才与智能团队",
-    "blurb": "雇用自由职业者和 AI 智能体，安装人设、技能和内容，并路由任意模型 — 一切尽在一个市场。",
+    "title": "市场",
+    "blurb": "雇佣真人与智能体，购买构建者的作品，并找到——或认领——一家公司。",
     "searchPlaceholder": "搜索市场…",
     "categoryLabel": "分类",
     "cat": {
@@ -7439,6 +8381,42 @@
       "evalTitle": "AI 评估分数（0-1）",
       "hired": "已雇用 {count} 次",
       "inUse": "{count} 个在使用"
+    },
+    "family": {
+      "label": "浏览",
+      "talent": "人才",
+      "company": "公司",
+      "companySoon": {
+        "soonTitle": "公司目录将随企业图谱一同开放",
+        "soonBody": "认领企业会写入一条经过验证的所有权记录，为 CEO 就位，并为其激活财务、收入、增长、人员、招聘、投资人与治理。上架界面将与该记录一同上线；在此之前，此类别保持可见但不可用，而非隐藏，让你看见即将到来的能力。",
+        "soonAction": "看看公司能解锁什么"
+      },
+      "agent": "智能体",
+      "asset": "资产",
+      "publishTalent": "发布服务",
+      "publishCompany": "发布公司",
+      "publishAgent": "发布智能体",
+      "publishAsset": "发布资产",
+      "kindLabel": "类型",
+      "kind": {
+        "person": "个人",
+        "gig": "零工",
+        "business": "企业",
+        "storefront": "店铺",
+        "builtin": "内置",
+        "community": "社区",
+        "model": "模型",
+        "skill": "技能",
+        "persona": "角色",
+        "knowledge": "知识",
+        "all": "全部"
+      },
+      "note": {
+        "talent": "人与零工。对一次会话而言，人和智能体是同类参与者，但并非同类listing——一个有档期与费率，另一个有价格与席位。",
+        "company": "认领你经营的企业，整套运营能力就会以它为范围。你尚未拥有的公司目录将随企业图谱一同上线。",
+        "agent": "没有独立的智能体页面——智能体就是一条listing，购买后即写入团队名册，因此目录与你的团队永不脱节。",
+        "asset": "构建者制作并可出售的成果。每一项都安装进拥有它的界面——技能进知识库，模板进项目——绝不新建界面。"
+      }
     }
   },
   "models": {
@@ -7453,7 +8431,12 @@
       "paid": "付费",
       "builderforce": "Builderforce.ai",
       "routableOnly": "仅可路由",
-      "routableOnlyTitle": "仅显示 Builderforce 免费/Pro 级联可路由的模型"
+      "routableOnlyTitle": "仅显示 Builderforce 免费/Pro 级联可路由的模型",
+      "maxInput": "最高输入价 / 百万 token",
+      "maxOutput": "最高输出价 / 百万 token",
+      "anyPrice": "任意价格",
+      "upToPrice": "最高 ${price}",
+      "priceHelp": "按每百万 token 的美元价格筛选模型"
     },
     "price": {
       "free": "免费",
@@ -7496,6 +8479,12 @@
       "actions": "操作",
       "details": "详情"
     },
+    "pagination": {
+      "label": "模型目录分页",
+      "previous": "上一页",
+      "next": "下一页",
+      "pageOf": "第 {page} 页，共 {pages} 页"
+    },
     "compare": {
       "dialogLabel": "比较模型",
       "comparingCount": "正在比较 {count} 个模型",
@@ -7511,7 +8500,13 @@
       "button": "比较",
       "maxTitle": "最多可比较 {max} 个模型",
       "addTitle": "加入比较",
-      "compareAria": "比较 {name}"
+      "compareAria": "比较 {name}",
+      "promptLabel": "在每个所选模型上运行同一提示词",
+      "promptPlaceholder": "输入要比较的确切提示词…",
+      "needPromptTitle": "请输入要执行的提示词",
+      "executeTitle": "在 Canvas 中使用每个所选模型执行提示词",
+      "executeButton": "在 Canvas 中比较执行结果",
+      "specsButton": "比较规格"
     }
   },
   "talent": {
@@ -7656,6 +8651,8 @@
     "buildSub": "项目、智能体和工作区",
     "hireTitle": "获得雇用",
     "hireSub": "自由职业资料和工作",
+    "salesTitle": "推广 Builderforce",
+    "salesSub": "推荐、销售管道与营销活动",
     "accountTypeAria": "账户类型",
     "commonQuestions": "常见问题",
     "navSignIn": "登录",
@@ -7671,7 +8668,7 @@
     "passwordLabel": "密码",
     "passwordPlaceholder": "至少 8 个字符",
     "confirmLabel": "确认",
-    "terms": "我同意《使用条款》和《隐私政策》（见下方页脚链接）",
+    "terms": "我同意<terms>《使用条款》</terms>和<privacy>《隐私政策》</privacy>",
     "passwordsMismatch": "两次输入的密码不一致",
     "registrationFailed": "注册失败",
     "creating": "正在创建账户…",
@@ -8023,11 +9020,13 @@
     "errExpired": "验证码已过期，请重新获取。",
     "errTooMany": "尝试次数过多，请重新获取验证码。",
     "errNone": "没有有效的验证码，请重新获取。",
+    "errDelivery": "验证邮件发送失败，请尝试重新发送。",
     "errGeneric": "出现问题，请重试。"
   },
   "admin": {
     "sub": {
       "health": "运行状况",
+      "outcomes": "价值成果",
       "directory": "目录",
       "sessions": "会话",
       "creationSessions": "创作会话",
@@ -8052,7 +9051,9 @@
       "releaseNotes": "更新日志",
       "demoFunnel": "演示漏斗",
       "salesLeads": "销售线索",
-      "cron": "定时任务"
+      "salesCommissions": "销售佣金",
+      "cron": "定时任务",
+      "broadcasts": "广播"
     },
     "common": {
       "loading": "加载中…",
@@ -8256,7 +9257,7 @@
     },
     "sessions": {
       "title": "采用会话",
-      "subtitle": "匿名 Brain 和免费工具访客，包括账户和付费转化。",
+      "subtitle": "匿名访客、他们的诉求，以及他们走到了哪一步。",
       "count": "{count} 个会话",
       "empty": "未找到访客会话。",
       "visitor": "访客",
@@ -8268,14 +9269,43 @@
       "tokensAndTools": "{tokens} tokens · {tools} 次工具运行",
       "guest": "访客",
       "registered": "已注册",
-      "paid": "已付费"
+      "paid": "已付费",
+      "intent": "他们想要什么",
+      "noPrompt": "未记录提示词",
+      "promptMeta": "{count} 条提示词 - 最近来自 {surface}",
+      "promptRowMeta": "{surface} - {at}",
+      "firstSeenAt": "首次访问 {at}",
+      "drawerTitle": "访客",
+      "drawerMeta": "着陆页 {landing} - 来源 {referrer}",
+      "messageVisitor": "给该访客发消息",
+      "statSessions": "会话数",
+      "statStatedIntent": "已表达诉求",
+      "statPromptsHint": "已采集 {count} 条提示词",
+      "statRegistered": "已注册",
+      "statPaid": "已付费",
+      "statConversion": "提示词转账号",
+      "statConversionHint": "占已表达诉求会话的比例"
     },
     "creationSessions": {
-      "title": "创作会话", "subtitle": "所有工作区中保存的画布，以及注册前和注册后的邀请记录。", "count": "{count} 个会话",
-      "consentNotice": "受邀地址可作为潜在客户线索，但邀请不代表同意接收营销邮件。", "empty": "未找到已保存的创作会话。",
-      "session": "会话", "workspace": "工作区", "canvas": "画布", "invitations": "邀请", "lastActivity": "最近活动", "noCreator": "无创建者邮箱",
-      "tenant": "租户 {id}", "objectsMembers": "{objects} 个对象 · {members} 位成员", "revision": "修订版 {revision}", "created": "创建于 {date}",
-      "pending": "待处理", "accepted": "已接受", "revoked": "已撤销", "expired": "已过期"
+      "title": "创作会话",
+      "subtitle": "所有工作区中保存的画布，以及注册前和注册后的邀请记录。",
+      "count": "{count} 个会话",
+      "consentNotice": "受邀地址可作为潜在客户线索，但邀请不代表同意接收营销邮件。",
+      "empty": "未找到已保存的创作会话。",
+      "session": "会话",
+      "workspace": "工作区",
+      "canvas": "画布",
+      "invitations": "邀请",
+      "lastActivity": "最近活动",
+      "noCreator": "无创建者邮箱",
+      "tenant": "租户 {id}",
+      "objectsMembers": "{objects} 个对象 · {members} 位成员",
+      "revision": "修订版 {revision}",
+      "created": "创建于 {date}",
+      "pending": "待处理",
+      "accepted": "已接受",
+      "revoked": "已撤销",
+      "expired": "已过期"
     },
     "usage": {
       "aiAnalyze": "AI 分析",
@@ -8739,7 +9769,16 @@
       "sendNoteHint": "立即将此更新发送给所有已同意接收的用户——之后将不会包含在每周汇总中。",
       "resendNoteHint": "此更新已发送过。再次发送给所有已同意接收的用户。",
       "sendNoteConfirm": "现在就将更新日志“{title}”发送给所有已同意接收的用户吗？之后它将不会包含在每周汇总中。",
-      "resendNoteConfirm": "此更新已发送过。现在再次将“{title}”发送给所有已同意接收的用户吗？"
+      "resendNoteConfirm": "此更新已发送过。现在再次将“{title}”发送给所有已同意接收的用户吗？",
+      "stage": "阶段",
+      "thStage": "阶段",
+      "thBeta": "测试版",
+      "betaOptIn": "允许用户自行加入此测试版",
+      "betaOptInHint": "关闭即为仅限邀请：横幅中不会提供该测试版。",
+      "phBetaTerms": "用户加入前必须接受的测试版条款。留空则使用平台标准测试版条款。",
+      "releasesOn": "计划发布日期",
+      "sunsetsOn": "下线日期",
+      "participants": "{count, plural, =0 {暂无参与者} other {# 人}}"
     },
     "demoFunnel": {
       "title": "演示转化漏斗",
@@ -8847,7 +9886,10 @@
         "unavailable": "在此环境中已禁用",
         "paused": "已由管理员暂停"
       },
-      "status": { "on": "开启", "off": "关闭" },
+      "status": {
+        "on": "开启",
+        "off": "关闭"
+      },
       "outcome": {
         "ok": "成功，耗时 {ms} 毫秒",
         "noop": "无事可做",
@@ -8864,7 +9906,75 @@
         "dispatch": "执行“{target}”会在所有工作区启动真实的智能体运行（所选任务中有 {count} 个会派发工作）。这会消耗额度，并非演练。",
         "confirmLabel": "立即执行"
       }
-    }
+    },
+    "broadcasts": {
+      "title": "平台广播",
+      "subtitle": "面向尚无工作区、无法通过其他渠道触达的访客发送消息。",
+      "count": "{count} 条广播",
+      "empty": "暂无广播。",
+      "compose": "新建广播",
+      "composeTitle": "新建广播",
+      "editTitle": "编辑广播",
+      "save": "保存",
+      "saving": "保存中...",
+      "edit": "编辑",
+      "goLive": "上线",
+      "archive": "归档",
+      "delete": "删除",
+      "deleteTitle": "删除这条广播？",
+      "deleteMessage": "\"{message}\" 将立即停止展示。已记录的互动数据会保留。",
+      "deleteConfirm": "删除",
+      "messageLabel": "消息内容",
+      "messagePlaceholder": "访客应该看到什么？",
+      "messageCounter": "{used}/500",
+      "messageRequired": "广播必须包含消息内容。",
+      "toneLabel": "语气",
+      "statusLabel": "状态",
+      "scopeLabel": "受众",
+      "minPromptsLabel": "最少提示词数",
+      "minPromptsHint": "仅面向至少提出过这么多次诉求的访客。",
+      "ctaLabelLabel": "按钮文字",
+      "ctaHrefLabel": "按钮链接",
+      "startsAtLabel": "开始时间",
+      "endsAtLabel": "结束时间",
+      "dismissibleLabel": "允许访客关闭",
+      "aimedAtVisitor": "面向访客 {visitorId}",
+      "statLive": "正在展示",
+      "statReach": "触达访客",
+      "statReachHint": "所有广播的去重访客数",
+      "statClicks": "点击数",
+      "statCtr": "点击率",
+      "statCtrHint": "每位触达访客的点击数",
+      "colMessage": "消息",
+      "colAudience": "受众",
+      "colWindow": "时间窗口",
+      "colEngagement": "互动",
+      "colActions": "操作",
+      "audienceVisitors": "指定 {count} 位访客",
+      "audienceMinPrompts": "{count} 条以上提示词",
+      "windowImmediate": "立即生效",
+      "windowOpenEnded": "无结束日期",
+      "engagementReach": "{count} 位访客",
+      "engagementDetail": "{clicks} 次点击 - 点击率 {ctr}% - {dismissals} 次关闭",
+      "tone": {
+        "info": "信息",
+        "success": "成功",
+        "warning": "警告",
+        "critical": "严重"
+      },
+      "status": {
+        "draft": "草稿",
+        "live": "已上线",
+        "archived": "已归档"
+      },
+      "scope": {
+        "all": "所有人",
+        "guest": "匿名访客",
+        "registered": "注册用户",
+        "paid": "付费客户"
+      }
+    },
+    "subnavLabel": "管理子视图"
   },
   "providerKeys": {
     "title": "使用您自己的模型",
@@ -8986,6 +10096,7 @@
       "testing": "测试中…",
       "verified": "连接验证成功。",
       "verifiedWith": "已通过 {model} 验证连接。",
+      "verifiedWithLimited": "连接可通过 {model} 使用。暂时跳过受限模型：{limited}。",
       "usage": "BuilderForce 归因用量，最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
       "lastUsed": " · 上次使用 {when}",
       "failedFallback": "连接测试失败：{status}。",
@@ -8993,10 +10104,6 @@
       "failedTitle": "{label} 连接失败",
       "upstreamTitle": "{label} — 模型提供方出错",
       "testCost": "测试会发送一次真实的小请求，费用计入被测试的账户。",
-      "copyTrace": "复制诊断记录",
-      "copyTraceAria": "复制本次失败的脱敏诊断记录，可附在提交给服务商的支持工单中",
-      "traceHint": "HTTP {status} — 包含服务商的请求 ID。不含密钥、提示词或请求正文。",
-      "traceEdgeBlocked": "HTTP {status} — 服务商的边缘节点在校验密钥之前就拒绝了请求。联系他们时请附上此记录。",
       "copyTrace": "复制诊断记录",
       "copyTraceAria": "复制本次失败的脱敏诊断记录，可附在提交给服务商的支持工单中",
       "traceHint": "HTTP {status} — 包含服务商的请求 ID。不含密钥、提示词或请求正文。",
@@ -9772,6 +10879,49 @@
     "meetTitle": "认识 Brain",
     "meetBody": "你的 AI 共建伙伴，助你规划项目、生成规格并更快交付。"
   },
+  "guestRoom": {
+    "defaultTitle": "共享会话",
+    "defaultHostName": "主持人",
+    "defaultGuestName": "访客",
+    "emptyTitle": "你已加入共享会话",
+    "emptyBody": "这里的每个人都与同一个 Brain 对话，并看到同一段对话记录。分享链接邀请更多人，或者打开摄像头见面聊聊。",
+    "invitePeople": "邀请他人",
+    "starting": "正在创建……",
+    "copyInvite": "复制邀请链接",
+    "linkCopied": "链接已复制",
+    "copyFallback": "请复制此邀请链接：",
+    "roomFull": "会话已满",
+    "startVideo": "开启视频",
+    "stopVideo": "关闭视频",
+    "leave": "离开",
+    "hostTag": "（主持人）",
+    "hostOf": "{name} — 主持人",
+    "peopleHere": "{count, plural, =0 {暂无他人} other {当前 # 人在线}}",
+    "sharedRemaining": "{count, plural, =0 {没有剩余的免费消息——由本会话所有人共享} other {还剩 # 条免费消息，由本会话所有人共享}}",
+    "sharedTagline": "免费消息由本会话中的所有人共享",
+    "waitingOnBrain": "{name} 正在等待 Brain 回复……",
+    "inviteTitle": "有人邀请你加入会话",
+    "inviteBody": "加入后可与他人一起和 Brain 对话，还能打开摄像头见面。无需账户。",
+    "yourName": "你的名字",
+    "namePlaceholder": "我们该怎么称呼你？",
+    "joinSession": "加入会话",
+    "joining": "正在加入……",
+    "errorUnavailable": "共享会话目前不可用。",
+    "errorGone": "该共享会话已结束或人数已满。",
+    "wallBody": "本会话今天已用完 {count} 条免费消息——它们由这里的所有人共享。创建免费账户即可继续，并保存你的成果。",
+    "meetingTitle": "会议",
+    "meetingLive": "进行中",
+    "meetingConnecting": "正在连接……",
+    "micOn": "麦克风开",
+    "micOff": "麦克风关",
+    "camOn": "摄像头开",
+    "camOff": "摄像头关",
+    "endMeeting": "离开会议",
+    "mediaBlocked": "无法访问你的摄像头或麦克风。请检查浏览器权限。",
+    "you": "你",
+    "replyingTo": "正在回复 {name}",
+    "inviteLink": "邀请链接"
+  },
   "login": {
     "navSignUp": "免费注册",
     "heading": "欢迎回来",
@@ -9969,19 +11119,19 @@
     "sourcePlaceholder": "例如 入职通话"
   },
   "personaLens": {
-    "pageTitle": "视角角色",
-    "title": "你的视角角色",
+    "pageTitle": "视角",
+    "title": "你的视角",
     "subtitle": "选择你所担任的角色。它会重新排序并突出你关注的洞察视图 — 但绝不会改变你的访问权限。",
     "loading": "加载中…",
     "primary": "主要",
-    "save": "保存角色",
+    "save": "保存视角",
     "saving": "保存中…",
-    "saved": "角色已保存",
-    "saveFailed": "无法保存角色",
-    "highlightsFor": "为 {persona} 突出的视图",
+    "saved": "视角已保存",
+    "saveFailed": "无法保存视角",
+    "highlightsFor": "为 {persona} 突出显示的视图",
     "home": "主页",
     "viewingAs": "当前视角",
-    "viewShapingNote": "角色仅影响你的视图。每个视图仍遵循你的工作区权限 — 你不会因此获得额外的访问权限。",
+    "viewShapingNote": "视角只影响你的视图。每个洞察视图仍然遵循你的工作区角色 — 你不会因此获得原本没有的访问权限。",
     "personas": {
       "ceo": "首席执行官",
       "cfo": "首席财务官",
@@ -10296,7 +11446,16 @@
     "statusAddNode": "请先添加至少一个节点。",
     "statusRunFailed": "运行失败",
     "statusExportFailed": "导出失败",
-    "statusImportFailed": "导入失败"
+    "statusImportFailed": "导入失败",
+    "nodeGroup": {
+      "trigger": "触发器",
+      "llmLogic": "LLM 逻辑",
+      "evermindBuild": "Evermind 构建",
+      "integrations": "集成",
+      "agent": "智能体",
+      "etl": "ETL",
+      "output": "输出"
+    }
   },
   "chunkError": {
     "recovering": "正在更新到最新版本…",
@@ -10411,11 +11570,11 @@
     "fieldRequired": "{field} 为必填项",
     "defaultKeyName": "{provider} 密钥",
     "saveFailed": "保存失败",
-      "testFailed": "测试失败",
-      "toggleFailed": "无法更改集成状态",
-      "toggleLabel": "开启或关闭 {name}",
-      "enabled": "开启",
-      "disabled": "关闭",
+    "testFailed": "测试失败",
+    "toggleFailed": "无法更改集成状态",
+    "toggleLabel": "开启或关闭 {name}",
+    "enabled": "开启",
+    "disabled": "关闭",
     "workspaceTag": "（工作区）",
     "connected": "已连接",
     "failed": "失败",
@@ -11359,15 +12518,13 @@
   "globalError": {
     "collapse": "收起",
     "expandDetails": "展开详情",
-    "report": "上报到项目",
+    "report": "上报此错误",
     "copyTicket": "复制支持工单",
     "dismiss": "关闭"
   },
   "reportError": {
     "title": "上报错误",
-    "intro": "将错误提交到某个项目。它会与自动采集的错误一起出现在该项目的质量列表中。",
-    "projectLabel": "项目",
-    "projectPlaceholder": "选择一个项目…",
+    "intro": "向 BuilderForce.ai 产品团队发送更多信息。该错误会记录到产品的质量列表中。",
     "titleLabel": "标题",
     "titlePlaceholder": "简要摘要（可选）",
     "messageLabel": "发生了什么？",
@@ -11377,8 +12534,7 @@
     "level_error": "错误",
     "level_warning": "警告",
     "level_info": "信息",
-    "noProjects": "你还没有项目——请先创建一个项目再上报错误。",
-    "reported": "错误已上报到项目。",
+    "reported": "错误已上报到 BuilderForce.ai。",
     "failed": "无法上报该错误。",
     "cancel": "取消",
     "submit": "上报错误",
@@ -11412,21 +12568,220 @@
     "primaryNav": "主导航",
     "home": "首页",
     "product": "产品",
-    "resources": "资源",
-    "talentWorkforce": "人才 / 智能劳动力",
-    "agents": "智能体",
-    "models": "模型",
-    "pricing": "定价",
-    "blog": "博客",
-    "diagnosticsTools": "诊断与工具",
-    "soc2Audits": "SOC 2 与系统审计",
-    "promptLibrary": "提示词库",
-    "compare": "对比",
-    "integrations": "集成",
-    "mediaKit": "媒体资料包",
-    "signIn": "登录",
-    "getStarted": "立即开始 →",
-    "toggleMenu": "切换菜单"
+    "learn": "学习",
+    "toggleMenu": "切换菜单",
+    "switchToLight": "切换到浅色模式",
+    "switchToDark": "切换到深色模式",
+    "openCanvas": "打开画布 →",
+    "column": {
+      "idea": "构思",
+      "make": "构建",
+      "run": "运营",
+      "read": "阅读",
+      "prove": "验证",
+      "buildWith": "搭配构建"
+    },
+    "megaFoot": "未登录时，此处每一项都是拥有真实网址的真实页面；登录后，同一路由会在你的画板之上打开——你的会话不会中断。",
+    "megaFootLearn": "随处可读。诊断、SOC 2 与 Evermind 等佐证页面会在你的画板之上打开，让你无需关闭正在构建的内容即可答复审计方。",
+    "dest": {
+      "canvas": {
+        "title": "画板",
+        "tagline": "一块画板，从提示词到产品。"
+      },
+      "blog": {
+        "title": "博客",
+        "tagline": "产品是如何构建出来的。"
+      },
+      "tutorials": {
+        "title": "教程",
+        "tagline": "以可用画板收尾的课程。"
+      },
+      "compare": {
+        "title": "对比",
+        "tagline": "与你现在使用的工具对比。"
+      },
+      "diagnostics": {
+        "title": "诊断",
+        "tagline": "注册之前先拿到结果。"
+      },
+      "soc2": {
+        "title": "SOC 2",
+        "tagline": "控制项、证据与分包处理方。"
+      },
+      "evermind": {
+        "title": "Evermind",
+        "tagline": "智能体背后的模型。"
+      },
+      "embedded": {
+        "title": "嵌入式",
+        "tagline": "把产品嵌入你自己的应用。"
+      },
+      "models": {
+        "title": "模型",
+        "tagline": "运行的是什么，成本是多少。"
+      },
+      "prompts": {
+        "title": "提示词与技能",
+        "tagline": "可复用，且归你所有。"
+      },
+      "features": {
+        "title": "功能"
+      },
+      "marketplace": {
+        "title": "市场"
+      },
+      "pricing": {
+        "title": "定价"
+      },
+      "about": {
+        "title": "关于"
+      },
+      "demo": {
+        "title": "在线演示"
+      },
+      "sell": {
+        "title": "销售 Builderforce"
+      },
+      "media": {
+        "title": "媒体资料包"
+      },
+      "signIn": {
+        "title": "登录"
+      }
+    },
+    "tagline": {
+      "workforce": "真人与智能体同属一个团队。",
+      "embedded": "发布到真实网址。",
+      "quality": "错误、反馈与质量保障。",
+      "reliability": "监控、事件与值班。",
+      "knowledge": "SOP、文档与一切可复用的内容。",
+      "hiring": "岗位、招聘系统与简历。",
+      "insights": "交付、支出与 AI 影响。"
+    }
+  },
+  "tutorials": {
+    "seo": {
+      "title": "AI 引导的教程与互动课程",
+      "description": "在 Creation Canvas 的自适应 LMS 中学习创业、招聘、产品、营销、领导力、财务、软件、AI 等任何主题。",
+      "ogTitle": "在 Creation Canvas 上跟随 AI 老师学习"
+    },
+    "eyebrow": "围绕你打造的学习体验",
+    "title": "选择主题，创建课程，认识你的 AI 老师。",
+    "lead": "每个教程都会打开私密的 Creation Canvas，创建互动式 LMS 课程，并邀请专业 AI 老师加入聊天，指导练习并调整每节课。",
+    "howItWorks": "互动教程的工作方式",
+    "steps": [
+      {
+        "title": "选择方向",
+        "description": "从实用主题开始，或带来你自己的任何学习目标。"
+      },
+      {
+        "title": "Canvas 创建 LMS",
+        "description": "Brain 会创建模块、课程、练习、测评、进度跟踪和综合项目。"
+      },
+      {
+        "title": "跟随专家学习",
+        "description": "匹配主题的 AI 老师加入聊天，检查理解程度并调整学习路径。"
+      }
+    ],
+    "catalogTitle": "你想学什么？",
+    "catalogLead": "选择一个起点。课程会根据你的目标和经验生成，每条学习路径都可以不同。",
+    "teacherLabel": "老师：{agent}",
+    "startCourse": "创建我的课程",
+    "customTitle": "想学其他内容？",
+    "customLead": "从谈判、演讲到园艺、设计、历史，或只有你能命名的主题——Canvas 都能将它变成课程，并为你匹配正确的 AI 老师。",
+    "customCta": "设计自定义课程",
+    "customPrompt": "我想学习一个自选主题。请先询问我想学什么、它为什么重要、我目前的经验、偏好的节奏和期望结果。然后在 Canvas 上创建完整的互动式 LMS 课程对象，包含模块、课程、练习、测评、进度跟踪和实践型综合项目。创建合适的专业 AI 教师智能体，将其连接到课程和 Brain 聊天，让老师加入对话。逐步开始教学，根据我的回答调整并检查理解程度。不要只描述课程；请在 Canvas 上实际创建课程和教师智能体。",
+    "coursePrompt": "请在 Canvas 上创建一门教我 {topic} 的完整互动式 LMS 课程。课程重点是 {focus}。包含结构化模块、课程、动手练习、测评、进度跟踪和实践型综合项目。创建名为 {agent} 的专业 AI 教师智能体，为其设置该主题的专家教学指令，并将其同时连接到课程和 Brain 聊天，让老师加入我们的对话。先询问我的经验水平和目标，然后逐步教学，根据回答调整、提供有用的反馈并检查理解程度。不要只描述课程大纲；请在 Canvas 上实际创建课程对象和教师智能体。",
+    "topics": {
+      "entrepreneurship": {
+        "title": "创业",
+        "summary": "通过客户发现、定位、商业模式和可信的发布计划，将想法变成经过验证的业务。",
+        "agent": "创业教练",
+        "focus": "发现真实客户问题、验证需求、选择商业模式、定价、市场进入、融资基础和可执行的发布计划",
+        "outcomes": [
+          "验证想法",
+          "构建商业模式",
+          "规划发布"
+        ]
+      },
+      "recruiting": {
+        "title": "招聘与录用",
+        "summary": "学会定义岗位、寻找优秀候选人、进行公平面试并自信地录用正确的人。",
+        "agent": "人才顾问",
+        "focus": "人力规划、岗位评分卡、包容性寻访、结构化面试、基于证据的选择、候选人体验和录用",
+        "outcomes": [
+          "编写评分卡",
+          "一致地面试",
+          "依据证据决策"
+        ]
+      },
+      "product": {
+        "title": "产品管理",
+        "summary": "从用户问题走向产品战略、发现证据、优先级路线图和可衡量的成果。",
+        "agent": "产品导师",
+        "focus": "客户发现、产品战略、机会映射、优先级、路线图、实验、指标和利益相关者对齐",
+        "outcomes": [
+          "发现需求",
+          "优先考虑成果",
+          "制定路线图"
+        ]
+      },
+      "marketing": {
+        "title": "营销与增长",
+        "summary": "构建清晰的受众、信息、渠道策略、实验和能够累积学习的衡量系统。",
+        "agent": "增长策略师",
+        "focus": "受众研究、定位、信息、内容、获客渠道、转化、留存、实验和增长指标",
+        "outcomes": [
+          "明确定位",
+          "设计活动",
+          "衡量增长"
+        ]
+      },
+      "leadership": {
+        "title": "领导力与管理",
+        "summary": "练习设定方向、辅导人员、处理冲突、有效授权并打造负责任的团队。",
+        "agent": "领导力教练",
+        "focus": "领导风格、目标、授权、反馈、辅导、困难对话、决策、团队健康和责任",
+        "outcomes": [
+          "清晰领导",
+          "有效辅导",
+          "应对冲突"
+        ]
+      },
+      "finance": {
+        "title": "决策者财务",
+        "summary": "理解财务报表、现金流、预算、单位经济、预测和投资权衡。",
+        "agent": "财务导师",
+        "focus": "财务报表、现金流、预算、预测、单位经济、情景分析、估值基础和资本配置",
+        "outcomes": [
+          "读懂数字",
+          "构建预测",
+          "评估权衡"
+        ]
+      },
+      "softwareAi": {
+        "title": "软件与 AI",
+        "summary": "学习如何设计、构建、评估、保护并负责任地发布现代软件和 AI 系统。",
+        "agent": "AI 工程讲师",
+        "focus": "软件架构、API、数据、测试、安全、LLM 应用、提示、检索、智能体、评估和负责任的部署",
+        "outcomes": [
+          "设计系统",
+          "使用 AI 构建",
+          "评估质量"
+        ]
+      },
+      "career": {
+        "title": "职业成长",
+        "summary": "将优势与方向匹配，弥补技能差距，表达价值并执行实际的成长计划。",
+        "agent": "职业教练",
+        "focus": "优势、职业选择、技能差距分析、作品集证据、人脉、面试、谈判和 90 天发展计划",
+        "outcomes": [
+          "选择方向",
+          "展示价值",
+          "规划未来 90 天"
+        ]
+      }
+    }
   },
   "media": {
     "seo": {
@@ -11480,22 +12835,48 @@
     "colProduct": "产品",
     "colPlatform": "平台",
     "colGetStarted": "开始使用",
-    "linkProduct": "产品",
-    "linkCompare": "对比",
-    "linkPricing": "价格",
-    "linkMediaKit": "媒体资料包",
-    "linkEvermind": "Evermind LLM",
-    "linkWorkforceRegistry": "工作力注册表",
-    "linkAgents": "BuilderForce Agents",
-    "linkDiagnostics": "诊断与工具",
-    "linkSoc2": "SOC 2 与系统审计",
-    "linkBlog": "博客",
-    "linkLiveDemo": "实时演示",
-    "linkSignIn": "登录",
-    "linkGetStarted": "开始使用"
+    "colLearn": "学习",
+    "cookies": "Cookie 设置",
+    "subprocessors": "子处理方",
+    "accessibility": "无障碍访问"
+  },
+  "beta": {
+    "crumb": "产品更新",
+    "bannerLabel": "Beta 计划",
+    "bannerLead": "已进入公开测试 — 在向所有人开放之前抢先体验。",
+    "bannerLeadDated": "已进入公开测试 — 在 {date} 全面发布之前抢先体验。",
+    "joinCta": "加入测试",
+    "join": "加入测试版",
+    "leave": "退出测试版",
+    "manage": "管理测试版",
+    "notNow": "暂不",
+    "working": "处理中…",
+    "whatIsIt": "这是什么？",
+    "lastUpdated": "最后更新于 {date}",
+    "rollsOut": "计划于 {date} 发布。",
+    "termsTitle": "测试版条款",
+    "defaultTerms": "测试版功能按现状提供，可能随时变更、出现故障或被撤回，且不受任何服务级别承诺的保障。我们可能会就测试版联系您收集反馈。您的使用仍受《使用条款》约束，您可以随时在“产品更新”中退出测试版。",
+    "agreeLabel": "我已阅读并同意以上测试版条款以及",
+    "joinedOn": "您已于 {date} 加入此测试版。",
+    "joinedAlready": "您正在参与此测试版。",
+    "actionFailed": "操作未成功，请重试。"
   },
   "whatsNew": {
-    "title": "新功能",
+    "title": "产品更新",
+    "eyebrow": "最新动态",
+    "description": "探索 Builderforce 的最新功能、改进和问题修复。",
+    "updateCount": "共 {count} 项更新",
+    "searchLabel": "搜索产品更新",
+    "searchPlaceholder": "搜索更新或版本…",
+    "filterLabel": "按类别筛选更新",
+    "filters": {
+      "all": "全部更新"
+    },
+    "showingCount": "显示 {count} 项更新",
+    "latest": "最新",
+    "noResultsTitle": "没有匹配的更新",
+    "noResultsBody": "请尝试其他搜索词或清除筛选条件。",
+    "clearFilters": "清除筛选",
     "loading": "加载中…",
     "error": "无法加载更新日志，请稍后重试。",
     "empty": "暂无更新，敬请期待。",
@@ -11503,6 +12884,13 @@
       "new": "新功能",
       "improvement": "改进",
       "fix": "修复"
+    },
+    "stages": {
+      "in_development": "开发中",
+      "private_beta": "私有测试版",
+      "public_beta": "公开测试版",
+      "live": "已上线",
+      "sunset": "即将下线"
     }
   },
   "demo": {
@@ -11537,6 +12925,11 @@
       "launching": "正在启动……",
       "error": "无法启动演示，请重试。",
       "note": "演示为共享环境，会定期重置，无需账户。您所做的更改是临时的。",
+      "carousel": {
+        "label": "实时演示场景",
+        "previous": "上一组演示场景",
+        "next": "下一组演示场景"
+      },
       "personas": {
         "ai-team": {
           "title": "AI 软件团队",
@@ -11586,10 +12979,6 @@
         "governance": "一起看看持续的 SOC 2 审计、整改与审计轨迹。"
       },
       "nav": {
-        "dashboard": {
-          "title": "构建任何东西",
-          "body": "用自然语言描述你的需求，AI 智能体即刻开始构建——无需任何配置。"
-        },
         "projects": {
           "title": "共享看板",
           "body": "人类与 AI 智能体共用一个看板。把工单拖到 Ready，智能体便会规划、编写代码并提交拉取请求。"
@@ -11609,6 +12998,10 @@
         "knowledge": {
           "title": "知识与治理",
           "body": "SOP、流程与政策，具备版本管理和阅读确认，可作为审计证据。"
+        },
+        "create": {
+          "title": "从画布开始",
+          "body": "用自然语言描述你的需求，AI 智能体即刻开始构建——无需任何配置。"
         }
       }
     }
@@ -11744,6 +13137,137 @@
     "errLoadAgents": "加载代理失败",
     "errLoadDiagnostics": "加载诊断信息失败"
   },
+  "embedded": {
+    "eyebrow": "From idea to real",
+    "title": "Embedded capabilities",
+    "subtitle": "Put the experiences you create in BuilderForce directly inside your product, website, or customer portal with one script and independently governed capabilities.",
+    "activeCapabilities": "capabilities active",
+    "tabsLabel": "Embedded capability sections",
+    "tabs": {
+      "features": "Features",
+      "install": "Install",
+      "consent": "Consent log",
+      "surfaces": "BuilderForce surfaces"
+    },
+    "categories": {
+      "all": "All",
+      "engage": "Engage",
+      "measure": "Measure",
+      "govern": "Govern",
+      "operate": "Operate"
+    },
+    "search": "Search embedded capabilities…",
+    "examples": "{count, plural, one {# example} other {# examples}}",
+    "toggleLabel": "Toggle {feature}",
+    "loadError": "Could not load embedded capability settings.",
+    "selectWorkspace": "请先选择工作区，然后再管理嵌入式功能。",
+    "saveError": "Could not save the embedded capability.",
+    "copySnippet": "Copy install snippet",
+    "copied": "Copied",
+    "cancel": "Cancel",
+    "openCanvas": "在 Canvas 中创建",
+    "surfaces": {
+      "title": "BuilderForce app surfaces",
+      "description": "Surface Product, Agile, and Security areas as authenticated, sandboxed experiences inside another application.",
+      "loading": "Loading…",
+      "enable": "Enable embedded app surfaces",
+      "capabilities": "Capabilities",
+      "capability": {
+        "product": "Product",
+        "agile": "Agile",
+        "security": "Security"
+      },
+      "saving": "Saving…",
+      "reviewEnable": "Review and enable…",
+      "save": "Save",
+      "saved": "Saved",
+      "loadError": "Could not load app-surface settings.",
+      "saveError": "Could not save app-surface settings."
+    },
+    "install": {
+      "title": "One script, every capability",
+      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+    },
+    "consent": {
+      "title": "Consent log",
+      "description": "An immutable workspace history of every capability opt-in and opt-out.",
+      "empty": "No consent events have been recorded yet.",
+      "enableTitle": "Enable {feature}?",
+      "auditNotice": "Your account, timestamp, and consent text version {version} are recorded for audit. You can revoke access at any time.",
+      "agree": "I consent, enable feature",
+      "actions": {
+        "OPT_IN": "Enabled",
+        "OPT_OUT": "Disabled"
+      }
+    },
+    "features": {
+      "usage_tracking": {
+        "name": "Usage tracking",
+        "description": "Track page views, custom events, identities, and feature engagement from customer sites.",
+        "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals."
+      },
+      "support_widget": {
+        "name": "Support widget",
+        "description": "Embed an AI help experience that answers from your knowledge and escalates to people.",
+        "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support."
+      },
+      "feedback_widget": {
+        "name": "Feedback widget",
+        "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.",
+        "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce."
+      },
+      "heatmaps": {
+        "name": "Heatmaps",
+        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
+      },
+      "feature_management": {
+        "name": "Feature management",
+        "description": "Evaluate remotely managed flags and variants for identified users.",
+        "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation."
+      },
+      "terms_gate": {
+        "name": "Terms gate",
+        "description": "Require acceptance of a versioned agreement before a visitor can continue.",
+        "consent": "Displays a blocking terms experience and records acceptance or decline against the active version."
+      },
+      "sourcing": {
+        "name": "Contact sourcing",
+        "description": "Add governed contact lookup and enrichment to forms and internal tools.",
+        "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance."
+      },
+      "lead_forms": {
+        "name": "Lead forms",
+        "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.",
+        "consent": "Stores submitted form data in this workspace and attributes it to the originating site."
+      },
+      "push_notifications": {
+        "name": "Push notifications",
+        "description": "Ask for browser permission and deliver targeted web and PWA notifications.",
+        "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns."
+      },
+      "onboarding": {
+        "name": "Onboarding",
+        "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.",
+        "consent": "Displays the published onboarding flow and records visitor progress and completion."
+      },
+      "cookie_consent": {
+        "name": "Cookie consent",
+        "description": "Gate optional analytics with a configurable, auditable consent banner.",
+        "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted."
+      },
+      "hr_widget": {
+        "name": "HR widget",
+        "description": "Embed personnel cards, leave requests, and document actions in a host portal.",
+        "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace."
+      },
+      "status_page": {
+        "name": "Public status page",
+        "description": "Publish live service health as an inline component or standalone status page.",
+        "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
+      }
+    }
+  },
   "embedInstall": {
     "heading": "在你的宿主应用中安装",
     "intro": "宿主应用的开发者安装该软件包，并在每个页面渲染一个组件，同时传入你签发的 SSO/租户 JWT。令牌通过 <code>postMessage</code> 传递给 iframe——绝不会出现在 URL 中。",
@@ -11866,7 +13390,20 @@
       "reportTitle": "智能体本会做的事",
       "frozenAt": "读取代码库的版本",
       "suppressedTitle": "被抑制的副作用",
-      "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。"
+      "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。",
+      "compareSelected": "比较所选项（{count}/2）",
+      "compareHint": "选择两个演练以比较其效果。",
+      "selectCompare": "选择",
+      "selected": "已选择",
+      "comparisonTitle": "演练比较",
+      "sameTicket": "同一工单",
+      "differentTicket": "不同工单",
+      "sameRef": "同一仓库引用",
+      "differentRef": "仓库引用不同或不可用",
+      "operation": "操作",
+      "baseline": "基线",
+      "candidate": "候选",
+      "delta": "变化"
     }
   },
   "quickStart": {
@@ -11883,16 +13420,3054 @@
     "note": "选择安装方式，复制命令，然后在终端中运行。"
   },
   "creationCanvas": {
-    "sessionTitle": "会话标题", "saved": "会话已保存", "activeCollaborators": "在线协作者",
-    "newSession": "新建会话", "add": "添加", "moreActions": "更多会话操作", "createAndView": "创建与查看", "sessionTools": "会话工具", "clearSearch": "清除搜索", "selectionActions": "选择操作", "selectedCount": "已选择 {count} 个", "diagnostics": "诊断", "openDiagnostics": "打开画布诊断", "diagnosticsHint": "会话、画布和 Brain 的实时状态", "copyDiagnostics": "复制诊断", "copyChatDiagnostics": "复制会话聊天诊断", "copyCanvasDiagnostics": "复制画布诊断", "templates": "模板", "history": "历史记录", "draw": "绘图", "stopDrawing": "停止绘图", "branch": "创建分支", "merge": "合并", "present": "演示", "exitPresentation": "退出演示", "share": "共享", "run": "运行", "saveCollaborate": "保存并协作",
-    "addToCanvas": "添加到画布", "searchEverything": "搜索全部内容…", "askBrain": "向 Brain 询问此画布", "sendBrain": "发送给 Brain", "entireCanvas": "整个画布", "loading": "正在加载画布…", "requestAccess": "申请访问权限", "accessRequired": "需要访问权限",
-    "canvasTemplates": "画布模板", "savedAccount": "已保存到你的账户", "reusableFrames": "你的可复用框架", "marketplacePacks": "可复用且安全的对象包",
-    "details": "详情", "activity": "活动", "name": "名称", "saveChanges": "保存更改", "next": "下一步", "startCreating": "开始创作",
-    "duplicate": "复制", "align": "对齐", "frame": "添加框架", "lock": "锁定", "unlock": "解锁", "hide": "隐藏", "showHidden": "显示隐藏对象", "hideHidden": "收起隐藏对象", "focus": "聚焦", "edge": "连接", "conversation": "对话", "tutorial": "教程",
-    "live": "实时", "offlineRetry": "离线 · 将重试编辑", "reconnecting": "正在重新连接…", "connecting": "正在连接…", "largeSession": "大型会话 · {count} 个对象",
-    "dashboardTitle": "Create 会话", "dashboardSubtitle": "返回画布，从上次离开的地方继续。", "searchSessions": "搜索会话、对象、项目或人员…", "active": "活跃", "archived": "已归档", "continueCreating": "继续创作", "sharedWithMe": "与我共享", "recentlyCompleted": "最近完成",
-    "starterCampaign": "营销活动工作室", "starterCampaignDescription": "创建营销工作流、交互式落地页、预测仪表板和评估框架。", "starterProductDiscovery": "产品发现", "starterProductDiscoveryDescription": "将客户反馈汇总为需求功能、可视化模型稿和交付路线图。",
-    "createTypeTitle": "你想创建什么？", "createTypeSubtitle": "从 Builder 类型或引导模板开始。它会作为对象在新画布中打开，你可以继续添加工作流、数据、人员和 Brain。", "existingCreations": "你现有的创作", "existingCreationsSubtitle": "在画布中打开现有的项目、智能体、网站、应用、Evermind、LLM、语音、视频、工作流或 Brain 会话。", "loadingCreations": "正在加载创作…", "noCreations": "没有符合此搜索的现有创作。", "brainSession": "Brain 会话", "workflowRuns": "工作流 · {count} 次运行", "projectTasks": "{count} 个任务", "exportCanvas": "导出",
-    "object": {"workflow":"工作流","project":"项目","website":"网站","dashboard":"仪表板","chat":"聊天","agent":"智能体","staff":"团队成员","evaluation":"评估","dataset":"数据集","table":"表格","spreadsheet":"电子表格","chart":"图表","report":"报告","kpi":"关键指标","prototype":"所见即所得原型","code":"代码","browser":"浏览器预览","llm":"大语言模型","voice":"语音","video":"视频","document":"文档","slides":"幻灯片","knowledge":"知识","file":"文件","url":"网址","note":"便笺","drawing":"绘图","frame":"框架","comment":"评论","timer":"计时器","roadmap":"路线图","prd":"产品需求文档","release":"发布","task":"任务","mockup":"模型稿","mockupSet":"模型稿集合","featureSummary":"功能摘要","team":"团队","role":"角色","mcp":"已连接工具","evermind":"Evermind","projectComparison":"项目对比","standup":"站会","repository":"代码仓库","selection":"编辑器选区","diagnostics":"诊断","terminal":"终端输出","service":"本地服务"}
+    "videoEditor": {
+      "editable": "可编辑",
+      "draft": "草稿",
+      "storingMedia": "正在保存媒体…",
+      "finishingCapture": "正在完成录制…",
+      "rendering": "正在浏览器中渲染视频",
+      "exported": "已导出",
+      "emptyPreview": "导入、录制或让 Brain 创建第一个镜头。",
+      "pause": "暂停",
+      "play": "播放",
+      "playhead": "视频播放头",
+      "importMedia": "导入媒体",
+      "addMusic": "添加音乐",
+      "recordScreen": "录制屏幕",
+      "recordCamera": "录制摄像头",
+      "stopRecording": "停止 · {seconds}秒",
+      "exportVideo": "导出 WebM",
+      "captureUnsupported": "此浏览器无法录制媒体。",
+      "captureFailed": "无法开始录制。",
+      "mediaFailed": "无法保存媒体。",
+      "renderFailed": "无法在此浏览器中渲染视频。",
+      "timeline": "视频时间线",
+      "track_visual": "场景",
+      "track_music": "音乐",
+      "track_voiceover": "旁白",
+      "track_sfx": "音效",
+      "start": "开始",
+      "length": "时长",
+      "trim": "裁剪",
+      "volume": "音量",
+      "removeClip": "移除 {name}",
+      "emptyTrack": "没有片段"
+    },
+    "comparison": {
+      "promptTitle": "共享比较提示词",
+      "sharedPrompt": "在每个所选模型上原样运行",
+      "responseFrom": "由 {model} 生成的回答",
+      "executing": "正在执行",
+      "executingWith": "正在使用 {model} 执行此提示词…",
+      "executesWith": "使用 {model} 执行",
+      "runningCount": "正在运行 {count} 个所选模型…",
+      "completed": "已完成",
+      "failed": "执行失败",
+      "emptyOutput": "模型未返回任何输出。",
+      "finished": "模型比较已完成。",
+      "modelLayer": "模型 · {model}",
+      "promptLayer": "共享提示词"
+    },
+    "group": {
+      "Build": "构建",
+      "Data": "数据",
+      "Knowledge": "知识",
+      "Insights": "洞察",
+      "Work": "工作",
+      "People": "人员",
+      "Agents": "智能体",
+      "Models": "模型",
+      "Collaborate": "协作",
+      "Integrations": "集成",
+      "Pitch": "路演"
+    },
+    "datasetRowLimit": "当前套餐每次画布导入最多支持 {limit} 行数据。",
+    "datasetNoColumns": "该文件中未找到任何列。",
+    "datasetImported": "已导入 {name} — {rows} 行，{columns} 列",
+    "datasetImportFailed": "数据集导入失败",
+    "datasetShape": "{rows} 行 · {columns} 列",
+    "datasetStatusImported": "已导入",
+    "roleCannotEdit": "你在本会话中的角色无权编辑",
+    "fileGeneric": "文件",
+    "dropFilesTitle": "拖放即可添加到画布",
+    "dropFilesHint": "Word 文件会展开为页面，电子表格展开为工作表，演示文稿展开为幻灯片——然后就可以向 Brain 提问。",
+    "import": {
+      "statusImported": "已导入",
+      "statusImporting": "正在读取",
+      "statusTooLarge": "文件过大无法读取",
+      "tooLargeShape": "已附加 — 超过 {limit} MB 的文件不会在画布上读取",
+      "statusAttached": "已附加",
+      "statusUnreadable": "无法读取",
+      "statusTextUnavailable": "无法提取文本",
+      "fileGeneric": "文件",
+      "datasetShape": "{rows} 行 · {columns} 列",
+      "workbookShape": "{sheets} 个工作表 · {rows} 行 · {columns} 列",
+      "deckShape": "{slides} 张幻灯片",
+      "documentShape": "{words} 个词",
+      "documentPages": "{pages} 页",
+      "pdfPages": "PDF · {pages} 页",
+      "codeShape": "{lines} 行",
+      "noticeDataset": "{name} 已作为数据集载入 — {rows} 行，{columns} 列",
+      "noticeWorkbook": "{name} 已作为工作簿载入 — {sheets} 个工作表",
+      "noticeDeck": "{name} 已作为演示文稿载入 — {slides} 张幻灯片",
+      "noticeDocument": "{name} 已作为文档载入 — {pages} 页",
+      "noticeImage": "已将 {name} 添加到画布",
+      "noticeFile": "已将 {name} 添加到画布",
+      "failed": "无法读取 {name}",
+      "tooManyFiles": "仅添加了前 {limit} 个文件",
+      "promptData": "分析 {name}：有哪些值得注意的地方，异常值在哪里？",
+      "promptDeck": "审阅 {name}：叙事是否清晰，还缺少什么？",
+      "promptDocument": "总结 {name}，并说明你会做哪些修改。",
+      "promptImage": "{name} 里有什么，我该如何使用它？",
+      "promptCode": "审阅 {name} 并说明它的作用。",
+      "promptFile": "关于 {name} 你能告诉我什么？",
+      "meshShape": "{facets} 个面 · {format}",
+      "drawingShape": "{format} 图纸",
+      "statusMeshUnreadable": "无法读取几何体",
+      "promptModel": "关于 {name}，需要我检查什么？",
+      "promptDrawing": "关于 {name} 这张图纸，需要我检查什么？",
+      "noticeModel": "{name} 已读取为三维模型 —— {facets} 个面",
+      "noticeDrawing": "{name} 已读取为 CAD 图纸"
+    },
+    "datasetImportBeforeVisualizing": "请先导入数据再进行可视化",
+    "datasetImportBeforeProfiling": "请先导入数据再分析列结构",
+    "datasetVisualizationTitle": "{name} 可视化",
+    "statusLive": "实时",
+    "chartTitleMeasureBy": "按{category}统计的{measure}",
+    "chartTitleCountBy": "按{category}计数",
+    "chartCountAxis": "行数",
+    "kpiTotalRows": "总行数",
+    "kpiGroups": "{category} 去重值",
+    "edgeVisualizes": "可视化",
+    "datasetVisualizationAdded": "已添加仪表板可视化",
+    "datasetProfileSummary": "共 {rows} 行、{columns} 列，其中 {complete} 列数据完整。",
+    "datasetProfiled": "已分析 {columns} 个列",
+    "datasetImportLabel": "导入 CSV、TSV 或 JSON",
+    "datasetImportHint": "数据行仅保存在本会话中。你可以分析列结构、创建可视化，或让 Brain 分析每一行。",
+    "datasetProfileAction": "分析列结构",
+    "datasetVisualizeAction": "创建可视化",
+    "datasetPlotAction": "绘制到地图",
+    "datasetPlotHint": "使用导入行中的 {latitude}/{longitude} 绘制，无需调用 AI。",
+    "datasetImportBeforePlotting": "请先导入数据再绘制地图",
+    "datasetPlotNoCoordinates": "{latitude}/{longitude} 中没有任何一行包含可用的坐标",
+    "datasetPlotNoGeoColumns": "没有可绘制的纬度/经度列。已找到的列：{columns}",
+    "datasetMapTitle": "{name} 地图",
+    "datasetPlottedCount": "已绘制 {count} 个地点",
+    "datasetPlotSummary": "{name} 中有 {plotted}/{total} 行包含坐标并已绘制。",
+    "datasetMapAdded": "已添加地图",
+    "edgePlots": "绘制",
+    "fileNameLabel": "文件名",
+    "fileInspectorHint": "上传的表格和 JSON 文件会自动成为数据集对象，便于 Brain 查询。其他文件将作为上下文保留。",
+    "datasetProfilePending": "分析列结构即可查看各列的类型、填充率和最常见的值。",
+    "datasetProfileEmpty": "导入文件后即可查看其列。",
+    "datasetProfileLabel": "列结构概览",
+    "dataGridShape": "{rows} 行 · {columns} 列",
+    "datasetColumnType_number": "数值",
+    "datasetColumnType_text": "文本",
+    "datasetColumnType_boolean": "布尔值",
+    "datasetColumnType_date": "日期",
+    "datasetColumnType_empty": "空",
+    "datasetColumnCoverage": "填充率 {coverage}% · {distinct} 个不同值",
+    "datasetColumnRange": "最小 {min} · 最大 {max} · 合计 {sum}",
+    "node": {
+      "rowsColumns": "{rows} 行 · {columns} 列",
+      "dataFallback": "添加或导入数据后，可让 Brain 进行分析或可视化。",
+      "columnsHidden": "另有 {hidden} 列",
+      "rowsShown": "显示 {total} 行中的 {shown} 行",
+      "tone_success": "成功",
+      "tone_warning": "警告",
+      "tone_danger": "失败",
+      "tone_info": "信息",
+      "fileGeneric": "文件",
+      "importReading": "正在读取文件…",
+      "fileType": "类型",
+      "fileSize": "大小",
+      "filePreviewAlt": "{name} 的预览",
+      "filePreviewUnavailable": "该文件类型暂无预览。",
+      "studio": "工作室",
+      "template": "模板",
+      "output": "输出",
+      "browseCatalog": "浏览目录",
+      "blankCanvas": "空白画布",
+      "chooseOnExport": "导出时选择",
+      "previewAlt": "{title} 预览",
+      "creativeFallback": "描述要创建的内容，选择模板，然后让 Brain 生成。",
+      "agent": "智能体",
+      "priority": "优先级",
+      "unassigned": "未分配",
+      "notSet": "未设置",
+      "noTaskDescription": "尚无任务描述。",
+      "prd": "PRD",
+      "linkedRequirements": "关联需求",
+      "noPrdLinked": "未关联 PRD",
+      "doneWhen": "完成条件",
+      "status": "状态",
+      "openWork": "未完成工作",
+      "blocked": "受阻",
+      "maturity": "成熟度",
+      "velocity": "速度",
+      "health": "健康度",
+      "active": "进行中",
+      "onTrack": "按计划推进",
+      "customerFeedback": "客户反馈",
+      "feedbackIndex": "反馈 {index}",
+      "projectContext": "项目上下文",
+      "everything": "全部",
+      "deliveryFallback": "展开此视图可查看项目任务、工作流和已分配的智能体。",
+      "metricsFallback": "实时交付与项目健康度指标。",
+      "feedbackFallback": "展开此视图可查看被请求的功能和客户依据。",
+      "projectFallback": "可选的项目上下文。展开可查看相关工作。",
+      "projectQuality": "项目质量",
+      "perHundred": "/100",
+      "quality": "质量",
+      "healthy": "健康",
+      "needsAttention": "需要关注",
+      "atRisk": "存在风险",
+      "notAssessed": "未评估",
+      "diagnosticsAnalyzed": "已分析 {count} 项诊断",
+      "loadDiagnostics": "加载诊断以确定质量。",
+      "diagnosticsCount": "诊断",
+      "openGaps": "未关闭差距",
+      "online": "在线",
+      "lowAutonomy": "低自主性",
+      "mediumAutonomy": "中等自主性",
+      "highAutonomy": "高自主性",
+      "addKnowledgeStep": "1 · 添加知识",
+      "testAgentStep": "2 · 测试智能体",
+      "executionTarget": "执行目标",
+      "approvalMode": "审批模式",
+      "approvalRequired": "需要审批",
+      "fullyAutonomous": "完全自主",
+      "stepIndex": "步骤 {index}",
+      "stepPending": "待处理",
+      "stepNotBuilt": "尚未构建",
+      "stepNotConfigured": "未设置操作",
+      "workflowNoSteps": "尚无步骤",
+      "workflowNoStepsHint": "添加带有集成和操作的步骤，然后点击“构建”使其可运行。",
+      "websiteHeadline": "爱上每一种造型",
+      "websiteBody": "新一季新品上市。",
+      "websiteCta": "选购系列",
+      "siteNav": "产品   解决方案   关于",
+      "getStarted": "开始使用",
+      "freeShipping": "免运费",
+      "easyReturns": "轻松退货",
+      "secureCheckout": "安全结账",
+      "dateRange": "日期范围",
+      "last30Days": "最近 30 天",
+      "last7Days": "最近 7 天",
+      "quarterToDate": "本季度至今",
+      "refreshed": "已刷新",
+      "metricIndex": "指标 {index}",
+      "taskCountByStatus": "按状态统计任务数",
+      "funnel": "漏斗",
+      "distribution": "分布",
+      "channelMix": "渠道组合",
+      "mockupFallback": "高保真交互概念，可供评审。",
+      "draft": "草稿",
+      "projectPrefix": "项目：{name}",
+      "agentPrefix": "智能体：{name}",
+      "targetValue": "目标 {value}",
+      "evaluationReady": "评估就绪",
+      "gapMessageMatch": "信息匹配需复核",
+      "gapPrimaryAction": "验证主要操作",
+      "gapDeliveryTiming": "确认交付时间",
+      "askBrainResolution": "让 Brain 提出解决方案。",
+      "evidenceOnCanvas": "证据已在画布上。",
+      "reviewTestResults": "查看测试结果",
+      "reviewEvaluationStep": "3 · 复核评估",
+      "releaseFallback": "检查交付清单，然后保存智能体以发布到你的团队。",
+      "deliveryChecklistStep": "4 · 打开交付清单",
+      "diagnosticIndex": "诊断 {index}",
+      "atLine": "第 {line} 行",
+      "checks": "检查项",
+      "issues": "问题",
+      "nextSteps": "后续步骤",
+      "diagnosticsHeading": "诊断",
+      "diagnosticsFindings": "诊断发现",
+      "diagnosticResults": "诊断结果",
+      "diagnosticNextSteps": "诊断后续步骤",
+      "resultsHeading": "结果",
+      "noDiagnosticsRecorded": "未记录单项诊断。",
+      "runDiagnostics": "运行诊断以获取结果。",
+      "noFollowUp": "未记录后续行动。",
+      "evermindSyncing": "正在同步当前项目的 Evermind…",
+      "evermindSyncingDetail": "正在加载当前版本、学习活动、就绪状态和最近的贡献。",
+      "model": "模型",
+      "learned": "已学习",
+      "queued": "排队中",
+      "trainingLoss": "训练损失",
+      "blueprint": "蓝图",
+      "knowledgeMap": "知识图谱",
+      "knowledgeMapAria": "包含 {count} 条已学习贡献的知识图谱",
+      "evermindBrainAria": "Evermind 认知区域与已学习知识",
+      "learning": "学习中",
+      "waiting": "等待中",
+      "teacherPrefix": "教师 · {model}",
+      "distils": "蒸馏",
+      "regionNeocortex": "新皮层",
+      "regionHippocampus": "海马体",
+      "regionPersonality": "人格",
+      "regionAmygdala": "杏仁核",
+      "regionHypothalamus": "下丘脑",
+      "regionThalamus": "丘脑",
+      "regionBasal": "基底神经节",
+      "growMap": "教学或运行工作以扩展此图谱",
+      "reasoningWeights": "推理权重",
+      "learnedTextLegend": "已学习文本",
+      "learnedTextTitle": "已学习文本",
+      "liveAffect": "实时情绪",
+      "recentlyLearned": "最近学习",
+      "shownCount": "显示 {count} 条",
+      "empty": "空",
+      "weightDelta": "权重变化",
+      "fittedLearning": "已拟合学习",
+      "agentModelUpdate": "智能体模型更新",
+      "untitledLearning": "未命名学习",
+      "teacherNoAnswer": "教师未产生可用答案",
+      "weightsAdapted": "权重已根据一次智能体运行调整。",
+      "noReadableText": "未保留可读的学习文本。",
+      "viaTeacher": "通过 {teacher}",
+      "teacher": "教师",
+      "notDistilled": "未蒸馏",
+      "selfLearned": "自学习",
+      "nothingLearned": "尚未学习任何内容",
+      "nothingLearnedDetail": "教一个示例或完成智能体工作。每次学习都会显示变化内容及其来源。",
+      "recommendedNextAction": "推荐的下一步行动",
+      "openDetails": "打开详情 → {destination}",
+      "connected": "已连接",
+      "replies": "回复",
+      "onEvermind": "使用 Evermind",
+      "off": "关闭",
+      "lastLearned": "最近学习时间",
+      "notYet": "尚未",
+      "project": "项目",
+      "projectIndex": "项目 {index}",
+      "portfolioQuality": "组合质量",
+      "portfolioQualityAria": "组合质量摘要",
+      "projectsAssessed": "已评估 {total} 个项目中的 {scored} 个",
+      "qualityCoverage": "质量覆盖率",
+      "diagnosticResultsCount": "诊断结果",
+      "attentionNeeded": "需要关注",
+      "openQualityGaps": "未关闭的质量差距",
+      "delivery": "交付",
+      "openBlocked": "未完成 / 受阻",
+      "resultsCount": "{count} 条结果",
+      "gapsCount": "{count} 项差距",
+      "noVelocity": "无速度数据",
+      "ptsVelocity": "速度 {points} 点",
+      "diagnostic": "诊断",
+      "noDiagnosticsRun": "尚未运行诊断",
+      "prioritizedRecommendations": "优先级推荐",
+      "recommendedNextActions": "推荐的下一步行动",
+      "lowestScoringFirst": "评分最低的证据优先",
+      "reviewDiagnosticFinding": "复核诊断发现",
+      "runQualityDiagnostics": "对项目运行质量诊断，以生成有证据支持的建议。",
+      "freshness": "数据时效：{at} · 已附来源",
+      "participant": "参与者",
+      "human": "人类",
+      "standupFallback": "将成员和智能体拖到画布上，然后召集站会。",
+      "brainFacilitator": "Brain 主持",
+      "stroke": "笔触",
+      "strokePx": "{width} 像素",
+      "drawHint": "选择“绘制”，然后在画布上绘图",
+      "run": "运行",
+      "runObject": "运行 {title}",
+      "moreOptions": "{title} 的更多选项",
+      "startHere": "从这里开始",
+      "stepOfFive": "第 {step} 步，共 5 步",
+      "pipelineFallback": "选择此卡片，在详情中查看下一步操作。",
+      "currentFocus": "当前聚焦",
+      "voiceFallback": "录制或生成语音备注。",
+      "noteFallback": "双击以添加想法。",
+      "phaseIndex": "阶段 {index}",
+      "itemIndex": "条目 {index}",
+      "feature": "功能",
+      "linkedConcepts": "{count} 个关联概念",
+      "mockupSetFallback": "一组可评审的功能概念。让 Brain 展开每一项。",
+      "expandable": "可展开",
+      "citationsRetained": "保留引用",
+      "arrangeObjects": "在此排列相关对象",
+      "frameFallback": "可重复使用的空间分区，用于演示、引导或评审。",
+      "objectReady": "{label} 已可连接、编辑并用作 Brain 上下文。",
+      "canvasObject": "画布对象",
+      "liveSessionContext": "实时会话上下文",
+      "brainAnchorYou": "你",
+      "brainAnchorBrain": "Brain",
+      "brainAnchorPromptFallback": "你想创建什么？",
+      "brainAnchorReplyFallback": "打开 Brain 聊天开始对话。",
+      "openBrainChat": "打开 Brain 聊天",
+      "brainMarkerBusy": "Brain 正在处理：{phase}。打开 Brain 聊天。",
+      "configuredAgent": "已配置的智能体",
+      "newAgent": "新智能体",
+      "autoModel": "自动选择模型",
+      "thinking": "思考中…",
+      "testing": "测试中…",
+      "contributing": "正在参与对话",
+      "latestResponse": "最新回复",
+      "documentFallback": "尚未撰写文档。让 Brain 调研并起草。",
+      "documentPages": "{count} 页",
+      "documentWords": "{count} 字",
+      "documentReading": "阅读约 {minutes} 分钟",
+      "documentEdit": "编辑",
+      "documentDone": "完成",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "pageOfPages": "第 {page} 页 / 共 {total} 页",
+      "workbookSheets": "工作表",
+      "sheetShape": "{name} — {rows} 行，{columns} 列",
+      "slidesFallback": "尚无幻灯片。让 Brain 制作这份演示文稿。",
+      "slideCount": "{count} 张幻灯片",
+      "slideUntitled": "第 {index} 张幻灯片",
+      "diagramFallback": "尚无图表。粘贴 Draw.io XML 或 Mermaid，或让 Brain 绘制。",
+      "diagramDrawio": "Draw.io",
+      "diagramMermaid": "Mermaid",
+      "diagramShapes": "{count} 个图形 · {connections} 条连线",
+      "diagramUnreadable": "无法读取此图表文件。请在详情面板中检查源码。",
+      "diagramLoading": "正在绘制图表…",
+      "addRow": "+ 行",
+      "addColumn": "+ 列",
+      "columnName": "第 {index} 列",
+      "editCell": "编辑 {column}，第 {row} 行",
+      "editColumnName": "重命名列 {column}",
+      "mapEmpty": "尚未绘制任何内容。请绘制包含纬度和经度的数据集——若行中只有地名，请先用地理编码器解析。",
+      "mapEmptyStatus": "绘制数据集",
+      "mapPlaces": "地点",
+      "mapRegion": "区域",
+      "mapSizedBy": "大小依据",
+      "mapAria": "包含 {count} 个已绘制地点的地图：{places}",
+      "mapExtent": "纬度 {south}° 至 {north}° · 经度 {west}° 至 {east}°",
+      "inboxNotConnected": "请在“增长”中连接邮箱以填充此收件箱。",
+      "inboxUnread": "{count} 封未读",
+      "inboxReadAt": "{time} 读取",
+      "inboxEmpty": "没有符合此筛选条件的邮件。",
+      "inboxUnknownSender": "未知发件人",
+      "inboxNoSubject": "（无主题）",
+      "inboxMore": "还有 {count} 封",
+      "emailFrom": "发件人",
+      "emailTo": "收件人",
+      "emailBody": "正文",
+      "emailNoBody": "此邮件没有可读文本。",
+      "emailOpenInProvider": "在邮件应用中打开",
+      "campaignSent": "已发送",
+      "campaignOpened": "已打开",
+      "campaignClicked": "已点击",
+      "campaignAudience": "受众",
+      "campaignVia": "发送方式",
+      "campaignSubject": "主题",
+      "campaignBlocked": "尚未就绪",
+      "templateSubject": "主题",
+      "templateNoSubject": "尚无主题",
+      "templateMergeFields": "合并字段",
+      "templateNoMergeFields": "仅使用姓名、邮箱和徽标。",
+      "gameNotGenerated": "还没有游戏。先描述你想要的游戏，然后生成它。",
+      "gameGenerateFirst": "生成后即可游玩",
+      "gamePlay": "开始游戏",
+      "gameStop": "停止",
+      "gameReady": "可以游玩",
+      "gameControlKeys": "键盘",
+      "gameControlTouch": "触控",
+      "gamePlayingAlt": "正在游玩 {title}"
+    },
+    "editor": {
+      "toolbar": "格式",
+      "undo": "撤销",
+      "redo": "重做",
+      "blockStyle": "文本样式",
+      "blockParagraph": "正文",
+      "blockHeading1": "标题 1",
+      "blockHeading2": "标题 2",
+      "blockHeading3": "标题 3",
+      "blockQuote": "引用",
+      "blockCode": "代码块",
+      "bold": "粗体",
+      "italic": "斜体",
+      "strikethrough": "删除线",
+      "inlineCode": "行内代码",
+      "codePlaceholder": "代码",
+      "bulletList": "项目符号列表",
+      "numberList": "编号列表",
+      "link": "插入链接",
+      "linkUrl": "链接地址",
+      "linkPlaceholder": "https://example.com",
+      "linkApply": "应用",
+      "linkCancel": "取消",
+      "rule": "水平分隔线",
+      "clearFormatting": "清除格式"
+    },
+    "export": {
+      "group": "下载",
+      "copy": "复制",
+      "markdown": "Markdown",
+      "html": "HTML",
+      "csv": "CSV",
+      "xlsx": "Excel",
+      "docx": "Word",
+      "pdf": "PDF",
+      "pptx": "PowerPoint",
+      "svg": "SVG",
+      "json": "JSON",
+      "scorm": "SCORM 课程包"
+    },
+    "course": {
+      "progress": "已完成 {percent}%",
+      "lessonCount": "已完成 {completed}/{total} 课",
+      "progressLabel": "课程进度",
+      "duration": "{minutes} 分钟",
+      "modules": "课程模块",
+      "module": "学习模块",
+      "minutes": "{count} 分钟",
+      "objective": "学习目标",
+      "practice": "动手实践",
+      "markComplete": "标记本课已完成",
+      "markIncomplete": "标记为未完成",
+      "knowledgeCheck": "知识检查",
+      "correct": "正确。",
+      "tryAgain": "请重试。",
+      "completed": "课程已完成",
+      "inProgress": "学习进行中",
+      "empty": "添加模块以开始本课程。"
+    },
+    "sessionTitle": "会话标题",
+    "saved": "会话已保存",
+    "activeCollaborators": "在线协作者",
+    "newSession": "新建会话",
+    "add": "添加",
+    "moreActions": "更多会话操作",
+    "createAndView": "创建与查看",
+    "sessionTools": "会话工具",
+    "clearSearch": "清除搜索",
+    "selectionActions": "选择操作",
+    "selectedCount": "已选择 {count} 个",
+    "diagnostics": "诊断",
+    "openDiagnostics": "打开画布诊断",
+    "diagnosticsHint": "会话、画布和 Brain 的实时状态",
+    "copyDiagnostics": "复制诊断",
+    "copyChatDiagnostics": "复制会话聊天诊断",
+    "copyCanvasDiagnostics": "复制画布诊断",
+    "templates": "模板",
+    "history": "历史记录",
+    "draw": "绘图",
+    "stopDrawing": "停止绘图",
+    "branch": "创建分支",
+    "merge": "合并",
+    "present": "演示",
+    "exitPresentation": "退出演示",
+    "share": "共享",
+    "run": "运行",
+    "saveCollaborate": "保存并协作",
+    "addToCanvas": "添加到画布",
+    "searchEverything": "搜索全部内容…",
+    "askBrain": "向 Brain 询问此画布",
+    "sendBrain": "发送给 Brain",
+    "entireCanvas": "整个画布",
+    "loading": "正在加载画布…",
+    "requestAccess": "申请访问权限",
+    "accessRequired": "需要访问权限",
+    "canvasTemplates": "画布模板",
+    "savedAccount": "已保存到你的账户",
+    "reusableFrames": "你的可复用框架",
+    "marketplacePacks": "可复用且安全的对象包",
+    "details": "详情",
+    "activity": "活动",
+    "name": "名称",
+    "saveChanges": "保存更改",
+    "back": "上一步",
+    "next": "下一步",
+    "startCreating": "开始创作",
+    "duplicate": "复制",
+    "align": "对齐",
+    "frame": "添加框架",
+    "lock": "锁定",
+    "unlock": "解锁",
+    "hide": "隐藏",
+    "showHidden": "显示隐藏对象",
+    "hideHidden": "收起隐藏对象",
+    "focus": "聚焦",
+    "edge": "连接",
+    "conversation": "对话",
+    "tutorial": "教程",
+    "live": "实时",
+    "offlineRetry": "离线 · 将重试编辑",
+    "reconnecting": "正在重新连接…",
+    "connecting": "正在连接…",
+    "largeSession": "大型会话 · {count} 个对象",
+    "dashboardTitle": "Create 会话",
+    "pinSession": "置顶",
+    "unpinSession": "取消置顶",
+    "renameSession": "重命名",
+    "moveSession": "移动",
+    "moveSessionPrompt": "文件夹名称（留空即可移出文件夹）",
+    "mergeSession": "合并",
+    "mergeSessionPrompt": "输入要合并到此会话中的会话准确名称。可用会话：{sessions}",
+    "mergeSessionNotFound": "未找到该名称的会话。",
+    "mergeSessionConfirm": "将“{source}”合并到“{target}”吗？源会话将被归档。",
+    "deleteSession": "删除",
+    "deleteSessionConfirm": "删除“{title}”吗？支持团队可在保留期内恢复此会话。",
+    "duplicateSession": "复制",
+    "shareSession": "分享",
+    "archiveSession": "归档",
+    "restoreSession": "恢复",
+    "dashboardSubtitle": "返回画布，从上次离开的地方继续。",
+    "searchSessions": "搜索会话、对象、项目或人员…",
+    "active": "活跃",
+    "archived": "已归档",
+    "continueCreating": "继续创作",
+    "sharedWithMe": "与我共享",
+    "recentlyCompleted": "最近完成",
+    "starterCampaign": "营销活动工作室",
+    "starterCampaignDescription": "创建营销工作流、交互式落地页、预测仪表板和评估框架。",
+    "starterProductDiscovery": "产品发现",
+    "starterProductDiscoveryDescription": "将客户反馈汇总为需求功能、可视化模型稿和交付路线图。",
+    "createTypeTitle": "你想创建什么？",
+    "createTypeSubtitle": "从 Builder 类型或引导模板开始。它会作为对象在新画布中打开，你可以继续添加工作流、数据、人员和 Brain。",
+    "existingCreations": "你现有的创作",
+    "existingCreationsSubtitle": "在画布中打开现有的项目、智能体、网站、应用、Evermind、LLM、语音、视频、工作流或 Brain 会话。",
+    "loadingCreations": "正在加载创作…",
+    "noCreations": "没有符合此搜索的现有创作。",
+    "brainSession": "Brain 会话",
+    "workflowRuns": "工作流 · {count} 次运行",
+    "projectTasks": "{count} 个任务",
+    "exportCanvas": "导出",
+    "object": {
+      "workflow": "工作流",
+      "project": "项目",
+      "website": "网站",
+      "build": "构建器",
+      "dashboard": "仪表板",
+      "chat": "聊天",
+      "agent": "智能体",
+      "staff": "团队成员",
+      "evaluation": "评估",
+      "dataset": "数据集",
+      "table": "表格",
+      "spreadsheet": "电子表格",
+      "chart": "图表",
+      "report": "报告",
+      "kpi": "关键指标",
+      "prototype": "所见即所得原型",
+      "code": "代码",
+      "browser": "浏览器预览",
+      "llm": "大语言模型",
+      "voice": "语音",
+      "video": "视频",
+      "image": "图像",
+      "animation": "动画",
+      "podcast": "播客",
+      "comic": "漫画",
+      "game": "游戏",
+      "cad": "CAD",
+      "model3d": "3D 模型",
+      "resume": "简历",
+      "template": "模板",
+      "document": "文档",
+      "slides": "幻灯片",
+      "knowledge": "知识",
+      "file": "文件",
+      "url": "网址",
+      "note": "便笺",
+      "drawing": "绘图",
+      "frame": "框架",
+      "comment": "评论",
+      "timer": "计时器",
+      "roadmap": "路线图",
+      "prd": "产品需求文档",
+      "release": "发布",
+      "task": "任务",
+      "mockup": "模型稿",
+      "mockupSet": "模型稿集合",
+      "featureSummary": "功能摘要",
+      "team": "团队",
+      "role": "角色",
+      "mcp": "已连接工具",
+      "evermind": "Evermind",
+      "projectComparison": "项目对比",
+      "standup": "站会",
+      "repository": "代码仓库",
+      "selection": "编辑器选区",
+      "diagnostics": "诊断",
+      "terminal": "终端输出",
+      "service": "本地服务",
+      "salesPipeline": "销售管道",
+      "salesCampaign": "销售活动",
+      "salesContact": "销售联系人",
+      "targetMarket": "目标市场",
+      "salesGoal": "每周销售目标",
+      "salesMeeting": "销售会议",
+      "diagram": "图表",
+      "map": "地图",
+      "pitch": "路演",
+      "pitchScorecard": "评分表",
+      "pitchQa": "评委问答",
+      "pitchApplication": "参赛申请",
+      "inbox": "收件箱",
+      "email": "邮件",
+      "emailCampaign": "邮件营销活动",
+      "emailTemplate": "邮件模板",
+      "course": "课程",
+      "guidedTour": "引导式导览"
+    },
+    "twilioSetup": {
+      "title": "Twilio 集成",
+      "crumb": "创作画布 · 设置 · 集成",
+      "checking": "正在检查 Twilio…",
+      "ready": "Twilio 已就绪",
+      "configure": "设置 Twilio",
+      "guideTitle": "三步完成设置",
+      "stepCredentials": "添加 Account SID、API key SID（或 Account SID）和 Auth token。密钥仍保存在现有的加密集成存储中。",
+      "stepTest": "在这里测试连接，并保持启用，以便工作流操作可以使用它。",
+      "stepReturn": "返回画布，构建工作流，然后使用真实 Twilio 号码运行端到端演示。",
+      "connectedStatus": "此画布已有可用的 Twilio 启用连接。",
+      "missingStatus": "交付步骤运行前，此画布需要一个启用的 Twilio 连接。",
+      "embedTitle": "将此体验嵌入你的网站",
+      "embedBody": "使用现有嵌入能力安装客户体验、传递身份和事件，并在背后运行 Twilio 工作流。",
+      "openEmbed": "打开嵌入能力"
+    },
+    "tourBuilder": {
+      "defaultObjectTitle": "产品引导导览",
+      "defaultOfferTitle": "欢迎使用，要快速了解一下吗？",
+      "defaultOfferBody": "通过几个简短步骤了解基本功能。您可以随时退出导览。",
+      "defaultStartLabel": "开始导览",
+      "defaultCancelLabel": "暂时不要",
+      "defaultStep1Title": "帮助用户熟悉界面",
+      "defaultStep1Body": "说明第一个重要区域及其作用。",
+      "defaultStep2Title": "展示关键操作",
+      "defaultStep2Body": "突出显示可帮助用户继续操作的功能。",
+      "closePreview": "关闭导览预览",
+      "stepOf": "第 {current} 步，共 {total} 步",
+      "targetConnected": "已连接目标",
+      "targetNeeded": "请选择目标对象",
+      "back": "返回",
+      "finish": "完成",
+      "next": "下一步",
+      "offer": "导览邀请",
+      "stepCount": "{count} 个步骤",
+      "visitCount": "访问 {count} 次后显示",
+      "escapeEnabled": "已启用退出通道",
+      "settings": "引导式导览设置",
+      "settingsHint": "设计一个可选择加入的导览，并将每个步骤连接到要突出显示的画布对象。",
+      "draftSteps": "草稿 · {count} 个步骤",
+      "offerTitle": "邀请标题",
+      "offerBody": "邀请说明",
+      "version": "导览版本",
+      "minimumVisits": "显示前访问次数",
+      "blurBackground": "邀请时模糊背景",
+      "escapeHatch": "始终提供关闭和 Escape",
+      "steps": "导览步骤",
+      "addStep": "添加步骤",
+      "newStepTitle": "新导览步骤",
+      "stepTitle": "步骤标题",
+      "stepBody": "步骤说明",
+      "targetObject": "要突出显示的对象",
+      "chooseTarget": "选择对象",
+      "removeStep": "删除步骤"
+    },
+    "canvasOutline": "无障碍画布大纲",
+    "canvasGestureToggle": "拖动以框选",
+    "canvasGesturePanActive": "拖动可平移画布 — 点击改为拖动框选",
+    "canvasGestureSelectActive": "拖动可框选对象 — 点击改为平移",
+    "closeCanvasOutline": "关闭画布大纲",
+    "canvasOutlineEmpty": "此画布尚无对象。",
+    "focusObject": "聚焦 {title}",
+    "outlineConnection": "与 {target} 的 {kind} 连接",
+    "canvasObject": "画布对象",
+    "placementLocked": "位置已锁定",
+    "genericObject": "对象",
+    "fullScreen": "全屏",
+    "exitFullScreen": "退出全屏",
+    "diagnosticsCopied": "诊断信息已复制到剪贴板",
+    "diagnosticsCopyFailed": "无法复制诊断信息 — 剪贴板不可用",
+    "diagnosticsBuildFailed": "无法生成诊断报告 — {reason}",
+    "brain": "Brain",
+    "brainDock": "Brain 聊天",
+    "openBrainDock": "显示 Brain 聊天",
+    "closeBrain": "关闭 Brain 聊天",
+    "dockBrainLeft": "将 Brain 停靠到左侧",
+    "dockBrainRight": "将 Brain 停靠到右侧",
+    "expandBrain": "展开 Brain 聊天",
+    "slimBrain": "收窄 Brain 聊天",
+    "showExecutionSteps": "显示执行步骤",
+    "hideExecutionSteps": "隐藏执行步骤",
+    "chat": "聊天",
+    "context": "上下文",
+    "brainChatHistory": "Brain 聊天记录",
+    "brainEmpty": "尚无对话。在下方输入框向 Brain 提问即可开始。",
+    "brainContext": "Brain 聊天关联",
+    "brainContextEmpty": "向 Brain 提问后，其关联工作会显示在这里。",
+    "you": "你",
+    "agents": "智能体",
+    "associatedTickets": "关联工单",
+    "connectedObjects": "已连接对象",
+    "noAgentsAssociated": "此聊天未关联智能体。",
+    "noTicketsAssociated": "此聊天未关联工单。",
+    "noObjectsConnected": "尚未连接其他对象。",
+    "tokensSpent": "{count} 个 token",
+    "thoughtFor": "思考了 {duration}",
+    "ranActions": "{count} 项操作",
+    "brainPhase": {
+      "thinking": "思考中…",
+      "processing": "处理中…",
+      "designing": "设计中…",
+      "churning": "运转中…",
+      "composing": "组织中…",
+      "recalling": "回忆中…",
+      "executing": "执行中…",
+      "learning": "学习中…",
+      "writing": "书写中…"
+    },
+    "save": "保存",
+    "invite": "邀请",
+    "retry": "重试",
+    "dismiss": "忽略",
+    "signIn": "登录",
+    "resolve": "已解决",
+    "reopen": "重新打开",
+    "download": "下载",
+    "preview": "预览",
+    "prompt": "提示词",
+    "status": "状态",
+    "priority": "优先级",
+    "model": "模型",
+    "prd": "PRD",
+    "role": "角色",
+    "tools": "工具",
+    "knowledge": "知识",
+    "autonomy": "自主性",
+    "instructions": "指令",
+    "viewport": "视口",
+    "frames": "帧数",
+    "purpose": "用途",
+    "headline": "标题",
+    "description": "描述",
+    "subdomain": "子域名",
+    "unassigned": "未分配",
+    "notRun": "未运行",
+    "completed": "已完成",
+    "member": "成员",
+    "collaborator": "协作者",
+    "source": "来源",
+    "canonicalApi": "规范 API",
+    "private": "私有",
+    "preparing": "准备中…",
+    "requesting": "请求中…",
+    "generating": "生成中…",
+    "loadingSession": "正在加载会话…",
+    "dateRange": "日期范围",
+    "last30Days": "最近 30 天",
+    "last7Days": "最近 7 天",
+    "quarterToDate": "本季度至今",
+    "chooseOnExport": "导出时选择",
+    "executionTarget": "执行目标",
+    "approvalMode": "审批模式",
+    "fullyAutonomous": "完全自主",
+    "currentFocus": "当前聚焦",
+    "startHere": "从这里开始",
+    "noPrdLinked": "未关联 PRD",
+    "outputFormat": "输出格式",
+    "templateId": "模板 ID",
+    "creativeBrief": "创意简报",
+    "strokeColor": "笔触颜色",
+    "strokeWidth": "笔触宽度",
+    "fillColor": "填充颜色",
+    "borderColor": "边框颜色",
+    "accentColor": "强调色",
+    "callToAction": "行动号召",
+    "supportingCopy": "辅助文案",
+    "arrangeObjects": "整理画布对象",
+    "arrangeObjectsHere": "在此排列相关对象",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fitCanvas": "适应画布视图",
+    "canvasViewControls": "画布视图控件",
+    "canvasHistory": "画布历史",
+    "undoCanvasChange": "撤销画布更改",
+    "redoCanvasChange": "重做画布更改",
+    "inviteCollaborator": "邀请协作者",
+    "inviteCollaborators": "邀请协作者",
+    "clickToFollow": "点击以跟随视图",
+    "connectionKind": "连接类型",
+    "viewOutcomeMetrics": "查看成果指标",
+    "outcomeMetricsTitle": "从想法到交付的成果指标",
+    "titleSaveFailed": "标题保存失败",
+    "closeInvitationPanel": "关闭邀请面板",
+    "emailPlaceholder": "name@company.com",
+    "invitationRole": "邀请角色",
+    "roleViewer": "查看者",
+    "roleCommenter": "评论者",
+    "roleEditor": "编辑者",
+    "roleRunner": "执行者",
+    "roleOwner": "所有者",
+    "sessionMembers": "会话成员",
+    "youSuffix": "（你）",
+    "roleFor": "{name} 的角色",
+    "removeMember": "移除 {name}",
+    "roleUpdateFailed": "角色更新失败",
+    "memberRemovalFailed": "成员移除失败",
+    "pendingInvitations": "待处理邀请",
+    "revokeInvitation": "撤销对 {email} 的邀请",
+    "invitationRevoked": "邀请已撤销",
+    "invitationRevokeFailed": "无法撤销邀请",
+    "accessLabel": "访问权限：{access}",
+    "privateOnDevice": "仅存于本设备",
+    "closeTemplates": "关闭模板",
+    "sharedWithTenant": "已与租户共享",
+    "privateCustomFrame": "私有自定义框架",
+    "thisDevice": "本设备",
+    "templateMeta": "{category} · {count} 个对象",
+    "createFreeAccount": "创建免费账户",
+    "keepMomentum": "保持你的势头",
+    "notNowKeepLocal": "暂不 — 继续在本地创作",
+    "closeAccountPrompt": "关闭账户提示",
+    "gateBenefitKeep": "保留整个本地会话",
+    "gateBenefitUnlock": "解锁持久资源与历史记录",
+    "gateBenefitCollaborate": "与团队协作",
+    "gateSaveTitle": "创建账户以保存并协作",
+    "gateSaveSessionTitle": "创建账户以保存此会话",
+    "gateSaveBody": "将此本地会话移入安全的租户工作区，不会丢失其对象、对话或布局。",
+    "gateMetricsTitle": "创建账户以衡量交付价值",
+    "gateMetricsBody": "保存此会话，以便在会话、项目和工作区之间比较从想法到交付的成果。",
+    "invitedCanBuild": "受邀者可以与你一起创建，并向 Brain 提问。",
+    "invitationEmailed": "邀请已发送邮件，备用链接已复制",
+    "invitationSavedLinkCopied": "邀请已保存；备用链接已复制（未配置邮件发送）",
+    "collaboratorInvitedEmail": "已通过邮件邀请协作者",
+    "collaboratorInvited": "已在 Builderforce 中邀请协作者",
+    "inviteFailed": "邀请失败",
+    "largeSessionHint": "仅渲染可见对象。使用框架或隐藏较重的对象可保持导航流畅。",
+    "toggleObjectPalette": "切换对象面板",
+    "closePalette": "关闭面板",
+    "tourLabel": "引导式导览",
+    "tourOfferTitle": "欢迎使用创作画布",
+    "tourOfferBody": "通过六个简短步骤，了解 Brain、对象、连接、协作者和交付如何协同工作。您可以随时退出导览。",
+    "tourStart": "开始导览",
+    "tourCancel": "暂时不要",
+    "tourClose": "关闭导览",
+    "tourStep": "第 {step} / 6 步",
+    "tourTitle1": "在 Brain 面板中提问",
+    "tourTitle2": "一切皆是对象",
+    "tourTitle3": "选择以聚焦 Brain",
+    "tourTitle4": "明确连接想法",
+    "tourTitle5": "与协作者一起构建",
+    "tourTitle6": "准备好后即可交付",
+    "tourBody1": "提示框位于 Brain 面板中，可以在此会话中创建或评估任何内容。",
+    "tourBody2": "从面板中拖入工作流、网站、数据、智能体、人员和项目上下文。",
+    "tourBody3": "选择一个对象提出针对性问题，或点击背景以评估整个会话。",
+    "tourBody4": "连接两个对象即可定义真实的数据、控制、引用、展示或交付关系。",
+    "tourBody5": "分享会话、对对象评论，并查看实时光标，而不会移动他人的视图。",
+    "tourBody6": "项目是可选的。只有当你想把工件变成任务并分配智能体时才添加。",
+    "workflowFocusEditor": "工作流聚焦编辑器",
+    "closeWorkflowEditor": "关闭工作流编辑器",
+    "editWorkflowOnCanvas": "在画布上编辑工作流",
+    "editWorkflowHint": "更改会保存到规范的工作流定义中。",
+    "workflowSaved": "已从此会话保存工作流",
+    "evermindAdapterStudio": "Evermind 适配器工作室",
+    "closeAdapterStudio": "关闭适配器工作室",
+    "trainEvermindOnCanvas": "在画布上训练 Evermind",
+    "trainEvermindHint": "真实的冻结基座 LoRA、可评估的任务证据，以及可移植的 safetensors 输出。",
+    "adapterTrained": "Evermind 适配器已训练并关联到此画布对象",
+    "localAdapterTrained": "本地 Evermind 适配器已训练、下载并关联到此画布对象",
+    "versionHistory": "版本历史",
+    "versionHistoryHint": "恢复会创建新的修订版本",
+    "closeHistory": "关闭历史记录",
+    "historyLocalOnly": "此会话目前存储在本设备上。保存后才会开始服务器版本历史。",
+    "nameCheckpoint": "+ 命名当前检查点",
+    "revisionLabel": "修订版 {revision}",
+    "revisionMeta": "修订版 {revision} · {at}",
+    "noRevisions": "尚无已保存的修订版本。",
+    "sessionOutcomeMetrics": "会话成果指标",
+    "ideaToDelivery": "想法 → 交付",
+    "sessionVsTenant": "本会话 vs {count} 个租户会话",
+    "valueGenerated": "本会话产生的价值",
+    "closeOutcomeMetrics": "关闭成果指标",
+    "saveForBaseline": "保存以建立基准",
+    "saveForBaselineHint": "你的草稿保留在本地。保存后 Builderforce 可以将行动与成果关联，并与汇总的租户会话进行比较。",
+    "saveAndMeasure": "保存并衡量",
+    "calculatingValue": "正在计算交付价值…",
+    "metricsUnavailable": "指标不可用",
+    "baselineGathering": "正在收集基准数据",
+    "typicalValue": "典型值：{value}",
+    "correlationCoverage": "关联覆盖让每个动作都可被追责。",
+    "aggregatesScoped": "汇总数据不含内容，且限定在租户范围内。",
+    "sessionConversation": "会话对话",
+    "sessionConversationHint": "即使移除聊天对象也会保留",
+    "closeConversation": "关闭对话",
+    "canvasDiagnostics": "画布诊断",
+    "closeDiagnostics": "关闭诊断",
+    "diagSession": "会话",
+    "diagSessionValue": "{persistence} · 修订版 {revision}",
+    "diagRealtime": "实时",
+    "diagCanvas": "画布",
+    "diagCanvasValue": "{objects} 个对象 · {connections} 条连接",
+    "diagBrainValue": "{state} · {actions} 项操作",
+    "diagResponding": "响应中",
+    "diagReady": "就绪",
+    "diagScope": "范围",
+    "diagAccess": "访问权限",
+    "reviewBrainChanges": "审核 Brain 的更改",
+    "reviewBrainChangesHint": "精确选择要应用的更改",
+    "closeChangeSet": "关闭更改集",
+    "rejectAll": "全部拒绝",
+    "applyAutoApply": "应用并自动应用",
+    "applyAutoApplyHint": "应用这一批，并自动应用后续的 Brain 操作",
+    "applySelected": "应用已选的 {count} 项",
+    "mergeBranch": "将分支合并到父级",
+    "mergeBranchHint": "逐个明确解决每个对象。仅存在于父级的对象会被保留。",
+    "closeMergeReview": "关闭合并审核",
+    "mergeBothContain": "两个会话都包含此 {kind}。",
+    "mergeNewFromBranch": "来自此分支的新 {kind}。",
+    "mergeChoiceFor": "{title} 的合并选择",
+    "useBranchVersion": "使用分支版本",
+    "keepParentVersion": "保留父级版本",
+    "applyReviewedMerge": "应用已审核的合并",
+    "resizeDetailsPanel": "调整详情面板大小",
+    "liveKind": "实时 {kind}",
+    "restoreDetailsWidth": "还原详情面板宽度",
+    "expandDetailsPanel": "展开详情面板",
+    "restorePanelWidth": "还原面板宽度",
+    "expandPanel": "展开面板",
+    "closeInspector": "关闭检查器",
+    "redactedObject": "你可以看到此对象的位置，但其来源对你已不可用。",
+    "accessRequested": "已请求访问权限",
+    "requestFailed": "请求失败",
+    "evermindSetupStep": "Evermind 设置第 {step} 步",
+    "evermindSetupOf5": "Evermind 设置 · 第 {step} / 5 步",
+    "pipelineStageHint": "完成此阶段，然后沿编号连接前往下一张卡片。",
+    "useFilePicker": "使用下方的文件选择器开始。",
+    "dataReadyNext": "数据已就绪。沿“2 · 示例”前往标记示例。",
+    "agentSetupProgress": "智能体设置进度",
+    "buildTestEvaluateDeliver": "构建 → 测试 → 评估 → 交付",
+    "agentStepsHint": "按顺序完成这些步骤。所有操作都在此详情面板中进行；结果会保留在画布上。",
+    "stepKnowledge": "1 · 知识 {state}",
+    "stepTest": "2 · 测试 {state}",
+    "stepEvaluation": "3 · 评估 {state}",
+    "stepDelivery": "4 · 交付 {state}",
+    "stateAdded": "已添加",
+    "stateNeeded": "待完成",
+    "stateRun": "已运行",
+    "stateRecorded": "已记录",
+    "statePending": "待处理",
+    "stateConnected": "已连接",
+    "stateReadyNext": "下一步就绪",
+    "removeTool": "移除 {tool}",
+    "addTool": "+ 添加工具",
+    "autonomyMedium": "中 · 请求审批",
+    "autonomyLow": "低 · 仅建议",
+    "autonomyHigh": "高 · 在策略内自主行动",
+    "agentKnowledge": "智能体知识",
+    "connectedCount": "已连接 {count} 项",
+    "addKnowledge": "添加知识",
+    "addKnowledgePlaceholder": "粘贴政策、产品事实、升级规则或支持流程",
+    "addAndConnectKnowledge": "添加并连接知识",
+    "agentTestBench": "智能体测试台",
+    "testBench": "测试台",
+    "customerMessage": "客户消息",
+    "customerMessagePlaceholder": "我被重复扣款了，能帮我处理吗？",
+    "expectedSignals": "期望的回复信号",
+    "expectedSignalsPlaceholder": "重复扣款、订单号、调查",
+    "runningTest": "正在运行测试…",
+    "runAgentTest": "运行智能体测试",
+    "agentResponse": "智能体回复",
+    "saveAgentEverywhere": "在所有位置保存智能体设置",
+    "passRate": "通过率 {rate}%",
+    "runTestForResult": "运行一次智能体测试以获取结果",
+    "evaluationCriteria": "评估标准",
+    "evaluationCriteriaPlaceholder": "每行一条预期行为",
+    "evaluationHint": "将此评估连接到一个智能体。从该智能体测试台运行的测试会带着通过/失败证据记录在这里。",
+    "testCase": "测试用例",
+    "agentDeliveryChecklist": "智能体交付清单",
+    "deliveryChecklist": "交付清单",
+    "agentSelected": "已选择智能体",
+    "connectAgentCard": "连接一张智能体卡片",
+    "knowledgeConnected": "已连接知识",
+    "sourceCount": "{count} 个来源",
+    "testResponseRecorded": "已记录测试回复",
+    "workforceAgentSaved": "已保存团队智能体",
+    "deliveryConnectedHint": "该智能体已连接到持久的团队资源。查看其评估，然后在任何需要支持工作的地方使用这个团队智能体。",
+    "deliveryPendingHint": "打开智能体卡片，完成知识与测试，然后保存会话并使用“在所有位置保存智能体设置”以连接交付。",
+    "viewportDesktop": "桌面 · 1440",
+    "viewportTablet": "平板 · 768",
+    "viewportMobile": "手机 · 390",
+    "subdomainPlaceholder": "留空时使用项目名称",
+    "publishWebsite": "发布线上网站",
+    "openPublishedSite": "打开已发布站点 ↗",
+    "websiteLiveHint": "更改会实时呈现在画布上的交互原型中。",
+    "videoPromptPlaceholder": "描述要生成的视频",
+    "publishedEvermindModel": "已发布的 Evermind 模型（可选）",
+    "mediaModelPlaceholder": "首个已发布的媒体模型",
+    "generateVideo": "生成视频",
+    "videoFirstFrame": "生成视频的首帧",
+    "approvalRequiredBeforePublish": "发布前需审批",
+    "runWorkflow": "运行工作流",
+    "refreshLiveData": "刷新实时数据",
+    "projectView": "项目视图",
+    "lensEverything": "全部",
+    "lensDelivery": "交付",
+    "lensMetrics": "指标",
+    "lensFeedback": "客户反馈",
+    "projectContextHint": "项目上下文是可选的。加载其质量证据、添加相关工作，或与画布上的其他项目比较。",
+    "visualizeQuality": "可视化质量诊断",
+    "addRelatedItems": "添加所有相关条目",
+    "compareProjects": "在画布上比较项目",
+    "statusBacklog": "待办池",
+    "statusTodo": "待办",
+    "statusReady": "就绪",
+    "statusAssigned": "已分配",
+    "statusInProgress": "进行中",
+    "statusInReview": "审核中",
+    "statusBlocked": "受阻",
+    "statusDone": "已完成",
+    "priorityLow": "低",
+    "priorityMedium": "中",
+    "priorityHigh": "高",
+    "priorityUrgent": "紧急",
+    "howToMoveForward": "如何推进",
+    "taskGuidanceFallback": "保持负责人、PRD、验收标准和当前状态准确，下一步行动才会清晰。",
+    "assignedAgent": "已分配的智能体",
+    "saveAgentBeforeAssign": "请先保存此智能体，然后再分配给项目任务",
+    "acceptanceCriteria": "验收标准",
+    "acceptanceCriteriaPlaceholder": "这个任务完成时必须满足什么条件？",
+    "taskPrd": "任务 PRD",
+    "noPrdLinkedHint": "将一个 PRD 对象连接到此任务，或从项目任务详情中关联一个。PRD 为智能体提供目标和交接上下文。",
+    "savingTask": "正在保存任务…",
+    "taskUpdated": "任务已更新",
+    "taskUpdatedLocal": "任务已在此会话中更新",
+    "taskUpdateFailed": "任务更新失败",
+    "taskDetailsSaved": "任务详情已保存",
+    "saveTaskDetails": "保存任务详情",
+    "portfolioViewHint": "此组合视图结合了项目健康度与已保存的质量诊断、未关闭差距、修复状态和优先级建议。",
+    "refreshQualityComparison": "刷新质量比较",
+    "deliveryProject": "交付项目",
+    "noProject": "无项目",
+    "assignAgent": "分配智能体",
+    "addToProjectAssign": "添加到项目并分配",
+    "mockupSetHint": "将该集合展开为可单独评审的原型稿，或将已批准的集合作为一个项目任务交付。",
+    "expandAllMockups": "展开所有原型稿",
+    "standupHint": "召集当前画布上的每位成员和智能体。若有已保存的项目，这会启动规范的站会仪式，并在会话中保留其资源链接。",
+    "gatherStandup": "召集并开始站会",
+    "creativeBriefPlaceholder": "描述要创建的{label}",
+    "browseWithBrain": "用 Brain 浏览或输入 ID",
+    "optionalTemplate": "可选模板",
+    "nativeCreativeCapability": "原生创作能力",
+    "creativeCapability": "创作能力",
+    "creativeCapabilityHint": "Builderforce 拥有这份与供应商无关的契约。Brain 通过内置 MCP 目录调用它；之后可以在不改变画布对象的情况下接入执行提供方。",
+    "applyTemplate": "应用模板",
+    "generateLabel": "生成{label}",
+    "saveReusableFrame": "保存为可复用框架",
+    "drawingHint": "调整大小、批注、连接，或将此草图用作 Brain 的视觉上下文。",
+    "objectLiveHint": "此对象在会话中是活动的。将它连接到其他对象，或让 Brain 转换或评估它。",
+    "copyAndDownload": "复制与下载",
+    "copiedToClipboard": "已复制到剪贴板",
+    "clipboardUnavailable": "剪贴板不可用",
+    "noTabularRows": "此对象尚未包含表格数据行",
+    "markdownDownloadedUsePdf": "今日免费下载次数已用完 — 已改为保存 Markdown；免费注册即可继续",
+    "printOpened": "已打开打印视图 — 请选择“另存为 PDF”",
+    "printUnavailable": "此浏览器无法打开打印视图",
+    "noRenderedDrawing": "此图尚未绘制完成",
+    "csvDownloadedSignInForExcel": "今日免费下载次数已用完 — 已改为保存 CSV；免费注册即可继续",
+    "downloadReady": "下载已就绪",
+    "exportFailed": "导出失败",
+    "deliverables": "交付物",
+    "deliveredOutputs": "已交付的输出",
+    "openDeliverable": "打开交付物 ↗",
+    "resourceRole": "资源 · {role}",
+    "evidenceSources": "证据来源",
+    "voiceTranscriptionFailed": "语音转写失败",
+    "voiceLocalHint": "保存此会话即可创建或选择已授权的声音、录制样本、转写语音并生成可播放音频。",
+    "dictateScript": "口述并转写脚本",
+    "generatingVoiceStatus": "正在生成语音…",
+    "generateVoice": "生成语音",
+    "guidedSetupAdded": "已添加引导式设置",
+    "newModel": "新模型",
+    "continueFromStep1": "从第 1 步继续",
+    "startWithExamples": "从训练示例开始",
+    "guidedSetupAddedHint": "编号卡片展示了完整的学习路径。此按钮会带你回到第一个未完成的操作。",
+    "guidedSetupHint": "我们会添加一个五步流程，并先打开训练数据选择器。每张卡片都会说明下一步。",
+    "goToStep1": "前往第 1 步 · 训练数据",
+    "startGuidedSetup": "开始引导式设置",
+    "trainLoraAdapter": "训练 LoRA 适配器",
+    "blueprintNoAccountHint": "此蓝图无需账户即可使用。想运行训练、保存版本或部署推理时再保存会话。",
+    "useProjectOnCanvas": "使用画布上的项目",
+    "collaborationStartsOnSave": "保存后即可开始协作",
+    "collaborationStartsHint": "你的画布在本设备上仍可编辑。登录后即可添加评论、提及、共享活动和协作者。",
+    "commentOnObject": "对此对象发表评论",
+    "commentPlaceholder": "写下评论，或用 @ 提及协作者…",
+    "viewOnlyAccess": "仅可查看",
+    "postComment": "发表评论",
+    "objectComments": "对象评论",
+    "objectActivity": "对象活动",
+    "recentActivity": "近期活动",
+    "commentUpdateFailed": "无法更新评论",
+    "brainScope": "Brain 范围",
+    "selectedObject": "所选对象",
+    "selectedObjects": "已选 {count} 个对象",
+    "connectedScope": "已连接对象",
+    "currentFrame": "当前框架",
+    "memoryNeedsProject": "添加一个已保存的项目以连接其 Evermind",
+    "agentExisting": "已有协作者",
+    "agentPrepareNew": "准备这位新协作者",
+    "agentExistingHint": "其工作团队配置已加载。在此处的更改会同步更新各处的同一智能体。",
+    "agentPrepareHint": "先设定这个智能体的行为方式，用已连接的知识训练它，并给出明确方向，然后再邀请它加入对话。",
+    "agentStepPersonality": "1 · 性格",
+    "agentStepTrainingAdded": "2 · 已添加训练",
+    "agentStepTrainingNeeded": "2 · 需要训练",
+    "agentStepDirection": "3 · 方向",
+    "agentStepTestRun": "4 · 已完成测试",
+    "agentStepTestNeeded": "4 · 需要测试",
+    "personality": "性格",
+    "personalityPlaceholder": "亲切、好奇、坦率且简洁",
+    "modelAuto": "自动 · 选择最合适的模型",
+    "agentDirection": "方向",
+    "agentDirectionPlaceholder": "这个智能体应负责什么、优化什么，并向团队交付什么？",
+    "showBrainInObject": "在“大脑”对象中显示对话",
+    "dockBrainToEdge": "将 Brain 停靠到边缘",
+    "resizeBrain": "调整 Brain 聊天宽度",
+    "collaboratorJoined": "{name} 加入了对话",
+    "collaboratorWriting": "{name} 正在输入",
+    "writingPrompt": "正在编写提示词",
+    "saveCollaborator": "保存此协作者",
+    "saveCollaboratorGate": "创建免费账户，将此已配置的智能体发布到您的团队，并在不同会话中使用。",
+    "savingAgentSettings": "正在保存智能体的规范设置…",
+    "creatingWorkforceAgent": "正在创建团队智能体…",
+    "agentSettingsSaved": "智能体设置已同步保存",
+    "agentCreatedReady": "智能体已创建，可以开始协作",
+    "agentSettingsSaveFailed": "无法保存智能体设置",
+    "createInviteAgent": "创建并邀请智能体",
+    "openingCanvas": "正在打开你的创作画布……",
+    "creatingCanvas": "正在创建你的画布……",
+    "startingOnDevice": "正在此设备上安全启动……",
+    "sharedStart": "分享此画布",
+    "sharedStarting": "正在创建……",
+    "sharedStarted": "已共享——发送链接即可邀请他人",
+    "sharedInviteHint": "无需账户即可与任何人共享此画布。你们将编辑同一块画板，并共享同一份免费消息额度。",
+    "sharedLiveHint": "任何拥有此链接的人都可以打开并编辑此画布。免费消息由这里的所有人共享。",
+    "sharedJoinBlurb": "加入后即可一起在此画布上创作。你们将编辑同一块画板——无需账户。",
+    "sharedPeopleHere": "{count, plural, =0 {暂无他人} other {当前 # 人在线}}",
+    "sharedHostTag": "（主持人）",
+    "sharedStopSharing": "停止共享",
+    "sharedSaveToKeep": "保存以便留存",
+    "sharedLeft": "你已停止共享此画布",
+    "sharedAnyoneWithLink": "任何拥有链接的人",
+    "sharedDefaultHostName": "主持人",
+    "sharedUnavailable": "共享画布目前不可用",
+    "sharedEnded": "该共享画布已结束",
+    "sharedBoardTooLarge": "此画板过大，无法同步——仅保存在此设备上",
+    "noDiagramSource": "此对象没有可导出的图表源码。",
+    "documentBody": "文档",
+    "documentBodyPlaceholder": "用 Markdown 撰写文档。标题、列表和表格都会在画布上呈现。",
+    "deckOutline": "演示大纲",
+    "deckOutlinePlaceholder": "每个标题一张幻灯片，或用 --- 分隔幻灯片。",
+    "diagramSource": "图表源码",
+    "drawioSectionTitle": "Draw.io 画布",
+    "drawioSectionHint": "将此预览转换为可编辑的 .drawio 文件，或添加到本会话已有的文件中。",
+    "drawioCreateAction": "新建 Draw.io 文件",
+    "drawioAddAction": "添加到 {name}",
+    "drawioSourceMissing": "源图片或绘图已不在画布上。",
+    "drawioPreviewRequired": "此对象需要图片预览或至少两个绘图点才能转换。",
+    "drawioAppendFailed": "此 Draw.io 源无法添加图片。请先导出或替换为未压缩的 Draw.io 文件。",
+    "drawioUpdatedStatus": "Draw.io 已更新",
+    "drawioCreatedStatus": "Draw.io 已创建",
+    "drawioAddedStatus": "图片已添加到 Draw.io",
+    "drawioAddedToEdge": "添加到",
+    "drawioConvertedEdge": "转换为",
+    "drawioImageAdded": "{name} 已添加到 {diagram}。",
+    "drawioTitle": "{name} Draw.io 画布",
+    "drawioCreated": "{name} 已就绪并随本会话保存。",
+    "diagramSourcePlaceholder": "粘贴 Draw.io XML（mxfile 或 mxGraphModel）或 Mermaid 源码。",
+    "diagramFormat": "表示法",
+    "diagramFormatDrawio": "Draw.io",
+    "diagramFormatMermaid": "Mermaid",
+    "files": {
+      "title": "文件",
+      "count": "{count} 个文件",
+      "close": "关闭文件",
+      "search": "搜索文件",
+      "filterByType": "按类型筛选",
+      "filterAll": "全部",
+      "empty": "暂无文件。你生成的文档、演示文稿、图表、表格和所有导出都会出现在这里。",
+      "noMatches": "没有符合此搜索的文件。",
+      "openOnCanvas": "在画布中打开",
+      "download": "下载 {name}",
+      "exported": "已导出",
+      "editable": "可编辑",
+      "category_document": "文档",
+      "category_presentation": "演示文稿",
+      "category_diagram": "图表",
+      "category_spreadsheet": "电子表格",
+      "category_image": "图片",
+      "category_media": "媒体",
+      "category_code": "代码",
+      "category_web": "站点",
+      "category_other": "其他"
+    },
+    "drive": {
+      "title": "云端文件",
+      "close": "关闭",
+      "accounts": "已连接的账户",
+      "connect": "连接 {provider}",
+      "notConfigured": "此部署未配置 {provider}",
+      "connectPrompt": "连接云盘即可在此浏览文件。",
+      "noAccounts": "此部署没有可用的云存储。",
+      "reconnectNeeded": "需要重新连接此云盘才能读取其文件。",
+      "breadcrumb": "文件夹路径",
+      "root": "全部文件",
+      "folder": "文件夹",
+      "loading": "加载中…",
+      "opening": "正在打开…",
+      "emptyFolder": "此文件夹为空。",
+      "loadMore": "加载更多",
+      "loadFailed": "无法读取该云盘。",
+      "connectFailed": "无法启动 {provider} 连接。",
+      "openFailed": "无法打开 {name}。"
+    },
+    "creativeSelectFirst": "请先选择一个创作对象",
+    "creativePreviewOpened": "已打开预览",
+    "creativeDownloaded": "交付物已下载",
+    "creativeGenerating": "生成中…",
+    "creativeGenerated": "{file} 已生成并通过校验",
+    "creativeGeneratedOffline": "{file} 由离线基础生成器生成 —— 生成服务当前不可用",
+      "creativeGeneratedStatus": "已生成",
+      "imageFoundStatus": "已找到",
+      "imageFoundValidation": "已从 {provider} 选择",
+      "imageGeneratedValidation": "图像生成已返回可渲染图像",
+      "imageFoundProposal": "添加找到的图像“{title}”",
+      "imageGeneratedProposal": "添加生成的图像“{title}”",
+    "creativeApplied": "已应用",
+    "creativeNoMediaModel": "请先发布一个 Evermind 媒体模型来渲染此对象",
+    "creativeNoFrames": "模型未返回可读取的帧",
+    "modeSaveFailed": "无法保存会话模式",
+    "alignNeedsTwo": "请至少选择两个对象再对齐",
+    "objectsAligned": "已对齐 {count} 个对象",
+    "editorActions": "编辑器操作",
+    "openInEditor": "在编辑器中打开",
+    "objectAdded": "已添加 {title}",
+    "recordingTitle": "实时会话录制",
+    "recordingStatus": "已录制",
+    "build": {
+      "typeLabel": "你要构建什么",
+      "typeLockedHint": "构建类型在创建工作区时确定，之后无法更改。",
+      "createWorkspace": "创建工作区",
+      "openBuilder": "打开构建器",
+      "creating": "正在创建工作区…",
+      "created": "工作区已创建 — 构建器已打开。",
+      "createFailed": "无法创建工作区",
+      "openFullPage": "在整页中打开 ↗",
+      "boundHint": "文件、编辑器、实时预览、质量检查、终端和发布全部在浏览器中运行。",
+      "unboundHint": "创建工作区会生成一个可运行的初始项目，你可以立即编辑和预览。",
+      "selectFirst": "请先添加一个构建器对象以打开工作区",
+      "gateTitle": "创建账户即可开始构建",
+      "gateDescription": "构建工作区会保存到你的账户，因此文件、预览和已发布的站点都会保留。",
+      "focusLabel": "构建器工作区",
+      "focusTitle": "构建器",
+      "focusHint": "无需离开画布即可编辑、运行和发布此项目。",
+      "closeBuilder": "关闭构建器",
+      "edgeLabel": "由此构建",
+      "addedFromWebsite": "已添加构建器 — 创建其工作区即可开始为该站点编写代码。",
+      "websiteWithCode": "用代码构建此站点",
+      "websiteWithCodeHint": "在此网站旁添加一个构建器，把设计变成真正可运行的代码库。",
+      "loading": "正在打开工作区…",
+      "loadFailed": "无法打开此工作区",
+      "close": "关闭",
+      "tileReady": "工作区就绪",
+      "tileNotCreated": "尚未创建",
+      "tileBoundHint": "打开构建器即可编辑文件、运行开发服务器并发布。",
+      "tileUnboundHint": "在详情面板中选择类型，然后创建工作区。",
+      "pillDevServer": "实时预览",
+      "pillChecks": "质量检查",
+      "pillPublish": "发布",
+      "attachLabel": "或使用你已有的工作区",
+      "attachPlaceholder": "选择一个已有的构建…",
+      "attached": "已关联工作区 — 构建器已打开。",
+      "deleteWorkspace": "删除工作区",
+      "deleteWorkspaceHint": "从画布移除该对象会保留其工作区；删除工作区则会在所有位置移除其文件。",
+      "deleteConfirm": "要删除“{title}”背后的工作区吗？其文件将在所有位置被移除，而不仅仅是从此画布。",
+      "workspaceDeleted": "工作区已删除 — 该构建器再次没有任何文件。",
+      "deleteWorkspaceFailed": "无法删除工作区"
+    },
+    "noticeSessionSaved": "会话已保存",
+    "noticeSavedOnDevice": "已保存到本设备",
+    "noticeSavingChanges": "正在保存更改…",
+    "noticeConcurrentMerged": "已合并并发更改；正在重新保存…",
+    "noticeUpdatedByCollaborator": "已由协作者更新",
+    "noticeUpdatedLive": "协作者已实时更新",
+    "noticeNothingToUndo": "没有可撤销的操作",
+    "noticeChangeUndone": "已撤销画布更改",
+    "noticeNothingToRedo": "没有可重做的操作",
+    "noticeChangeRedone": "已重做画布更改",
+    "noticeSelectToDuplicate": "请选择一个或多个对象以复制",
+    "noticeSelectToCopy": "请选择一个或多个对象以拷贝",
+    "noticeSelectTwoForFrame": "请至少选择两个对象以创建框架",
+    "noticeSketchAdded": "已添加草图",
+    "noticeFrameSavedAccount": "可复用框架已保存到你的账户模板库",
+    "noticeFrameSavedLibrary": "可复用框架已保存到你的模板库",
+    "noticeCreatingBranch": "正在创建独立分支…",
+    "noticeComparingBranch": "正在将分支与其父级比较…",
+    "noticeApplyingMerge": "正在应用已审阅的合并…",
+    "noticeAddOrSelectProject": "请先添加或选择一个项目",
+    "noticeLoadingRelationships": "正在加载项目关系…",
+    "noticeRelationshipsAdded": "项目关系已添加到画布",
+    "noticeNeedTwoProjects": "请至少添加两个已保存的项目以进行比较",
+    "noticeLoadingEvidence": "正在加载最新的项目证据…",
+    "noticeComparisonAdded": "已添加基于证据的项目比较",
+    "noticeAttachForQuality": "请先关联一个已保存的项目，然后再加载质量诊断",
+    "noticeLoadingQuality": "正在加载项目质量诊断…",
+    "noticeCreatingDelivery": "正在创建交付任务…",
+    "noticeDeliveryAwaitingApproval": "交付任务已创建；代理运行正在等待批准",
+    "noticeDeliveryStarted": "交付任务已创建，代理已启动",
+    "noticeMockupDelivered": "原型已作为任务交付到项目",
+    "noticeNeedProjectForDelivery": "请添加一个真实项目以交付此任务",
+    "noticeNeedSavedProject": "请先将已保存的项目添加到画布",
+    "noticeEvermindAttached": "Evermind 已关联到项目",
+    "noticeDatasetStepOne": "第 1 步，共 5 步 — 在详情面板中选择 CSV 或 TSV",
+    "noticeNeedProjectForTraining": "请先添加或关联一个已保存的项目，然后再创建工作区训练作业",
+    "noticeTrainBeforeEval": "请先训练工作区适配器，然后再运行模型评估",
+    "noticeEvaluatingAdapter": "正在用数据集评估已训练的适配器…",
+    "noticeNeedPeopleOnCanvas": "请先将成员或代理添加到画布",
+    "noticeStartingStandup": "正在启动标准站会…",
+    "noticeNeedProjectForStandup": "请添加一个项目以开始实时站会",
+    "noticeKnowledgeConnected": "知识已添加并连接到代理",
+    "noticeBrainEvaluating": "Brain 正在评估已连接的对象…",
+    "noticeRoadmapAdded": "路线图已添加到画布",
+    "noticeLlmCourseAdded": "您的 LLM 课程和结业实验已准备就绪",
+    "noticeFeatureSummaryAdded": "已添加功能摘要和原型",
+    "noticeEvaluationAdded": "评估已添加到画布",
+    "noticeSavingPrd": "正在将已审阅的 PRD 保存到其项目…",
+    "noticeChangesRejected": "已拒绝 Brain 的更改；画布未变动",
+    "noticeNeedRunnerAccess": "需要运行者或所有者权限",
+    "noticeNeedWorkflow": "请添加一个工作流以运行它",
+    "noticeWorkflowRunRecord": "此对象是工作流运行记录。请添加或打开其工作流定义以开始新的运行。",
+    "noticeStartingWorkflow": "正在启动标准工作流…",
+    "noticeWorkflowBuilding": "正在构建此工作流…",
+    "noticeWorkflowBuilt": "工作流已构建 —— {count} 个步骤可以运行",
+    "noticeWorkflowNotRunnable": "此工作流尚不可运行",
+    "buildWorkflow": "构建工作流",
+    "buildWorkflowGateTitle": "保存此工作流",
+    "buildWorkflowGate": "构建工作流会在你的账户中创建一个真实可运行的资源。请创建免费账户以构建并运行它。",
+    "noticeNeedWebsite": "请添加一个网站对象以发布",
+    "noticeConnectWebsite": "发布前请将此网站连接到一个已保存的项目",
+    "noticePublishingWebsite": "正在构建并发布网站…",
+    "noticeNeedVideo": "请添加一个视频对象以生成",
+    "noticeGeneratingVideo": "正在使用 Evermind 生成视频…",
+    "noticeUseTrainedPackage": "请使用“已训练的包”部分来发布和测试此 Evermind",
+    "noticePreparingExport": "正在准备画布导出…",
+    "noticeExportDownloaded": "画布导出已下载",
+    "noticeViewportChanged": "网站视口已更改为 {viewport}",
+    "noticeObjectsDuplicated": "已复制 {count} 个对象",
+    "noticeObjectsCopied": "已拷贝 {count} 个对象",
+    "noticeObjectsPasted": "已粘贴 {count} 个对象",
+    "noticeObjectsFramed": "已框选 {count} 个对象",
+    "noticeTemplateAddedMarketplace": "已从市场添加 {name}",
+    "noticeFramePresetAdded": "已添加框架 {name}",
+    "noticeAddingTemplate": "正在添加 {name}…",
+    "noticeTemplateAdded": "已添加 {name}",
+    "noticeDecisionsReady": "有 {count} 项对象决策待审阅",
+    "noticeAgentDelivery": "代理交付 {status}",
+    "noticeMockupsExpanded": "已在画布上展开 {count} 个原型",
+    "noticeEvermindEvalComplete": "Evermind 评估完成：{score}%",
+    "noticeTestingAgent": "正在测试 {name}…",
+    "noticeAgentTestResult": "{name} 测试{status}",
+    "noticeWorkflowStarted": "工作流已启动 · {count} 个任务",
+    "noticeWorkflowStatus": "工作流{status}",
+    "noticeWebsitePublished": "网站已发布到 {url}",
+    "noticeVideoGenerated": "已使用 {model} 生成 {frames} 帧视频",
+    "noticeRestoringRevision": "正在恢复修订版本 {revision}…",
+    "noticeRevisionRestored": "修订版本 {revision} 已恢复；正在另存为新修订版本…",
+    "noticeCheckpointSaved": "检查点“{label}”已保存",
+    "noticeWorkflowRunStarted": "工作流运行 {id} 已启动",
+    "noticeEvermindPublished": "Evermind 已发布，可通过 {ref} 调用",
+    "noticeDeliveryAgentFailed": "交付任务 {id} 已创建，但代理无法启动：{reason}",
+    "noticeNoDeliveryAdapter": "{action} 未执行，因为此 {kind} 没有连接交付适配器",
+    "runtimeUnavailable": "运行时不可用",
+    "noticeAdapterStudioOpened": "已为此 Evermind 打开适配器工作室",
+    "noticeBrainFailed": "Brain 无法完成此请求",
+    "noticeBrainFinished": "Brain 已完成画布评估",
+    "noticeExportFailed": "画布导出失败",
+    "noticeConversationSaveFailed": "对话保存失败",
+    "noticeTemplateFailed": "无法应用模板",
+    "noticeCompareBranchFailed": "无法比较分支",
+    "noticeCompareProjectsFailed": "无法比较项目",
+    "noticeCreateBranchFailed": "无法创建分支",
+    "noticeExpandProjectFailed": "无法展开项目",
+    "noticeLoadEvermindFailed": "无法加载 Evermind",
+    "noticeLoadActivityFailed": "无法加载活动记录",
+    "noticeLoadHistoryFailed": "无法加载历史记录",
+    "noticeLoadQualityFailed": "无法加载项目质量数据",
+    "noticeLoadSessionFailed": "无法加载会话",
+    "noticePostCommentFailed": "无法发表评论",
+    "noticeRestoreRevisionFailed": "无法恢复修订版本",
+    "noticeSaveCheckpointFailed": "无法保存检查点",
+    "noticeSaveTemplateFailed": "无法保存模板",
+    "noticeStartStandupFailed": "无法开始站会",
+    "noticeEvermindEvalFailed": "Evermind 评估失败",
+    "noticeInvitationsFailed": "无法加载邀请",
+    "noticeLoadingActivity": "正在加载活动记录…",
+    "noticeMergeFailed": "无法应用合并",
+    "noticeNoActivityYet": "此对象尚无活动记录。",
+    "noticePlacementUnlocked": "对象位置已解锁",
+    "noticeObjectsShown": "对象已在画布上显示",
+    "noticeOutcomeMetricsFailed": "无法加载成效指标",
+    "noticePrdNotSaved": "项目 PRD 未保存",
+    "noticeQualityCardAdded": "已添加质量卡片 — 运行诊断以得出评分",
+    "noticeSaveFailed": "保存失败",
+    "noticeStandupFramePrepared": "站会框架已准备好",
+    "noticeObjectLocked": "此对象正由其他协作者编辑",
+    "noticeLensAlreadyExpanded": "此项目视图已展开",
+    "noticeGuestAiUnavailable": "AI 目前不可用。你的画布在本设备上仍可编辑——请稍后再试一次。",
+    "noticeAgentTestFailed": "智能体测试失败",
+    "noticeAgentGroupFailed": "该智能体回合未能完成",
+    "noticeAgentTestStatusError": "错误 · {reason}",
+    "noticeAgentGroupTurnFailed": "智能体小组未能完成本回合：{reason}",
+    "noticeClaimFailed": "暂时无法保存此会话",
+    "noticeApplyingBrainChanges": "正在应用 {count} 项 Brain 更改…",
+    "noticeBrainChangesAwaitReview": "{count} 项 Brain 更改待审核",
+    "noticeConversationSaveFailedReason": "对话保存失败：{reason}",
+    "noticePrdNotSavedReason": "项目 PRD 未保存：{reason}",
+    "noticeGuestLimitReached": "你今天的 {limit} 条免费访客消息已用完。免费注册即可继续——你的画布会一并保留。",
+    "noticeGuestLimitDevice": "本设备今天的免费访客额度已用完。免费注册即可继续——你的画布会一并保留。",
+    "templateCategoryMarketplace": "应用市场模板",
+    "templateCategoryObjectPack": "对象组合包",
+    "template": {
+      "llm-builder-academy": {
+        "name": "LLM 构建学院",
+        "description": "通过课程、实践、评估和可移植的 SCORM 课程包学习完整的 LLM 生命周期。"
+      },
+      "sales-command-center": {
+        "name": "销售指挥中心",
+        "description": "在一个协作画布上完成目标客户定位、外联触达、管道管理、目标设定与辅导。"
+      },
+      "campaign": {
+        "name": "营销活动工作室",
+        "description": "规划营销活动、制作落地页原型并评估预测依据。"
+      },
+      "product-discovery": {
+        "name": "产品探索",
+        "description": "汇总客户证据、排定功能优先级，并把概念扩展为原型图。"
+      },
+      "data-story": {
+        "name": "数据故事",
+        "description": "导入数据集、构建实时可视化，并组织成面向管理层的叙述。"
+      },
+      "stand-up": {
+        "name": "临时站会",
+        "description": "召集人员与智能体，暴露阻碍并生成后续工作。"
+      },
+      "model-build": {
+        "name": "Evermind 模型实验室",
+        "description": "准备数据、教学与调优 Evermind、进行评估并打包成果。"
+      },
+      "executive-review": {
+        "name": "管理层评审",
+        "description": "将项目健康度、优先级、路线图与演示汇入同一决策框架。"
+      },
+      "creative-studio": {
+        "name": "创意工作室",
+        "description": "通过 Builderforce 原生创意能力制作视频、图像、动画、播客与漫画。"
+      },
+      "career-documents": {
+        "name": "简历与演示工作室",
+        "description": "基于同一份源简介生成简历、配套文件、分页文档与演示文稿。"
+      },
+      "pitch-competition": {
+        "name": "路演比赛作战室",
+        "description": "参加路演比赛并赢下它：书面申请、限时路演、评分表、评委问答演练与演示文稿，全部依据赛事自身规则评分。"
+      },
+      "interactive-3d": {
+        "name": "游戏与 3D 工作室",
+        "description": "借助 MCP 支持的项目持久化设计可玩游戏、CAD 图纸与 3D 模型。"
+      }
+    },
+    "pitch": {
+      "addQuestion": "添加问题",
+      "answer": "回答",
+      "answerEmpty": "尚未演练。",
+      "answerPlaceholder": "用你实际拥有的时间作答。",
+      "answeredCount": "已回答 {answered}/{total}",
+      "applicationHint": "提交前请满足每条规则并遵守每项字数限制。",
+      "beatEmpty": "该环节尚未撰写内容。",
+      "beatsWritten": "已撰写 {written}/{total} 个环节",
+      "blockedCount": "{count} 项阻碍",
+      "budget": "预算",
+      "budgetedAcrossBeats": "分配于 {count} 个环节",
+      "category": "类别",
+      "charCount": "{chars} / {max} 字符",
+      "chooseCategory": "选择类别",
+      "competition": "赛事",
+      "competitionHint": "{pitch} 路演、{qa} 评委问答、{criteria} 项评分标准。",
+      "complete": "完成度",
+      "completePercent": "完成 {value}%",
+      "criteriaCount": "{count} 项标准",
+      "entryFor": "参赛项目",
+      "evidence": "佐证",
+      "evidencePlaceholder": "评委会认可的证据。",
+      "gap": "差距",
+      "gapPlaceholder": "目前还缺什么。",
+      "gapPrefix": "差距：{gap}",
+      "judgeQa": "评委问答",
+      "marksLostHere": "失分点",
+      "noLimit": "无字数限制",
+      "ofLimit": "限时 {limit}",
+      "officialRules": "官方规则",
+      "qaHint": "评委有 {qa} 提问时间。请优先演练你最不想被问到的问题。",
+      "qaWindow": "问答时段",
+      "question": "问题",
+      "readinessHint": "按该赛事公布的每项标准加权计算。",
+      "readinessPercent": "就绪度 {value}%",
+      "ready": "就绪",
+      "readyToSubmit": "可以提交",
+      "rehearsed": "已演练",
+      "rehearsedOf": "已演练 {answered}/{total}",
+      "runtime": "时长",
+      "scoreOutOf": "为「{name}」评分，满分 {max}",
+      "scoreValue": "{max} 分中的 {score} 分",
+      "scored": "已评分",
+      "scoredAgainst": "评分依据",
+      "script": "讲稿",
+      "seconds": "秒数",
+      "spokenAt130": "按每分钟 130 词计算，限时 {limit}",
+      "label": {
+        "beat": {
+          "hook": "开场钩子",
+          "problem": "问题",
+          "solution": "解决方案",
+          "demo": "演示",
+          "traction": "增长实绩",
+          "market": "市场与商业模式",
+          "team": "团队",
+          "ask": "诉求",
+          "whatYouDo": "你做的事",
+          "insight": "洞察",
+          "progress": "进展"
+        },
+        "criterion": {
+          "innovation": "创新性与原创性",
+          "viability": "可行性",
+          "marketability": "市场适销性",
+          "growth": "增长潜力",
+          "impact": "影响力潜能",
+          "team": "团队与成员",
+          "problem": "问题清晰度",
+          "solution": "解决方案与演示",
+          "traction": "增长实绩",
+          "market": "市场与商业模式",
+          "founders": "创始人",
+          "insight": "洞察",
+          "progress": "启动以来的进展",
+          "clarity": "思路清晰度"
+        },
+        "rule": {
+          "launchWindow": "产品或服务于 2024 年 1 月 1 日之后发布",
+          "oneProduct": "每家公司仅可提交一款产品或服务",
+          "founderOwnership": "创始人仍持有股权",
+          "fundingCap": "累计融资低于 1000 万美元",
+          "registered": "在所属司法辖区依法注册并合规",
+          "categoryFit": "符合官方参赛类别之一",
+          "cohort": "目前属于本期路演批次或项目",
+          "liveProduct": "产品已上线且可演示",
+          "incorporated": "公司已完成注册",
+          "founderTime": "至少一位创始人全职投入",
+          "equity": "创始人可接受该项目的股权条款"
+        },
+        "answer": {
+          "oneLiner": "一句话描述",
+          "problem": "你解决的问题",
+          "solution": "产品或服务",
+          "differentiation": "独特之处",
+          "market": "市场与商业模式",
+          "traction": "迄今的增长实绩",
+          "impact": "成功后的影响",
+          "team": "团队",
+          "funding": "迄今融资总额",
+          "ask": "你的诉求",
+          "whatYouDo": "你们在做什么？",
+          "insight": "你们理解而他人不理解的是什么？",
+          "progress": "目前已经做出了什么？",
+          "users": "你们的用户是谁？如何确认他们需要它？",
+          "founders": "创始人背景"
+        }
+      }
+    },
+    "webPage": {
+      "address": "网址",
+      "addressPlaceholder": "输入网址后按 Enter",
+      "reload": "重新加载页面",
+      "openInNewTab": "在新标签页中打开",
+      "emptyTitle": "尚未加载页面",
+      "emptyHint": "在上方输入网址，或将链接拖放到画布上。",
+      "loading": "正在加载 {host}…",
+      "checking": "正在检查该页面是否允许嵌入…",
+      "blockedTitle": "{host} 不允许被嵌入",
+      "blockedHint": "此处改为显示页面的可读文本。如需正常使用，请在新标签页中打开。",
+      "readerEmpty": "该页面未返回可读文本。",
+      "probeFailed": "服务器无法读取该页面。",
+      "invalidUrl": "请输入有效的 http:// 或 https:// 地址。",
+      "statusLive": "实时",
+      "addressLabel": "网址",
+      "reread": "重新加载并重新读取页面",
+      "inspectorHint": "页面在画布上实时加载，其文本也会读入画布，便于 Brain 回答与之相关的问题。",
+      "mixedTitle": "{host} 通过 http:// 提供服务",
+      "mixedHint": "安全页面无法嵌入非安全页面。此处改为显示页面文本 — 请在新标签页中打开，或在 VS Code 扩展中查看。"
+    },
+    "expandPaletteGroup": "展开「{group}」分组",
+    "collapsePaletteGroup": "收起「{group}」分组",
+    "game": {
+      "title": "在真实设备上游玩",
+      "shipAction": "在设备上游玩",
+      "selectFirst": "请先选择一个游戏对象。",
+      "accountTitle": "创建账户以发布此游戏",
+      "accountBody": "保存此会话，即可将游戏发布到手机、构建应用或发送到 Roblox。",
+      "needProject": "将此游戏连接到一个「项目」对象，才能发布它或构建应用。",
+      "needGame": "请先生成游戏 — 目前还没有可发布的内容。",
+      "phoneTitle": "在手机上",
+      "phoneIntro": "将游戏发布到专属网址，然后在 Android 或 iPhone 上添加到主屏幕。全屏、离线、触控操作。",
+      "phoneScan": "用手机相机扫描即可立即游玩。",
+      "qrAlt": "已发布游戏的二维码",
+      "publish": "发布",
+      "republish": "发布更新",
+      "publishing": "发布中…",
+      "published": "游戏已发布到 {url}",
+      "installIos": "iPhone：在 Safari 中打开链接，然后「分享」→「添加到主屏幕」。",
+      "installAndroid": "Android：在 Chrome 中打开链接，出现提示时点击「安装」。",
+      "zeroSetup": "无需设置",
+      "build": "构建",
+      "rebuild": "重新构建",
+      "building": "构建中…",
+      "openIt": "打开",
+      "openLink": "打开",
+      "materialized": "{label}：已写入 {count} 个文件",
+      "wroteFiles": "{directory} 中有 {count} 个文件",
+      "universeId": "Roblox Universe ID",
+      "placeId": "Roblox Place ID",
+      "robloxIdsHint": "这两个数字都在你已从 Studio 发布的体验的 Creator Dashboard 网址中。",
+      "publishRoblox": "发布到 Roblox",
+      "robloxPublished": "已发布到 Roblox，版本 {version}"
+    },
+    "teammateSeated": "已加入此画布",
+    "launcherEyebrow": "创建",
+    "createByTypeTitle": "按类型创建",
+    "createByTypeSubtitle": "选择你想创建的内容类型。",
+    "guidedTemplateTitle": "使用引导模板",
+    "guidedTemplateSubtitle": "从一个完整、已连接的工作流开始。",
+    "guidedTemplatesLabel": "引导模板",
+    "useTemplate": "使用模板",
+    "comingSoon": "即将推出",
+    "createAction": "创建",
+    "blankCanvas": "从空白画布开始",
+    "blankCanvasHint": "在上方描述你想创建的内容，或点击这里。",
+    "blankCanvasEmpty": "空白画布",
+    "untitledSession": "未命名会话",
+    "sessionLimitReached": "已达到已保存会话数量上限。请归档一个会话或升级后再创建。",
+    "sessionLimitShort": "已达会话上限",
+    "sessionLimitHint": "请归档一个会话或升级后再创建。",
+    "sessionLimitPlan": "你的套餐包含 {limit} 个会话。请归档一个或升级后再开始新的已保存会话。",
+    "creatingSession": "正在创建…",
+    "libraryLabel": "创作库",
+    "creationStatusLabel": "创作状态",
+    "searchCreationsLabel": "搜索创作",
+    "unreadBadge": "新",
+    "projectBadge": "项目 {id}",
+    "sessionObjectsPeople": "{objects} 个对象 · {people} 位成员",
+    "sessionRunning": "{count} 个运行中"
+  },
+  "canvasCommands": {
+    "cleanLayout": "整理画布布局",
+    "toggleMiniMap": "切换缩略图",
+    "showMiniMap": "显示缩略图",
+    "hideMiniMap": "隐藏缩略图",
+    "closeMiniMap": "关闭缩略图",
+    "threeD": {
+      "toggle": "切换 3D 视图",
+      "enter": "以 3D 查看此画布",
+      "exit": "退出 3D",
+      "depthGroup": "按对象组分层",
+      "depthGroupActive": "当前按对象组分层 — 切换为依赖流",
+      "depthGroupInactive": "当前按依赖流分层 — 切换为对象组",
+      "title": "3D 视图",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "reset": "重置视图",
+      "layerName": "第 {index} 层",
+      "layerCount": "{count} 个对象",
+      "layerGuides": "图层参考线",
+      "layerGuidesActive": "隐藏图层参考线",
+      "layerGuidesInactive": "显示图层参考线",
+      "dropToLayers": "让对象回落到各自的图层",
+      "orbitLabel": "3D 画布。拖动可旋转，滚动可缩放，也可使用方向键。",
+      "spaceLabel": "三维画布。拖动对象可移动它，按住 Shift 拖动可沿深度移动；拖动空白处可旋转场景，滚轮缩放，也可使用方向键。",
+      "hint": "拖动旋转 · 滚动缩放 · 方向键旋转，+ 与 − 缩放，0 重置 · 选择对象即可打开",
+      "spaceHint": "拖动对象可移动它，按住 Shift 可沿深度移动 · 拖动空白处可旋转场景，按住 Shift 或使用中键可平移 · 滚轮缩放 · 方向键旋转场景并移动选中的对象，+ 与 − 缩放，0 重置",
+      "empty": "向此画布添加对象后即可在 3D 中查看。",
+      "previewAlt": "{label} 预览"
+    }
+  },
+  "workspaceCanvas": {
+    "panelLabel": "{title} 画布面板",
+    "removePanel": "从画布中移除 {title}",
+    "defaultGroup": "面板"
+  },
+  "projectConnections": {
+    "title": "连接",
+    "defaultRepo": "默认仓库",
+    "connectionAria": "{provider} {label} — {status}",
+    "lastSynced": "上次同步于 {date}",
+    "more": "还有 {count} 个",
+    "moreTitle": "还有 {count} 个连接 — 打开「集成」",
+    "buildTitle": "{branch} 上的最新构建：{status}（{date}）",
+    "buildAria": "{branch} 上的最新构建：{status}",
+    "openPrs": "{count, plural, other {# 个 PR}}",
+    "openPrsTitle": "{count, plural, other {# 个待处理的拉取请求}}",
+    "openPrsRecordedTitle": "由 Builderforce 创建的 {count, plural, other {# 个待处理拉取请求}}",
+    "health": {
+      "ok": "已连接",
+      "degraded": "同步中但有错误",
+      "error": "连接失败",
+      "unknown": "未验证"
+    },
+    "reason": {
+      "no_credential": "未关联凭据",
+      "unauthorized": "访问被拒绝 — 请检查凭据",
+      "not_found": "未找到仓库",
+      "rate_limited": "已达到服务商速率限制",
+      "provider_error": "服务商错误",
+      "disabled": "连接已停用",
+      "not_probed": "未验证"
+    },
+    "build": {
+      "success": "通过",
+      "failure": "失败",
+      "pending": "运行中",
+      "cancelled": "已取消"
+    }
+  },
+  "connectors": {
+    "category": {
+      "communication": "沟通协作",
+      "crm": "客户关系与销售",
+      "productivity": "效率工具",
+      "devtools": "开发者工具",
+      "finance": "财务与计费",
+      "marketing": "市场营销",
+      "support": "客户支持",
+      "storage": "存储",
+      "data": "数据",
+      "other": "其他"
+    },
+    "gallery": {
+      "loading": "正在加载连接器…",
+      "blurb": "共有 {count} 个连接器。连接之后，其操作即可作为工具供智能体调用。",
+      "buildConnector": "+ 创建连接器",
+      "noMatches": "没有符合搜索条件的连接器。",
+      "connected": "已连接",
+      "notConnected": "未连接",
+      "actionCount": "{count} 个操作",
+      "custom": "自定义",
+      "draft": "草稿",
+      "confirmDisconnect": "断开 {name}？将删除 {count} 个已保存的连接，其操作也将不再提供给智能体。"
+    },
+    "panel": {
+      "connections": "连接",
+      "actions": "操作",
+      "activity": "活动记录",
+      "edit": "编辑连接器",
+      "apiDocs": "API 文档 ↗"
+    },
+    "connect": {
+      "empty": "尚无连接。添加一个后，智能体即可使用此连接器。",
+      "add": "+ 添加连接",
+      "nameLabel": "连接名称",
+      "baseUrlOverride": "基础 URL 覆盖（可选）",
+      "baseUrlHelp": "留空则使用默认值。自托管或沙箱实例请填写。",
+      "save": "保存连接",
+      "saving": "正在保存…",
+      "credentialsStored": "已保存 {count} 项凭据",
+      "untested": "未测试",
+      "healthy": "正常",
+      "failing": "异常",
+      "test": "测试",
+      "enable": "启用",
+      "disable": "停用",
+      "remove": "移除",
+      "confirmRemove": "移除连接“{name}”？其保存的凭据将被删除。",
+      "failed": "无法保存该连接。",
+      "testFailed": "测试调用失败。"
+    },
+    "actions": {
+      "blurb": "连接完成后，以下每个操作都会作为可调用工具提供给智能体。",
+      "writes": "写入",
+      "inputs": "输入参数"
+    },
+    "activity": {
+      "empty": "暂无调用记录。",
+      "actor": {
+        "agent": "智能体",
+        "user": "手动",
+        "test": "测试"
+      }
+    },
+    "builder": {
+      "newTitle": "创建连接器",
+      "editTitle": "编辑连接器 — {key}",
+      "tabImport": "导入 OpenAPI",
+      "tabManifest": "清单",
+      "importBlurb": "粘贴 OpenAPI 或 Swagger 文档，每个接口都会转为一个操作。保存前可先审阅结果。",
+      "keyLabel": "连接器标识",
+      "keyHelp": "仅限小写字母、数字和连字符。创建后不可更改。",
+      "specUrlLabel": "规范文档 URL",
+      "specPasteLabel": "或直接粘贴文档（JSON）",
+      "specPastePlaceholder": "'{' \"openapi\": \"3.0.0\", … '}'",
+      "import": "导入",
+      "importing": "正在导入…",
+      "imported": "已导入 {total} 个接口中的 {count} 个。请审阅后发布。",
+      "importFailed": "导入失败。",
+      "specNotJson": "粘贴的文档不是有效的 JSON（不支持 YAML）。",
+      "warnings": "{count} 条导入提示",
+      "manifestBlurb": "清单即整个连接器：基础 URL、认证方式，以及每个操作的定义。",
+      "manifestLabel": "连接器清单（JSON）",
+      "summary": "标识“{key}” · {count} 个操作",
+      "saveDraft": "保存草稿",
+      "publish": "发布",
+      "publishHelp": "草稿可在此测试，但不会提供给智能体。发布后其操作方可被调用。",
+      "statusDraft": "草稿",
+      "statusPublished": "已发布",
+      "saveFailed": "无法保存连接器。",
+      "deleteFailed": "无法删除连接器。",
+      "confirmDelete": "删除此连接器？其连接和已保存的凭据也会一并删除。"
+    }
+  },
+  "challenges": {
+    "title": "挑战",
+    "subtitle": "粘贴一份比赛、招标文件或开通邮件。Builderforce 会读出获胜所需的条件，规划系统并完成搭建：画布里的代码、上线的接口，以及看板上的工单。",
+    "briefLabel": "题目内容",
+    "briefPlaceholder": "整段粘贴即可 —— 邮件、比赛规则、招标条款都行，无需预先整理。",
+    "readBtn": "解读题目",
+    "reading": "解读中…",
+    "buildBtn": "开始搭建",
+    "building": "搭建中…",
+    "openProject": "打开项目",
+    "twoStepNote": "解读题目不会构建任何东西。请先确认下方的方案，再开始搭建。",
+    "readFailed": "无法解读该题目。",
+    "buildFailed": "搭建未能完成。",
+    "goalHeading": "系统需要做到什么",
+    "approachHeading": "将如何搭建",
+    "matchScore": "匹配度 {score}",
+    "endpointsHeading": "接口",
+    "unverified": "未验签",
+    "verifiedVia": "通过 {kind} 验签",
+    "integrationsHeading": "需要连接的集成",
+    "secretsHeading": "后端运行所需的密钥",
+    "constraintsHeading": "题目中明确的限制",
+    "successHeading": "如何证明它能跑通",
+    "ticketsHeading": "将创建的工单（{count}）",
+    "warningsHeading": "需要注意",
+    "builtHeading": "已搭建",
+    "builtFiles": "已写入 {files} 个文件，{handlers} 个接口已上线。",
+    "builtTickets": "新建 {created} 个工单，{skipped} 个已在看板上。",
+    "ingressLabel": "你的 Webhook 地址",
+    "blockingHeading": "上线前仍需完成（{count}）",
+    "nextHeading": "下一步",
+    "openConsole": "打开控制台",
+    "historyHeading": "你的挑战",
+    "status": {
+      "parsed": "已解读",
+      "planned": "已规划",
+      "building": "搭建中",
+      "built": "已完成",
+      "failed": "失败"
+    },
+    "backend": {
+      "title": "运行中的后端",
+      "loading": "正在加载后端…",
+      "loadFailed": "无法加载后端。",
+      "saveFailed": "保存失败。",
+      "addressLabel": "将服务商的 Webhook 指向这里",
+      "siteAddressLabel": "在您的网站上",
+      "siteAddressNote": "您已发布的网站会在自有域名上提供这些处理程序，因此页面可直接调用 fetch('/api/…')，无需令牌。上面的地址仍可用于服务商 Webhook。",
+      "deployedNote": "本项目部署在你自己的 Cloudflare 账号上，因此这是你的 Worker 地址，而非 Builderforce 入口。",
+      "strategyLabel": "运行位置",
+      "endpointsLabel": "当前已上线的接口",
+      "unverified": "未验签 —— 任何人都可调用",
+      "brokenLabel": "无法解析的 handler",
+      "secretsLabel": "密钥",
+      "missingSecrets": "尚未设置：{names}。在此之前请求会被 403 拒绝 —— 这是有意的安全失效，而非故障。",
+      "stored": "已保存",
+      "remove": "删除",
+      "secretNamePlaceholder": "密钥名称",
+      "secretValuePlaceholder": "值",
+      "storeSecret": "保存",
+      "secretsNote": "值按租户加密保存且不可再读取 —— 重新保存将直接覆盖。Handler 模板也无法读取密钥。",
+      "deliveriesLabel": "最近的请求",
+      "noDeliveries": "还没有请求到达这些接口。",
+      "colWhen": "时间",
+      "colRoute": "路径",
+      "colStatus": "状态码",
+      "colVerdict": "结果",
+      "refresh": "刷新",
+      "pauseIngress": "暂停入口",
+      "resumeIngress": "恢复入口",
+      "pauseHint": "暂停后，所有入站请求会在几秒内返回 404 —— 这是针对异常或已泄露接口的紧急开关。",
+      "pausedNote": "已暂停。所有入站请求均被拒绝；服务商会重试或将 Webhook 标记为失败。",
+      "workerHealthLabel": "已部署的 Worker",
+      "workerUnreachable": "无法连接已部署的 Worker：{reason}",
+      "workerMissingSecrets": "已部署，但以下密钥尚未在 Worker 中绑定：{names}。在你将它们添加为仓库密钥并重新部署之前，请求会被拒绝。",
+      "workerReady": "可达，预期的 {count} 个密钥均已绑定。",
+      "addHandler": "添加接口",
+      "noHandlers": "还没有接口。自己添加一个，或构建一个挑战来生成。",
+      "edit": "编辑",
+      "newHandler": "新建接口",
+      "editHandler": "正在编辑 {name}",
+      "handlerName": "名称",
+      "handlerRoute": "路径",
+      "handlerMethod": "方法",
+      "handlerVerify": "验签方式",
+      "handlerDescription": "描述",
+      "handlerSteps": "步骤",
+      "handlerRespond": "响应",
+      "stepsHelp": "一个 JSON 数组。每个步骤为 llm、connector、set 或 data 之一，并具有唯一 id。data 步骤会读取您网站的某个集合。模板可读取 body、query、headers、project 和 steps——绝不包括密钥。",
+      "respondHelp": "一个 JSON 对象，kind 为 twiml、json、text 或 empty。",
+      "verifyNoneWarning": "未验签：任何知道此 URL 的人都可以调用它。仅当该接口可安全地匿名调用时才选择此项。",
+      "handlerCors": "浏览器源（CORS）",
+      "handlerCorsPlaceholder": "https://example.com",
+      "corsHelp": "每行一个源。除非其他站点的页面会调用此处理程序，否则请留空——您自己发布的网站属于同源，无需配置。使用“*”允许任意源，或使用“null”以适配原生应用的 webview。",
+      "corsWildcardWarning": "“*” 允许互联网上的任何网站从访客的浏览器调用此处理程序。它可能消耗您已连接的账户和模型令牌，因此仅在真正的公开 API 上使用。",
+      "invalidJson": "这不是有效的 JSON。",
+      "stepsMustBeArray": "步骤必须是一个 JSON 数组。",
+      "saveHandler": "保存接口",
+      "saving": "正在保存…",
+      "cancel": "取消",
+      "verdict": {
+        "ok": "正常",
+        "unverified": "未验签",
+        "no-handler": "无 handler",
+        "rate-limited": "限流",
+        "error": "错误"
+      },
+      "handlerVerifySecret": "密钥名称（可选）",
+      "handlerVerifySecretPlaceholder": "STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED",
+      "verifySecretHelp": "留空则使用该服务商的默认密钥。当服务商为每个端点签发不同的签名密钥时才需要填写 —— Stripe 就是如此，因此每条 Stripe 路由都需要各自的密钥。"
+    },
+    "builtDispatched": "已有智能体在处理 {count} 个构建工单。"
+  },
+  "site": {
+    "domain": {
+      "title": "自定义域名",
+      "description": "为该站点绑定你拥有的域名。添加下方两条 DNS 记录后进行验证。",
+      "placeholder": "example.com",
+      "inputLabel": "域名",
+      "connect": "连接",
+      "update": "更新",
+      "verify": "验证",
+      "disconnect": "断开",
+      "txtRecord": "1. 证明域名归你所有",
+      "cnameRecord": "2. 将流量指向这里",
+      "visit": "打开 {hostname}",
+      "cnameMissing": "所有权已验证，但 CNAME 记录尚未指向这里。",
+      "genericError": "出错了，请重试。",
+      "status": {
+        "unset": "未设置",
+        "pending_dns": "等待 DNS",
+        "pending_certificate": "正在签发证书",
+        "active": "已上线",
+        "failed": "失败"
+      }
+    },
+    "forms": {
+      "title": "表单",
+      "description": "每个已发布站点都可以收集提交内容。将表单提交到下方地址。",
+      "endpoint": "接口地址",
+      "submissionCount": "{count} 条提交",
+      "viewSubmissions": "查看提交",
+      "hideSubmissions": "隐藏提交",
+      "noSubmissions": "暂无提交。",
+      "when": "时间",
+      "email": "邮箱",
+      "fields": "字段",
+      "newPlaceholder": "new-form",
+      "newLabel": "新表单名称",
+      "add": "添加表单",
+      "genericError": "出错了，请重试。"
+    },
+    "traffic": {
+      "title": "访问量",
+      "views": "页面浏览",
+      "visitors": "访客",
+      "assets": "资源请求",
+      "window": "{days}天",
+      "sparklineLabel": "每日页面浏览量",
+      "approximate": "数据为近似值——在边缘节点批量统计。"
+    }
+  },
+  "growth": {
+    "title": "增长",
+    "description": "读取你已在使用的邮箱，并触达在你所建站点上注册的用户。",
+    "genericError": "出错了，请重试。",
+    "audiences": {
+      "title": "受众",
+      "description": "站点表单提交会自动进入这里。",
+      "empty": "暂无受众。",
+      "memberCount": "{count} 位成员",
+      "namePlaceholder": "订阅通讯",
+      "nameLabel": "受众名称",
+      "add": "添加",
+      "created": "受众已创建。"
+    },
+    "senders": {
+      "title": "发件地址",
+      "description": "发送前请添加 TXT 记录以证明域名所有权。",
+      "empty": "暂无发件地址。",
+      "emailPlaceholder": "hello@example.com",
+      "emailLabel": "发件地址",
+      "add": "添加",
+      "verify": "检查 DNS",
+      "created": "地址已添加——请发布 TXT 记录后检查 DNS。",
+      "checked": "DNS 已检查。",
+      "status": {
+        "verified": "已验证",
+        "pending": "待验证"
+      }
+    },
+    "campaigns": {
+      "title": "营销活动",
+      "description": "营销活动需要主题、有成员的受众，以及一个发送来源。",
+      "empty": "暂无活动。",
+      "namePlaceholder": "上线公告",
+      "nameLabel": "活动名称",
+      "subjectPlaceholder": "邮件主题",
+      "subjectLabel": "主题",
+      "bodyPlaceholder": "<p>你好…</p>",
+      "bodyLabel": "邮件正文",
+      "add": "创建草稿",
+      "send": "发送",
+      "created": "草稿已创建。",
+      "sent": "已开始发送。",
+      "stats": "已发送 {sent}/{recipients} · 打开 {opened} · 点击 {clicked}",
+      "status": {
+        "draft": "草稿",
+        "sending": "发送中",
+        "sent": "已发送",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "blocker": {
+        "status": "已发送",
+        "subject": "请填写主题",
+        "sender": "请验证发件地址",
+        "audience": "受众为空",
+        "mailbox": "请选择已连接的邮箱",
+        "connection": "请选择 SendGrid 连接"
+      },
+      "compose": "新建营销活动",
+      "confirmSendTitle": "要发送此营销活动吗？",
+      "confirmSend": "向“{name}”的全部受众发送？这会触达真实用户且无法撤销。",
+      "transport": {
+        "platform": "由 Builderforce 发送",
+        "mailbox": "从你的邮箱发送",
+        "sendgrid": "经 Twilio SendGrid 发送"
+      }
+    },
+    "mailboxes": {
+      "title": "邮箱",
+      "description": "连接 Microsoft 365 或 Gmail，即可在画布上查看收件箱，并以本人身份发送营销邮件。",
+      "empty": "尚未连接邮箱。",
+      "connect": "连接 {provider}",
+      "connected": "邮箱已连接。",
+      "disconnect": "断开连接",
+      "disconnected": "邮箱已断开连接。",
+      "confirmDisconnect": "断开 {email}？以该邮箱发送的营销活动将会停止。",
+      "allowSending": "允许营销活动从此邮箱发送",
+      "sendingUpdated": "发送权限已更新。",
+      "notConfigured": "本部署未配置该服务商。",
+      "status": {
+        "connected": "已连接",
+        "reconnect": "需重新连接"
+      },
+      "provider": {
+        "microsoft": "Microsoft 365",
+        "google": "Gmail"
+      },
+      "error": {
+        "declined": "你拒绝了授权，因此未连接任何邮箱。",
+        "failed": "无法连接该邮箱，请重试。"
+      }
+    },
+    "brand": {
+      "title": "徽标与图片",
+      "description": "邮件可加载的图片。使用 '{{logo}}' 的模板会自动采用你最新的徽标。",
+      "empty": "尚无图片。",
+      "upload": "上传徽标",
+      "uploaded": "图片已上传。",
+      "generate": "生成",
+      "generated": "徽标已生成。",
+      "generatePlaceholder": "墨尔本的一家精品咖啡烘焙店",
+      "generateLabel": "描述该业务",
+      "delete": "删除",
+      "deleted": "图片已删除。",
+      "confirmDelete": "删除 {name}？使用它的模板将显示为损坏的图片。"
+    },
+    "templates": {
+      "title": "模板",
+      "description": "可复用的主题与正文。导入的 HTML 会先经过清理再存储。",
+      "empty": "尚无模板。",
+      "use": "使用",
+      "delete": "删除",
+      "deleted": "模板已删除。",
+      "import": "导入 HTML",
+      "imported": "模板已导入。",
+      "confirmDelete": "删除模板 {name}？",
+      "mergeFields": "需要：{fields}",
+      "source": {
+        "builtin": "入门",
+        "custom": "自定义",
+        "imported": "导入",
+        "generated": "AI"
+      }
+    },
+    "composer": {
+      "title": "新建营销活动",
+      "audience": "受众",
+      "audienceOption": "{name}（{count} 位成员）",
+      "template": "从模板开始",
+      "noTemplate": "从空白开始撰写",
+      "transport": "发送方式",
+      "transportHint": {
+        "platform": "使用你已通过 TXT 记录验证域名的地址发送。",
+        "mailbox": "以本人身份，从你连接的 Microsoft 365 或 Gmail 账户发送。",
+        "sendgrid": "使用你自己的 Twilio SendGrid 密钥，从已验证的地址发送。"
+      },
+      "mailbox": "邮箱",
+      "noMailboxes": "没有已连接且允许发送的邮箱。",
+      "sender": "发件地址",
+      "noSenders": "尚无已验证的发件地址。",
+      "fromName": "显示名称",
+      "fromNamePlaceholder": "Acme 团队",
+      "choose": "请选择…",
+      "mergeHelp": "可使用 '{{name}}'、'{{email}}'、'{{logo}}' 和 '{{unsubscribe}}'，或受众中的任意 '{{field}}'。",
+      "cancel": "取消",
+      "connection": "SendGrid 连接",
+      "noConnections": "没有已启用的 SendGrid 连接。请在“设置 → 集成 → 连接器”中添加。"
+    }
+  },
+  "cookieConsent": {
+    "title": "您的隐私，由您选择",
+    "subtitle": "可选分析默认关闭",
+    "gpcBadge": "GPC 已启用",
+    "body": "我们使用必要的存储来运行 BuilderForce。在您允许的情况下，分析可帮助我们改进产品。我们绝不出售您的个人信息、聊天记录或创意。",
+    "necessaryLabel": "必要",
+    "necessaryDesc": "安全、登录和已保存的偏好设置",
+    "alwaysOn": "始终开启",
+    "analyticsLabel": "分析",
+    "analyticsDesc": "帮助我们了解并改进 BuilderForce",
+    "gpcNote": "您浏览器的全球隐私控制 (GPC) 将保持可选跟踪处于关闭状态。",
+    "necessaryOnly": "仅必要",
+    "allowAnalytics": "允许分析",
+    "saveChoices": "保存选择",
+    "customize": "自定义",
+    "back": "返回",
+    "cookiePolicy": "Cookie 政策"
+  },
+  "pwa": {
+    "updateReady": "新版本已就绪 — {seconds} 秒后更新。",
+    "updateNow": "立即更新",
+    "installPitch": "安装 Builderforce，获得更快的全屏应用体验。",
+    "install": "安装",
+    "installIos": "安装 Builderforce：点按“分享”，然后选择“添加到主屏幕”。"
+  },
+  "workflow": {
+    "connectorNode": {
+      "integration": "集成",
+      "action": "操作",
+      "input": "输入（JSON）",
+      "choosePlaceholder": "请选择…",
+      "loading": "正在加载集成…",
+      "loadFailed": "无法加载你的集成。",
+      "parameters": "参数",
+      "required": "必填",
+      "templateHint": "'{{'input'}}' 会插入上游节点的输出；当该输出为 JSON 时，'{{'input.字段'}}' 可读取其中的某个字段。",
+      "mutatesWarning": "该操作会产生实际影响 —— 发送消息、拨打电话或划转资金。每次触发此工作流时，它都会在无人值守的情况下执行。",
+      "connectionHint": "需要在「集成」中有一个可用的 {name} 连接。在此之前，该节点会安全地失败。"
+    }
+  },
+  "kernel": {
+    "timeline": {
+      "loading": "正在加载动态…",
+      "empty": "这里还没有任何动态。",
+      "failed": "无法加载动态。",
+      "someone": "某人"
+    },
+    "comments": {
+      "placeholder": "添加评论…",
+      "post": "发布",
+      "posting": "发布中…",
+      "loading": "正在加载评论…",
+      "empty": "暂无评论。",
+      "resolved": "已解决",
+      "someone": "某人"
+    },
+    "share": {
+      "scopeLabel": "访问权限",
+      "create": "创建链接",
+      "creating": "创建中…",
+      "shownOnce": "请立即复制此链接——系统仅保存其哈希值，无法再次显示。",
+      "loading": "正在加载链接…",
+      "empty": "暂无分享链接。",
+      "revoke": "撤销",
+      "uses": "已使用 {count} 次",
+      "expires": "{date} 过期",
+      "scope": {
+        "view": "可查看",
+        "comment": "可评论",
+        "edit": "可编辑"
+      }
+    },
+    "chart": {
+      "empty": "暂无测量数据。",
+      "ariaLabel": "趋势图，共 {count} 条数据线"
+    },
+    "panel": {
+      "title": "详情",
+      "breadcrumb": "路径导航",
+      "sections": "分区",
+      "untitled": "未命名",
+      "close": "关闭",
+      "noMembers": "还没有成员。",
+      "noRevisions": "暂无版本。",
+      "tab": {
+        "activity": "动态",
+        "comments": "评论",
+        "members": "成员",
+        "shares": "分享",
+        "revisions": "版本"
+      }
+    },
+    "roster": {
+      "label": "团队",
+      "team": "团队",
+      "recents": "最近",
+      "activeNow": "近期活跃",
+      "expand": "展开导航",
+      "collapse": "收起导航",
+      "domain": {
+        "growth": "增长",
+        "delivery": "交付",
+        "agents": "智能体",
+        "hiring": "招聘",
+        "finance": "财务",
+        "revenue": "营收",
+        "commerce": "商务",
+        "identity": "身份",
+        "people": "人事",
+        "platform": "平台",
+        "governance": "治理",
+        "investor": "投资组合",
+        "support": "支持",
+        "canvas": "画布",
+        "integrations": "集成"
+      }
+    },
+    "surface": {
+      "ownedBy": "由{seat}负责",
+      "loading": "加载中…",
+      "noItems": "这里还没有内容。",
+      "panelLabel": "对象详情",
+      "stat": {
+        "items": "条目",
+        "recentEvents": "本周事件",
+        "lastActivity": "最近活动"
+      },
+      "section": {
+        "metrics": "趋势",
+        "items": "该席位所属",
+        "activity": "最近动态",
+        "records": "记录",
+        "kernel": "共享内核"
+      },
+      "blurb": {
+        "growth": "营销活动、落地页、内容以及它们触达的受众。",
+        "delivery": "所有工作单元——任务、史诗、目标、里程碑——统一成一棵树。",
+        "agents": "智能体、运行记录及其背后的模型。",
+        "hiring": "职位发布、申请、面试与入职安排。",
+        "finance": "总账、计划、支出以及基于它们构建的情景。",
+        "revenue": "交易、销售管道、联系人与外联。",
+        "commerce": "商品、订单、预约与外包项目。",
+        "identity": "人员、团队、工作区及其登录方式。",
+        "people": "雇佣关系、学习培训与组织健康状况。",
+        "platform": "监控、仪表板以及平台的运行报告。",
+        "governance": "控制项、发现问题及其证据。",
+        "investor": "公司、产品、尽职调查与验证。",
+        "support": "工单、知识库文章以及客户的反馈。",
+        "canvas": "所有共同创作、分享和协作的内容。",
+        "integrations": "已连接的账户及其同步内容。"
+      },
+      "kernelBlurb": "每个席位共享的二十五个基础组件。没有任何领域拥有它们，也不得分叉。"
+    },
+    "entities": {
+      "tabs": "记录类型",
+      "loading": "加载中…",
+      "noEntities": "此席位尚无记录。",
+      "empty": "暂无记录。",
+      "search": "搜索",
+      "searchBy": "按 {field} 搜索",
+      "searchDisabled": "此记录类型没有可搜索的名称",
+      "new": "新建",
+      "edit": "编辑",
+      "retire": "停用",
+      "actions": "操作",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "creating": "新建 {entity}",
+      "editing": "编辑 {entity}",
+      "readOnly": "只读 — 这些记录由拥有它们的服务写入。",
+      "withheld": "已隐藏字段：{fields}",
+      "loadFailed": "无法加载这些记录。",
+      "saveFailed": "保存失败。",
+      "previous": "上一页",
+      "next": "下一页",
+      "range": "第 {from}–{to} 条，共 {total} 条"
+    }
+  },
+  "announcements": {
+    "regionLabel": "公告",
+    "dismiss": "关闭",
+    "defaultCta": "了解更多"
+  },
+  "toast": {
+    "dismiss": "关闭通知"
+  },
+  "resumeWork": {
+    "savedOne": "我们已将“{title}”保存到您的工作区。",
+    "savedMany": "我们已将“{title}”以及另外 {count} 个画布保存到您的工作区。",
+    "open": "打开"
+  },
+  "canvasSwitcher": {
+    "title": "画布：{name}",
+    "selectAria": "选择画布",
+    "canvases": "画布",
+    "untitled": "未命名画布",
+    "unsavedLabel": "尚未保存",
+    "unsavedHint": "保存在此浏览器中",
+    "recentLabel": "最近",
+    "empty": "还没有画布",
+    "newCanvas": "新建画布",
+    "creating": "正在创建…",
+    "allCanvases": "全部画布"
+  },
+  "canvasLibrary": {
+    "title": "您的画布",
+    "subtitle": "您创建的全部内容，以及开始新作品的方式。",
+    "pendingTitle": "等待保存",
+    "renameSession": "重命名会话",
+    "moveSession": "移动到文件夹",
+    "moveSessionPrompt": "文件夹名称（留空即可移出文件夹）",
+    "mergeSession": "合并会话",
+    "mergeSessionPrompt": "输入要合并到此会话中的会话准确名称。可用会话：{sessions}",
+    "mergeSessionNotFound": "未找到该名称的会话。",
+    "mergeSessionConfirm": "将“{source}”合并到“{target}”吗？源会话将从此浏览器中删除。",
+    "deleteSession": "删除会话",
+    "deleteSessionConfirm": "删除“{title}”吗？此操作无法撤销。",
+    "pendingHint": "这些画布仍保存在此浏览器中。打开其中一个即可将其保存到您的工作区。",
+    "untitled": "未命名画布",
+    "signedOutSubtitle": "你在此浏览器中创建的画板。登录后即可保存它们，并查看工作区中的全部内容。",
+    "startLocalCanvas": "+ 新建画板"
+  },
+  "commandPalette": {
+    "trigger": "搜索",
+    "openAria": "搜索目的地（Ctrl 或 Cmd + K）",
+    "title": "前往",
+    "placeholder": "搜索页面、报告或画布…",
+    "noResults": "没有与“{query}”匹配的结果。",
+    "hintMove": "<kbd>↑↓</kbd> 移动",
+    "hintOpen": "<kbd>⏎</kbd> 打开",
+    "hintClose": "<kbd>esc</kbd> 关闭",
+    "locked": "{plan} 方案"
+  },
+  "homeScroller": {
+    "previous": "显示上一项",
+    "next": "显示更多"
+  },
+  "liveBar": {
+    "region": "实时会话",
+    "cameras": "摄像头",
+    "you": "你",
+    "youShort": "我",
+    "member": "成员",
+    "mic": "麦克风",
+    "micOff": "麦克风已关",
+    "camera": "摄像头",
+    "cameraOff": "摄像头已关",
+    "presentScreen": "共享屏幕",
+    "stopPresenting": "停止共享",
+    "record": "录制",
+    "stopRecording": "停止录制",
+    "savingRecording": "正在保存录制…",
+    "recordingFailed": "无法保存录制",
+    "present": "演示",
+    "exitPresentation": "退出演示",
+    "leave": "离开",
+    "connecting": "连接中…",
+    "mediaUnavailable": "摄像头或麦克风不可用",
+    "following": "{count, plural, other {# 人正在跟随你}}",
+    "shareError": {
+      "denied": "屏幕共享被阻止",
+      "unsupported": "此浏览器无法共享屏幕",
+      "missing": "没有可共享的屏幕",
+      "in-use": "另一个应用正在使用该屏幕",
+      "cancelled": "",
+      "failed": "屏幕共享失败"
+    }
+  },
+  "canvasStage": {
+    "outsideCurrentProject": "正在查看当前项目之外的画布"
+  },
+  "scopePolicy": {
+    "leaveRoomOnTenantSwitch": "切换工作区将结束实时会话——该房间属于你即将离开的工作区。是否继续？"
+  },
+  "liveChip": {
+    "start": "开始实时会话",
+    "startTitle": "在此画布上开始实时会话",
+    "leaveTitle": "离开实时会话",
+    "onThisCanvas": "此画布",
+    "liveWithCount": "{count, plural, other {进行中 · # 人}}"
+  },
+  "team": {
+    "barLabel": "你的团队",
+    "alwaysOn": "常驻",
+    "team": "团队",
+    "invite": "+ 邀请",
+    "roleTeammate": "队友",
+    "chipJoin": "把 {name}（{role}）加入此画布 —— 拖入或按 Enter",
+    "chipLocked": "{name} 尚未在此工作区中配置",
+    "inviteSignedOut": "登录后邀请"
+  },
+  "sessions": {
+    "newCanvas": "+ 新建画布",
+    "active": "进行中",
+    "recents": "最近",
+    "untitled": "未命名画布",
+    "draft": "草稿",
+    "draftHint": "仅保存在此浏览器中 —— 登录后才会保留",
+    "signInToKeep": "登录以保存你的工作"
+  },
+  "shellPanel": {
+    "crumb": "工作区",
+    "title": "面板"
+  },
+  "profile": {
+    "displayName": "显示名称",
+    "displayNamePlaceholder": "你的名字在团队中的显示方式",
+    "avatarUpload": "上传照片",
+    "avatarChange": "更换照片",
+    "avatarUploading": "上传中…",
+    "avatarFailed": "无法上传该图片",
+    "save": "保存",
+    "saved": "已保存",
+    "saveFailed": "保存失败"
+  },
+  "creationInvitation": {
+    "title": "加入创作会话",
+    "joining": "正在加入此创作会话…",
+    "signInPrompt": "请使用收到邀请的邮箱登录以加入此会话。",
+    "invalidLink": "此邀请链接无效。",
+    "notAccepted": "无法接受此邀请。",
+    "workspaceUnavailable": "此账号无法访问被邀请的工作区。",
+    "signInLink": "使用收到邀请的邮箱登录",
+    "useAnotherAccount": "使用其他账号"
+  },
+  "about": {
+    "seo": {
+      "title": "关于 Builderforce.ai — 构建与经营一体化操作系统",
+      "description": "了解 Builderforce：团队与 AI 智能体基于共享上下文进行创造、经营、治理和交付的互联操作系统。"
+    },
+    "hero": {
+      "eyebrow": "关于 Builderforce",
+      "title": "构建产品。经营公司。一个系统。",
+      "lead": "Builderforce 是人类与 AI 智能体共用的创意操作系统，把想法、业务和让想法成真的工作连接起来。",
+      "primaryCta": "免费开始",
+      "secondaryCta": "预约演示",
+      "domains": "运营领域",
+      "foundations": "共享基础",
+      "workspace": "互联工作空间",
+      "core": "IDEA to REAL",
+      "visualAria": "Builderforce 操作系统连接产品、财务、收入和治理"
+    },
+    "thesis": {
+      "eyebrow": "我们为何存在",
+      "title": "公司是一个系统，它的软件也应该如此。",
+      "body": "创业公司不会在整齐的部门孤岛中失败。产品决策会改变现金跑道，客户反馈会改变路线图，安全要求会改变交付方式。Builderforce 让这些关系始终可见，并为人类和智能体提供从决策到行动的受治理路径。"
+    },
+    "promises": {
+      "eyebrow": "Builderforce 的不同",
+      "title": "自由创造。清晰经营。交付。",
+      "items": [
+        {
+          "title": "从意图开始创造",
+          "description": "在一个可视化画布上，将想法变成相互连接的网站、工作流、原型、数据集、模型、计划和产品。"
+        },
+        {
+          "title": "基于共享事实经营",
+          "description": "连接产品、财务、收入、客户、人员、投资者、营销与风险，无需在每个工具中重建上下文。"
+        },
+        {
+          "title": "让决策转化为行动",
+          "description": "让专业智能体与工作并肩，审查拟议变更、保留证据，并将获批工作送入交付。"
+        }
+      ]
+    },
+    "system": {
+      "eyebrow": "我们构建了什么",
+      "title": "完整运营视图，与执行紧密相连",
+      "lead": "九个运营领域让整个公司围绕共同使命协同。三个基础能力为每个领域提供一致的智能、业务上下文、集成和受治理的 Builderforce 执行。",
+      "domains": "运营领域",
+      "foundations": "共享基础"
+    },
+    "story": {
+      "eyebrow": "我们的故事",
+      "title": "From IDEA to REAL.",
+      "bodyOne": "Builderforce 始于一个简单的信念：创造不应止于原型。只有当产品、业务上下文、人员与执行协同推进时，想法才会成为现实。",
+      "bodyTwo": "Builderforce 在一个共享工作空间中连接整个旅程——从最初的灵感和客户信号，到创意决策、受治理的执行和可衡量的结果。"
+    },
+    "principles": {
+      "eyebrow": "我们的构建原则",
+      "title": "智能体操作系统的原则",
+      "items": [
+        {
+          "title": "创业公司优先",
+          "description": "每项能力都应帮助团队更快验证、节省资源、获得收入、降低风险，或构建客户真正重视的价值。"
+        },
+        {
+          "title": "默认互联",
+          "description": "想法、公司数据、决策、产物、工作和成果应始终相连，而不是在另一个单点工具里变成副本。"
+        },
+        {
+          "title": "人类始终参与",
+          "description": "智能体扩展团队，但不会消除责任。审查、审批、权限和明确归属都属于工作流的一部分。"
+        },
+        {
+          "title": "证据胜于表演",
+          "description": "真实对象、可见边界、保留的执行记录和可衡量成果，比华丽却无法验证的回答更重要。"
+        }
+      ]
+    },
+    "trust": {
+      "eyebrow": "安全与信任",
+      "title": "治理就是工作本身，而非事后补充。",
+      "body": "角色、审批路径、凭证控制、审计历史、隐私工作流和系统证据均属于平台架构，帮助团队从实验更清晰地走向负责任的运营。",
+      "cta": "了解信任与审计"
+    },
+    "cta": {
+      "eyebrow": "构建真正重要的事",
+      "title": "带上你的下一个想法，以及它背后的公司。",
+      "body": "从画布开始，连接运营上下文，为人类与智能体提供一个将意图转化为成果的共同空间。",
+      "primary": "免费开始创作",
+      "secondary": "探索全部能力"
+    }
+  },
+  "routeMarketing": {
+    "subtitle": "创建免费工作区即可使用{surface}，或登录以继续已有的工作。",
+    "startFree": "免费开始创建",
+    "signIn": "登录",
+    "exploreCanvas": "探索画布",
+    "howItWorks": "{surface}的工作方式",
+    "seeHowItWorks": "了解运作方式",
+    "whatYouGet": "Builderforce.ai 为你提供什么",
+    "faqHeading": "常见问题",
+    "relatedReading": "相关阅读"
+  },
+  "burnrateMarketing": {
+    "shared": {
+      "builtFor": "为 {persona} 打造",
+      "poweredBy": "由 Builderforce.ai 提供支持",
+      "publicCta": "免费开始",
+      "publicSecondaryCta": "预约演示",
+      "authenticatedCta": "打开工作区",
+      "authenticatedEyebrow": "你的运营工作区",
+      "featureHeading": "包含的能力",
+      "publicClosing": "用一个运营系统替代相互割裂的工具，让每个决策都能到达负责执行的人和智能体。",
+      "authenticatedClosing": "在 Builderforce 实时工作区继续，企业上下文、团队、智能体和治理已经连接。"
+    },
+    "index": {
+      "eyebrow": "创业公司的运营系统",
+      "title": "让每个职能都连接到执行",
+      "description": "BurnRateOS 的高管产品结构现已整合到 Builderforce。探索九个互联的运营领域及其共享基础。",
+      "domains": "产品领域",
+      "foundations": "基础能力",
+      "explore": "探索"
+    },
+    "domains": {
+      "productManagement": {
+        "title": "产品管理",
+        "tagline": "发现、验证与路线图",
+        "hero": "把客户证据转化为正确的路线图",
+        "description": "梳理想法、规划 MVP、验证需求、确定战略待办优先级，并把产品投入连接到交付。",
+        "features": [
+          {
+            "title": "产品发现",
+            "description": "通过客户、市场和竞争证据捕获并评估机会。"
+          },
+          {
+            "title": "MVP 规划",
+            "description": "把有潜力的想法变成可验证的范围和假设。"
+          },
+          {
+            "title": "路线图与待办",
+            "description": "按业务价值、采用率、工作量和战略匹配度排序。"
+          }
+        ]
+      },
+      "businessIntelligence": {
+        "title": "商业智能",
+        "tagline": "跑道、燃烧率、预测与定价",
+        "hero": "了解每个决策对资金跑道的影响",
+        "description": "在协调实际工作的同一系统中，对现金、收入、留存、费用和情景进行建模。",
+        "features": [
+          {
+            "title": "跑道与燃烧率",
+            "description": "实时跟踪现金、月度燃烧、盈亏平衡和资金跑道。"
+          },
+          {
+            "title": "预测情景",
+            "description": "比较假设、敏感性和各种假设方案。"
+          },
+          {
+            "title": "单位经济模型",
+            "description": "衡量 ARR、留存、CAC、LTV 和回收周期。"
+          }
+        ]
+      },
+      "agileSurvival": {
+        "title": "敏捷生存",
+        "tagline": "每个迭代都关联资金跑道",
+        "hero": "不浪费任何一个迭代地交付",
+        "description": "把规划、复盘、看板、产能和交付风险与每个迭代的财务影响结合起来。",
+        "features": [
+          {
+            "title": "生存导向规划",
+            "description": "在承诺前同时查看产能和资金跑道。"
+          },
+          {
+            "title": "成本感知看板",
+            "description": "查看流程、瓶颈、风险和延期的财务影响。"
+          },
+          {
+            "title": "复盘与速度",
+            "description": "把交付信号转化为下个迭代的改进。"
+          }
+        ]
+      },
+      "salesRevenue": {
+        "title": "销售与收入",
+        "tagline": "ICP、潜客、管道与漏斗",
+        "hero": "建立全团队可见的收入引擎",
+        "description": "把目标客户、联系人、序列、商机、转化信号和预测连接在同一流程中。",
+        "features": [
+          {
+            "title": "ICP 与潜客开发",
+            "description": "定义理想客户、丰富潜客并保留来源。"
+          },
+          {
+            "title": "序列与营销活动",
+            "description": "协调触达、回复、跟进和转化信号。"
+          },
+          {
+            "title": "商机与收入漏斗",
+            "description": "管理管道阶段、配额达成和预测变化。"
+          }
+        ]
+      },
+      "customerEngagement": {
+        "title": "客户互动",
+        "tagline": "反馈、支持、留存与健康度",
+        "hero": "把每个客户信号转化为行动",
+        "description": "统一反馈、支持、引导、情绪、留存、流失和账户健康度。",
+        "features": [
+          {
+            "title": "客户反馈",
+            "description": "收集反馈并直接送入产品和交付决策。"
+          },
+          {
+            "title": "健康度与留存",
+            "description": "结合参与度、NPS、情绪和流失指标。"
+          },
+          {
+            "title": "支持与引导",
+            "description": "协调工单、知识、引导流程和后续行动。"
+          }
+        ]
+      },
+      "investorIntelligence": {
+        "title": "投资者智能",
+        "tagline": "融资、更新与投资组合健康度",
+        "hero": "基于实时公司事实管理投资者关系",
+        "description": "创建路演材料、投资者更新、数据室、尽调流程、融资历史和投资组合视图。",
+        "features": [
+          {
+            "title": "路演材料与分析",
+            "description": "按版本共享并衡量每页的参与度。"
+          },
+          {
+            "title": "更新与数据室",
+            "description": "准备已审批的投资者沟通和尽调材料。"
+          },
+          {
+            "title": "投资组合智能",
+            "description": "跟踪融资、里程碑、健康评分和交易流。"
+          }
+        ]
+      },
+      "operationalCadence": {
+        "title": "运营节奏",
+        "tagline": "人员、目标、会议与节奏",
+        "hero": "不增加会议也能保持公司一致",
+        "description": "连接目标、人员规划、绩效、一对一、签到、运营节奏、笔记和决策。",
+        "features": [
+          {
+            "title": "目标与记分卡",
+            "description": "关联目标、成果、里程碑和运营指标。"
+          },
+          {
+            "title": "人员运营",
+            "description": "协调人员规划、绩效评估、签到和一对一。"
+          },
+          {
+            "title": "会议与决策",
+            "description": "记录议程、转录、负责人和后续行动。"
+          }
+        ]
+      },
+      "governanceSecurity": {
+        "title": "治理与安全",
+        "tagline": "控制、证据、风险与隐私",
+        "hero": "让治理成为工作的一部分",
+        "description": "在执行旁运营 SOC 控制、证据、事件、供应商、隐私资产、审批和审计轨迹。",
+        "features": [
+          {
+            "title": "控制与证据",
+            "description": "管理 SOC 控制、证据收集、培训和合规事件。"
+          },
+          {
+            "title": "安全与供应商风险",
+            "description": "跟踪事件、供应商、DPA、PII 资产和整改。"
+          },
+          {
+            "title": "隐私与审批",
+            "description": "处理数据请求、同意、版本、签署和审计。"
+          }
+        ]
+      },
+      "marketingGrowth": {
+        "title": "营销与增长",
+        "tagline": "活动、转化与内容",
+        "hero": "把注意力转化为可衡量的增长",
+        "description": "在同一闭环中构建落地页、活动、培育流程、实验、内容、SEO 和分析。",
+        "features": [
+          {
+            "title": "活动与培育",
+            "description": "协调受众、消息、注册、投递和跟进。"
+          },
+          {
+            "title": "网站与转化",
+            "description": "构建页面、表单、实验、热图和转化旅程。"
+          },
+          {
+            "title": "内容与分发",
+            "description": "规划内容、SEO、社交、推荐、邮件和推送。"
+          }
+        ]
+      },
+      "aiCoach": {
+        "title": "AI 教练",
+        "tagline": "一个助手，覆盖所有高管视角",
+        "hero": "为每个决策引入正确的高管视角",
+        "description": "通过同一个 Builderforce Brain 使用 CEO、CFO、CRO、CMO、CPO、CTO、CHRO 和 CISO 上下文。",
+        "features": [
+          {
+            "title": "八种高管视角",
+            "description": "切换视角时不丢失公司或项目上下文。"
+          },
+          {
+            "title": "领域工具",
+            "description": "使用财务、产品、增长、人员和风险工具。"
+          },
+          {
+            "title": "受治理的行动",
+            "description": "从建议走向已审批、可审计的执行。"
+          }
+        ]
+      },
+      "integrations": {
+        "title": "集成与迁移",
+        "tagline": "连接你保留的工具",
+        "hero": "在现有技术栈之上的统一运营层",
+        "description": "连接协作、开发、财务、CRM 和交付系统，同时保持租户边界和审批控制。",
+        "features": [
+          {
+            "title": "已连接服务",
+            "description": "引入团队现有系统中的信号。"
+          },
+          {
+            "title": "迁移流程",
+            "description": "把工作和知识迁出割裂的单点工具。"
+          },
+          {
+            "title": "受控访问",
+            "description": "集中管理凭据、范围、审批和数据边界。"
+          }
+        ]
+      },
+      "companiesContacts": {
+        "title": "公司与联系人",
+        "tagline": "共享的商业关系图",
+        "hero": "所有运营领域共用一个公司图谱",
+        "description": "只需一次表示你的公司、客户、潜客、投资者、合作伙伴、供应商和联系人。",
+        "features": [
+          {
+            "title": "公司关系",
+            "description": "表示所有者、客户、潜客、伙伴、投资者和供应商。"
+          },
+          {
+            "title": "联系人来源",
+            "description": "保留标识、来源、丰富过程和编辑历史。"
+          },
+          {
+            "title": "共享上下文",
+            "description": "在销售、财务、产品、支持和治理中使用同一图谱。"
+          }
+        ]
+      }
+    }
+  },
+  "featuresPage": {
+    "badgeAllSeats": "全部席位",
+    "badgeSystem": "✦ 创业操作系统",
+    "titleLead": "从想法到落地。",
+    "titleSub": "一块画布，全套席位。",
+    "lede": "九个业务领域，每个都由一位可以拖到画布上的高管队友负责——所以每项能力都对应一个真正担责的人，而不是一个无人负责的菜单项。",
+    "ctaCanvas": "打开画布 →",
+    "ctaPricing": "查看定价",
+    "check": {
+      "noCard": "无需信用卡",
+      "boardFirst": "先有画布，再有账号",
+      "soc2": "符合 SOC 2 准备"
+    },
+    "overviewTitle": "平台概览",
+    "overviewNote": "……以及把它们串起来的主线。",
+    "stat": {
+      "domains": "产品领域",
+      "seats": "团队席位",
+      "destinations": "目的地",
+      "features": "子视图"
+    },
+    "domainsBadge": "产品领域",
+    "domainsTitle": "{count} 个领域，{count} 位负责人，一块画布",
+    "domainsLede": "每个领域都由团队中的一个席位负责。从菜单进入，或从队友进入——两者落到同一个界面，因为读的是同一份清单。",
+    "foundationsBadge": "基础能力",
+    "foundationsTitle": "每个席位都依赖的 {count} 项基础",
+    "foundationsLede": "横向支撑层。没有单一席位拥有它们——而且值得注意：其中没有一项叫“AI”，模型是界面本身，不是一个部门。",
+    "foundationBadge": "基础",
+    "arcBadge": "主线",
+    "arcTitle": "构想 → 构建 → 运营",
+    "arcLede": "菜单不是部门清单，而是你在旅程中的位置；下面每个目的地都只属于一个位置。",
+    "arcCol": {
+      "stage": "阶段",
+      "question": "要回答的问题",
+      "where": "前往何处"
+    },
+    "arcQuestion": {
+      "idea": "如果……会怎样？",
+      "make": "把它做出来。",
+      "run": "像公司一样运营它。",
+      "measure": "有效果吗？",
+      "market": "销售、采购、招聘、被发现。",
+      "admin": "设置。"
+    },
+    "arcNote": "由产品自身的导航生成，因此这张表不会宣传不存在的目的地，也不会遗漏已有的目的地。",
+    "faqTitle": "由此带来的问题",
+    "faq": [
+      {
+        "q": "菜单去哪了？",
+        "a": "现在只有一份清单。左侧面板按主线所处的位置分组——构想、构建、运营——底部则列出拥有这些能力的人和智能体。你过去从侧边栏进入的一切都属于这两者之一，而且两者读取同一份注册表，因此名称不可能不一致。"
+      },
+      {
+        "q": "必须创建公司才能使用吗？",
+        "a": "不必，中途停下也是一次完整而成功的使用。有人发布了三个落地页却从未成立公司，这并不算引导失败。业务相关的条目始终保持可见——变暗而非隐藏——让你在需要之前就先看见它们。"
+      },
+      {
+        "q": "原来的 AI 板块去哪了？",
+        "a": "它的入口都回到了真正负责该工作的席位：费用分类归 CFO，合同分析归安全，竞品监控归 CMO，路演材料反馈归 CEO。以技术命名的菜单项，恰恰说明产品还没想清楚这项工作归谁。"
+      },
+      {
+        "q": "参考页为什么是侧滑面板？",
+        "a": "因为为了看一眼 SOC 2 而丢掉正在用的画布并不划算。未登录时它们就是普通页面、普通网址；登录后，同一页面会在你正在工作的画布之上打开，按 Esc 即可返回，智能体的任务仍在运行。"
+      },
+      {
+        "q": "市场只面向自由职业者吗？",
+        "a": "不是。四个类别并列：人才、公司、智能体与资产。智能体不是独立板块——购买即加入你的团队，这也是目录与团队名册永不脱节的原因。"
+      }
+    ],
+    "closeTitle": "准备好替换整套工具了吗？",
+    "closeLede": "用一个平台取代五个，用一份菜单取代七份。先从画布开始；等你有了公司，再认领它。",
+    "closeFine": "无需信用卡 · 注册之前画布就属于你 · 随时升级"
+  },
+  "referencePanel": {
+    "crumb": "{seat} · 参考",
+    "section": {
+      "label": "本页内容",
+      "start": "开始使用",
+      "report": "你的报告",
+      "criteria": "控制项",
+      "how": "运作方式",
+      "audits": "其他审计",
+      "faq": "常见问题"
+    }
+  },
+  "integrationsIndex": {
+    "seo": {
+      "title": "集成 — 将你的智能体团队连接到现有技术栈 | Builderforce.ai",
+      "description": "Builderforce.ai 可与 GitHub、GitLab、Slack、Discord、WhatsApp、Ollama、Anthropic、MCP、Notion 和 Gmail 集成。把自托管的 AI 智能体团队接入你已经在用的工具。"
+    },
+    "eyebrow": "集成",
+    "title": "将你的智能体团队连接到现有技术栈",
+    "lede": "Builderforce.ai 把自托管、不绑定模型的 AI 智能体接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具——每一次操作都有审批和审计记录。",
+    "provenCategory": "已连接的服务",
+    "category": {
+      "work": "工作管理",
+      "devtools": "开发者工具",
+      "incident": "事件与值班",
+      "communication": "沟通协作",
+      "crm": "CRM 与销售",
+      "productivity": "效率工具",
+      "finance": "财务与计费",
+      "marketing": "市场营销",
+      "support": "服务台",
+      "storage": "文件与存储",
+      "data": "数据与数仓",
+      "other": "其他"
+    },
+    "direction": {
+      "import": "读取",
+      "export": "写入",
+      "two-way": "双向",
+      "event-ingest": "事件接入"
+    },
+    "surface": {
+      "connector": "可作为受管控的连接器操作，由任意代理或工作流调用。",
+      "board": "作为同步看板连接——工作项双向流转。",
+      "data": "可使用已保存的凭据从工作流节点查询。",
+      "drive": "连接云盘，将其中的文件带入画布。",
+      "mailbox": "连接邮箱以读取会话并从中发送邮件。"
+    }
+  },
+  "integrationDetail": {
+    "eyebrow": "{category} 集成",
+    "title": "Builderforce.ai + {name}",
+    "ctaPrimary": "免费开始使用",
+    "ctaDocs": "了解更多",
+    "useCasesHeading": "使用 {name} 可以做什么",
+    "moreHeading": "探索更多集成",
+    "moreLede": "Builderforce.ai 把你的智能体团队接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具。",
+    "moreLink": "浏览全部集成"
+  },
+  "marketplaceSkill": {
+    "eyebrow": "市场 · 技能",
+    "byAuthor": "作者：{author}",
+    "downloads": "{count} 次下载",
+    "getCta": "获取此技能",
+    "browseCta": "浏览市场",
+    "aboutHeading": "关于此技能"
   }
 }

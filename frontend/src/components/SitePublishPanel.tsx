@@ -7,10 +7,12 @@
  * `onBuild` callback supplied by the IDE (it owns the file contents + the
  * WebContainer). This panel owns the subdomain UI, the upload, and the result.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
-import { GitHubDeployPanel } from './ide/GitHubDeployPanel';
+import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
+import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 
 interface SitePublishPanelProps {
   projectId: number;
@@ -96,7 +98,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, color: 'var(--text-primary)', fontSize: 14 }}>
       <div>
-        <div style={{ fontWeight: 600, fontSize: 15 }}>🚀 {t('publish.title')}</div>
+        <div style={{ fontWeight: 600, fontSize: 15 }}><Icon source="🚀" size="1em" /> {t('publish.title')}</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12.5, marginTop: 2 }}>
           {t('publish.description')}
         </div>
@@ -112,7 +114,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
             placeholder="my-app"
             spellCheck={false}
             style={{
-              flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8,
+              flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--chat-input-border)', background: 'var(--chat-input-bg)',
               color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-mono, monospace)',
             }}
@@ -126,16 +128,16 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
         onClick={handlePublish}
         disabled={busy || !loaded}
         style={{
-          padding: '10px 14px', borderRadius: 8, border: 'none', cursor: busy ? 'wait' : 'pointer',
-          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--surface-coral, #e2654a)',
-          color: '#fff', fontWeight: 600, fontSize: 14,
+          padding: '10px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: busy ? 'wait' : 'pointer',
+          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--coral-bright)',
+          color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 14,
         }}
       >
         {phase === 'building' ? t('publish.building') : phase === 'uploading' ? t('publish.uploading') : site ? t('publish.republish') : t('publish.publish')}
       </button>
 
       {error && (
-        <div style={{ color: 'var(--text-error, #c0392b)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
+        <div style={{ color: 'var(--error-text)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
       )}
 
       {site && phase !== 'building' && phase !== 'uploading' && (
@@ -143,7 +145,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
             {phase === 'done' ? t('publish.published') : t('publish.liveSite')}
           </div>
-          <a href={site.url} target="_blank" rel="noreferrer" style={{ color: 'var(--surface-coral, #e2654a)', fontWeight: 600, wordBreak: 'break-all' }}>
+          <a href={site.url} target="_blank" rel="noreferrer" style={{ color: 'var(--coral-bright)', fontWeight: 600, wordBreak: 'break-all' }}>
             {site.url}
           </a>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
@@ -159,6 +161,12 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
 
       {/* The CI half: same site, built by GitHub instead of the browser. */}
       <GitHubDeployPanel projectId={projectId} subdomain={site?.subdomain ?? undefined} />
+
+      {/* Everything that happens AFTER the deploy. Each panel gates itself on
+          there being a published site, so no condition is duplicated here. */}
+      <SiteDomainPanel projectId={projectId} />
+      <SiteFormsPanel projectId={projectId} />
+      <SiteTrafficPanel projectId={projectId} />
     </div>
   );
 }

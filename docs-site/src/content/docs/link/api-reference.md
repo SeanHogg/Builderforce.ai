@@ -439,7 +439,7 @@ Agent-authenticated endpoints for pushing telemetry from the agent runtime.
 
 Stripe is the only payment provider — there is no provider switch and no manual fallback.
 
-Required Worker secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_TEAMS_MONTHLY`, `STRIPE_PRICE_TEAMS_YEARLY`.
+Required Worker secrets: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. The four `STRIPE_PRICE_*` IDs are optional reusable-price optimizations; without them, checkout uses inline recurring pricing from the published Builderforce pricing contract.
 
 Secrets are validated lazily: when they are absent the billing routes return **503 `payment_not_configured`** and every other route keeps working.
 

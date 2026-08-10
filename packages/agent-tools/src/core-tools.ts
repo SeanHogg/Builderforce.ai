@@ -443,7 +443,7 @@ export const webFetchTool: ToolDefinition = defineTool({
 export const webSearchTool: ToolDefinition = defineTool({
   name: "web_search",
   description:
-    "Search the public web for a query and return ranked results (title, url, snippet). Use to discover sources/docs when you don't have an exact URL; then web_fetch the most relevant result.",
+    "Search the public web for a query and return ranked results (title, url, snippet) plus `coverage` and `attribution`. Use to discover sources/docs when you don't have an exact URL; then web_fetch the most relevant result. When `coverage` is \"encyclopedic\" the index behind this workspace is narrower than a general web engine — report what you actually found and say what you could not find, rather than filling the gap from memory.",
   parameters: {
     type: "object",
     properties: {

@@ -16,10 +16,10 @@ import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { LEVELS, STATUSES, LEVEL_COLOR, STATUS_COLOR } from './qualityColors';
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-base)', color: 'var(--text-primary)',
 };
 
@@ -133,7 +133,7 @@ export function QualityDashboard() {
         <ViewToggle value={view} onChange={setView} card table />
       </div>
 
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>

@@ -15,6 +15,7 @@
  * Clipboard access requires a secure context and can be denied by permission policy, so
  * failure is a real state, surfaced rather than swallowed.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -51,10 +52,10 @@ export function CopyButton({
       title={ariaLabel ?? text}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        fontSize: 12, fontWeight: 600,
+        fontSize: 'var(--font-size-small)', fontWeight: 600,
         // 32px min keeps the target tappable on a phone without bloating a dense header.
         padding: compact ? '6px 10px' : '7px 12px', minHeight: 32,
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: `1px solid ${state === 'idle' ? 'var(--border-subtle)' : tone}`,
         background: 'var(--bg-base)',
         color: tone,
@@ -62,7 +63,7 @@ export function CopyButton({
         whiteSpace: 'nowrap',
       }}
     >
-      <span aria-hidden="true">{state === 'copied' ? '✓' : state === 'error' ? '⚠' : '⧉'}</span>
+      <span aria-hidden="true"><Icon name={state === 'copied' ? 'check' : state === 'error' ? 'warning' : 'document'} size={14} /></span>
       <span>{text}</span>
     </button>
   );

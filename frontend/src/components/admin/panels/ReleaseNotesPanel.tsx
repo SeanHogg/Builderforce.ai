@@ -20,10 +20,27 @@ import {
 import { errText, fmtDateTime, AdminError, AdminLoading } from '@/components/admin/adminShared';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { RELEASE_NOTE_STAGES, toStage, type ReleaseNoteStage } from '@/lib/releaseNotesApi';
+import { isBetaStage } from '@/components/releaseNotes/ReleaseNoteParts';
 
 const CATEGORIES: AdminReleaseNoteCategory[] = ['new', 'improvement', 'fix'];
 
-const EMPTY_DRAFT = { version: '', title: '', body: '', category: 'improvement' as AdminReleaseNoteCategory };
+const EMPTY_DRAFT = {
+  version: '',
+  title: '',
+  body: '',
+  category: 'improvement' as AdminReleaseNoteCategory,
+  stage: 'live' as ReleaseNoteStage,
+  betaOptIn: false,
+  betaTerms: '',
+  /** `<input type="date">` value — '' means "no date". */
+  stageEndsAt: '',
+};
+
+/** ISO timestamp → the `yyyy-mm-dd` an `<input type="date">` accepts. */
+function toDateInput(iso: string | null): string {
+  return iso ? iso.slice(0, 10) : '';
+}
 
 export default function ReleaseNotesPanel() {
   const t = useTranslations('admin');
@@ -72,6 +89,10 @@ export default function ReleaseNotesPanel() {
       category: (CATEGORIES.includes(note.category as AdminReleaseNoteCategory)
         ? note.category
         : 'improvement') as AdminReleaseNoteCategory,
+      stage: toStage(note.stage),
+      betaOptIn: note.betaOptIn,
+      betaTerms: note.betaTerms ?? '',
+      stageEndsAt: toDateInput(note.stageEndsAt),
     });
   };
 
@@ -84,6 +105,14 @@ export default function ReleaseNotesPanel() {
         title: draft.title.trim(),
         body: draft.body.trim() || null,
         category: draft.category,
+        stage: draft.stage,
+        // Only a beta can be joined, so opt-in cannot survive a move to another
+        // stage — otherwise a note shipped as 'live' would keep an invisible
+        // enrolment flag that reappears the next time someone edits it.
+        betaOptIn: isBetaStage(draft.stage) && draft.betaOptIn,
+        betaTerms: draft.betaTerms.trim() || null,
+        // A date input carries no time; send the UTC start of that day.
+        stageEndsAt: draft.stageEndsAt ? new Date(`${draft.stageEndsAt}T00:00:00Z`).toISOString() : null,
         publish,
       };
       if (editingId) await adminApi.updateReleaseNote(editingId, payload);
@@ -180,11 +209,11 @@ export default function ReleaseNotesPanel() {
       <div className="health-card" style={{ padding: 16, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div className="health-label">{t('releaseNotes.digestTitle')}</div>
-          <div className="text-muted" style={{ fontSize: 13, marginTop: 4 }}>
+          <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 4 }}>
             {t('releaseNotes.unsentCount', { count: unsentCount })}
           </div>
           {digestResult && (
-            <div className="text-muted" style={{ fontSize: 13, marginTop: 4 }}>
+            <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 4 }}>
               {t('releaseNotes.digestSent', {
                 notes: digestResult.notes,
                 sent: digestResult.sent,
@@ -220,6 +249,16 @@ export default function ReleaseNotesPanel() {
               <option key={cat} value={cat}>{tCat(`categories.${cat}`)}</option>
             ))}
           </Select>
+          <Select
+            className="admin-select"
+            aria-label={t('releaseNotes.stage')}
+            value={draft.stage}
+            onChange={(e) => setDraft((d) => ({ ...d, stage: toStage(e.target.value) }))}
+          >
+            {RELEASE_NOTE_STAGES.map((stage) => (
+              <option key={stage} value={stage}>{tCat(`stages.${stage}`)}</option>
+            ))}
+          </Select>
         </div>
         <input
           type="text"
@@ -236,6 +275,45 @@ export default function ReleaseNotesPanel() {
           className="admin-token-textarea"
           style={{ minHeight: 120, marginBottom: 8, width: '100%' }}
         />
+
+        {/* The date this stage ends: "scheduled for release" on a beta, the
+            withdrawal date on a sunset. One field, because it is one fact. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8, fontSize: 'var(--font-size-small)' }}>
+          <span className="text-muted">
+            {draft.stage === 'sunset' ? t('releaseNotes.sunsetsOn') : t('releaseNotes.releasesOn')}
+          </span>
+          <input
+            type="date"
+            value={draft.stageEndsAt}
+            onChange={(e) => setDraft((d) => ({ ...d, stageEndsAt: e.target.value }))}
+            className="admin-select"
+          />
+        </label>
+
+        {/* Beta enrolment — only meaningful on a beta stage, so the controls only
+            exist there rather than sitting inert and confusing on a live note. */}
+        {isBetaStage(draft.stage) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-small)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={draft.betaOptIn}
+                onChange={(e) => setDraft((d) => ({ ...d, betaOptIn: e.target.checked }))}
+                style={{ width: 16, height: 16 }}
+              />
+              <span>{t('releaseNotes.betaOptIn')}</span>
+            </label>
+            <div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{t('releaseNotes.betaOptInHint')}</div>
+            <textarea
+              placeholder={t('releaseNotes.phBetaTerms')}
+              value={draft.betaTerms}
+              onChange={(e) => setDraft((d) => ({ ...d, betaTerms: e.target.value }))}
+              className="admin-token-textarea"
+              style={{ minHeight: 90, width: '100%' }}
+            />
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="admin-tab active" disabled={busy || !canSave} onClick={() => save(true)}>
             {t('releaseNotes.savePublish')}
@@ -261,6 +339,8 @@ export default function ReleaseNotesPanel() {
                 <th>{t('releaseNotes.thTitle')}</th>
                 <th>{t('releaseNotes.thVersion')}</th>
                 <th>{t('releaseNotes.thCategory')}</th>
+                <th>{t('releaseNotes.thStage')}</th>
+                <th>{t('releaseNotes.thBeta')}</th>
                 <th>{t('releaseNotes.thStatus')}</th>
                 <th>{t('releaseNotes.thEmailed')}</th>
                 <th />
@@ -270,8 +350,14 @@ export default function ReleaseNotesPanel() {
               {notes.map((note) => (
                 <tr key={note.id}>
                   <td>{note.title}</td>
-                  <td style={{ fontFamily: 'var(--mono)' }}>{note.version}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{note.version}</td>
                   <td>{tCat(`categories.${CATEGORIES.includes(note.category as AdminReleaseNoteCategory) ? note.category : 'improvement'}`)}</td>
+                  <td>{tCat(`stages.${toStage(note.stage)}`)}</td>
+                  <td>
+                    {note.betaOptIn
+                      ? t('releaseNotes.participants', { count: note.participants })
+                      : '—'}
+                  </td>
                   <td>
                     <span className={`badge ${note.publishedAt ? 'badge-success' : 'badge-neutral'}`}>
                       {note.publishedAt ? t('releaseNotes.published') : t('releaseNotes.draft')}

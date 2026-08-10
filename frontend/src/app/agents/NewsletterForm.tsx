@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-
-const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+import { subscribeToNewsletter } from '@/lib/newsletterApi';
 
 type Status = 'idle' | 'sending' | 'ok' | 'error';
 
@@ -17,12 +16,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
     if (!email.trim()) return;
     setStatus('sending');
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/auth/newsletter/subscribers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), action: 'subscribe', source }),
-      });
-      if (!res.ok) throw new Error('failed');
+      await subscribeToNewsletter(email, source);
       setStatus('ok');
     } catch {
       setStatus('error');
@@ -60,7 +54,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           margin: 64px auto 0;
           padding: 32px;
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: var(--radius-lg);
           background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
         }
         .cc-nl-form {
@@ -75,10 +69,10 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           padding: 12px 14px;
           background: var(--bg-deep);
           border: 1px solid var(--border-subtle);
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           color: var(--text-primary);
           font-family: inherit;
-          font-size: 0.95rem;
+          font-size: var(--font-size-body);
         }
         .cc-nl-input:focus {
           outline: none;
@@ -89,7 +83,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark, var(--coral-bright)));
           color: white;
           border: none;
-          border-radius: 10px;
+          border-radius: var(--radius-lg);
           font-family: var(--font-display);
           font-weight: 600;
           cursor: pointer;
@@ -104,9 +98,9 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
         }
         .cc-nl-status {
           margin: 12px 0 0;
-          font-size: 0.875rem;
+          font-size: var(--font-size-small);
         }
-        .cc-error { color: #ff6b6b; }
+        .cc-error { color: var(--red-bright); }
         .cc-ok { color: var(--cyan-bright); }
       `}</style>
     </section>

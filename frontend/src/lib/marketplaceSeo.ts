@@ -3,9 +3,13 @@
  * (`/marketplace/[slug]`) and sitemap. No client-only imports (localStorage,
  * auth) so they are usable from server components and `sitemap.ts`. Reads hit
  * the public, cached `?seo=1` endpoint (no download-counter side effect). [1333]
+ *
+ * The request itself goes through `lib/publicApi` — the one uncredentialed
+ * server read, which owns the base URL, the data-cache window and the
+ * degrade-to-null contract this file used to carry a private copy of.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+import { publicApiGet } from './publicApi';
 
 export interface PublishedSkill {
   id: string;
@@ -39,43 +43,33 @@ function parseTags(raw: unknown): string[] {
 
 /** Fetch one published skill for SSR/metadata. Returns null on miss/error. */
 export async function getPublishedSkill(slug: string): Promise<PublishedSkill | null> {
-  try {
-    const res = await fetch(`${API_BASE}/marketplace/skills/${encodeURIComponent(slug)}?seo=1`);
-    if (!res.ok) return null;
-    const body = (await res.json()) as { skill?: Record<string, unknown> };
-    const s = body.skill;
-    if (!s) return null;
-    return {
-      id: String(s.id ?? ''),
-      name: String(s.name ?? ''),
-      slug: String(s.slug ?? slug),
-      description: String(s.description ?? ''),
-      category: (s.category as string) ?? null,
-      tags: parseTags(s.tags),
-      version: (s.version as string) ?? null,
-      readme: (s.readme as string) ?? null,
-      icon_url: (s.icon_url as string) ?? null,
-      repo_url: (s.repo_url as string) ?? null,
-      downloads: typeof s.downloads === 'number' ? s.downloads : null,
-      likes: typeof s.likes === 'number' ? s.likes : null,
-      author_username: (s.author_username as string) ?? null,
-      author_display_name: (s.author_display_name as string) ?? null,
-    };
-  } catch {
-    return null;
-  }
+  const body = await publicApiGet<{ skill?: Record<string, unknown> }>(
+    `/marketplace/skills/${encodeURIComponent(slug)}?seo=1`,
+  );
+  const s = body?.skill;
+  if (!s) return null;
+  return {
+    id: String(s.id ?? ''),
+    name: String(s.name ?? ''),
+    slug: String(s.slug ?? slug),
+    description: String(s.description ?? ''),
+    category: (s.category as string) ?? null,
+    tags: parseTags(s.tags),
+    version: (s.version as string) ?? null,
+    readme: (s.readme as string) ?? null,
+    icon_url: (s.icon_url as string) ?? null,
+    repo_url: (s.repo_url as string) ?? null,
+    downloads: typeof s.downloads === 'number' ? s.downloads : null,
+    likes: typeof s.likes === 'number' ? s.likes : null,
+    author_username: (s.author_username as string) ?? null,
+    author_display_name: (s.author_display_name as string) ?? null,
+  };
 }
 
 /** Published skill slugs for the sitemap. Best-effort; empty on error. */
 export async function listPublishedSkillSlugs(limit = 500): Promise<string[]> {
-  try {
-    const res = await fetch(`${API_BASE}/marketplace/skills?limit=${limit}`);
-    if (!res.ok) return [];
-    const body = (await res.json()) as { skills?: { slug?: string }[] };
-    return (body.skills ?? [])
-      .map((s) => s.slug)
-      .filter((s): s is string => typeof s === 'string' && s.length > 0);
-  } catch {
-    return [];
-  }
+  const body = await publicApiGet<{ skills?: { slug?: string }[] }>(`/marketplace/skills?limit=${limit}`);
+  return (body?.skills ?? [])
+    .map((s) => s.slug)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
 }

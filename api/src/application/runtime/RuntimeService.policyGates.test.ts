@@ -5,8 +5,8 @@
  * only ever saw `[]` because nothing put gates on a run's payload. `submit` is the
  * ONE funnel every execution passes through (board auto-run, manual dispatch, agent
  * handoff), so it stamps the tenant's resolved gates there. These tests pin that
- * contract — including the two ways it must NOT interfere: an explicit spec-compiled
- * gate set wins, and a resolver failure never blocks a dispatch.
+ * contract — including explicit spec-compiled gates winning and resolver failure
+ * blocking dispatch rather than silently running without governance.
  */
 import { describe, it, expect } from 'vitest';
 import { RuntimeService } from './RuntimeService';
@@ -42,12 +42,15 @@ type Scope = { tenantId: number; projectId: number | null; agentRef: string | nu
 function makeService(
   resolver?: (s: Scope) => Promise<PolicyGate[]>,
   registrationResolver?: (id: string, tenantId: number) => Promise<{ active: boolean } | null>,
+  executionEnabled?: (tenantId: number) => Promise<boolean>,
 ) {
   let savedPayload: string | null = null;
+  let saveCount = 0;
   const scopes: Scope[] = [];
 
   const executions = {
     save: async (e: Execution) => {
+      saveCount += 1;
       savedPayload = (e as unknown as { payload: string | null }).payload;
       return e;
     },
@@ -65,14 +68,41 @@ function makeService(
     undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     wrapped,
     registrationResolver,
+    executionEnabled,
   );
-  return { svc, getPayload: () => savedPayload, scopes };
+  return { svc, getPayload: () => savedPayload, getSaveCount: () => saveCount, scopes };
 }
 
 const submit = (svc: RuntimeService, payload?: string) =>
   svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'system:lane-auto', payload });
 
 describe('RuntimeService.submit — governance gate stamping', () => {
+  it('refuses every submission while the workspace execution kill switch is disabled', async () => {
+    const { svc, getSaveCount } = makeService(undefined, undefined, async () => false);
+
+    await expect(submit(svc)).rejects.toThrow(/disabled for this workspace/i);
+    expect(getSaveCount()).toBe(0);
+  });
+
+  it.each(['vscode', 'brain'] as const)('keeps interactive %s execution available while the switch is disabled', async (source) => {
+    const { svc, getSaveCount } = makeService(undefined, undefined, async () => false);
+
+    await expect(svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'user-1', source })).resolves.toBeDefined();
+    expect(getSaveCount()).toBe(1);
+  });
+
+  it('submits normally while workspace execution is enabled', async () => {
+    const seen: number[] = [];
+    const { svc, getSaveCount } = makeService(undefined, undefined, async (tenantId) => {
+      seen.push(tenantId);
+      return true;
+    });
+
+    await expect(submit(svc)).resolves.toBeDefined();
+    expect(seen).toEqual([1]);
+    expect(getSaveCount()).toBe(1);
+  });
+
   it('stamps the resolved gates onto the payload so the engine enforces them', async () => {
     const gate: PolicyGate = { id: 'no-shell', tool: 'run_command', effect: 'block', reason: 'prod safety' };
     const { svc, getPayload } = makeService(async () => [gate]);
@@ -127,12 +157,13 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['from-spec']);
   });
 
-  it('never blocks a dispatch when the resolver throws', async () => {
-    const { svc, getPayload } = makeService(async () => { throw new Error('kv down'); });
+  it('fails closed when the policy resolver throws', async () => {
+    const { svc, getPayload, getSaveCount } = makeService(async () => { throw new Error('kv down'); });
     const payload = JSON.stringify({ cloudAgentRef: 'ada' });
 
-    await expect(submit(svc, payload)).resolves.toBeDefined();
-    expect(getPayload()).toBe(payload);
+    await expect(submit(svc, payload)).rejects.toThrow(/governance policy could not be resolved/i);
+    expect(getPayload()).toBeNull();
+    expect(getSaveCount()).toBe(0);
   });
 
   it('is a no-op when no resolver is wired (unchanged legacy behaviour)', async () => {

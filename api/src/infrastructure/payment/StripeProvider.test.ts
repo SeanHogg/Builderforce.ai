@@ -16,6 +16,17 @@ function makeProvider(): StripeProvider {
   });
 }
 
+function makeProviderWithoutPrices(): StripeProvider {
+  return new StripeProvider({
+    secretKey: 'sk_test_key',
+    webhookSecret: WEBHOOK_SECRET,
+    priceProMonthly: '',
+    priceProYearly: '   ',
+    priceTeamsMonthly: '',
+    priceTeamsYearly: '',
+  });
+}
+
 /** Build a genuine `t=<ts>,v1=<hmac>` header the way Stripe signs webhooks. */
 async function sign(
   body: string,
@@ -87,6 +98,126 @@ describe('buildPaymentProvider — unconfigured', () => {
   it('refuses to parse a webhook without a signing secret', async () => {
     const provider = buildPaymentProvider({ STRIPE_SECRET_KEY: 'sk_test' } as Env);
     await expect(provider.parseWebhook('{}', 't=1,v1=abc')).rejects.toBeInstanceOf(PaymentNotConfiguredError);
+  });
+});
+
+describe('createCheckoutSession — published-price fallback', () => {
+  it.each([
+    ['pro', 'monthly', 2900, 1, 'month'],
+    ['pro', 'yearly', 29000, 1, 'year'],
+    ['teams', 'monthly', 2000, 5, 'month'],
+    ['teams', 'yearly', 19200, 8, 'year'],
+  ] as const)('creates inline recurring pricing for %s %s when no Stripe Price ID exists', async (targetPlan, billingCycle, unitAmountCents, seats, interval) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'cs_inline', url: 'https://checkout.stripe.test/inline', customer: null,
+    }), { status: 200 })));
+
+    await makeProviderWithoutPrices().createCheckoutSession({
+      tenantId: 7,
+      targetPlan: targetPlan as never,
+      billingCycle: billingCycle as never,
+      billingEmail: 'billing@example.com',
+      currency: 'USD',
+      unitAmountCents,
+      productName: `Builderforce.ai ${targetPlan}`,
+      seats,
+      successUrl: 'https://builderforce.ai/pricing?success=1',
+      cancelUrl: 'https://builderforce.ai/pricing?cancelled=1',
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.has('line_items[0][price]')).toBe(false);
+    expect(body.get('line_items[0][price_data][currency]')).toBe('usd');
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe(String(unitAmountCents));
+    expect(body.get('line_items[0][price_data][recurring][interval]')).toBe(interval);
+    expect(body.get('line_items[0][quantity]')).toBe(String(seats));
+  });
+
+  it('still prefers a configured reusable Stripe Price ID', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'cs_price', url: 'https://checkout.stripe.test/price', customer: null,
+    }), { status: 200 })));
+
+    await makeProvider().createCheckoutSession({
+      tenantId: 7,
+      targetPlan: 'pro' as never,
+      billingCycle: 'monthly' as never,
+      billingEmail: 'billing@example.com',
+      currency: 'USD',
+      unitAmountCents: 2900,
+      productName: 'Builderforce.ai Pro',
+      successUrl: 'https://builderforce.ai/pricing?success=1',
+      cancelUrl: 'https://builderforce.ai/pricing?cancelled=1',
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('line_items[0][price]')).toBe('price_pro_monthly');
+    expect(body.has('line_items[0][price_data][unit_amount]')).toBe(false);
+  });
+});
+
+describe('createCheckoutSession — discount', () => {
+  it('creates a duration-limited coupon and attaches signed redemption metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/coupons')) return new Response(JSON.stringify({ id: 'coupon' }), { status: 200 });
+      return new Response(JSON.stringify({ id: 'cs_discount', url: 'https://checkout.stripe.test/discount', customer: null }), { status: 200 });
+    }));
+
+    await makeProvider().createCheckoutSession({
+      tenantId: 7,
+      targetPlan: 'pro' as never,
+      billingCycle: 'yearly' as never,
+      billingEmail: 'billing@example.com',
+      successUrl: 'https://builderforce.ai/pricing?success=1',
+      cancelUrl: 'https://builderforce.ai/pricing?cancelled=1',
+      discount: {
+        id: '11111111-2222-3333-4444-555555555555',
+        code: 'ANNUAL50',
+        percentOff: 50,
+        durationYears: 1,
+        redemptionId: 'redemption-1',
+      },
+      salesReferralId: 'referral-1',
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [, couponInit] = vi.mocked(fetch).mock.calls[0]!;
+    const coupon = new URLSearchParams(String(couponInit?.body));
+    expect(coupon.get('percent_off')).toBe('50');
+    expect(coupon.get('duration')).toBe('repeating');
+    expect(coupon.get('duration_in_months')).toBe('12');
+
+    const [, checkoutInit] = vi.mocked(fetch).mock.calls[1]!;
+    const checkout = new URLSearchParams(String(checkoutInit?.body));
+    expect(checkout.get('discounts[0][coupon]')).toBe('bf_11111111222233334444555555555555_50_12');
+    expect(checkout.get('metadata[discountRedemptionId]')).toBe('redemption-1');
+    expect(checkout.get('subscription_data[metadata][discountCode]')).toBe('ANNUAL50');
+    expect(checkout.get('metadata[salesReferralId]')).toBe('referral-1');
+    expect(checkout.get('subscription_data[metadata][salesReferralId]')).toBe('referral-1');
+  });
+});
+
+describe('Business Phone checkout', () => {
+  it('charges activation once, service monthly, and signs the consolidated cart metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'cs_phone', url: 'https://checkout.stripe.test/phone', customer: null }), { status: 200 })));
+    await makeProvider().createBusinessPhoneCheckoutSession({ tenantId: 7, cartId: 'cart-7', billingEmail: 'billing@example.com', currency: 'USD', activationCents: 1995, monthlyCents: 995, successUrl: 'https://builderforce.ai/crm/phone?purchase=success', cancelUrl: 'https://builderforce.ai/pricing?phone=cancelled' });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('1995');
+    expect(body.get('line_items[0][price_data][recurring][interval]')).toBeNull();
+    expect(body.get('line_items[1][price_data][unit_amount]')).toBe('995');
+    expect(body.get('line_items[1][price_data][recurring][interval]')).toBe('month');
+    expect(body.get('metadata[purchaseKind]')).toBe('business_phone');
+    expect(body.get('metadata[cartId]')).toBe('cart-7');
+  });
+
+  it('normalizes checkout completion as an add-on event, not a base-plan activation', async () => {
+    const payload = JSON.stringify({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', customer: 'cus_phone', subscription: 'sub_phone', customer_email: 'billing@example.com', metadata: { tenantId: '7', purchaseKind: 'business_phone', cartId: 'cart-7', activationCents: '1995', monthlyCents: '995' } } } });
+    const event = await makeProvider().parseWebhook(payload, await sign(payload));
+    expect(event).toMatchObject({ type: 'addon.activated', purchaseKind: 'business_phone', tenantId: 7, cartId: 'cart-7', activationCents: 1995, monthlyCents: 995 });
   });
 });
 
@@ -221,7 +352,7 @@ describe('checkout.session.completed', () => {
         customer: 'cus_123',
         subscription: 'sub_123',
         customer_email: 'billing@example.com',
-        metadata: { tenantId: '7', billingCycle: 'yearly', targetPlan: 'teams', seats: '5' },
+        metadata: { tenantId: '7', billingCycle: 'yearly', targetPlan: 'teams', seats: '5', discountRedemptionId: 'redemption-1', salesReferralId: 'referral-1' },
       },
     },
   });
@@ -264,12 +395,15 @@ describe('checkout.session.completed', () => {
 
     expect(event).toMatchObject({
       type: 'subscription.activated',
+      tenantId: 7,
       externalCustomerId: 'cus_123',
       externalSubscriptionId: 'sub_123',
       billingCycle: 'yearly',
       targetPlan: 'teams',
       seats: 5,
       billingEmail: 'billing@example.com',
+      discountRedemptionId: 'redemption-1',
+      salesReferralId: 'referral-1',
     });
   });
 

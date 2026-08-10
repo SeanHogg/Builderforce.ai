@@ -74,7 +74,7 @@ export function CoordinationPanel() {
         </button>
       </form>
 
-      {error && <div style={{ ...emptyState, color: 'var(--danger, #dc2626)' }}>{error}</div>}
+      {error && <div style={{ ...emptyState, color: 'var(--danger)' }}>{error}</div>}
 
       {!state && !error && <div style={emptyState}>{t('coordination.empty')}</div>}
 
@@ -131,7 +131,7 @@ export function CoordinationPanel() {
             ) : (
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
                 {state.notes.map((n) => (
-                  <li key={n.key} style={{ borderLeft: '3px solid var(--border, #e5e7eb)', paddingLeft: 10 }}>
+                  <li key={n.key} style={{ borderLeft: '3px solid var(--border)', paddingLeft: 10 }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
                       <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{n.key}</strong>
                       <span style={chip('accent')}>{n.author}</span>

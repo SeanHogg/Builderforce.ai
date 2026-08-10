@@ -14,7 +14,7 @@ import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
-import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { containerGitCloneUrl, mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
 import { mintPreviewToken, PREVIEW_TOKEN_TTL_SECONDS } from '../../application/runtime/previewToken';
 import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
@@ -25,6 +25,7 @@ import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } 
 import {
   markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
+  stampExecutionSourceRef,
 } from '../../application/runtime/cloudAgentEngine';
 import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
@@ -42,13 +43,16 @@ import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
+import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
+import { executeGitProxy } from '../../application/repos/gitProxy';
+import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -58,6 +62,7 @@ import { authorizeManagedTaskExecution } from '../../application/kanban/managedE
  * GET    /api/runtime/sessions/:sessionId/executions – full execution timeline for a session
  * GET    /api/runtime/executions/:id         – get execution state
  * POST   /api/runtime/executions/:id/cancel  – cancel an execution
+ * POST   /api/runtime/executions/cancel-all  – stop every live tenant execution
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
  * GET    /api/runtime/agents/:ref/tool-audit  – tool-audit timeline for one cloud agent
@@ -521,6 +526,24 @@ async function startDispatchedExecution(
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
+  // Per-agent containment: `ide_agents.status != active` is the quarantine switch.
+  // Refuse the named teammate without disturbing peers or the workspace-wide switch.
+  if (agent.active === false) {
+    const msg = `Agent "${agent.label ?? agent.ref ?? 'agent'}" is quarantined and cannot start executions. Re-enable it in Workforce before retrying.`;
+    await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg });
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+      toolName: 'runtime.quarantined', category: 'governance',
+      detail: { agentRef: agent.ref }, result: msg,
+    });
+    const updated = await runtimeService.getExecution(execution.id);
+    notifyExecutionSubscribers(execution.id, {
+      type: 'done', executionId: execution.id, status: updated.status,
+      execution: updated.toPlain(), ts: new Date().toISOString(),
+    });
+    return updated.toPlain();
+  }
+
   // The EXECUTING agent vs the ticket's OWNER are distinct roles. The swimlane's
   // agent works whatever stage (lane) the ticket is in — it executes AS itself
   // (resolved into `agent.ref` from the lane assignment / payload) and that run is
@@ -764,15 +787,16 @@ async function startDispatchedExecution(
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
         const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+        if (repo.ok) await stampExecutionSourceRef(db, tenantId, execution.id, repo.ctx);
         // Clone the ticket's HEAD branch (ctx.branch — where prior runs commit their
         // WIP), not just the base. A container that clones only the base branch starts
         // every run from a stale default and cannot see earlier passes' work; carrying
         // headBranch lets the container check it out and fall back to base on run #1
         // when the branch doesn't exist yet.
-        const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
-          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
-          : null;
         const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
+        const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
+          ? { cloneUrl: containerGitCloneUrl(internalBaseUrl, execution.id, token), baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
+          : null;
         const res = await stub.fetch('https://agent-container/run', {
           method: 'POST',
           body: JSON.stringify({
@@ -966,6 +990,70 @@ async function loadOwnedExecution(
   return execution.toPlain().tenantId === c.get('tenantId') ? execution : null;
 }
 
+interface CancelTenantExecutionsResult {
+  requested: number;
+  cancelled: number;
+  failed: number[];
+}
+
+/** Cancel the tenant's live set through the canonical lifecycle and notify every
+ * executor. The emergency switch includes paused runs so an old approval cannot
+ * resume work while execution is disabled. */
+async function cancelTenantExecutions(
+  c: Context<RuntimeHonoEnv>,
+  db: Db,
+  runtimeService: RuntimeService,
+  includePaused: boolean,
+): Promise<CancelTenantExecutionsResult> {
+  const tenantId = c.get('tenantId');
+  const statuses = includePaused
+    ? ['pending', 'submitted', 'running', 'paused'] as const
+    : ['pending', 'submitted', 'running'] as const;
+  const rows = await db
+    .select({ id: executions.id, agentHostId: executions.agentHostId })
+    .from(executions)
+    .where(and(
+      eq(executions.tenantId, tenantId),
+      inArray(executions.status, [...statuses]),
+      // The workspace switch stops autonomous/platform agents. Interactive
+      // editor and Brain runs deliberately remain live; explicit Cancel all
+      // (includePaused=false) still means every run.
+      includePaused ? eq(executions.source, 'agent') : undefined,
+      liveExecution(),
+    ));
+
+  const failed: number[] = [];
+  let cancelled = 0;
+  await Promise.all(rows.map(async (row) => {
+    try {
+      const execution = await runtimeService.cancel(row.id, c.get('userId'));
+      await releasePendingSteers(db, row.id);
+
+      if (row.agentHostId != null) {
+        const stub = c.env.AGENT_HOST_RELAY?.get(
+          c.env.AGENT_HOST_RELAY.idFromName(String(row.agentHostId)),
+        );
+        await stub?.fetch('https://relay.internal/execution-cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ executionId: row.id }),
+        }).catch((error) => reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelTenantExecutions', context: { logMessage: '[runtime-cancel-all] host relay cancellation failed after status transition', details: { tenantId, executionId: row.id, error } } }));
+      }
+
+      notifyExecutionSubscribers(execution.id, {
+        type: 'done', executionId: execution.id, status: execution.status,
+        execution: execution.toPlain(), ts: new Date().toISOString(),
+      });
+      cancelled += 1;
+    } catch (error) {
+      failed.push(row.id);
+      reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelTenantExecutions', context: { logMessage: '[runtime-cancel-all] execution cancellation failed', details: { tenantId, executionId: row.id, error } } });
+    }
+  }));
+
+  return { requested: rows.length, cancelled, failed };
+}
+
 export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hono<RuntimeHonoEnv> {
   const router = new Hono<RuntimeHonoEnv>();
 
@@ -983,9 +1071,34 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!ok) return c.json({ error: 'invalid run token' }, 403);
     const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
     if (!ctx) return c.json({ error: 'execution not found' }, 404);
+    if (!(await authorizeExecutionPrincipal(db, ctx.tenantId, body.executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
     const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
     return c.json(res.body as Record<string, unknown>, res.status as 200);
   });
+
+  const containerGitProxy = async (c: Context<RuntimeHonoEnv>, subPath: string, method: 'GET' | 'POST'): Promise<Response> => {
+    const executionId = Number(c.req.param('executionId'));
+    const auth = c.req.header('Authorization') ?? '';
+    let token = '';
+    if (auth.startsWith('Basic ')) {
+      try { token = atob(auth.slice(6)).split(':').slice(1).join(':'); } catch { token = ''; }
+    }
+    if (!Number.isFinite(executionId) || !token || !(await verifyContainerRunToken(c.env.JWT_SECRET, executionId, token))) return c.json({ error: 'invalid run credential' }, 403);
+    const run = await loadContainerRunContext(c.env as Env, db, executionId);
+    if (!run) return c.json({ error: 'execution not found' }, 404);
+    if (!(await authorizeExecutionPrincipal(db, run.tenantId, executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
+    const resolved = await resolveTicketRepoContext(db, gitSecret(c.env as Env), run.tenantId, run.taskId);
+    if (!resolved.ok) return c.json({ error: resolved.reason }, 400);
+    const proxied = await executeGitProxy({
+      repo: resolved.ctx, token: resolved.ctx.token, subPath, method,
+      query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
+      contentType: c.req.header('Content-Type'), body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
+    });
+    return proxied.ok ? proxied.response : c.json({ error: proxied.error }, 400);
+  };
+  router.get('/internal/container-git/:executionId.git/info/refs', (c) => containerGitProxy(c, 'info/refs', 'GET'));
+  router.post('/internal/container-git/:executionId.git/git-upload-pack', (c) => containerGitProxy(c, 'git-upload-pack', 'POST'));
+  router.post('/internal/container-git/:executionId.git/git-receive-pack', (c) => containerGitProxy(c, 'git-receive-pack', 'POST'));
 
   router.use('*', authMiddleware);
 
@@ -1076,6 +1189,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
       payload:     body.payload,
+      source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
     const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
@@ -1168,6 +1282,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
       payload:     body.payload,
+      source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
     const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
@@ -1322,14 +1437,20 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         status: executions.status,
         taskId: executions.taskId,
         taskTitle: tasks.title,
+        projectId: projects.id,
+        projectName: projects.name,
         agentHostId: executions.agentHostId,
         cloudAgentRef: tasks.assignedAgentRef,
+        agentName: sql<string | null>`coalesce(${agentHosts.name}, ${ideAgents.name})`,
         submittedBy: executions.submittedBy,
         startedAt: executions.startedAt,
         createdAt: executions.createdAt,
       })
       .from(executions)
       .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .leftJoin(agentHosts, eq(agentHosts.id, executions.agentHostId))
+      .leftJoin(ideAgents, eq(ideAgents.id, tasks.assignedAgentRef))
       .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running']), liveExecution()))
       .orderBy(desc(executions.createdAt))
       .limit(limit);
@@ -1346,6 +1467,45 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       };
     });
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+  });
+
+  // Persisted workspace execution override. This is deliberately separate from
+  // manager autonomy: disabling it blocks manual Run-now, scheduled/cron work,
+  // lane chaining, integrations, and every other RuntimeService.submit caller.
+  router.get('/execution-control', async (c) => {
+    const tenantId = c.get('tenantId');
+    const [row] = await db.select({ enabled: tenants.agentExecutionEnabled })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    return c.json({ enabled: row.enabled });
+  });
+
+  router.put('/execution-control', requireRole(TenantRole.MANAGER) as never, async (c) => {
+    const body = await c.req.json<{ enabled?: unknown }>()
+      .catch(() => ({ enabled: undefined } as { enabled?: unknown }));
+    if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean' }, 400);
+
+    const tenantId = c.get('tenantId');
+    const [row] = await db.update(tenants)
+      .set({ agentExecutionEnabled: body.enabled, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ enabled: tenants.agentExecutionEnabled });
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+
+    // Disable first, then drain. RuntimeService.submit observes FALSE while this
+    // snapshot is being cancelled, so schedulers cannot refill the fleet.
+    const stopped = body.enabled
+      ? { requested: 0, cancelled: 0, failed: [] as number[] }
+      : await cancelTenantExecutions(c, db, runtimeService, true);
+    return c.json({ enabled: row.enabled, stopped });
+  });
+
+  // Master fleet stop. Resolve the tenant-scoped live set on the server and
+  // cancel every run through the same lifecycle used by an individual cancel.
+  router.post('/executions/cancel-all', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+    return c.json(await cancelTenantExecutions(c, db, runtimeService, false));
   });
 
   // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"
@@ -1545,6 +1705,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Get a single execution by ID
+  router.get('/executions/:id/coordination', async (c) => {
+    const executionId = Number(c.req.param('id'));
+    if (!Number.isFinite(executionId)) return c.json({ error: 'invalid execution id' }, 400);
+    const tenantId = c.get('tenantId');
+    const [run] = await db.select({ taskId: executions.taskId }).from(executions).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId))).limit(1);
+    if (!run) return c.json({ error: 'execution not found' }, 404);
+    const coordination = await getTicketCoordination(c.env, db, tenantId, run.taskId);
+    return coordination ? c.json(coordination) : c.json({ error: 'ticket not found' }, 404);
+  });
+
   router.get('/executions/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const owned = await loadOwnedExecution(c, runtimeService, id);
@@ -1938,7 +2108,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     const execution = await runtimeService.getExecution(id).catch(() => null);
     if (!execution) return c.json({ error: 'Execution not found' }, 404);
-    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null; status?: string; taskId?: number; payload?: string | null; cloudAgentRef?: string | null };
+    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null; status?: string; taskId?: number; payload?: string | null; cloudAgentRef?: string | null; source?: 'agent' | 'vscode' | 'brain' };
     const tenantId = c.get('tenantId');
     if (plain.tenantId != null && plain.tenantId !== tenantId) {
       return c.json({ error: 'Execution not found' }, 404);
@@ -1997,6 +2167,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       tenantId,
       submittedBy: c.get('userId'),
       payload: followUpPayload,
+      source: plain.source === 'vscode' || plain.source === 'brain' ? plain.source : 'agent',
     });
 
     // Echo the directive on the new run's thread (display-only — it is already the
@@ -2133,15 +2304,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/tasks/:taskId/file-changes', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ changes: [] });
-    // `createdAt` is projected as the RAW driver string (not a Drizzle `Date`) so the
-    // JSON wire format the Changes tab already parses is unchanged.
+    // Typed timestamps serialize to the API-wide ISO-8601 UTC wire format.
     const rows = await db
       .select({
         path: taskFileChanges.path,
         change: taskFileChanges.change,
         agent: taskFileChanges.agent,
         executionId: taskFileChanges.executionId,
-        createdAt: sql<string>`${taskFileChanges.createdAt}`,
+        createdAt: taskFileChanges.createdAt,
         // NOTE: the outer-row references below interpolate the TABLE (`${taskFileChanges}`),
         // not its columns. In a single-table select Drizzle renders an interpolated
         // Column WITHOUT its table qualifier, so `${taskFileChanges.executionId}` would
@@ -2220,9 +2390,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     };
 
     // Version token = newest change row for this path (null when unrecorded).
-    // Kept as the raw driver string so the cache key it composes is byte-identical.
     const [ver] = await db
-      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .select({ ts: taskFileChanges.createdAt })
       .from(taskFileChanges)
       .where(and(
         eq(taskFileChanges.taskId, taskId),
@@ -2235,7 +2404,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!ver?.ts) return c.json(await load());
     const body = await getOrSetCached(
       env,
-      `task-file-content:${tenantId}:${taskId}:${path}:${ver.ts}`,
+      `task-file-content:${tenantId}:${taskId}:${path}:${ver.ts.toISOString()}`,
       load,
       { kvTtlSeconds: 600 },
     );
@@ -2304,7 +2473,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // Version token = newest change row for this task (null when the run hasn't
     // written anything yet — then the branch content is stable at the base).
     const [ver] = await db
-      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .select({ ts: taskFileChanges.createdAt })
       .from(taskFileChanges)
       .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, tenantId)))
       .orderBy(desc(taskFileChanges.createdAt))
@@ -2312,7 +2481,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     const body = await getOrSetCached(
       env,
-      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts ?? 'base'}`,
+      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts.toISOString() ?? 'base'}`,
       load,
       { kvTtlSeconds: 300, l1TtlMs: 30_000 },
     );
@@ -2363,6 +2532,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       tenantId: c.get('tenantId'),
       submittedBy: c.get('userId'),
       payload: body.payload,
+      source: c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
     const targets = await getDispatchTargets(db, c.get('tenantId'), null);

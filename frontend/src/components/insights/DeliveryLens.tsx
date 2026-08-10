@@ -33,22 +33,22 @@ function fmtDur(hours: number): string {
 }
 
 const STATUS_TONE: Record<DeliveryStatus, string> = {
-  on_track: '#16a34a', at_risk: '#d97706', late: 'var(--danger, #dc2626)',
-  done: '#2563eb', no_signal: 'var(--text-muted)',
+  on_track: 'var(--success)', at_risk: 'var(--warning)', late: 'var(--danger)',
+  done: 'var(--info)', no_signal: 'var(--text-muted)',
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 interface Pick { scope: DeliverableScope; id: string; label: string }
 
-const PROJECTION_COLOR = '#7c5cff';
+const PROJECTION_COLOR = 'var(--purple-bright)';
 
 /**
  * Value-delivery chart — historical burnup (scope dashed, completed filled) plus a
@@ -88,17 +88,17 @@ function BurnChart({ series, projection, targetDate }: { series: BurnPoint[]; pr
       {/* target-date marker */}
       {targetX != null && (
         <g>
-          <line x1={targetX} y1={PAD} x2={targetX} y2={H - PAD} stroke="var(--danger, #dc2626)" strokeWidth={1} strokeDasharray="2 3" opacity={0.8} />
-          <text x={Math.min(targetX + 4, W - PAD)} y={PAD + 2} fontSize={9} fill="var(--danger, #dc2626)">{t('deliv.legendTarget')}</text>
+          <line x1={targetX} y1={PAD} x2={targetX} y2={H - PAD} stroke="var(--danger)" strokeWidth={1} strokeDasharray="2 3" opacity={0.8} />
+          <text x={Math.min(targetX + 4, W - PAD)} y={PAD + 2} fontSize={9} fill="var(--danger)">{t('deliv.legendTarget')}</text>
         </g>
       )}
       {/* today marker */}
       <line x1={todayX} y1={PAD} x2={todayX} y2={H - PAD} stroke="var(--text-muted)" strokeWidth={1} opacity={0.5} />
       <text x={todayX} y={H - 18} fontSize={9} fill="var(--text-muted)" textAnchor="middle">{t('deliv.legendToday')}</text>
 
-      <path d={areaCompleted} fill="#2563eb22" stroke="none" />
+      <path d={areaCompleted} fill="color-mix(in srgb, var(--info) 13%, transparent)" stroke="none" />
       <path d={path(series, (p) => p.scope)} fill="none" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 3" />
-      <path d={path(series, (p) => p.completed)} fill="none" stroke="#2563eb" strokeWidth={2} />
+      <path d={path(series, (p) => p.completed)} fill="none" stroke="var(--info)" strokeWidth={2} />
       {/* forward projection of completed → scope at current pace */}
       {projection.length >= 2 && (
         <path d={path(projection, (p) => p.completed)} fill="none" stroke={PROJECTION_COLOR} strokeWidth={2} strokeDasharray="5 3" />
@@ -111,7 +111,7 @@ function BurnChart({ series, projection, targetDate }: { series: BurnPoint[]; pr
   );
 }
 
-const POINTS_DONE_COLOR = '#22c55e';
+const POINTS_DONE_COLOR = 'var(--success)';
 const POINTS_DEFINED_COLOR = 'var(--text-muted)';
 
 /**
@@ -165,7 +165,7 @@ function ScopeEffortChart({ points, hasEffort }: { points: ScopeEffortPoint[]; h
 
 const UPDATE_STATUSES: DeliverableUpdateStatus[] = ['note', 'on_track', 'at_risk', 'blocked', 'done'];
 const UPDATE_TONE: Record<DeliverableUpdateStatus, string> = {
-  note: 'var(--text-muted)', on_track: '#16a34a', at_risk: '#d97706', blocked: 'var(--danger, #dc2626)', done: '#2563eb',
+  note: 'var(--text-muted)', on_track: 'var(--success)', at_risk: 'var(--warning)', blocked: 'var(--danger)', done: 'var(--info)',
 };
 
 /** Qualitative update/comment stream for the selected deliverable (EMP-11). */
@@ -321,8 +321,8 @@ function LifecycleExplorer() {
             {phases.map((p, i) => (
               <div key={p.phase} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 84px', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{t(`deliv.lifecycle.phase.${p.phase}`)}</span>
-                <div style={{ background: 'var(--bg-subtle, #00000010)', borderRadius: 6, height: 18, overflow: 'hidden' }}>
-                  <div style={{ width: `${(p.avgHours / maxAvg) * 100}%`, height: '100%', background: colorAt(i), borderRadius: 6, minWidth: p.avgHours > 0 ? 2 : 0 }} />
+                <div style={{ background: 'var(--surface-sunken)', borderRadius: 'var(--radius-sm)', height: 18, overflow: 'hidden' }}>
+                  <div style={{ width: `${(p.avgHours / maxAvg) * 100}%`, height: '100%', background: colorAt(i), borderRadius: 'var(--radius-sm)', minWidth: p.avgHours > 0 ? 2 : 0 }} />
                 </div>
                 <span style={{ fontSize: '0.82rem', textAlign: 'right', fontWeight: 600 }} title={t('deliv.lifecycle.median', { d: fmtDur(p.medianHours) })}>
                   {fmtDur(p.avgHours)}
@@ -424,7 +424,7 @@ export function DeliveryLens() {
           <PmCard title={t('deliv.burnup')}>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 8, fontSize: '0.78rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 0, borderTop: '1.5px dashed var(--text-muted)', display: 'inline-block' }} /> {t('deliv.legendScope')}</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 2, background: '#2563eb', display: 'inline-block' }} /> {t('deliv.legendDone')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 2, background: 'var(--info)', display: 'inline-block' }} /> {t('deliv.legendDone')}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 0, borderTop: `2px dashed ${PROJECTION_COLOR}`, display: 'inline-block' }} /> {t('deliv.legendProjected')}</span>
               <span style={{ color: STATUS_TONE[data.status], fontWeight: 600 }}>{t(`deliv.statusLabel.${data.status}`)}</span>
             </div>
@@ -436,8 +436,8 @@ export function DeliveryLens() {
           {(data.hasPoints || data.hasEffort) && (
             <PmCard title={t('deliv.scopeEffort.title')}>
               <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 8, fontSize: '0.78rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DONE_COLOR, borderRadius: 2, display: 'inline-block' }} /> {t('deliv.scopeEffort.completed')}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DEFINED_COLOR, opacity: 0.25, borderRadius: 2, display: 'inline-block' }} /> {t('deliv.scopeEffort.defined')}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DONE_COLOR, borderRadius: 'var(--radius-sm)', display: 'inline-block' }} /> {t('deliv.scopeEffort.completed')}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DEFINED_COLOR, opacity: 0.25, borderRadius: 'var(--radius-sm)', display: 'inline-block' }} /> {t('deliv.scopeEffort.defined')}</span>
                 {data.hasEffort && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 2, background: PROJECTION_COLOR, display: 'inline-block' }} /> {t('deliv.scopeEffort.fte')}</span>}
               </div>
               <ScopeEffortChart points={data.scopeEffort} hasEffort={data.hasEffort} />

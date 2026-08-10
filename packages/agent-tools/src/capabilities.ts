@@ -106,12 +106,12 @@ export interface RepoWriteCapability {
   editFile(path: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult>;
 }
 
-/** Fetch / search the public web. The two halves are gated SEPARATELY — `fetch` by
- *  capability `web`, `search` by `web.search` — because they need different backings:
- *  fetching a known URL is just an HTTP client (every surface has one), while search
- *  needs a search-engine vendor. So `search` is OPTIONAL: a surface that can fetch but
- *  has no search vendor wired backs `fetch` only and omits `web.search` from its
- *  capability set, and the registry then never surfaces `web_search` to the model. */
+/** Fetch / search the public web. The two halves are still gated SEPARATELY — `fetch`
+ *  by capability `web`, `search` by `web.search` — because they need different
+ *  backings: fetching a known URL is just an HTTP client, while search needs a
+ *  search-engine vendor. `search` stays OPTIONAL for surfaces that wire no vendor at
+ *  all (the registry then never surfaces `web_search`); the cloud surface always wires
+ *  one, because a keyless encyclopedic vendor is the floor beneath every BYO key. */
 export interface WebCapability {
   fetch(url: string): Promise<WebFetchResult>;
   search?(query: string): Promise<WebSearchResult>;
@@ -315,6 +315,16 @@ export interface WebSearchResult {
   query?: string;
   results?: Array<{ title?: string; url?: string; snippet?: string }>;
   error?: string;
+  /** Licence/credit line the answering surface must carry when it uses these
+   *  results (e.g. the keyless encyclopedic index is CC-BY-SA). */
+  attribution?: string;
+  /**
+   * How WIDE the index behind these results is. `web` is a general search engine;
+   * `encyclopedic` is the keyless floor — real, citable, but narrower. The model is
+   * told which it got so it can say "this is what an encyclopedic index has" rather
+   * than implying it swept the open web.
+   */
+  coverage?: 'web' | 'encyclopedic';
 }
 export interface StaticCheckResult {
   ok: boolean;

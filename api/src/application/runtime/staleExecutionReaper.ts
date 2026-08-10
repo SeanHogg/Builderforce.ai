@@ -111,9 +111,8 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   // on the durable executor (CloudRunnerDO), which survives long multi-step runs.
   // Pull the candidates first (with task context the DO `/start` needs) so we can
   // decide per-row whether to re-dispatch or fail — see requeueCloudRun.
-  // The three timestamps are projected as RAW strings (not Drizzle `Date`s) because
-  // `tsToMs` parses them with millisecond precision — the per-surface silence
-  // ceiling below is a sub-second decision (execution #136 turned on 2s).
+  // Keep these as typed Date values. `tsToMs` performs the explicit epoch conversion
+  // used by the per-surface silence calculation, preserving millisecond precision.
   const cloudCandidates: CloudCandidateRow[] = await db
     .select({
       id: executions.id,
@@ -121,9 +120,9 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       agent_host_id: executions.agentHostId,
       payload: executions.payload,
       error_message: executions.errorMessage,
-      started_at: sql<string | null>`${executions.startedAt}`,
-      created_at: sql<string | null>`${executions.createdAt}`,
-      updated_at: sql<string | null>`${executions.updatedAt}`,
+      started_at: executions.startedAt,
+      created_at: executions.createdAt,
+      updated_at: executions.updatedAt,
       task_id: tasks.id,
       task_title: tasks.title,
       task_description: tasks.description,
@@ -332,9 +331,9 @@ async function narrateReapedRuns(env: Env, db: Db, rows: ReapedRow[]): Promise<v
 
 /** A stale cloud run + the task context the durable executor needs to resume it. */
 interface CloudCandidateRow extends ReapedRow {
-  started_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  started_at: Date | null;
+  created_at: Date | null;
+  updated_at: Date | null;
   task_id: number;
   task_title: string;
   task_description: string | null;
@@ -345,9 +344,9 @@ interface CloudCandidateRow extends ReapedRow {
 
 /** Parse a timestamp column (ISO string or null) to epoch ms, or null when absent
  *  / unparseable — so the reason picker falls back to the serverless message. */
-function tsToMs(ts: string | null | undefined): number | null {
+function tsToMs(ts: Date | string | null | undefined): number | null {
   if (!ts) return null;
-  const ms = Date.parse(ts);
+  const ms = ts instanceof Date ? ts.getTime() : Date.parse(ts);
   return Number.isFinite(ms) ? ms : null;
 }
 

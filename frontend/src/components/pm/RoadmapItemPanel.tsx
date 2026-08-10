@@ -22,7 +22,7 @@ export interface RoadmapItemPanelProps {
 
 const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' };
 const fieldStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+  width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14,
 };
 
@@ -88,12 +88,12 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
           <label style={labelStyle} htmlFor="rm-target">Target date</label>
           <input id="rm-target" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={fieldStyle} />
         </div>
-        {error && <div style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
             {isEdit ? 'Save changes' : 'Create'}
           </button>
-          <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
+          <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
         </div>
       </div>
     </SlideOutPanel>

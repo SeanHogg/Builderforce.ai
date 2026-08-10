@@ -62,8 +62,7 @@ import {
   getCachedBuilderInsightsSnapshot,
 } from '../../application/insights/builderInsights';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
-import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
-import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
+import { callGatewayMcpTool, listGatewayMcpTools } from '../../application/llm/mcpGateway';
 import {
   setTenantProviderKey,
   setTenantProviderOAuth,
@@ -74,6 +73,7 @@ import {
   listTenantProviderKeys,
   deleteTenantProviderKey,
   isSupportedProvider,
+  byoVendorIdFor,
   byoVendorIdsFromCredentials,
   providersFromCredentials,
   formatByoUnresolvedHeader,
@@ -141,7 +141,9 @@ import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../
 import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBody } from '../../domain/tenant/planFeatures';
 import { isCardValidated } from '../../application/tenant/cardValidationService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
+import { GuestPromptService } from '../../application/marketing/GuestPromptService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
+import { guestRoomTurn } from '../../application/guest/guestRoomClient';
 import { restrictGuestTools } from '../../application/guest/guestCanvasTools';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
@@ -295,7 +297,7 @@ export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
   return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
 }
 
-type TenantAccess = {
+export type TenantAccess = {
   userId: string | null;
   tenantId: number;
   /** Numeric agentHost ID, set when request authenticates via agentHost API key. */
@@ -958,6 +960,38 @@ function isAgenticToolTurn(body: { tools?: unknown }): boolean {
 }
 
 /**
+ * Can this tenant fund a completion WITHOUT the operator's pool key?
+ *
+ * The pre-flight "LLM proxy not configured" 503 asks whether the request can be served
+ * at all — not whether WE can serve it. A tenant on their own credential does not touch
+ * our pool, so turning them away for a missing `OPENROUTER_API_KEY` refuses a request
+ * that would have succeeded, and blames our configuration for it.
+ *
+ * OpenRouter CONNECTIONS were already exempt; every DIRECT provider (a connected Kimi
+ * Code / OpenAI / Meta / Moonshot / xAI key, or a Claude / Codex / SuperGrok
+ * subscription) is the same case and was simply missed — which is how a tenant whose
+ * only connected account is Kimi could be told the proxy is unconfigured while holding
+ * a perfectly good key.
+ *
+ * Deliberately a capability check, not a routing decision: `byoRequired` + the strict
+ * pin still decide WHICH account serves the turn, and a cascade that cannot reach the
+ * pinned vendor still fails with its own real reason instead of this blanket 503.
+ */
+function tenantCanSelfFund(creds: {
+  vendorKeys?: TenantVendorKeys | null;
+  anthropicOAuthToken?: string | null;
+  openaiCodexAuth?: unknown;
+  xaiOAuthToken?: string | null;
+  openRouterConnections?: readonly { hasKey: boolean }[];
+}): boolean {
+  return Object.values(creds.vendorKeys ?? {}).some(Boolean)
+    || creds.anthropicOAuthToken != null
+    || creds.openaiCodexAuth != null
+    || creds.xaiOAuthToken != null
+    || (creds.openRouterConnections?.some((connection) => connection.hasKey) ?? false);
+}
+
+/**
  * Build the gateway completion proxy, applying the agentic capability floor when
  * the turn carries tools. `codingOnly` keeps the failover cascade inside the
  * curated coder pool and `CODING_BACKSTOP_MODELS` floors an exhausted cascade onto
@@ -1010,17 +1044,37 @@ function proxyForCompletion(
  *     touches `llm_usage_log` or any tenant meter.
  * Cap exhaustion returns a 402 the UI turns into a "sign up free to keep going"
  * wall — the whole point of the funnel.
+ *
+ * A guest token may also carry a signed room code (`rid`) — a SHARED session the
+ * guest invited other people into. Then a THIRD axis applies, and it is the one
+ * the UI counts down: the room's COMBINED allowance. It is the same ten turns a
+ * lone guest gets, spent by everybody in the room together, so an invite link can
+ * never multiply anonymous spend. The per-visitor and per-IP counters keep running
+ * underneath it, so joining a fresh room cannot refill an exhausted individual
+ * either — a turn must clear ALL THREE to be dispatched.
  */
+async function guestTurnFingerprint(messages: ChatCompletionRequest['messages'], originalUserInput?: string): Promise<string> {
+  // Tool-loop continuations append assistant/tool messages, while the system and
+  // user messages remain unchanged. Hash only that stable user-authored spine so
+  // retries within one submit dedupe, but reusing an id for different input does not.
+  const stableInput = originalUserInput != null
+    ? JSON.stringify(originalUserInput.slice(0, 8_000))
+    : JSON.stringify(messages.filter((message) => message.role === 'system' || message.role === 'user'));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableInput));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   if (!guestBrainEnabled(c.env)) {
     return c.json({ error: 'Guest chat is disabled.', code: 'guest_brain_disabled' }, 503);
   }
   const authHeader = c.req.header('Authorization') ?? '';
   const token = authHeader.slice(7); // strip "Bearer "
-  const visitorId = await verifyGuestToken(token, c.env.JWT_SECRET);
-  if (!visitorId) {
+  const identity = await verifyGuestToken(token, c.env.JWT_SECRET);
+  if (!identity) {
     return c.json({ error: 'Invalid or expired guest session.', code: 'guest_token_invalid' }, 401);
   }
+  const { visitorId, roomCode } = identity;
 
   const body = await c.req.json<ChatCompletionRequest>().catch(() => null);
   if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
@@ -1029,8 +1083,32 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
 
   const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
   const guest = new GuestChatService(buildDatabase(c.env));
+  const metadata = (body as unknown as { metadata?: Record<string, unknown> }).metadata;
+  const suppliedTurnId = typeof metadata?.guestTurnId === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(metadata.guestTurnId)
+    ? metadata.guestTurnId
+    : null;
+  const originalUserInput = typeof metadata?.guestTurnInput === 'string' ? metadata.guestTurnInput : undefined;
+  const turnFingerprint = await guestTurnFingerprint(body.messages, originalUserInput);
+  // Fingerprint fallback keeps older clients from charging each appended tool
+  // continuation during a rolling deploy. New clients always send a unique id.
+  const turnId = suppliedTurnId ?? turnFingerprint;
 
-  const cap = await guest.checkCap(c.env as Env, visitorId, ip);
+  // The room's COMBINED allowance is checked first, and its numbers are the ones
+  // the shared UI counts down — "3 free messages left" must mean the same thing to
+  // everyone looking at the same conversation. A room that has vanished (expired,
+  // or the DO binding is gone) degrades to the solo path rather than blocking.
+  const roomTurn = roomCode ? await guestRoomTurn(c.env as Env, roomCode, turnId, false) : null;
+  if (roomTurn && !roomTurn.allowed) {
+    return c.json({
+      error: `This shared session has used its ${roomTurn.limit} free messages for today. Sign up free to keep going.`,
+      code: 'guest_limit_reached',
+      reason: 'room',
+      limit: roomTurn.limit,
+      terminal: true,
+    }, 429);
+  }
+
+  const cap = await guest.checkCap(c.env as Env, visitorId, ip, turnId, turnFingerprint);
   if (!cap.allowed) {
     // 429 (not 402) — a guest has no plan to upgrade, so this must NOT trip the
     // paid-plan upgrade modal. The UI shows a "sign up free to keep going" wall,
@@ -1068,12 +1146,51 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   const estimatedTokens = estimateRequestTokens(body.messages, undefined);
   const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
 
+  // Harvest the visitor's own words for the funnel. The landing composer posts
+  // its prompt explicitly (it fires before any model call exists); every turn
+  // INSIDE a session arrives here instead, so this is where those are captured —
+  // off the request path, so a canvas turn pays nothing for it, and only when the
+  // client sent the original input rather than the assembled message array (a
+  // tool-loop continuation carries no new human sentence and must not be logged
+  // as one). `record` is idempotent about nothing and charges its own daily
+  // ceiling, which is why the same service owns both entry points.
+  if (originalUserInput) {
+    c.executionCtx.waitUntil(
+      new GuestPromptService(buildDatabase(c.env))
+        .record(c.env as Env, {
+          visitorId,
+          prompt: originalUserInput,
+          surface: roomCode ? 'room' : 'canvas',
+          mode: typeof metadata?.chatMode === 'string' ? metadata.chatMode : undefined,
+          sessionRef: typeof metadata?.sessionRef === 'string' ? metadata.sessionRef : undefined,
+          ip,
+        })
+        .catch((error) => {
+          reportCaughtError(error, { source: 'presentation/routes/llmRoutes.ts', operation: 'handleGuestChat.recordPrompt' });
+        }),
+    );
+  }
+
   // Charge only once an upstream has accepted the request. For streaming calls
   // this still happens before the response body is handed to the browser, so an
   // aborted stream counts; gateway/vendor failures do not burn a guest turn.
   let remaining = cap.remaining;
-  if (result.response.ok) {
-    remaining = await guest.consumeMessage(c.env as Env, visitorId, ip);
+  let limit = cap.limit;
+  if (result.response.ok && !cap.alreadyConsumed) {
+    remaining = await guest.consumeMessage(c.env as Env, visitorId, ip, turnId, turnFingerprint);
+  }
+  // Charge the room on the same condition, and report ITS numbers — the shared
+  // counter is what every participant sees. The DO makes this idempotent per
+  // turnId, so a tool-loop continuation costs the room nothing extra.
+  if (roomCode && result.response.ok) {
+    const charged = await guestRoomTurn(c.env as Env, roomCode, turnId, true);
+    if (charged) {
+      remaining = charged.remaining;
+      limit = charged.limit;
+    }
+  } else if (roomTurn) {
+    remaining = roomTurn.remaining;
+    limit = roomTurn.limit;
   }
 
   const headers = new Headers();
@@ -1087,7 +1204,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   headers.set('x-builderforce-retries', String(result.retries));
   headers.set('x-builderforce-guest', 'true');
   headers.set('x-builderforce-guest-remaining', String(remaining));
-  headers.set('x-builderforce-guest-limit', String(cap.limit));
+  headers.set('x-builderforce-guest-limit', String(limit));
 
   if (body.stream && result.response.body) {
     headers.set('cache-control', 'no-cache');
@@ -1107,7 +1224,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   if (result.response.ok) {
     c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
   }
-  return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit: cap.limit } }, result.response.status as 200);
+  return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit } }, result.response.status as 200);
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,7 +1401,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const probe = await probeOpenRouterConnection(c.env, access.tenantId, id);
     if (probe.status === 'not_found') return c.json({ error: 'not_found', code: 'not_found' }, 404);
     if (probe.ok) {
-      return c.json({ ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey, testedAt: probe.checkedAt });
+      return c.json({
+        ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey,
+        ...(probe.limitedModels?.length ? { limitedModels: probe.limitedModels } : {}),
+        testedAt: probe.checkedAt,
+      });
     }
     // An upstream 5xx means the OPPOSITE of a broken registration: the key was accepted and
     // the model provider then errored. Reporting that as "test failed" sends an owner to
@@ -1303,6 +1424,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'openrouter_connection_test_failed',
       testedAt: probe.checkedAt,
+      ...(probe.limitedModels?.length ? { limitedModels: probe.limitedModels } : {}),
       // Echo the alert the probe just persisted so the card repaints from THIS response
       // instead of waiting for the list read's cache window to lapse.
       ...(probe.alert ? { authAlert: probe.alert } : {}),
@@ -1765,10 +1887,16 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       });
     }
 
-    // ── No BYO key → serve from our model pool via Messages ⇄ OpenAI translation ──
+    // ── No BYO ANTHROPIC key → serve via Messages ⇄ OpenAI translation ──────
+    // Resolved BEFORE the pool-key check, not after: the tenant may still bring a
+    // non-Anthropic account (Kimi, OpenAI, Meta, …), and refusing them for a missing
+    // OPENROUTER key would blame our pool for a turn that never needed it.
+    const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
     const isPro = access.premiumOverride || access.effectivePlan !== 'free';
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey) return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
+    if (!requiredKey && !tenantCanSelfFund({ vendorKeys: tenantVendorKeys })) {
+      return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
+    }
 
     // Our-models path bills US (not the tenant's Anthropic key), so apply the
     // SAME daily + monthly token caps as /v1/chat/completions — and close the
@@ -1780,10 +1908,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const openaiBody = anthropicToOpenAiRequest(parsed);
     const traceId = newTraceId();
     const messageId = `msg_${traceId}`;
-    // The tenant has no BYO Anthropic credential here (handled above), but may
-    // still bring OpenAI/Google — overlay those so a translated turn landing on
-    // their vendor rides the tenant's own account ($0 to us, metered byo).
-    const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
+    // `tenantVendorKeys` was resolved above (before the pool-key check) — the tenant
+    // has no BYO Anthropic credential here (handled earlier) but may still bring
+    // OpenAI/Google/Kimi/…, overlaid so a translated turn landing on their vendor
+    // rides the tenant's own account ($0 to us, metered byo).
     // Determinism for non-Anthropic on-prem BYO: if the requested model belongs to
     // a vendor the tenant has connected, HARD-PIN it (modelStrict) so the run rides
     // their own account instead of the gateway silently cascading onto our free
@@ -1899,8 +2027,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
     const db = buildDatabase(c.env);
-    // First-party platform tools (in-process) + the tenant's external MCP servers.
-    const tools = [...listBuiltinTools(), ...await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET, fetch, c.env as Env)];
+    // THREE sources, one list — built by the shared gateway module so this REST
+    // transport and the spec JSON-RPC transport (`POST /mcp`) can never drift.
+    const tools = await listGatewayMcpTools({
+      db,
+      env: c.env as Env,
+      tenantId: access.tenantId,
+      keyMaterial: c.env.JWT_SECRET,
+    });
     return c.json({ tools });
   });
 
@@ -1922,23 +2056,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const db = buildDatabase(c.env);
     try {
-      // First-party platform tools run in-process; everything else relays to the
-      // tenant's external MCP server.
-      const result = body.extensionId === BUILTIN_EXTENSION_ID
-        ? await callBuiltinTool(db, {
-            tenantId: access.tenantId, tool: body.tool, arguments: body.arguments,
-            env: c.env as Env, userId: access.userId, role: access.role,
-            // Forwarded so route-replay tools run as the caller (JWT) or mint for gateway keys.
-            authToken: (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null,
-            executionCtx: c.executionCtx,
-          })
-        : await callMcpTool(db, {
-            tenantId: access.tenantId,
-            extensionId: body.extensionId,
-            tool: body.tool,
-            arguments: body.arguments,
-            keyMaterial: c.env.JWT_SECRET,
-          });
+      const result = await callGatewayMcpTool(
+        { db, env: c.env as Env, tenantId: access.tenantId, keyMaterial: c.env.JWT_SECRET },
+        { extensionId: body.extensionId, tool: body.tool, arguments: body.arguments },
+        {
+          userId: access.userId,
+          role: access.role,
+          // Forwarded so route-replay tools run as the caller (JWT) or mint for gateway keys.
+          authToken: (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null,
+          executionCtx: c.executionCtx,
+        },
+      );
       return c.json({ result });
     } catch (e) {
       // Recoverable: hand the model a tool-error result, don't 500 the loop.
@@ -2043,7 +2171,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       const msgsForRecall = body.messages as Array<{ role?: string; content?: unknown }>;
       const latestUser = [...msgsForRecall].reverse().find((m) => m.role === 'user');
       const recallQuery = typeof latestUser?.content === 'string' ? latestUser.content : undefined;
-      const wf = await resolveWorkforceModel(c.env as Env, bodyAny.model, recallQuery);
+      const wf = await resolveWorkforceModel(c.env as Env, access.tenantId, bodyAny.model, recallQuery);
       bodyAny.model = wf?.baseModel ?? undefined;
       if (wf?.directives) {
         const msgs = body.messages as Array<{ role?: string; content?: unknown }>;
@@ -2200,7 +2328,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Validate required key for the active plan up-front so callers get a clear 503.
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey && !tenantCreds.openRouterConnections?.some((connection) => connection.hasKey)) {
+    if (!requiredKey && !tenantCanSelfFund(tenantCreds)) {
       return c.json({
         error: isPro
           ? 'LLM proxy not configured (missing OPENROUTER_API_KEY_PRO or OPENROUTER_API_KEY)'
@@ -2353,7 +2481,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           vendor: result.resolvedVendor,
           account: classifyReplyAccount(byoFunded, byoVendors.size > 0),
           byoFunded,
-          extra: { chatId },
+          // MODE (0409) — conversation vs execution. The caller stamps it on the
+          // completion metadata; carrying it here is what lets the audit timeline (and
+          // the mode rollup) tell a turn that ANSWERED from one that went and did the
+          // work, instead of every agent turn reading identically.
+          extra: { chatId, ...(typeof meta.mode === 'string' ? { mode: meta.mode } : {}) },
         }),
       });
       c.executionCtx?.waitUntil?.(promise);
@@ -2566,14 +2698,30 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           listOpenRouterConnections(c.env, access.tenantId),
         ])
       : [[] as ProviderKeySummary[], []];
-    const byoModels = [
-      ...byoModelsFor(byoProviderRows),
-      ...connectionModelRefs(openRouterConnections).map((id) => ({
-        id,
-        vendor: 'openrouter',
-        tier: 'REGISTERED',
+    // Preserve the ONE mixed provider/connection precedence in the picker payload.
+    // Appending every OpenRouter registration after every direct provider made the
+    // prompt order disagree with the priority drawer whenever a connection was #1.
+    const providerModels = byoModelsFor(byoProviderRows);
+    const groups = [
+      ...byoProviderRows.map((row) => ({
+        priority: row.priority,
+        tie: `provider:${row.provider}`,
+        models: providerModels.filter((model) => {
+          const vendor = byoVendorIdFor(row.provider, row.authType);
+          return model.vendor === vendor;
+        }),
       })),
-    ];
+      ...openRouterConnections.map((connection) => ({
+        priority: connection.priority,
+        tie: `openrouter:${connection.id}`,
+        models: connectionModelRefs([connection]).map((id) => ({ id, vendor: 'openrouter', tier: 'REGISTERED' })),
+      })),
+    ].sort((a, b) => {
+      const ar = a.priority ?? Number.POSITIVE_INFINITY;
+      const br = b.priority ?? Number.POSITIVE_INFINITY;
+      return ar === br ? a.tie.localeCompare(b.tie) : ar - br;
+    });
+    const byoModels = groups.flatMap((group) => group.models);
     // The wire shape stays a plain provider-id list (what every client reads).
     const byoProviders: string[] = [
       ...byoProviderRows.map((d) => d.provider),

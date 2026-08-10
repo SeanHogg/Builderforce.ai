@@ -171,10 +171,16 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
      */
     if (body.op === 'spec') {
       const [execRow] = await db
-        .select({ payload: executions.payload })
+        .select({ payload: executions.payload, status: executions.status })
         .from(executions)
         .where(eq(executions.id, body.executionId))
         .limit(1);
+      // A queued Actions job may start after the workspace kill switch cancelled
+      // its execution. Refuse the spec before it receives prompts or performs any
+      // work; the external runner then exits immediately instead of reviving it.
+      if (!execRow || execRow.status === 'cancelled') {
+        return c.json({ error: 'Execution was cancelled before the runner started.' }, 409);
+      }
 
       const artifacts = await resolveArtifacts(db, {
         tenantId: ctx.tenantId,

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -27,25 +28,25 @@ import { useGithubActionsReadiness } from '@/components/repos/githubActionsSurfa
 const SCM_PROVIDERS = ['github', 'gitlab', 'bitbucket'] as const;
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 const inputStyle: React.CSSProperties = {
-  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
   // Keeps every action in this row a comfortable tap target on a phone.
   minHeight: 32,
 };
 const iconBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   cursor: 'pointer', color: 'var(--text-secondary)', padding: 0,
 };
 
@@ -331,21 +332,21 @@ export function SourceControlContent({
                   {r.defaultBranch && <span style={{ color: 'var(--text-muted)' }}> · {r.defaultBranch}</span>}
                   {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>{t('defaultBadge')}</span>}
                   {r.credentialId
-                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? t('key')}</span>
-                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger, #dc2626)' }}>{t('noKey')}</span>}
+                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}><Icon source="🔑" size="1em" /> {credName(r.credentialId) ?? t('key')}</span>
+                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger)' }}>{t('noKey')}</span>}
                 </span>
                 {result && (
-                  <span style={{ fontSize: 11, color: result.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+                  <span style={{ fontSize: 11, color: result.ok ? 'var(--success)' : 'var(--danger)' }}>
                     ● {result.message}
                   </span>
                 )}
                 {imp && (
-                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success)' : 'var(--danger)' }}>
                     ● {imp.message}
                   </span>
                 )}
                 {act && (
-                  <span style={{ fontSize: 11, color: act.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)', flexBasis: '100%' }}>
+                  <span style={{ fontSize: 11, color: act.ok ? 'var(--success)' : 'var(--danger)', flexBasis: '100%' }}>
                     ● {act.message}
                   </span>
                 )}
@@ -399,7 +400,7 @@ export function SourceControlContent({
                 <button type="button" style={iconBtn} title={t('editRepository')} aria-label={t('editRepository')} onClick={() => openEdit(r)}>
                   <PencilIcon />
                 </button>
-                <button type="button" style={{ ...iconBtn, color: 'var(--danger, #dc2626)' }} title={t('removeRepository')} aria-label={t('removeRepository')} onClick={() => remove(r.id)}>
+                <button type="button" style={{ ...iconBtn, color: 'var(--danger)' }} title={t('removeRepository')} aria-label={t('removeRepository')} onClick={() => remove(r.id)}>
                   <TrashIcon />
                 </button>
               </div>
@@ -408,10 +409,10 @@ export function SourceControlContent({
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: 130 }}>
               {SCM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}

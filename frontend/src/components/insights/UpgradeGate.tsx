@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { isPlanLimitError } from '@/lib/planLimitError';
@@ -26,11 +27,11 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
       aria-label={t('upgrade.title')}
       style={{
         display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start',
-        padding: '20px 22px', borderRadius: 12, border: '1px solid var(--border-subtle)',
-        background: 'var(--bg-subtle, rgba(37,99,235,0.06))',
+        padding: '20px 22px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)',
+        background: 'var(--surface-sunken, rgba(37,99,235,0.06))',
       }}
     >
-      <span style={{ fontSize: '1.4rem' }} aria-hidden>🔒</span>
+      <span style={{ fontSize: '1.4rem' }} aria-hidden><Icon source="🔒" size="1em" /></span>
       <div style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--text-primary)' }}>{t('upgrade.title')}</div>
       <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', maxWidth: 460 }}>
         {t('upgrade.body', { plan: error.currentPlan })}
@@ -38,8 +39,8 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
       <Link
         href="/pricing?upgrade=pro"
         style={{
-          marginTop: 4, padding: '8px 16px', borderRadius: 8, textDecoration: 'none',
-          background: 'var(--accent, #2563eb)', color: '#fff', fontWeight: 600, fontSize: '0.84rem',
+          marginTop: 4, padding: '8px 16px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
+          background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.84rem',
         }}
       >
         {t('upgrade.cta')}

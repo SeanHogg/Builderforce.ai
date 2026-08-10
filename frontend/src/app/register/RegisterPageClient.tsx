@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
+import { Icon } from '@/components/ui/Icon';
 import OAuthButtons from '@/components/OAuthButtons';
 import PasswordInput from '@/components/PasswordInput';
 import { registerSchema } from '@/lib/structured-data';
@@ -16,24 +17,33 @@ import MarketingVisual from '@/components/account/MarketingVisual';
 import AccountTypeChooser from '@/components/account/AccountTypeChooser';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import { safeRedirectPath } from '@/lib/safeRedirect';
+import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
+import { useLegalDocs } from '@/components/legal/useLegalDocs';
+import LegalDocModal, { type LegalModalType } from '@/components/legal/LegalDocModal';
 
 export default function RegisterPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tr = useTranslations('register');
   const { register, isAuthenticated } = useAuth();
+  const { legal } = useLegalDocs();
+  const [legalModalType, setLegalModalType] = useState<LegalModalType | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [accountType, setAccountType] = useState<'standard' | 'freelancer'>('standard');
+  const [ageAttested, setAgeAttested] = useState(false);
+  const [discountCode, setDiscountCode] = useState('');
+  const initialType = searchParams.get('role') === 'sales' ? 'sales' : 'standard';
+  const [accountType, setAccountType] = useState<'standard' | 'freelancer' | 'sales'>(initialType);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set once the account is created but its email needs verifying — swaps the form
   // for the code-entry step.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   // Right-hand marketing panel follows the Build/Hired chooser.
   const marketing = REGISTER_MARKETING[accountType];
@@ -41,11 +51,19 @@ export default function RegisterPageClient() {
   // Freelancers land on their for-hire profile (the restricted gig shell); standard
   // accounts go to the builder dashboard.
   const requestedDestination = safeRedirectPath(searchParams.get('next'));
-  const destination = accountType === 'freelancer' ? '/freelancer/profile' : requestedDestination;
+  const destination = accountType === 'freelancer' ? '/freelancer/profile' : accountType === 'sales' ? '/sales' : requestedDestination;
 
   useEffect(() => {
     if (isAuthenticated) router.replace(destination);
   }, [destination, isAuthenticated, router]);
+
+  useEffect(() => {
+    const captured = searchParams.get('discountcode') ?? getRetainedDiscountCode();
+    if (captured) {
+      setDiscountCode(captured.toUpperCase());
+      retainDiscountCode(captured);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +71,11 @@ export default function RegisterPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType);
+      const referralCode = searchParams.get('ref')?.trim() || undefined;
+      const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType, referralCode, ageAttested);
       if (res.needsVerification) {
         setPendingEmail(res.email);
+        setEmailDeliveryFailed(res.emailDeliveryFailed === true);
       } else {
         router.push(destination);
       }
@@ -71,7 +91,7 @@ export default function RegisterPageClient() {
     background: 'var(--bg-elevated)',
     color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-lg)',
     padding: '11px 14px',
     fontSize: '0.9rem',
     outline: 'none',
@@ -123,7 +143,7 @@ export default function RegisterPageClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ThemeToggleButton />
             <Link href="/login" style={{
-              padding: '7px 16px', borderRadius: 10,
+              padding: '7px 16px', borderRadius: 'var(--radius-lg)',
               border: '1px solid var(--border-subtle)',
               background: 'var(--surface-card)',
               color: 'var(--text-primary)', textDecoration: 'none',
@@ -160,7 +180,7 @@ export default function RegisterPageClient() {
                 background: 'var(--surface-coral-soft)',
                 color: 'var(--coral-bright)',
                 border: '1px solid var(--border-accent)',
-                borderRadius: 999, padding: '4px 12px',
+                borderRadius: 'var(--radius-full)', padding: '4px 12px',
                 fontFamily: 'var(--font-display)',
               }}>{f}</span>
             ))}
@@ -173,6 +193,7 @@ export default function RegisterPageClient() {
               email={pendingEmail}
               onVerified={() => router.push(destination)}
               onChangeEmail={() => setPendingEmail(null)}
+              initialDeliveryFailed={emailDeliveryFailed}
             />
           ) : (
           <>
@@ -180,7 +201,7 @@ export default function RegisterPageClient() {
           <div style={{
             background: 'var(--surface-card)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: 20,
+            borderRadius: 'var(--radius-xl)',
             padding: '32px 28px',
             backdropFilter: 'blur(12px)',
             boxShadow: '0 16px 48px var(--shadow-coral-soft)',
@@ -209,6 +230,14 @@ export default function RegisterPageClient() {
                   placeholder="you@example.com" style={inputStyle}
                   required onFocus={focusIn} onBlur={focusOut}
                 />
+              </div>
+              <div>
+                <label htmlFor="discountCode" style={labelStyle}>Discount code <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+                <input id="discountCode" type="text" autoComplete="off"
+                  value={discountCode} onChange={e => { setDiscountCode(e.target.value.toUpperCase()); retainDiscountCode(e.target.value); }}
+                  placeholder="ANNUAL50" style={inputStyle} onFocus={focusIn} onBlur={focusOut}
+                />
+                {discountCode && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--coral-bright)' }}>Saved for checkout after signup.</div>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -245,25 +274,59 @@ export default function RegisterPageClient() {
                   onChange={e => setAgreeToTerms(e.target.checked)}
                   style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }}
                 />
-                <span>{tr('terms')}</span>
+                <span>
+                  {tr.rich('terms', {
+                    terms: chunks => (
+                      <a
+                        href="#terms-of-use"
+                        onClick={event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setLegalModalType('terms');
+                        }}
+                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                    privacy: chunks => (
+                      <a
+                        href="#privacy-policy"
+                        onClick={event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setLegalModalType('privacy');
+                        }}
+                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                  })}
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                <input type="checkbox" checked={ageAttested} onChange={e => setAgeAttested(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }} />
+                <span>I confirm I am at least 18 years old. BuilderForce is not directed to children.</span>
               </label>
 
               {error && (
-                <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
+                <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--error-text)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: '0.875rem' }}>
                   {error}
                 </div>
               )}
 
               <button
                 type="submit"
-                disabled={isLoading || !email || !password || !confirmPassword || !agreeToTerms}
+                disabled={isLoading || !email || !password || !confirmPassword || !agreeToTerms || !ageAttested}
                 style={{
                   width: '100%', marginTop: 4,
                   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff', border: 'none', borderRadius: 12, padding: '13px',
+                  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', padding: '13px',
                   fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem',
                   cursor: isLoading ? 'wait' : 'pointer',
-                  opacity: (isLoading || !email || !password || !confirmPassword || !agreeToTerms) ? 0.5 : 1,
+                  opacity: (isLoading || !email || !password || !confirmPassword || !agreeToTerms || !ageAttested) ? 0.5 : 1,
                   transition: 'opacity 0.2s, box-shadow 0.2s',
                   boxShadow: '0 6px 20px var(--shadow-coral-mid)',
                   letterSpacing: '0.02em',
@@ -287,6 +350,8 @@ export default function RegisterPageClient() {
         </div>
         </div>
 
+        <LegalDocModal type={legalModalType} legal={legal} onClose={() => setLegalModalType(null)} />
+
         {/* RIGHT PANEL — marketing banner (hidden on mobile via CSS) */}
         <aside className="auth-marketing-panel" style={{
           display: 'none', /* overridden by media query */
@@ -302,7 +367,7 @@ export default function RegisterPageClient() {
               display: 'inline-block', marginBottom: 12,
               fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
-              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
               fontFamily: 'var(--font-display)',
             }}>{marketing.eyebrow}</span>
 
@@ -318,7 +383,7 @@ export default function RegisterPageClient() {
             {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
               {marketing.stats.map(s => (
-                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                 </div>
@@ -329,14 +394,14 @@ export default function RegisterPageClient() {
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {marketing.bullets.map(b => (
                 <li key={b.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1.4 }} aria-hidden>{b.icon}</span>
+                  <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>
               ))}
             </ul>
 
             {/* Comparison quote */}
-            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 10px 10px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 var(--radius-lg) var(--radius-lg) 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
               &ldquo;{marketing.quote}&rdquo;
             </blockquote>
 

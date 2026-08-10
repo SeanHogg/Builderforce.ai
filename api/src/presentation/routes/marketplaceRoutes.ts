@@ -639,9 +639,14 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
         .from(schema.marketplaceSkills)
         .where(and(eq(schema.marketplaceSkills.slug, body.artifactSlug), eq(schema.marketplaceSkills.published, true)))
         .limit(1);
-      if (!skill) return c.json({ error: 'Skill not found' }, 404);
-      priceCents   = skill.priceCents;
-      pricingModel = skill.pricingModel;
+      // Built-in skills are shipped in the first-party frontend catalog rather than
+      // marketplace_skills. A missing row may therefore only be acquired as free;
+      // it never creates paid entitlement. Published DB listings remain the
+      // authoritative source for every non-zero price.
+      if (skill) {
+        priceCents   = skill.priceCents;
+        pricingModel = skill.pricingModel;
+      }
     }
 
     // For paid items a Stripe payment intent is required

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
@@ -28,7 +29,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
         flex: '1 1 140px',
         minWidth: 120,
         padding: '12px 14px',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
         background: 'var(--surface)',
       }}
@@ -38,7 +39,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: 'da
         style={{
           fontSize: 24,
           fontWeight: 600,
-          color: tone === 'danger' && value > 0 ? 'var(--danger, #dc2626)' : 'var(--text-primary)',
+          color: tone === 'danger' && value > 0 ? 'var(--danger)' : 'var(--text-primary)',
         }}
       >
         {value.toLocaleString()}
@@ -206,10 +207,10 @@ export default function ErrorsPanel() {
                       }
                     }}
                   >
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12, wordBreak: 'break-all' }}>{g.source ?? '—'}</td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{g.operation ?? '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{g.source ?? '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{g.operation ?? '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{g.count.toLocaleString()}</td>
-                    <td style={{ textAlign: 'right', color: g.unhandledCount > 0 ? 'var(--danger, #dc2626)' : undefined }}>
+                    <td style={{ textAlign: 'right', color: g.unhandledCount > 0 ? 'var(--danger)' : undefined }}>
                       {g.unhandledCount.toLocaleString()}
                     </td>
                     <td style={{ textAlign: 'right' }}>{g.tenantCount}</td>
@@ -268,7 +269,7 @@ export default function ErrorsPanel() {
                       >
                         <td style={{ verticalAlign: 'middle' }}>
                           {hasDetail && (
-                            <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+                            <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none' }}><Icon source="▶" size="1em" /></span>
                           )}
                         </td>
                         <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(e.createdAt)}</td>
@@ -277,20 +278,20 @@ export default function ErrorsPanel() {
                             style={{
                               display: 'inline-block',
                               padding: '1px 7px',
-                              borderRadius: 999,
+                              borderRadius: 'var(--radius-full)',
                               fontSize: 11,
                               fontWeight: 600,
                               border: '1px solid var(--border)',
-                              color: e.handled ? 'var(--text-muted)' : 'var(--danger, #dc2626)',
+                              color: e.handled ? 'var(--text-muted)' : 'var(--danger)',
                             }}
                           >
                             {e.handled ? t('errors.handled_handled') : t('errors.handled_unhandled')}
                           </span>
                         </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, maxWidth: 240, wordBreak: 'break-all' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, maxWidth: 240, wordBreak: 'break-all' }}>
                           {e.source ? `${e.source}${e.operation ? ` · ${e.operation}` : ''}` : '—'}
                         </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, maxWidth: 200, wordBreak: 'break-all' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, maxWidth: 200, wordBreak: 'break-all' }}>
                           {e.method ? `${e.method} ` : ''}{e.path ?? '—'}
                         </td>
                         <td className="text-muted">{e.tenantId ?? '—'}</td>
@@ -307,7 +308,7 @@ export default function ErrorsPanel() {
                                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
                                     {t('errors.context')}
                                   </div>
-                                  <pre style={{ margin: '0 0 12px', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                  <pre style={{ margin: '0 0 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                     {JSON.stringify(e.context, null, 2)}
                                   </pre>
                                 </>
@@ -317,7 +318,7 @@ export default function ErrorsPanel() {
                                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
                                     {t('errors.stack')}
                                   </div>
-                                  <pre style={{ margin: 0, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                  <pre style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                                     {e.stack}
                                   </pre>
                                 </>

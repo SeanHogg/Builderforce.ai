@@ -12,4 +12,9 @@ export type CreationNodeData = {
   role?: string;
   focus?: string;
   accent?: string;
+  /**
+   * How far the object floats off its depth plane in the 3D space, in board
+   * pixels. Absent means it sits on whichever layer the graph puts it on.
+   */
+  depthOffset?: number;
 };

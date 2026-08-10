@@ -9,7 +9,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * surface (CloudRunnerDO), and the worker-fallback path. Framework-free (no Hono)
  * so it is unit-testable against a mocked gateway/DB without standing up the Worker.
  */
-import { and, desc, eq, or, isNull } from 'drizzle-orm';
+import { and, desc, eq, or, isNull, sql } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildMemoryCapability } from '../memory/memoryService';
 import { isMemoryScope } from '../../domain/memory/memoryScope';
@@ -21,7 +21,8 @@ import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
-import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
+import { commitPrdAsPendingChange, taskPrdRepoPath } from '../repos/commitPrdToRepo';
+import { resolveRepoRefSha } from '../repos/commitFileToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../repos/recordPullRequestRow';
@@ -48,7 +49,7 @@ import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
-  CONTAINER_AGENT_TOOLS, cloudSurfaceCaps, cloudAgentToolsFor, cloudToolRegistry,
+  CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
@@ -58,7 +59,7 @@ import {
   applyDelta, appraiseAmygdala, homeostasis,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
 } from '@builderforce/agent-tools';
-import { resolveWebSearchCredential, type ResolvedWebSearchCredential } from './webSearchCredential';
+import { resolveWebSearchBacking, type ResolvedWebSearchBacking } from './webSearchCredential';
 import { parseRemediation, parseFollowUp, parseRoleInstruction, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
@@ -80,8 +81,14 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
+import { isAgentRunnable } from '../../domain/containment/agentState';
+import { recordCodeCompletionClaim, recordTypedExecutionClaim } from '../provenance/finishClaimService';
+import { authorizeCredentialDelegation, delegateCredential, ensureAgentRunIdentity } from '../agentIdentity/agentRunIdentity';
+import { checkRunLimits } from '../../domain/containment/runLimits';
+import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
+import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
+import { boards, executionLimits, executions, llmUsageLog, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
@@ -102,6 +109,9 @@ export interface ResolvedCloudAgent {
    *  swimlane coordinator resolves this to an assignment runtime; the direct
    *  dispatch path uses it only to break a tie when a host is available. */
   preferredRuntime?: string | null;
+  /** False when the named agent exists but is quarantined/inactive. Missing refs keep
+   * the legacy gateway-default fallback; a known inactive teammate must never run. */
+  active?: boolean;
 }
 
 /** Does an agent's declared runtime_support permit running on an On-Prem host?
@@ -129,31 +139,28 @@ export async function resolveCloudAgent(
   // DB. A run is the current engine regardless of any legacy `engine` value on the row.
   const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
-  try {
-    const db = buildDatabase(env);
-    const rows = await db
-      .select({
-        name:             ideAgents.name,
-        runtimeSurface:   ideAgents.runtimeSurface,
-        baseModel:        ideAgents.baseModel,
-        runtimeSupport:   ideAgents.runtimeSupport,
-        preferredRuntime: ideAgents.preferredRuntime,
-      })
-      .from(ideAgents)
-      .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
-      .limit(1);
-    const engine = CURRENT_ENGINE_ID;
-    const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-    const runtimeSurface = rows[0]?.runtimeSurface === 'container' ? 'container' : 'durable';
-    const rawModel = typeof rows[0]?.baseModel === 'string' ? rows[0].baseModel.trim() : '';
-    const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
-    const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
-    const preferredRuntime = rows[0]?.preferredRuntime ?? null;
-    return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
-  } catch (error) {
-    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveCloudAgent", context: { logMessage: '[cloud-agent] agent resolution failed; using runtime defaults', details: { tenantId, ref, error } } });
-    return DEFAULT;
-  }
+  const db = buildDatabase(env);
+  const rows = await db
+    .select({
+      name:             ideAgents.name,
+      runtimeSurface:   ideAgents.runtimeSurface,
+      baseModel:        ideAgents.baseModel,
+      runtimeSupport:   ideAgents.runtimeSupport,
+      preferredRuntime: ideAgents.preferredRuntime,
+      status:           ideAgents.status,
+    })
+    .from(ideAgents)
+    .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
+    .limit(1);
+  const engine = CURRENT_ENGINE_ID;
+  const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
+  const runtimeSurface = rows[0]?.runtimeSurface === 'container' ? 'container' : 'durable';
+  const rawModel = typeof rows[0]?.baseModel === 'string' ? rows[0].baseModel.trim() : '';
+  const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
+  const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
+  const preferredRuntime = rows[0]?.preferredRuntime ?? null;
+  const active = rows[0] ? isAgentRunnable(rows[0].status) : undefined;
+  return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime, active };
 }
 /**
  * Load a cloud agent's OWN psychometric profile (ide_agents.psychometric) — the
@@ -411,7 +418,7 @@ export async function ensureTaskPrd(
 
 /**
  * Land a PRD body change as a pending change on the ticket branch: record the
- * attributed PRD.md file change, commit it to the SAME branch the agent's code
+ * attributed task-scoped PRD file change, commit it to the SAME branch the agent's code
  * commits to (single run PR covers it), surface the branch on the ticket, and
  * notify the execution stream. The single PRD-commit path — shared by the
  * first-draft ({@link ensureTaskPrd}) and per-run directive ({@link recordPrdDirective})
@@ -432,7 +439,8 @@ async function landPrdChange(
   },
 ): Promise<void> {
   const fileChange = args.isUpdate ? 'modified' : 'created';
-  await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, 'PRD.md', fileChange, args.agentLabel);
+  const prdPath = taskPrdRepoPath(args.taskId);
+  await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, prdPath, fileChange, args.agentLabel);
 
   const committed = await commitPrdAsPendingChange(db, gitSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
   if (committed.ok) {
@@ -441,20 +449,20 @@ async function landPrdChange(
       .where(eq(tasks.id, args.taskId))
       .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "landPrdChange", context: { logMessage: '[cloud-prd] task branch update failed', details: { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error } } }));
   } else {
-    // The DB PRD copy (specs.prd) stands but the repo PRD.md commit failed — the 3 copies
+    // The DB PRD copy (specs.prd) stands but the repo task brief commit failed — the copies
     // have DIVERGED. Surface it on the audit trail (a reconcile signal) instead of silently
     // dropping it (PRD §5.7), so an operator/agent can re-land the repo copy.
     await recordActivity(env, db, {
       tenantId: args.tenantId, projectId: null, actor: SYSTEM_ACTOR,
       verb: 'ticket.prd.reconcile_needed',
       targetType: 'task', targetId: String(args.taskId), targetLabel: `#${args.taskId}`,
-      summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo PRD.md have diverged; re-land needed`.slice(0, 300),
-      metadata: { reason: committed.reason ?? null, executionId: args.executionId },
+      summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo ${prdPath} have diverged; re-land needed`.slice(0, 300),
+      metadata: { reason: committed.reason ?? null, executionId: args.executionId, path: prdPath },
     }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "landPrdChange", context: { logMessage: '[cloud-prd] divergence activity append failed', details: { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error } } }));
   }
 
   notifyExecutionSubscribers(args.executionId, {
-    type: 'file_change', executionId: args.executionId, path: 'PRD.md', change: fileChange, ts: new Date().toISOString(),
+    type: 'file_change', executionId: args.executionId, path: prdPath, change: fileChange, ts: new Date().toISOString(),
   });
   notifyExecutionSubscribers(args.executionId, {
     type: 'message', executionId: args.executionId, role: 'assistant',
@@ -927,6 +935,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
     if (board?.lifecycleManaged && !explicitRef) return null;
     const ref = explicitRef ?? task.assignedAgentRef ?? undefined;
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
+    if (agent.active === false) return null;
     const payloadModel = parseModel(exec.payload ?? undefined);
     const routing = await resolveCloudRouting(env, exec.tenantId);
     // Compile the persona/agent personality exec levers ONCE per run (cache-backed
@@ -1201,6 +1210,62 @@ export async function handleContainerOp(
     return { status: 200, body: result };
   }
 
+  // Multi-agent coordination relayed from the container. The Worker remains the
+  // authority for leases and blackboard notes; the image receives only the same
+  // capability-shaped results as the durable loop.
+  if (op === 'coordinate') {
+    const action = typeof args.action === 'string' ? args.action : '';
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const coordination = buildCoordinationCapability({
+      env,
+      db,
+      holder: {
+        tenantId,
+        executionId,
+        label: agentLabel,
+        taskId,
+        repoSlug: repo.ok ? `${repo.ctx.owner}/${repo.ctx.repo}` : '',
+        branch: repo.ok ? repo.ctx.branch : '',
+        scopeKey: coordinationScopeKey(taskId),
+      },
+    });
+    let result: Record<string, unknown>;
+    try {
+      if (action === 'claim') {
+        const resource = typeof args.resource === 'string' ? args.resource : '';
+        if (!resource.trim()) return { status: 200, body: { ok: false, error: 'resource is required' } };
+        result = await coordination.claim(resource, {
+          mode: args.mode === 'shared' ? 'shared' : 'exclusive',
+          reason: typeof args.reason === 'string' ? args.reason : undefined,
+        }) as unknown as Record<string, unknown>;
+      } else if (action === 'release') {
+        const resource = typeof args.resource === 'string' ? args.resource : '';
+        if (!resource.trim()) return { status: 200, body: { ok: false, error: 'resource is required' } };
+        result = await coordination.release(resource) as unknown as Record<string, unknown>;
+      } else if (action === 'note') {
+        const key = typeof args.key === 'string' ? args.key : '';
+        const content = typeof args.content === 'string' ? args.content : '';
+        if (!key.trim() || !content.trim()) return { status: 200, body: { ok: false, error: 'key and content are required' } };
+        result = await coordination.postNote(key, content) as unknown as Record<string, unknown>;
+      } else if (action === 'read') {
+        result = await coordination.readNotes(
+          typeof args.query === 'string' ? args.query : undefined,
+          typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : undefined,
+        ) as unknown as Record<string, unknown>;
+      } else {
+        return { status: 200, body: { ok: false, error: `unknown coordinate action '${action}'` } };
+      }
+    } catch (e) {
+      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: `coordinate.${action || 'unknown'}`, category: 'tool', detail: args,
+      result: JSON.stringify(result).slice(0, 300),
+    });
+    return { status: 200, body: result };
+  }
+
   if (op === 'llm') {
     const messages = Array.isArray(args.messages) ? (args.messages as unknown as Array<Record<string, unknown>>) : ([] as Array<Record<string, unknown>>);
     // Mid-run steering for the long-lived container: drain user follow-ups posted
@@ -1423,6 +1488,10 @@ export interface CloudLoopState {
   /** ROADMAP #38: set once the empty-deliverable finish gate has fired, so the
    *  durable surface doesn't re-arm (and re-block) the same self-review every tick. */
   noDeliverableBlocked?: boolean;
+  /** A reviewer run cannot become terminal until the exact lane/role verdict tool
+   * succeeds. Persisted because durable runs execute one model turn per tick. */
+  reviewVerdictRecorded?: boolean;
+  requiredSignoff?: { roleKey: string; laneKey?: string };
   /** How many finish attempts the anti-stub gate has already blocked this RUN. MUST be
    *  persisted: the durable surface runs ONE step per alarm tick, so a loop-local
    *  counter resets to 0 every tick and MAX_PLACEHOLDER_FINISH_BLOCKS could never be
@@ -1453,6 +1522,8 @@ export interface CloudLoopOpts {
    *  runs (board lane auto-run, scheduled, CI-fix). Merged as a nudge over the KV
    *  routing table on the first tick. */
   routingBias?: Record<string, number>;
+  /** Exact accountability slot a reviewer run must sign before it may finish. */
+  requiredSignoff?: { roleKey: string; laneKey?: string };
   /**
    * Per-step dynamic system directive injected into THIS turn's LLM request only
    * — never persisted into the conversation state the loop owns. The decoupling
@@ -1519,6 +1590,26 @@ export interface CloudLoopResult {
   awaitingInput?: { approvalId: string; question: string };
 }
 
+export type RequiredReviewSignoff = { roleKey: string; laneKey?: string };
+
+/** Accept evidence only for the exact accountability slot that caused this run. */
+export function matchesRequiredReviewSignoff(
+  required: RequiredReviewSignoff | undefined,
+  toolName: string,
+  args: Record<string, unknown>,
+  succeeded: boolean,
+): boolean {
+  if (!required || !succeeded || toolName !== 'builtin_kanban_signoff') return false;
+  const roleKey = typeof args.roleKey === 'string' ? args.roleKey.trim() : '';
+  const laneKey = typeof args.laneKey === 'string' ? args.laneKey.trim() : undefined;
+  return roleKey === required.roleKey && laneKey === required.laneKey;
+}
+
+export function missingReviewVerdictMessage(required: RequiredReviewSignoff): string {
+  const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : '';
+  return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
+}
+
 /**
  * The durable/Worker surface's {@link CapabilityProvider}: the concrete backing for
  * the capability-gated tool registry on Cloudflare. It exposes the repo over the git
@@ -1548,11 +1639,13 @@ function buildCloudProvider(args: {
    *  unlocked (today: `web.search`). Must be the same set the advertised tool schemas
    *  were derived from. */
   capabilities: ReadonlySet<Capability>;
-  /** Resolved BYO web-search backing, or null when this tenant has no key. Null must
-   *  coincide with `capabilities` lacking `web.search`. */
-  webSearch: ResolvedWebSearchCredential | null;
+  /** Resolved web-search backing for this tenant — a BYO key, the operator key, or the
+   *  keyless floor. Always present, which is why `web.search` is a surface capability. */
+  webSearch: ResolvedWebSearchBacking;
   /** Replay: pin repo reads to this ref rather than computing base→branch. */
   frozenReadRef?: string;
+  principalId?: string;
+  repositoryDelegationId?: string;
 }): CapabilityProvider {
   const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
   // Read/list against the ticket branch only once it exists (created on the first
@@ -1565,6 +1658,10 @@ function buildCloudProvider(args: {
   const readRef = (): string =>
     args.frozenReadRef ?? (repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '');
   const noRepo = (suffix = ''): string => `no repo bound to this task (${repoMiss})${suffix}`;
+  const credentialAllowed = (scope: 'repository:read' | 'repository:write'): Promise<boolean> =>
+    args.principalId && args.repositoryDelegationId
+      ? authorizeCredentialDelegation(db, { tenantId, principalId: args.principalId, delegationId: args.repositoryDelegationId, requiredScope: scope })
+      : Promise.resolve(false);
 
   // WHO this run is, for coordination purposes. A ticket is one blackboard, so every
   // agent staffed onto the same ticket — in the same stage or a later one — shares a
@@ -1587,6 +1684,7 @@ function buildCloudProvider(args: {
     repoRead: {
       async listFiles(sub, glob) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const ref = readRef();
         const ls = await listRepoFiles({ ...repoCtx, ref }, sub);
         if (!ls.ok) return { ok: false, error: ls.reason };
@@ -1597,11 +1695,14 @@ function buildCloudProvider(args: {
       },
       async readFile(path) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
+        if (rf.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'repository_file', sourceRef: `${repoCtx.owner}/${repoCtx.repo}:${path}`, trustTier: 'repository', content: rf.content });
         return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
       },
       async searchCode(query, scope) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         // The `path` scope is applied INSIDE searchRepoCode (server-side via GitHub's
         // `path:` qualifier), not post-filtered here — a post-filter over the capped
         // top-N global hits dropped a subdir's real matches and carried a stale
@@ -1619,6 +1720,9 @@ function buildCloudProvider(args: {
     repoWrite: guardRepoWrite({
       async writeFile(path, content, _summary) {
         if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
+        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
+        const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content });
+        if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
         const firstWriteThisRun = !writtenPaths.has(path);
         const commit = await commitAgentFile(repoCtx, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
@@ -1632,6 +1736,7 @@ function buildCloudProvider(args: {
       },
       async editFile(path, oldString, newString, replaceAll) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
         if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
         if (rf.truncated) return { ok: false, error: `'${path}' is too large to edit safely here — rewrite it with write_file instead` };
@@ -1641,6 +1746,8 @@ function buildCloudProvider(args: {
         const edit = applyStringEdit(rf.content, oldString, newString, replaceAll);
         if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
         const updated = edit.content;
+        const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content: updated });
+        if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
         const firstWriteThisRun = !writtenPaths.has(path);
         const commit = await commitAgentFile(repoCtx, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
@@ -1651,6 +1758,7 @@ function buildCloudProvider(args: {
       },
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };
+        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
         const del = await deleteAgentFile(repoCtx, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
@@ -1716,16 +1824,30 @@ function buildCloudProvider(args: {
     // Multi-agent coordination for this ticket: leases + the shared blackboard.
     coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
-    // limited to what the repo already contains — and, when the TENANT has a BYO
-    // search key, discover that URL in the first place. Search is metered per query,
-    // so its backing (and therefore `web.search`, and therefore the `web_search`
-    // schema) is present only when a usable key resolved; otherwise this is
-    // fetch-only exactly as before. SSRF egress policy + byte cap + timeout + the
-    // read-through cache all live in cloudWeb.
-    web: buildCloudWebCapability({
+    // limited to what the repo already contains — and discover that URL in the first
+    // place. The search backing always resolves (tenant BYO key → the operator's own
+    // SearXNG → keyless encyclopedic floor), so both halves are always wired; what a key
+    // or an instance buys is WIDER coverage, which the result states. SSRF egress policy
+    // + byte cap + timeout + the read-through cache + per-query metering all live in
+    // cloudWeb.
+    web: (() => {
+      const capability = buildCloudWebCapability({
       env,
-      search: args.webSearch ? { vendor: args.webSearch.vendor, apiKey: args.webSearch.apiKey, meter: { db, tenantId } } : null,
-    }),
+      search: { vendor: args.webSearch.vendor, auth: args.webSearch.auth, meter: { db, tenantId } },
+      });
+      return {
+        async fetch(url: string) {
+          const result = await capability.fetch(url);
+          if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_fetch', sourceRef: result.url ?? url, trustTier: 'external', content: result.content ?? '' });
+          return result;
+        },
+        async search(query: string) {
+          const result = await capability.search!(query);
+          if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_search', sourceRef: query, trustTier: 'external', content: JSON.stringify(result) });
+          return result;
+        },
+      };
+    })(),
   };
 }
 
@@ -1744,6 +1866,9 @@ export async function runCloudToolLoop(
   projectId: number,
   opts?: CloudLoopOpts,
 ): Promise<CloudLoopResult> {
+  if (env.AGENT_EXECUTION_ENABLED?.trim().toLowerCase() === 'false') {
+    return { ok: false, output: 'Agent execution is halted by the platform operator.', cancelled: true, finished: true };
+  }
   // Resolve the ticket repo ONCE per run. On the durable (DO) surface, the first
   // tick resolves it and every later tick reuses the persisted context — so the
   // finalize tick can always open the PR for files earlier ticks committed (a
@@ -1762,6 +1887,7 @@ export async function runCloudToolLoop(
     repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
+  if (repoCtx && !opts?.resume) await stampExecutionSourceRef(db, tenantId, executionId, repoCtx);
 
   // Tenant "LLM" (migration 0211): if `model` is a `tenant_model:<slug>` ref, expand
   // it to its configured base model + system directives so THIS run honours the
@@ -1769,21 +1895,37 @@ export async function runCloudToolLoop(
   // `baseModel: null` means "run on the plan default" → effectiveModel = undefined.
   // Unknown/non-tenant refs resolve to null and pass through unchanged.
   const tenantModel = await resolveTenantModel(env, db, tenantId, model);
-  const effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
+  let effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
   // Curated platform tools give this run the SAME work-management reach the Brain
   // has (create follow-up tasks, update OKRs, read what's remaining) — advertised
   // alongside the repo/file tools and dispatched in-process below. The prompt
   // guidance that makes the agent USE them lives in prepareCloudRun so every
   // surface (Worker/DO durable + the container) gets it once (DRY).
-  // Self-gating web search. Resolved ONCE per run (not per step): `web.search` is a
-  // TENANT capability, not a surface one — it needs a BYO search-vendor key, because
-  // search bills per query and the platform funds none. A resolved key adds
-  // `web.search` to BOTH the capability set the provider reports and the schemas sent
-  // to the model, from the same value, so the two can never drift. No key → the base
-  // set, and the run is byte-identical to fetch-only behaviour.
-  const webSearchCred = await resolveWebSearchCredential(env, db, tenantId);
-  const surfaceCaps = cloudSurfaceCaps({ webSearch: webSearchCred !== null });
-  const cloudTools = [...cloudAgentToolsFor(surfaceCaps), ...cloudAgentPlatformToolSchemas()];
+  // Web-search backing, resolved ONCE per run (not per step): a tenant BYO key, the
+  // operator-wide key, or the keyless encyclopedic floor. It ALWAYS resolves, so
+  // `web.search` is part of CLOUD_SURFACE_CAPS rather than a per-run addition — the
+  // advertised schemas and the wired backing come from the same constant and cannot
+  // drift. What the key buys is coverage, and the tool result says which it got.
+  const webSearchCred = await resolveWebSearchBacking(env, db, tenantId);
+  const surfaceCaps = CLOUD_SURFACE_CAPS;
+  const runIdentity = await ensureAgentRunIdentity(db, {
+    tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
+    capabilities: [...surfaceCaps],
+  });
+  const releasedModel = runIdentity.definition?.baseModel;
+  if (typeof releasedModel === 'string' && releasedModel.trim() && releasedModel !== AGENT_DEFAULT_MODEL_SENTINEL) effectiveModel = releasedModel.trim();
+  const repositoryDelegationId = repoCtx
+    ? await delegateCredential(db, {
+      tenantId, principalId: runIdentity.principalId, credentialKind: 'repository', credentialRef: repoCtx.repoId,
+      scopes: ['repository:read', 'repository:write'],
+    })
+    : undefined;
+  const [declaredLimits] = await db.select({
+    maxFiles: executionLimits.maxFiles,
+    maxRepositories: executionLimits.maxRepositories,
+    maxSpendMillicents: executionLimits.maxSpendMillicents,
+  }).from(executionLimits).where(and(eq(executionLimits.tenantId, tenantId), eq(executionLimits.executionId, executionId))).limit(1);
+  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
   const effectiveSystemPrompt = tenantModel?.directives
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;
@@ -1815,14 +1957,8 @@ export async function runCloudToolLoop(
     );
   }
 
-  // The PRD (committed to the ticket branch during prep) is part of this task's
-  // single PR. Seed it into writtenPaths on the first tick so the finalize opens a
-  // PR — and lists PRD.md — even if the agent ends up writing zero code files. Done
-  // once (resume is undefined on the first tick); thereafter it rides resume state.
-  if (repoCtx && !opts?.resume) {
-    const prdOnBranch = await readRepoFile({ ...repoCtx, ref: repoCtx.branch }, 'PRD.md').catch(() => null);
-    if (prdOnBranch?.ok) writtenPaths.add('PRD.md');
-  }
+  // The task brief is committed during prep, but deliberately is NOT counted as a
+  // run deliverable. A brief without implementation must never open a PR by itself.
 
   // Resume from persisted state (DO surface) or start fresh (Worker surface).
   const messages: Array<Record<string, unknown>> = opts?.resume?.messages ?? [
@@ -1933,6 +2069,8 @@ export async function runCloudToolLoop(
   // premature one ("wrote a plan, shipped nothing") is forced to reconsider. Carried
   // across DO ticks via resume state so the block isn't re-armed every tick.
   let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? false;
+  const requiredSignoff = opts?.resume?.requiredSignoff ?? opts?.requiredSignoff;
+  let reviewVerdictRecorded = opts?.resume?.reviewVerdictRecorded ?? false;
 
   // Governance gates (compile-primitive policy modality). Resolved ONCE: a resumed
   // run reuses the gates persisted on its first tick (the payload may not survive
@@ -1965,6 +2103,8 @@ export async function runCloudToolLoop(
   const builtProvider = buildCloudProvider({
     env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
     capabilities: surfaceCaps, webSearch: webSearchCred,
+    principalId: runIdentity.principalId,
+    ...(repositoryDelegationId ? { repositoryDelegationId } : {}),
     ...(opts?.frozenReadRef ? { frozenReadRef: opts.frozenReadRef } : {}),
   });
   // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
@@ -1976,6 +2116,19 @@ export async function runCloudToolLoop(
   for (; step < MAX_CLOUD_TOOL_STEPS && !finished && (step - startStep) < maxThisCall; step++) {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
     if (cancelled || abortController.signal.aborted || await isCancelled()) { cancelled = true; break; }
+
+    if (declaredLimits) {
+      const [spend] = await db.select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
+        .from(llmUsageLog)
+        .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, executionId)));
+      const limitReason = checkRunLimits(declaredLimits, {
+        files: writtenPaths.size, repositories: repoCtx ? 1 : 0, spendMillicents: Number(spend?.total ?? 0),
+      });
+      if (limitReason) {
+        await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'containment.limit', category: 'tool', detail: { step, limits: declaredLimits }, result: limitReason });
+        return { ok: false, output: `Run contained: ${limitReason}.`, cancelled: false, finished: true };
+      }
+    }
 
     // Mid-run steering: drain any user follow-ups posted to this execution since the
     // previous step and splice them in as user turns BEFORE the next paid call, so a
@@ -2115,7 +2268,22 @@ export async function runCloudToolLoop(
     const { content, toolCalls } = turn;
     if (content) finalOutput = content;
 
-    if (toolCalls.length === 0) { finished = true; break; }
+    if (toolCalls.length === 0) {
+      if (requiredSignoff && !reviewVerdictRecorded) {
+        const error = missingReviewVerdictMessage(requiredSignoff);
+        messages.push({ role: 'assistant', content });
+        messages.push({ role: 'user', content: error });
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'review_verdict_missing', ...requiredSignoff },
+          result: error,
+        });
+        continue;
+      }
+      finished = true;
+      break;
+    }
 
     // Echo the assistant turn (with its tool_calls) so tool results attach to it.
     messages.push({ role: 'assistant', content, tool_calls: toolCalls });
@@ -2145,7 +2313,21 @@ export async function runCloudToolLoop(
       const gate = evaluatePolicyGate(policyGates, name);
       let toolResult: Record<string, unknown>;
       let control: ToolControl | undefined;
-      if (gate.action === 'block') {
+      const candidatePath = typeof parsed.path === 'string' ? parsed.path : null;
+      const prospectiveFiles = candidatePath && /^(write_file|edit_file|delete_file)$/.test(name) && !writtenPaths.has(candidatePath)
+        ? writtenPaths.size + 1 : writtenPaths.size;
+      const containmentBlock = declaredLimits ? checkRunLimits(declaredLimits, {
+        files: prospectiveFiles, repositories: repoCtx ? 1 : 0, spendMillicents: 0,
+      }) : null;
+      const outboundInspection = isHumanOrExternalOutputTool(name)
+        ? await inspectOutboundContent(db, { tenantId, executionId, seam: 'tool_output', target: name, content: JSON.stringify(parsed) })
+        : { ok: true as const };
+      if (!outboundInspection.ok) {
+        toolResult = { ok: false, error: `Outbound content blocked: ${outboundInspection.reasons.join(', ')}. Remove credential material before contacting a human or external system.` };
+      } else if (containmentBlock) {
+        toolResult = { ok: false, error: `Blocked by the run's declared containment policy: ${containmentBlock}.` };
+        await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'containment.blocked', category: 'tool', toolCallId: tc.id, detail: { tool: name, path: candidatePath, limits: declaredLimits }, result: containmentBlock });
+      } else if (gate.action === 'block') {
         toolResult = { ok: false, error: `Blocked by governance policy: ${gate.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` };
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef, executionId,
@@ -2198,6 +2380,10 @@ export async function runCloudToolLoop(
         }
       }
 
+      if (matchesRequiredReviewSignoff(requiredSignoff, name, parsed, toolResult.ok !== false)) {
+        reviewVerdictRecorded = true;
+      }
+
       if (control?.kind === 'finish') {
         const summary = control.summary;
         // Four finish gates, in order. Either yields a block message that forces the
@@ -2208,9 +2394,17 @@ export async function runCloudToolLoop(
           ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
           : null;
         let finishBlock: string | null = null;
-        if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+        if (requiredSignoff && !reviewVerdictRecorded) {
+          finishBlock = missingReviewVerdictMessage(requiredSignoff);
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef, executionId,
+            toolName: 'finish.blocked', category: 'tool',
+            detail: { reason: 'review_verdict_missing', ...requiredSignoff },
+            result: finishBlock,
+          });
+        } else if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
           // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
-          // with NO code deliverable (only the seeded PRD, or nothing). Block ONCE and
+          // with NO code deliverable. Block ONCE and
           // make the agent self-review the requirements — implement what's missing, or
           // explicitly confirm no code change was required — before an empty finish is
           // honored. A legitimate no-op run finishes on the retry.
@@ -2264,6 +2458,16 @@ export async function runCloudToolLoop(
             });
           }
         }
+        if (!finishBlock && repoCtx && writtenPaths.size > 0) {
+          const claim = await recordCodeCompletionClaim(db, {
+            tenantId,
+            executionId,
+            statement: summary || finalOutput || `Completed changes to ${[...writtenPaths].join(', ')}`,
+          });
+          if (!claim.ok) {
+            finishBlock = `Cannot finish — no structural evidence record supports this completion claim (${claim.error}). Retry the successful write or verification, then finish again.`;
+          }
+        }
         if (finishBlock) {
           toolResult = { ok: false, error: finishBlock };
         } else {
@@ -2285,6 +2489,10 @@ export async function runCloudToolLoop(
         result: JSON.stringify(toolResult).slice(0, 300),
         durationMs: Date.now() - tStart,
       });
+      if (toolResult.ok !== false && (name === 'run_checks' || name === 'run_command' || name === 'builtin_reviews_record')) {
+        const kind = name === 'builtin_reviews_record' ? 'review_verdict' : 'validation';
+        await recordTypedExecutionClaim(db, { tenantId, executionId, kind, statement: `${name} completed successfully` });
+      }
 
       messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(toolResult) });
     }
@@ -2294,6 +2502,16 @@ export async function runCloudToolLoop(
     // in `state` so the resume tick continues right where it left off.
     if (awaitingInput) break;
   }
+  } catch (error) {
+    // A thrown tool/LLM path is terminal for this invocation. Hand leases back now;
+    // otherwise peers remain blocked until the 15-minute TTL even though this run can
+    // no longer use them. Preserve the original failure if cleanup itself fails.
+    await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskRow.id))
+      .catch((releaseError) => reportCaughtError(releaseError, {
+        source: 'application/runtime/cloudAgentEngine.ts', operation: 'runCloudToolLoop.releaseAfterThrow',
+        context: { tenantId, executionId, taskId: taskRow.id, error: releaseError },
+      }));
+    throw error;
   } finally {
     // Stop the cancel watcher (and let it settle) so its timer can't outlive the run.
     watcherDone = true;
@@ -2320,6 +2538,8 @@ export async function runCloudToolLoop(
     repoCtx,
     repoMiss,
     noDeliverableBlocked,
+    reviewVerdictRecorded,
+    requiredSignoff,
     placeholderBlocks,
     policyGates,
     policyAskedGates: [...policyAskedGates],
@@ -2362,6 +2582,18 @@ export async function runCloudToolLoop(
   // which is exactly what makes a multi-tick read→edit→write sequence safe.
   await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskRow.id));
 
+  // The global step cap is a safety limit, never an evidence bypass. Exhausting it
+  // without the required reviewer verdict fails the run and leaves the slot open
+  // for retry/escalation; it must not finalize as successful acceptance.
+  if (requiredSignoff && !reviewVerdictRecorded) {
+    return {
+      ok: false,
+      output: missingReviewVerdictMessage(requiredSignoff),
+      cancelled,
+      finished: true,
+    };
+  }
+
   // Rehearsal: the loop is over and nothing may be shipped, closed or summarised onto
   // the real ticket. Hand the transcript back and stop.
   if (opts?.suppressFinalize) return { ok: true, output: finalOutput, cancelled, finished: true };
@@ -2371,6 +2603,19 @@ export async function runCloudToolLoop(
     repoCtx, repoMiss, writtenPaths, finalOutput, cancelled,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
+}
+
+/** Capture the exact tree a run starts from. Best-effort on the provider read, but
+ * never fabricates a ref: absence remains explicit in rehearsal reports. */
+export async function stampExecutionSourceRef(db: Db, tenantId: number, executionId: number, repoCtx: TicketRepoContext): Promise<string | null> {
+  const sourceSha = await resolveRepoRefSha(repoCtx, repoCtx.branch) ?? await resolveRepoRefSha(repoCtx, repoCtx.base);
+  if (!sourceSha) return null;
+  const [run] = await db.select({ payload: executions.payload }).from(executions).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId))).limit(1);
+  let payload: Record<string, unknown> = {};
+  try { payload = run?.payload ? JSON.parse(run.payload) as Record<string, unknown> : {}; } catch { payload = {}; }
+  if (payload.sourceSha === sourceSha) return sourceSha;
+  await db.update(executions).set({ payload: JSON.stringify({ ...payload, sourceSha }) }).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId)));
+  return sourceSha;
 }
 
 /** The runtime context an engine is constructed with (the surface-specific wiring
@@ -2598,6 +2843,7 @@ export async function finalizeCloudRun(
         detail: { base: repoCtx.base, head: repoCtx.branch },
         result: prOpened ? `opened PR #${pr.ok ? pr.number : ''} — awaiting human approval` : `pr failed: ${pr.ok ? '' : pr.reason}`.slice(0, 300),
       });
+      if (prOpened) await recordTypedExecutionClaim(db, { tenantId, executionId, kind: 'delivery', statement: `Opened pull request #${pr.ok ? pr.number : ''} for human review.` });
     } else if (cloudAutoMergeRequiresGreen(env)) {
       // Auto-merge enabled, gated on green CI: a successful CI webhook merges later.
       mergeNote = ` — pending CI (will merge to \`${repoCtx.base}\` on green)`;
@@ -2747,11 +2993,16 @@ export async function finalizeCloudRun(
         }`
       : '';
     const runUrl = resolveAppBaseUrl(env) ? `\n\n[View the full run](${resolveAppBaseUrl(env)}/executions/${executionId})` : '';
-    await postRepoPrComment(
-      env, db, tenantId, repoCtx.repoId, openedPrNumber,
-      `### 🤖 ${agentLabel} — task #${taskRow.id}\n\n${output}${fileBlock}${unverifiedNote}${runUrl}`,
-      { kind: 'agent-run', scope: executionId },
-    ).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] PR summary comment failed', details: { tenantId, executionId, prNumber: openedPrNumber, error } } }));
+    const comment = `### 🤖 ${agentLabel} — task #${taskRow.id}\n\n${output}${fileBlock}${unverifiedNote}${runUrl}`;
+    const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'pull_request_comment', target: `${repoCtx.owner}/${repoCtx.repo}#${openedPrNumber}`, content: comment });
+    if (inspection.ok) {
+      await recordTypedExecutionClaim(db, { tenantId, executionId, kind: 'human_message', statement: output }).catch(() => ({ ok: false as const, error: 'claim failed' }));
+      await postRepoPrComment(
+        env, db, tenantId, repoCtx.repoId, openedPrNumber,
+        comment,
+        { kind: 'agent-run', scope: executionId },
+      ).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] PR summary comment failed', details: { tenantId, executionId, prNumber: openedPrNumber, error } } }));
+    }
   }
 
   // STAMP WHAT THIS RUN LEFT BEHIND (0385) — the last thing finalize does, from the
@@ -2811,12 +3062,22 @@ export async function prepareCloudRun(
      * created, which the report notes).
      */
     readOnly?: boolean;
+    /** Rehearsal/replay may pin the exact immutable definition observed by the source
+     * run. Live runs omit this and freeze the current row at the run boundary. */
+    agentDefinitionSnapshot?: Record<string, unknown>;
   },
 ): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
   const tPrep0 = Date.now();
+  const prepIdentity = await ensureAgentRunIdentity(db, {
+    tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
+    capabilities: [...(opts?.shell ? CONTAINER_SURFACE_CAPS : CLOUD_SURFACE_CAPS)],
+  });
   // The agent's OWN personality (independent of assigned personas) — folded into the
   // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
-  const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
+  const frozenPsychometric = opts?.agentDefinitionSnapshot?.psychometric ?? prepIdentity.definition?.psychometric;
+  const agentPsychometric = typeof frozenPsychometric === 'string'
+    ? frozenPsychometric
+    : await loadAgentPsychometric(env, tenantId, cloudAgentRef);
   const [prd, governance, capabilities, workspace, factsBlock, lessonsBlock] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model, opts?.readOnly === true),
     loadGovernanceContext(db, tenantId, projectId, cloudAgentRef),
@@ -2835,6 +3096,11 @@ export async function prepareCloudRun(
   ]);
   const priorChanges = workspace.priorChanges;
   const repoLabel = workspace.repo ? `${workspace.repo.owner}/${workspace.repo.repo}` : null;
+  await Promise.all([
+    recordContextContribution(db, { tenantId, executionId, sourceKind: 'ticket', sourceRef: String(taskRow.id), trustTier: 'tenant', content: `${taskRow.title}\n${taskRow.description ?? ''}` }),
+    ...(prd ? [recordContextContribution(db, { tenantId, executionId, sourceKind: 'prd', sourceRef: String(taskRow.id), trustTier: 'tenant', content: prd })] : []),
+    ...(repoLabel ? [recordContextContribution(db, { tenantId, executionId, sourceKind: 'repository', sourceRef: repoLabel, trustTier: 'repository', content: `${workspace.topLevel.join('\n')}\n${priorChanges.map((c) => c.path).join('\n')}` })] : []),
+  ]);
   await recordCloudToolEvent(db, {
     tenantId, cloudAgentRef, executionId,
     toolName: 'context.prepare', category: 'planning',
@@ -2951,11 +3217,11 @@ export async function prepareCloudRun(
     followUp
       ? `## Follow-up directive (act on this first)\n\nThe user reviewed the previous run${followUp.priorExecutionId != null ? ` (execution #${followUp.priorExecutionId})` : ''} and sent this new direction. Treat it as the primary goal for THIS run, building on the work already committed to the task's branch (see the prior-files list below) rather than starting over:\n\n${followUp.directive}`
       : null,
-    prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
+    prd ? `## Product Requirements Document (PRD)\n\n${trustNotice('tenant', 'ticket PRD')}\n\n${prd}` : null,
     governance || null,
-    workspaceBlock,
+    `${trustNotice('repository', repoLabel ?? 'unbound workspace')}\n\n${workspaceBlock}`,
     priorChangesBlock,
-    `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
+    `## Your Task\n\n${trustNotice('tenant', `ticket ${taskRow.id}`)}\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
   ].filter(Boolean).join('\n\n---\n\n');
 
   // The tool loop runs against a real repository. The verification sentence differs

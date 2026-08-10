@@ -5,7 +5,14 @@
  *                        what the footer "What's new" panel renders, so it needs
  *                        no session (the changelog is marketing, not tenant
  *                        data). Served through the read-through cache.
- *   GET  /admin        — superadmin: everything, drafts + sent-state included.
+ *   GET  /betas        — signed-in: the betas this user may join, each with where
+ *                        THEY stand, plus the one worth banner-interrupting them
+ *                        about. The banner choice is made HERE, once, so the
+ *                        banner and the panel cannot disagree about it.
+ *   POST /:id/beta     — signed-in: join / leave / dismiss. Joining requires an
+ *                        explicit `agreed: true` and records the consent.
+ *   GET  /admin        — superadmin: everything, drafts + sent-state + how many
+ *                        people are actually in each beta.
  *   POST /             — superadmin: create (draft or published).
  *   PUT  /:id          — superadmin: edit / publish / unpublish.
  *   DELETE /:id        — superadmin: remove.
@@ -22,16 +29,58 @@ import { Hono } from 'hono';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv, Env } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
+import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import type { UserId } from '../../domain/shared/types';
 import {
   RELEASE_NOTE_CATEGORIES,
+  RELEASE_NOTE_STAGES,
   isReleaseNoteCategory,
+  isReleaseNoteStage,
   listPublishedReleaseNotes,
   listAllReleaseNotes,
   createReleaseNote,
   updateReleaseNote,
   deleteReleaseNote,
+  type ReleaseNoteStage,
 } from '../../application/product/releaseNotes';
+import {
+  bannerBeta,
+  countBetaParticipants,
+  listBetaProgramsForUser,
+  setBetaEnrollment,
+} from '../../application/product/releaseNoteBetas';
 import { runReleaseDigest } from '../../application/email/releaseDigest';
+
+/** What a join/leave/dismiss request may ask for, and the enrolment status each
+ *  one lands on. Declaring it as data keeps the route free of a three-branch
+ *  translation nobody would remember to extend. */
+const ACTION_STATUS = { join: 'joined', leave: 'left', dismiss: 'dismissed' } as const;
+type BetaAction = keyof typeof ACTION_STATUS;
+
+const isBetaAction = (value: unknown): value is BetaAction =>
+  typeof value === 'string' && value in ACTION_STATUS;
+
+/** The beta authoring fields, parsed once — create and update take the same set,
+ *  so they validate it the same way. Returns an error string or the patch. */
+function parseBetaFields(body: {
+  stage?: unknown; betaOptIn?: unknown; betaTerms?: unknown; stageEndsAt?: unknown;
+}): { error: string } | {
+  stage?: ReleaseNoteStage; betaOptIn?: boolean; betaTerms?: string | null; stageEndsAt?: string | null;
+} {
+  if (body.stage !== undefined && !isReleaseNoteStage(body.stage)) {
+    return { error: `stage must be one of: ${RELEASE_NOTE_STAGES.join(', ')}` };
+  }
+  return {
+    ...(body.stage !== undefined ? { stage: body.stage as ReleaseNoteStage } : {}),
+    ...(body.betaOptIn !== undefined ? { betaOptIn: body.betaOptIn === true } : {}),
+    ...(body.betaTerms !== undefined
+      ? { betaTerms: typeof body.betaTerms === 'string' && body.betaTerms.trim() ? body.betaTerms : null }
+      : {}),
+    ...(body.stageEndsAt !== undefined
+      ? { stageEndsAt: typeof body.stageEndsAt === 'string' && body.stageEndsAt.trim() ? body.stageEndsAt : null }
+      : {}),
+  };
+}
 
 export function createReleaseNoteRoutes(db: Db) {
   const router = new Hono<HonoEnv>();
@@ -50,16 +99,63 @@ export function createReleaseNoteRoutes(db: Db) {
   });
 
   // -------------------------------------------------------------------------
+  // GET /betas — the betas open to this user + where they stand with each.
+  // -------------------------------------------------------------------------
+  router.get('/betas', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const betas = await listBetaProgramsForUser(c.env as Env, db, userId);
+    // The banner candidate is decided here rather than in the client, so every
+    // surface that asks "should we interrupt them?" gets the same answer.
+    return c.json({ betas, bannerBetaId: bannerBeta(betas)?.id ?? null });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /:id/beta — join / leave / dismiss. Joining is consent, so it requires
+  // an explicit `agreed: true`; the server records what they agreed to.
+  // -------------------------------------------------------------------------
+  router.post('/:id/beta', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ action?: string; agreed?: boolean }>().catch(() => ({}) as Record<string, never>);
+    if (!isBetaAction(body.action)) {
+      return c.json({ error: `action must be one of: ${Object.keys(ACTION_STATUS).join(', ')}` }, 400);
+    }
+    if (body.action === 'join' && body.agreed !== true) {
+      return c.json({ error: 'You must accept the beta terms before joining' }, 400);
+    }
+
+    // Resolve the note from the SAME list the user was offered: an id that is not
+    // a joinable beta (draft, live, or invitation-only) can never be enrolled in,
+    // no matter what the client posts.
+    const betas = await listBetaProgramsForUser(c.env as Env, db, userId);
+    const note = betas.find((b) => b.id === c.req.param('id'));
+    if (!note) return c.json({ error: 'Beta not found or not open for enrollment' }, 404);
+
+    const enrollment = await setBetaEnrollment(db, {
+      note,
+      userId,
+      status: ACTION_STATUS[body.action],
+    });
+    return c.json({ enrollment: { releaseNoteId: note.id, ...enrollment } });
+  });
+
+  // -------------------------------------------------------------------------
   // Superadmin authoring surface.
   // -------------------------------------------------------------------------
   router.get('/admin', superAdminMiddleware, async (c) => {
-    return c.json({ releaseNotes: await listAllReleaseNotes(db) });
+    const notes = await listAllReleaseNotes(db);
+    // "Is anyone actually in this beta?" — the question an operator asks straight
+    // after opening one. Counted only for the notes that can have participants.
+    const participants = await countBetaParticipants(db, notes.filter((n) => n.betaOptIn).map((n) => n.id));
+    return c.json({
+      releaseNotes: notes.map((note) => ({ ...note, participants: participants[note.id] ?? 0 })),
+    });
   });
 
   router.post('/', superAdminMiddleware, async (c) => {
     const body = await c.req.json<{
       version?: string; title?: string; body?: string | null;
       category?: string; publish?: boolean;
+      stage?: unknown; betaOptIn?: unknown; betaTerms?: unknown; stageEndsAt?: unknown;
     }>().catch(() => ({}) as Record<string, never>);
 
     const version = typeof body.version === 'string' ? body.version.trim() : '';
@@ -68,12 +164,15 @@ export function createReleaseNoteRoutes(db: Db) {
     if (body.category !== undefined && !isReleaseNoteCategory(body.category)) {
       return c.json({ error: `category must be one of: ${RELEASE_NOTE_CATEGORIES.join(', ')}` }, 400);
     }
+    const beta = parseBetaFields(body);
+    if ('error' in beta) return c.json({ error: beta.error }, 400);
 
     const note = await createReleaseNote(c.env as Env, db, {
       version,
       title,
       body: typeof body.body === 'string' ? body.body : null,
       category: body.category,
+      ...beta,
       publish: body.publish === true,
     });
     return c.json({ releaseNote: note }, 201);
@@ -83,11 +182,14 @@ export function createReleaseNoteRoutes(db: Db) {
     const body = await c.req.json<{
       version?: string; title?: string; body?: string | null;
       category?: string; publish?: boolean;
+      stage?: unknown; betaOptIn?: unknown; betaTerms?: unknown; stageEndsAt?: unknown;
     }>().catch(() => ({}) as Record<string, never>);
 
     if (body.category !== undefined && !isReleaseNoteCategory(body.category)) {
       return c.json({ error: `category must be one of: ${RELEASE_NOTE_CATEGORIES.join(', ')}` }, 400);
     }
+    const beta = parseBetaFields(body);
+    if ('error' in beta) return c.json({ error: beta.error }, 400);
     if (body.version !== undefined && !String(body.version).trim()) {
       return c.json({ error: 'version cannot be empty' }, 400);
     }
@@ -100,6 +202,7 @@ export function createReleaseNoteRoutes(db: Db) {
       ...(body.title !== undefined ? { title: String(body.title).trim() } : {}),
       ...(body.body !== undefined ? { body: typeof body.body === 'string' ? body.body : null } : {}),
       ...(body.category !== undefined ? { category: body.category } : {}),
+      ...beta,
       ...(body.publish !== undefined ? { publish: body.publish === true } : {}),
     });
     if (!note) return c.json({ error: 'Release note not found' }, 404);

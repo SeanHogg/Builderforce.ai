@@ -56,7 +56,7 @@ const cardStyle: React.CSSProperties = {
   width: 'min(440px, 92vw)',
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
   padding: 16,
   textAlign: 'left',
@@ -103,7 +103,7 @@ export function ConfiguredQuickstartPopover({
     cursor: 'pointer',
     border: 'none',
     background: os === value ? 'var(--accent)' : 'transparent',
-    color: os === value ? '#fff' : 'var(--text-strong)',
+    color: os === value ? 'var(--text-on-accent)' : 'var(--text-strong)',
   });
 
   return (
@@ -129,7 +129,7 @@ export function ConfiguredQuickstartPopover({
       </p>
 
       {/* OS toggle */}
-      <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+      <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 10 }}>
         <button type="button" style={osBtn('unix')} onClick={() => setOs('unix')}>{t('quickstart.osUnix')}</button>
         <button type="button" style={osBtn('windows')} onClick={() => setOs('windows')}>{t('quickstart.osWindows')}</button>
       </div>
@@ -138,7 +138,7 @@ export function ConfiguredQuickstartPopover({
       <div
         style={{
           display: 'flex', alignItems: 'flex-start', gap: 8,
-          background: 'var(--bg-deep, #0d0f14)', border: '1px solid var(--border)', borderRadius: 8,
+          background: 'var(--bg-deep)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           padding: '10px 12px',
         }}
       >
@@ -151,7 +151,7 @@ export function ConfiguredQuickstartPopover({
           style={{
             flexShrink: 0, padding: '4px 10px', fontSize: 12, fontWeight: 600,
             background: copied ? 'var(--surface-coral-soft)' : 'var(--accent)',
-            color: copied ? 'var(--accent)' : '#fff', border: 'none', borderRadius: 6, cursor: 'pointer',
+            color: copied ? 'var(--accent)' : 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
           }}
         >
           {copied ? t('copiedExclaim') : tc('copy')}

@@ -509,32 +509,6 @@ export async function createCreationSession(
   return result.session;
 }
 
-export interface BfCreationObject {
-  id: string;
-  kind: string;
-  resourceType?: string | null;
-  resourceId?: string | null;
-  canvasData?: Record<string, unknown> | null;
-  content?: Record<string, unknown> | null;
-}
-
-export interface BfCreationConnection {
-  id: string;
-  sourceObjectId: string;
-  targetObjectId: string;
-  kind?: string;
-  label?: string | null;
-  metadata?: Record<string, unknown> | null;
-}
-
-export interface BfCreationSessionDetail {
-  session: { id: string; title: string; canvasRevision: number; viewport?: unknown };
-  role: "viewer" | "commenter" | "editor" | "runner" | "owner";
-  objects: BfCreationObject[];
-  connections: BfCreationConnection[];
-  currentUserId?: string;
-  members: Array<{ userId: string; displayName?: string | null; role: string; lastSeenAt?: string | null; typing?: boolean; selection?: string[]; viewport?: Record<string, unknown> }>;
-}
 
 export interface BfCreationSessionSummary {
   id: string;
@@ -553,64 +527,6 @@ export async function listCreationSessions(secrets: vscode.SecretStorage): Promi
   return result?.sessions ?? [];
 }
 
-export async function getCreationSession(secrets: vscode.SecretStorage, sessionId: string): Promise<BfCreationSessionDetail> {
-  const result = await authed<BfCreationSessionDetail>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}`);
-  if (!result) throw new Error("Session not found");
-  return result;
-}
-
-export async function applyCreationCommands(
-  secrets: vscode.SecretStorage,
-  sessionId: string,
-  revision: number,
-  commands: unknown[],
-): Promise<{ revision: number }> {
-  const result = await authed<{ revision: number }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/commands`, {
-    method: "POST",
-    headers: { "Idempotency-Key": crypto.randomUUID(), "If-Match": String(revision) },
-    body: JSON.stringify({ commands, atomic: true }),
-  });
-  if (!result) throw new Error("Canvas change failed");
-  return result;
-}
-
-export interface BfCreationComment {
-  id: string;
-  objectId?: string | null;
-  body: string;
-  authorName?: string | null;
-  createdAt: string;
-  resolvedAt?: string | null;
-}
-
-export async function listCreationComments(secrets: vscode.SecretStorage, sessionId: string, objectId?: string): Promise<BfCreationComment[]> {
-  const suffix = objectId ? `?objectId=${encodeURIComponent(objectId)}` : "";
-  const result = await authed<{ comments: BfCreationComment[] }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/comments${suffix}`);
-  return result?.comments ?? [];
-}
-
-export async function createCreationComment(secrets: vscode.SecretStorage, sessionId: string, body: string, objectId?: string): Promise<BfCreationComment> {
-  const result = await authed<BfCreationComment>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/comments`, {
-    method: "POST",
-    body: JSON.stringify({ body, objectId: objectId || null }),
-  });
-  if (!result) throw new Error("Comment could not be saved");
-  return result;
-}
-
-export async function updateCreationPresence(
-  secrets: vscode.SecretStorage,
-  sessionId: string,
-  revision: number,
-  selection: string[] = [],
-): Promise<{ revision: number; currentUserId?: string; members: BfCreationSessionDetail["members"] }> {
-  const result = await authed<{ revision: number; currentUserId?: string; members: BfCreationSessionDetail["members"] }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/presence`, {
-    method: "POST",
-    body: JSON.stringify({ revision, selection, typing: false }),
-  });
-  if (!result) throw new Error("Presence could not be updated");
-  return result;
-}
 
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
 const TASKS_TTL = 30_000;

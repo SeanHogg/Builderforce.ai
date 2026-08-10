@@ -14,11 +14,11 @@
  */
 import type { DemoPersona } from '@/lib/demoApi';
 
-export type TourAnchor = 'dashboard' | 'projects' | 'workforce' | 'insights' | 'quality' | 'knowledge';
+export type TourAnchor = 'create' | 'projects' | 'workforce' | 'insights' | 'quality' | 'knowledge';
 
 /** In-app route each anchor navigates to when its tour step opens. */
 export const TOUR_ROUTES: Record<TourAnchor, string> = {
-  dashboard: '/dashboard',
+  create: '/create',
   projects: '/projects',
   workforce: '/workforce',
   insights: '/insights',
@@ -35,7 +35,7 @@ export const TOUR_ROUTES: Record<TourAnchor, string> = {
  * then to a centered card — so the tour always has a target.
  */
 export const TOUR_SECTION: Record<TourAnchor, string> = {
-  dashboard: 'demo-build',
+  create: 'demo-build',
   projects: 'demo-board',
   workforce: 'demo-roster',
   insights: 'demo-insights',

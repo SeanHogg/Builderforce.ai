@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CeremonySession, CeremonyParticipant } from '@/lib/builderforceApi';
@@ -9,11 +10,11 @@ const btn = (variant: 'primary' | 'tertiary'): React.CSSProperties => ({
   padding: '6px 12px',
   fontSize: 13,
   fontWeight: 600,
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   border: variant === 'primary' ? 'none' : '1px solid var(--border-subtle)',
   background: variant === 'primary' ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-deep)',
-  color: variant === 'primary' ? '#fff' : 'var(--text-secondary)',
+  color: variant === 'primary' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 
 /**
@@ -83,7 +84,8 @@ export function StandupControls({
       </span>
       {speaker && (
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          🎤 <strong style={{ color: 'var(--text-primary)' }}>{speaker.memberName}</strong>
+          
+          <Icon source="🎤" size="1em" /> <strong style={{ color: 'var(--text-primary)' }}>{speaker.memberName}</strong>
           <span style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', color: remainingMs != null && remainingMs <= 10000 ? 'var(--error)' : 'var(--text-muted)' }}>
             {remainingMs != null ? formatDuration(Math.max(0, remainingMs)) : formatDuration(turnMs)}
           </span>

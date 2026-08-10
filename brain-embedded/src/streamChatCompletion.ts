@@ -116,6 +116,19 @@ export interface CompletionMetadata {
   agentRef?: string;
   /** Display name of the answering agent. Defaults server-side to `Brain`. */
   agentName?: string;
+  /** One user submit. Reused by every model iteration in that submit so guest
+   * metering charges the user action once, not once per tool-loop completion. */
+  guestTurnId?: string;
+  /** Original text the user submitted. Internal specialist/tool prompts retain
+   * this value so the gateway can verify the turn even when their prompts differ. */
+  guestTurnInput?: string;
+  /**
+   * The conversation's MODE (0409) — `chat` or `work`. Carried so the usage row this
+   * completion produces records WHICH KIND of turn spent the tokens. Without it,
+   * spend can only be attributed to a chat id, and "what does execution actually
+   * cost us versus conversation" has no answer.
+   */
+  mode?: string;
 }
 
 export interface StreamChatOptions {

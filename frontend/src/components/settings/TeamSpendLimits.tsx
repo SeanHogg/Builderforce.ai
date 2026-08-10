@@ -30,7 +30,7 @@ import {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 const sectionTitle: React.CSSProperties = {
@@ -40,15 +40,15 @@ const helpText: React.CSSProperties = {
   fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px',
 };
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 13, borderRadius: 8, width: 110,
+  padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', width: 110,
   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
 };
 // Native <option> needs its own opaque bg/fg — theme tokens don't reach the OS popup.
 const optionStyle: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)' };
 const primaryBtn: React.CSSProperties = {
-  padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: '#fff', border: 'none',
+  padding: '7px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none',
 };
 
 function fmtUsd(mc: number): string {
@@ -57,9 +57,9 @@ function fmtUsd(mc: number): string {
 
 /** A colour for the spend bar that escalates with utilisation (theme tokens). */
 function barColor(pct: number): string {
-  if (pct >= 100) return 'var(--coral-bright, #ef4444)';
-  if (pct >= 80) return 'var(--amber-bright, #f59e0b)';
-  return 'var(--accent, #2563eb)';
+  if (pct >= 100) return 'var(--coral-bright)';
+  if (pct >= 80) return 'var(--amber-bright, var(--warning))';
+  return 'var(--accent)';
 }
 
 function SeatRow({
@@ -113,7 +113,7 @@ function SeatRow({
 
       {/* Spend bar */}
       <div style={{ flex: '2 1 200px', minWidth: 160 }}>
-        <div style={{ height: 8, borderRadius: 5, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+        <div style={{ height: 8, borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
           <div style={{ width: `${effUnlimited ? 0 : pct}%`, height: '100%', background: barColor(pct), transition: 'width .2s' }} />
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
@@ -223,7 +223,7 @@ function TeamSpendInner() {
       {loading ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : error ? (
-        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--coral-bright, #ef4444)' }}>{t('error', { message: error })}</div>
+        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--coral-bright)' }}>{t('error', { message: error })}</div>
       ) : overview && !overview.seatControlsEnabled ? (
         <div style={{ ...cardStyle }}>
           <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 6 }}>{t('spendTeamsOnlyTitle')}</div>

@@ -5,8 +5,11 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * All routes require a WebJWT with sa: true (enforced by superAdminMiddleware).
  *
  * GET  /api/admin/users                — all platform users + tenant counts
- * GET  /api/admin/guest-sessions       — anonymous Brain/tool adoption sessions
+ * GET  /api/admin/guest-sessions       — anonymous leads + the prompts they typed
+ * GET  /api/admin/broadcasts          — platform messages to logged-out visitors
+ * DELETE /api/admin/guest-sessions/:visitorId/prompts — erase one visitor's prompts
  * GET  /api/admin/creation-sessions    — saved Canvases with invitation evidence
+ * GET  /api/admin/outcome-metrics      — platform/tenant/project value rollups
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
@@ -18,7 +21,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * POST /api/admin/cron/:target         — force-run a sweep / cadence group / all
  */
 import { Hono } from 'hono';
-import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
@@ -33,6 +36,14 @@ import { slugify } from '../../domain/shared/strings';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
+import { getOutcomeValueRollup } from '../../application/admin/outcomeValueRollup';
+import { GuestPromptService } from '../../application/marketing/GuestPromptService';
+import {
+  broadcastVocabulary,
+  PlatformBroadcastService,
+  type BroadcastInput,
+} from '../../application/marketing/PlatformBroadcastService';
+import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import {
   clampErrorLogLimit,
   getErrorLogEntry,
@@ -56,7 +67,10 @@ import {
   userMfaRecoveryCodes,
   projects,
   platformPersonas,
+  discountCodes,
+  emailDeliveryFailures,
 } from '../../infrastructure/database/schema';
+import { normalizeDiscountCode } from '../../application/tenant/discountCodeService';
 import { signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
 import {
   adminImpersonationSessions,
@@ -91,7 +105,7 @@ import { getAllVendorIds, vendorForModel, type VendorId } from '../../applicatio
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
+import { membershipChanged } from '../../application/tenant/membershipChanged';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -138,6 +152,7 @@ import {
 import { evaluateCronGate, signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
+import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -332,6 +347,28 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // All admin routes require superadmin WebJWT
   router.use('*', superAdminMiddleware);
+
+  router.get('/pricing', async (c) => c.json(await getPricingDraft(buildDatabase(c.env))));
+
+  // Draft saves never touch the public cache. Only the explicit publication
+  // boundary below can make content visible and invalidate cached responses.
+  router.put('/pricing/draft', async (c) => {
+    try {
+      return c.json({ draft: await savePricingDraft(buildDatabase(c.env), await c.req.json()) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'Invalid pricing configuration' }, 400);
+    }
+  });
+
+  router.post('/pricing/publish', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const published = await publishPricing(db, c.env as Env, actorId);
+    await writeAdminAudit(db, 'PLATFORM_PRICING_PUBLISHED', actorId, {
+      metadata: { currency: published.currency, publishedAt: published.publishedAt },
+    });
+    return c.json({ published });
+  });
 
   // -------------------------------------------------------------------------
   // GET /api/admin/legal/current
@@ -1228,42 +1265,45 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/admin/guest-sessions
-  // Anonymous Brain sessions are marketing leads, not auth_user_sessions. Keep
-  // them visible beside the user directory so admins can follow the full
-  // guest -> account -> paid adoption funnel.
+  // GET  /api/admin/guest-sessions             — leads + the intent they typed
+  // GET  /api/admin/guest-sessions/:visitorId  — one lead's prompts, newest first
+  //
+  // An anonymous visitor who types a prompt IS a lead, and this is the only place
+  // the funnel is visible end to end: what they asked for, whether they came back,
+  // whether they signed up, whether they paid. Served by the application service
+  // so the aggregate, its cache and its invalidation live in ONE place rather than
+  // being re-remembered per route (the console and the broadcast targeting read the
+  // same numbers, and they must agree).
   // -------------------------------------------------------------------------
   router.get('/guest-sessions', async (c) => {
+    const service = new GuestPromptService(buildDatabase(c.env));
+    return c.json(await service.listSessionsWithIntent(c.env as Env));
+  });
+
+  router.get('/guest-sessions/:visitorId', async (c) => {
+    const visitorId = c.req.param('visitorId');
+    if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+    const service = new GuestPromptService(buildDatabase(c.env));
+    return c.json({ prompts: await service.listPromptsForVisitor(visitorId) });
+  });
+
+  // DELETE /api/admin/guest-sessions/:visitorId/prompts
+  //
+  // Erase what a visitor typed. A prompt is free text a person wrote, so it is
+  // personal data — and it is keyed by an opaque visitor id rather than a user
+  // row, so no account deletion or foreign-key cascade would ever reach it. This
+  // is how a privacy request that names a visitor gets ACTIONED instead of only
+  // tracked in `privacy_requests`. Audited, because erasing evidence without a
+  // record of who erased it is the wrong kind of clean.
+  router.delete('/guest-sessions/:visitorId/prompts', async (c) => {
+    const visitorId = c.req.param('visitorId');
+    if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const db = buildDatabase(c.env);
-
-    const rows = await db.execute(sql`
-      SELECT
-        ms.id,
-        ms.visitor_id        AS "visitorId",
-        ms.guest_chat_count  AS "guestChatCount",
-        ms.guest_chat_tokens AS "guestChatTokens",
-        ms.guest_chat_day    AS "guestChatDay",
-        ms.tool_runs         AS "toolRuns",
-        ms.last_tool_id      AS "lastToolId",
-        ms.landing_path      AS "landingPath",
-        ms.referrer,
-        ms.converted,
-        ms.converted_user_id AS "convertedUserId",
-        ms.converted_at      AS "convertedAt",
-        ms.first_seen_at     AS "firstSeenAt",
-        ms.last_seen_at      AS "lastSeenAt",
-        u.email              AS "convertedEmail",
-        COALESCE(BOOL_OR(t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false), false) AS "isPaid"
-      FROM marketing_sessions ms
-      LEFT JOIN users u ON u.id = ms.converted_user_id
-      LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
-      LEFT JOIN tenants t ON t.id = tm.tenant_id
-      GROUP BY ms.id, u.email
-      ORDER BY ms.last_seen_at DESC
-      LIMIT 500
-    `);
-
-    return c.json({ sessions: rows.rows });
+    const erased = await new GuestPromptService(db).forgetVisitor(c.env as Env, visitorId);
+    await writeAdminAudit(db, 'GUEST_PROMPTS_ERASED', c.get('userId') as string, {
+      metadata: { visitorId, erased },
+    });
+    return c.json({ erased });
   });
 
   // -------------------------------------------------------------------------
@@ -1299,8 +1339,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
             'acceptedAt', csi.accepted_at,
             'revokedAt', csi.revoked_at
           ) ORDER BY csi.created_at DESC)
-          FROM creation_session_invites csi
-          WHERE csi.session_id = cs.id
+          FROM invitations csi
+          JOIN objects o ON o.id = csi.object_id
+          WHERE csi.kind = 'session'
+            AND o.kind = 'creation_session'
+            AND o.ref_id = cs.id::text
+            AND o.tenant_id = cs.tenant_id
         ), '[]'::jsonb) AS invitations
       FROM creation_sessions cs
       JOIN tenants t ON t.id = cs.tenant_id
@@ -1309,6 +1353,21 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       LIMIT 500
     `);
     return c.json({ sessions: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/outcome-metrics
+  // Content-free value generation across the platform, optionally narrowed to
+  // one tenant or project. The previous equal-length period is the baseline.
+  // -------------------------------------------------------------------------
+  router.get('/outcome-metrics', async (c) => {
+    const days = Math.min(365, Math.max(7, Math.floor(Number(c.req.query('days') ?? 30) || 30)));
+    const tenantValue = Number(c.req.query('tenantId'));
+    const projectValue = Number(c.req.query('projectId'));
+    const tenantId = Number.isInteger(tenantValue) && tenantValue > 0 ? tenantValue : undefined;
+    const projectId = Number.isInteger(projectValue) && projectValue > 0 ? projectValue : undefined;
+    const db = buildDatabase(c.env);
+    return c.json(await getOutcomeValueRollup(db, { days, tenantId, projectId }));
   });
 
   // -------------------------------------------------------------------------
@@ -1377,6 +1436,150 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // Platform broadcasts — /api/admin/broadcasts
+  //
+  // The channel to visitors who have no workspace to reach them through. A lead
+  // who typed a prompt and left has no email and no account, so the campaign
+  // engine (audiences of addresses, verified senders, suppression) cannot touch
+  // them — but they still have an open tab, and this is what puts a message in it.
+  //
+  // GET    /broadcasts      — every platform broadcast + its measured engagement
+  // POST   /broadcasts      — author one
+  // PATCH  /broadcasts/:id  — edit / schedule / take it live / archive it
+  // DELETE /broadcasts/:id  — remove it (engagement survives in activity_log)
+  //
+  // Every write publishes: caches dropped and one `{type:'changed'}` frame to the
+  // shared relay room, so a banner appears in open tabs rather than on next load.
+  // -------------------------------------------------------------------------
+  router.get('/broadcasts', async (c) => {
+    const service = new PlatformBroadcastService(buildDatabase(c.env));
+    return c.json({
+      broadcasts: await service.listForConsole(c.env as Env),
+      vocabulary: broadcastVocabulary,
+    });
+  });
+
+  router.post('/broadcasts', async (c) => {
+    const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const created = await new PlatformBroadcastService(db).create(c.env as Env, body, actorId);
+    if (!created) return c.json({ error: 'A broadcast needs a message.' }, 400);
+    await writeAdminAudit(db, 'PLATFORM_BROADCAST_CREATED', actorId, {
+      metadata: { broadcastId: created.id, status: created.status, audience: created.audience },
+    });
+    return c.json({ broadcast: created }, 201);
+  });
+
+  router.patch('/broadcasts/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
+    const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
+    const db = buildDatabase(c.env);
+    if (!await new PlatformBroadcastService(db).update(c.env as Env, id, body)) {
+      return c.json({ error: 'Broadcast not found' }, 404);
+    }
+    await writeAdminAudit(db, 'PLATFORM_BROADCAST_UPDATED', c.get('userId') as string, {
+      metadata: { broadcastId: id, patch: body },
+    });
+    return c.json({ ok: true });
+  });
+
+  router.delete('/broadcasts/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
+    const db = buildDatabase(c.env);
+    if (!await new PlatformBroadcastService(db).remove(c.env as Env, id)) {
+      return c.json({ error: 'Broadcast not found' }, 404);
+    }
+    await writeAdminAudit(db, 'PLATFORM_BROADCAST_DELETED', c.get('userId') as string, {
+      metadata: { broadcastId: id },
+    });
+    return c.body(null, 204);
+  });
+
+  // -------------------------------------------------------------------------
+  // Discount codes — SuperAdmin-authored signup/checkout offers.
+  // -------------------------------------------------------------------------
+  router.get('/discount-codes', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db.execute(sql`
+      SELECT dc.id, dc.code, dc.percent_off AS "percentOff",
+             dc.applicable_plan AS "applicablePlan", dc.billing_cycle AS "billingCycle",
+             dc.duration_years AS "durationYears", dc.is_active AS "isActive",
+             dc.created_at AS "createdAt", dc.updated_at AS "updatedAt",
+             COUNT(dr.id)::int AS "redemptionCount",
+             COUNT(dr.id) FILTER (WHERE dr.status = 'redeemed')::int AS "redeemedCount"
+      FROM discount_codes dc
+      LEFT JOIN discount_redemptions dr ON dr.discount_code_id = dc.id
+      GROUP BY dc.id
+      ORDER BY dc.created_at DESC
+    `);
+    return c.json({ discountCodes: rows.rows });
+  });
+
+  router.post('/discount-codes', async (c) => {
+    type DiscountBody = {
+      code?: string; percentOff?: number; applicablePlan?: 'pro' | 'teams';
+      billingCycle?: 'monthly' | 'yearly'; durationYears?: number; isActive?: boolean;
+    };
+    const body = await c.req.json<DiscountBody>().catch(() => ({} as DiscountBody));
+    const code = normalizeDiscountCode(body.code ?? '');
+    const percentOff = Number(body.percentOff);
+    const durationYears = Number(body.durationYears);
+    if (!/^[A-Z0-9_-]{3,64}$/.test(code)) return c.json({ error: 'Code must be 3–64 letters, numbers, _ or -' }, 400);
+    if (!Number.isInteger(percentOff) || percentOff < 1 || percentOff > 100) return c.json({ error: 'percentOff must be an integer from 1 to 100' }, 400);
+    if (!Number.isInteger(durationYears) || durationYears < 1 || durationYears > 20) return c.json({ error: 'durationYears must be an integer from 1 to 20' }, 400);
+    const applicablePlan = body.applicablePlan === 'teams' ? 'teams' : 'pro';
+    const billingCycle = body.billingCycle === 'monthly' ? 'monthly' : 'yearly';
+    const db = buildDatabase(c.env);
+    const [existing] = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.code, code)).limit(1);
+    if (existing) return c.json({ error: 'Discount code already exists' }, 409);
+    const [created] = await db.insert(discountCodes).values({
+      code, percentOff, durationYears, applicablePlan, billingCycle,
+      isActive: body.isActive ?? true,
+      createdByUserId: c.get('userId') as string,
+    }).returning();
+    if (!created) return c.json({ error: 'Failed to create discount code' }, 500);
+    await writeAdminAudit(db, 'DISCOUNT_CODE_CREATED', c.get('userId') as string, {
+      metadata: { discountCodeId: created.id, code },
+    });
+    return c.json({ discountCode: created }, 201);
+  });
+
+  router.patch('/discount-codes/:id', async (c) => {
+    type DiscountBody = {
+      code?: string; percentOff?: number; applicablePlan?: 'pro' | 'teams';
+      billingCycle?: 'monthly' | 'yearly'; durationYears?: number; isActive?: boolean;
+    };
+    const body = await c.req.json<DiscountBody>().catch(() => ({} as DiscountBody));
+    const updates: Partial<typeof discountCodes.$inferInsert> = { updatedAt: new Date() };
+    if (body.code !== undefined) {
+      const code = normalizeDiscountCode(body.code);
+      if (!/^[A-Z0-9_-]{3,64}$/.test(code)) return c.json({ error: 'Code must be 3–64 letters, numbers, _ or -' }, 400);
+      updates.code = code;
+    }
+    if (body.percentOff !== undefined) {
+      if (!Number.isInteger(body.percentOff) || body.percentOff < 1 || body.percentOff > 100) return c.json({ error: 'percentOff must be an integer from 1 to 100' }, 400);
+      updates.percentOff = body.percentOff;
+    }
+    if (body.durationYears !== undefined) {
+      if (!Number.isInteger(body.durationYears) || body.durationYears < 1 || body.durationYears > 20) return c.json({ error: 'durationYears must be an integer from 1 to 20' }, 400);
+      updates.durationYears = body.durationYears;
+    }
+    if (body.applicablePlan !== undefined) updates.applicablePlan = body.applicablePlan;
+    if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
+    if (body.isActive !== undefined) updates.isActive = body.isActive;
+    const db = buildDatabase(c.env);
+    const [updated] = await db.update(discountCodes).set(updates).where(eq(discountCodes.id, c.req.param('id'))).returning();
+    if (!updated) return c.json({ error: 'Discount code not found' }, 404);
+    await writeAdminAudit(db, 'DISCOUNT_CODE_UPDATED', c.get('userId') as string, {
+      metadata: { discountCodeId: updated.id, code: updated.code },
+    });
+    return c.json({ discountCode: updated });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/admin/tenants
   // -------------------------------------------------------------------------
   router.get('/tenants', async (c) => {
@@ -1398,6 +1601,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
         t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
+        d.code AS "discountCode",
+        d.percent_off AS "discountPercentOff",
+        d.duration_years AS "discountDurationYears",
+        d.status AS "discountStatus",
+        d.applied_at AS "discountAppliedAt",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
@@ -1406,7 +1614,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN agent_hosts ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at
+      LEFT JOIN LATERAL (
+        SELECT dc.code, dc.percent_off, dc.duration_years, dr.status, dr.applied_at
+        FROM discount_redemptions dr
+        JOIN discount_codes dc ON dc.id = dr.discount_code_id
+        WHERE dr.tenant_id = t.id
+        ORDER BY dr.applied_at DESC
+        LIMIT 1
+      ) d ON true
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at, d.code, d.percent_off, d.duration_years, d.status, d.applied_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);
@@ -1986,6 +2202,51 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const entry = await getErrorLogEntry(buildTransactionalDatabase(c.env), Number(c.req.param('id')));
     if (!entry) return c.json({ error: 'Error log entry not found' }, 404);
     return c.json({ error: entry });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/email-delivery-failures
+  // Durable provider-rejection ledger. Message bodies, OTPs and API keys are
+  // never stored, so this view is diagnostic without becoming a secrets store.
+  // -------------------------------------------------------------------------
+  router.get('/email-delivery-failures', async (c) => {
+    const db = buildDatabase(c.env);
+    const q = c.req.query();
+    const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
+    const offset = Math.max(Number(q.offset) || 0, 0);
+    const conditions = [];
+    if (q.deliveryType) conditions.push(eq(emailDeliveryFailures.deliveryType, q.deliveryType.slice(0, 64)));
+    if (q.q) {
+      const needle = `%${q.q.slice(0, 200)}%`;
+      conditions.push(or(
+        ilike(emailDeliveryFailures.recipient, needle),
+        ilike(emailDeliveryFailures.errorMessage, needle),
+      )!);
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [failures, countRows, summaryRows, typeRows] = await Promise.all([
+      db.select().from(emailDeliveryFailures).where(where)
+        .orderBy(desc(emailDeliveryFailures.createdAt)).limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)::int` }).from(emailDeliveryFailures).where(where),
+      db.select({
+        total: sql<number>`count(*)::int`,
+        last24Hours: sql<number>`count(*) filter (where ${emailDeliveryFailures.createdAt} >= now() - interval '24 hours')::int`,
+        affectedRecipients: sql<number>`count(distinct ${emailDeliveryFailures.recipient})::int`,
+        latestAt: sql<Date | null>`max(${emailDeliveryFailures.createdAt})`,
+      }).from(emailDeliveryFailures),
+      db.selectDistinct({ deliveryType: emailDeliveryFailures.deliveryType })
+        .from(emailDeliveryFailures).orderBy(emailDeliveryFailures.deliveryType),
+    ]);
+    const total = countRows[0]?.count ?? 0;
+    return c.json({
+      failures,
+      total,
+      returned: failures.length,
+      offset,
+      hasMore: offset + failures.length < total,
+      summary: summaryRows[0] ?? { total: 0, last24Hours: 0, affectedRecipients: 0, latestAt: null },
+      deliveryTypes: typeRows.map((row) => row.deliveryType),
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -3257,11 +3518,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
-    // Bust the gateway's JWT→membership cache so the new role takes effect at once
-    // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
-    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
-    });
+    // The role is the label the footer roster renders beside the person (PRD 21
+    // §4.1) AND the claim the gateway caches, so one announcement clears both —
+    // this handler used to name each cache itself, which is precisely the drift
+    // `membershipChanged` exists to end.
+    await membershipChanged(c.env as Env, tenantId, [userId]);
     await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,

@@ -12,7 +12,7 @@ import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { int } from './format';
 
 const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
 };
 

@@ -168,6 +168,12 @@ describe('classifyModelFunding', () => {
     expect(classifyModelFunding('openai/gpt-5', surface)).toBe('premium');
   });
 
+  it('calls a project-Evermind pin what it is, not a metered premium model', () => {
+    // It is in no pool, so it used to fall through to `premium` — which on a free plan
+    // raised a "plan not entitled to premium" warning about a plan FEATURE.
+    expect(classifyModelFunding('project_evermind:12', surface)).toBe('evermind');
+  });
+
   it('does not guess when the model surface has not loaded', () => {
     // A null surface means "unknown", and an unpinned model is still auto — but a pinned
     // model must not be labelled `premium` merely because the pool list is missing.

@@ -46,9 +46,9 @@ function formatAmount(unit: MeterSnapshot['unit'], n: number): string {
 
 /** Bar colour escalates as the allowance fills — neutral → amber → red. */
 function barColor(percent: number): string {
-  if (percent >= 100) return 'var(--danger, #ef4444)';
-  if (percent >= 80) return 'var(--warning, #f59e0b)';
-  return 'var(--coral-bright, #4d9eff)';
+  if (percent >= 100) return 'var(--danger)';
+  if (percent >= 80) return 'var(--warning, var(--warning))';
+  return 'var(--coral-bright, var(--coral-bright))';
 }
 
 const METER_ICON: Record<MeterSnapshot['key'], string> = {
@@ -68,7 +68,7 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
  */
 const METER_CONFIG_HREF: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '/settings/integrations',
-  cloud_runs: '/ide/dashboard',
+  cloud_runs: '/create?filter=build',
   ingestion: '/settings/integrations',
   error_events: '/quality?tab=collectors',
   outbound_fetches: '/insights/finance',
@@ -117,7 +117,7 @@ export function ConsumptionMeterCard({
         style={{
           minWidth: 112,
           padding: '9px 11px',
-          borderRadius: 8,
+          borderRadius: 'var(--radius-md)',
           background: 'var(--bg-elevated, rgba(255,255,255,0.08))',
           border: '1px solid var(--border-subtle, var(--border))',
         }}
@@ -140,7 +140,7 @@ export function ConsumptionMeterCard({
       style={{
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle, var(--border))',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         padding: 12,
         marginBottom: 8,
       }}
@@ -165,7 +165,7 @@ export function ConsumptionMeterCard({
       <div
         style={{
           height: 6,
-          borderRadius: 3,
+          borderRadius: 'var(--radius-sm)',
           background: 'var(--bg-elevated, rgba(255,255,255,0.08))',
           overflow: 'hidden',
           margin: '10px 0 8px',
@@ -176,7 +176,7 @@ export function ConsumptionMeterCard({
             width: unlimited ? '0%' : `${percentUsed}%`,
             height: '100%',
             background: barColor(percentUsed),
-            borderRadius: 3,
+            borderRadius: 'var(--radius-sm)',
             transition: 'width 0.3s, background 0.3s',
           }}
         />
@@ -186,7 +186,7 @@ export function ConsumptionMeterCard({
         <span style={{ fontSize: 12, color: 'var(--text-muted, var(--muted))' }}>
           {unlimited ? t('usedAmount', { amount: formatAmount(unit, meter.used) }) : t('percentUsed', { percent: percentUsed })}
         </span>
-        <Link href="/pricing" className="usage-meter-link" style={{ fontSize: 12, fontWeight: 500, color: 'var(--coral-bright, #4d9eff)' }}>
+        <Link href="/pricing" className="usage-meter-link" style={{ fontSize: 12, fontWeight: 500, color: 'var(--coral-bright, var(--coral-bright))' }}>
           {isFree ? t('seePlans') : t('manage')} →
         </Link>
       </div>

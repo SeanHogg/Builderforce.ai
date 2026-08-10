@@ -11,7 +11,6 @@ presentation/middleware/superAdminMiddleware.ts
 presentation/middleware/webAuthMiddleware.ts
 presentation/routes/activityRoutes.ts
 presentation/routes/adminRoutes.ts
-presentation/routes/agentAssignmentRoutes.ts
 presentation/routes/agentHostRoutes.ts
 presentation/routes/agentRuntimeRoutes.ts
 presentation/routes/agileRoutes.ts
@@ -22,10 +21,8 @@ presentation/routes/approvalRoutes.ts
 presentation/routes/approvalRuleRoutes.ts
 presentation/routes/artifactAssignmentRoutes.ts
 presentation/routes/authRoutes.ts
-presentation/routes/autonomyRoutes.ts
 presentation/routes/benchmarkingRoutes.ts
 presentation/routes/biRoutes.ts
-presentation/routes/bitbucketWebhookRoutes.ts
 presentation/routes/boardConnectionRoutes.ts
 presentation/routes/boardRoutes.ts
 presentation/routes/boardWebhookRoutes.ts
@@ -35,16 +32,12 @@ presentation/routes/calendarRoutes.ts
 presentation/routes/catalogAnalyticsRoutes.ts
 presentation/routes/ceremonyRoutes.ts
 presentation/routes/chatRoutes.ts
-presentation/routes/ciOutcomeDeps.ts
-presentation/routes/compileRoutes.ts
 presentation/routes/consumptionRoutes.ts
 presentation/routes/contributorRoutes.ts
 presentation/routes/costForecastRoutes.ts
 presentation/routes/dashboardPinsRoutes.ts
 presentation/routes/dashboardRoutes.ts
 presentation/routes/dashboardsRoutes.ts
-presentation/routes/datasetRoutes.ts
-presentation/routes/deckRoutes.ts
 presentation/routes/demoRoutes.ts
 presentation/routes/deployRoutes.ts
 presentation/routes/devTeamRoutes.ts
@@ -56,7 +49,6 @@ presentation/routes/empFinopsRoutes.ts
 presentation/routes/empMetricsRoutes.ts
 presentation/routes/evalRoutes.ts
 presentation/routes/evermindModelRoutes.ts
-presentation/routes/executionTokenGate.ts
 presentation/routes/factsRoutes.ts
 presentation/routes/feedbackIngestRoutes.ts
 presentation/routes/feedbackRoutes.ts
@@ -65,10 +57,8 @@ presentation/routes/forecastRoutes.ts
 presentation/routes/freelancerMessagingRoutes.ts
 presentation/routes/freelancerRoutes.ts
 presentation/routes/gigMarketplaceRoutes.ts
-presentation/routes/gitProxyRoutes.ts
 presentation/routes/githubActionsRoutes.ts
 presentation/routes/githubWebhookRoutes.ts
-presentation/routes/gitlabWebhookRoutes.ts
 presentation/routes/governanceRoutes.ts
 presentation/routes/ideProjectRoutes.ts
 presentation/routes/ideRoutes.ts
@@ -78,7 +68,6 @@ presentation/routes/insightsRoutes.ts
 presentation/routes/integrationRoutes.ts
 presentation/routes/jobRoutes.ts
 presentation/routes/kanbanRoutes.ts
-presentation/routes/knowledgeMarketRoutes.ts
 presentation/routes/knowledgeRoutes.ts
 presentation/routes/lensSnapshotRoutes.ts
 presentation/routes/limbicRoutes.ts
@@ -87,7 +76,6 @@ presentation/routes/managedAgentHostRoutes.ts
 presentation/routes/managerRoutes.ts
 presentation/routes/marketplaceRoutes.ts
 presentation/routes/marketplaceStatsRoutes.ts
-presentation/routes/mcpExtensionRoutes.ts
 presentation/routes/meetingRoutes.ts
 presentation/routes/memberPersonaRoutes.ts
 presentation/routes/memberRoutes.ts
@@ -114,7 +102,6 @@ presentation/routes/qaRoutes.ts
 presentation/routes/qualityIngestRoutes.ts
 presentation/routes/qualityRoutes.ts
 presentation/routes/recommendationsRoutes.ts
-presentation/routes/releaseNoteRoutes.ts
 presentation/routes/releasesRoutes.ts
 presentation/routes/repoAnalysisRoutes.ts
 presentation/routes/repoRoutes.ts
@@ -123,7 +110,6 @@ presentation/routes/rfpRoutes.ts
 presentation/routes/roiRoutes.ts
 presentation/routes/runtimeRoutes.ts
 presentation/routes/seamRoutes.ts
-presentation/routes/securityReviewRoutes.ts
 presentation/routes/segmentRoutes.ts
 presentation/routes/segmentTrackerRoutes.ts
 presentation/routes/skillAssignmentRoutes.ts
@@ -133,11 +119,8 @@ presentation/routes/taskRoutes.ts
 presentation/routes/teamMemoryRoutes.ts
 presentation/routes/teamRoutes.ts
 presentation/routes/telemetryRoutes.ts
-presentation/routes/tenantApiKeyRoutes.ts
-presentation/routes/tenantModelRoutes.ts
 presentation/routes/tenantRoutes.ts
 presentation/routes/timeRoutes.ts
-presentation/routes/toolRoutes.ts
 presentation/routes/vscodeRoutes.ts
 presentation/routes/webhookRoutes.ts
 presentation/routes/workflowDefinitionRoutes.ts

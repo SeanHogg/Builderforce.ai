@@ -17,12 +17,12 @@
 
 export const BRAIN_AUTO_APPROVE_KEY = 'brain.autoApprove';
 
-/** Whether auto-approve is currently enabled for this browser. */
+/** Whether auto-approve is enabled. New browsers default on; an explicit off is preserved. */
 export function isBrainAutoApprove(): boolean {
   try {
-    return localStorage.getItem(BRAIN_AUTO_APPROVE_KEY) === '1';
+    return localStorage.getItem(BRAIN_AUTO_APPROVE_KEY) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 

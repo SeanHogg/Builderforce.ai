@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
@@ -41,7 +42,7 @@ import { ticketHref } from '@/lib/ticketHref';
 const panelStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' };
@@ -118,7 +119,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
   const header = (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span aria-hidden>📣</span>
+        <span aria-hidden><Icon source="📣" size="1em" /></span>
         <span style={sectionTitleStyle}>{t('title')}</span>
       </div>
       {data && (
@@ -140,12 +141,12 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
       <section style={panelStyle}>
         {header}
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--danger-text, #b91c1c)', fontSize: '0.85rem' }}>{error}</span>
+          <span style={{ color: 'var(--danger-text)', fontSize: '0.85rem' }}>{error}</span>
           <button
             type="button"
             onClick={() => void load()}
             style={{
-              padding: '4px 10px', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', cursor: 'pointer',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
             }}
           >
@@ -264,7 +265,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
                     href={ticketHref(s.id)}
                     style={{
                       fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700,
-                      color: 'var(--accent, #2563eb)', textDecoration: 'none', flexShrink: 0,
+                      color: 'var(--accent)', textDecoration: 'none', flexShrink: 0,
                     }}
                   >
                     {s.key}
@@ -311,7 +312,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 8, padding: '7px 10px',
+                  borderRadius: 'var(--radius-md)', padding: '7px 10px',
                 }}
               >
                 <span aria-hidden style={{ flexShrink: 0 }}>{KIND_ICON[c.kind] ?? '•'}</span>
@@ -334,13 +335,13 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
       {needsAttention.openEscalations > 0 && (
         <div
           style={{
-            marginTop: 16, padding: 12, borderRadius: 10,
+            marginTop: 16, padding: 12, borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--warning-border, var(--border-subtle))',
-            borderLeft: '3px solid var(--warning-text, #b45309)',
+            borderLeft: '3px solid var(--warning-text)',
             background: 'var(--bg-base)',
           }}
         >
-          <div style={{ ...subTitleStyle, color: 'var(--warning-text, #b45309)' }}>
+          <div style={{ ...subTitleStyle, color: 'var(--warning-text)' }}>
             {t('attention.title', { open: needsAttention.openEscalations, today: needsAttention.escalatedToday })}
           </div>
           <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -350,7 +351,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
                   href={ticketHref(item.taskId)}
                   style={{
                     fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700,
-                    color: 'var(--accent, #2563eb)', textDecoration: 'none', flexShrink: 0,
+                    color: 'var(--accent)', textDecoration: 'none', flexShrink: 0,
                   }}
                 >
                   {item.key ?? `#${item.taskId}`}
@@ -368,7 +369,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
               replace the surface built to diagnose them. */}
           <Link
             href="/projects?tab=manager&sub=stuck"
-            style={{ display: 'inline-block', marginTop: 8, fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}
+            style={{ display: 'inline-block', marginTop: 8, fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent)' }}
           >
             {t('attention.open')}
           </Link>
@@ -377,7 +378,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
 
       {/* The decision feed is one click away and is the drill-in for everything above. */}
       <div style={{ marginTop: 14, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <Link href="/projects?tab=manager&sub=activity" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}>
+        <Link href="/projects?tab=manager&sub=activity" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent)' }}>
           {t('viewActivity')}
         </Link>
         {manager.lastRunAt && (

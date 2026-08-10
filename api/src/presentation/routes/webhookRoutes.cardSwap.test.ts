@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   clearCardValidationByCustomer: vi.fn(async () => ({ known: true, clearedPaymentMethodId: null as string | null })),
   detachCards: vi.fn(async () => 1),
   parseWebhook: vi.fn(),
+  markDiscountRedeemed: vi.fn(async () => undefined),
+  recordReferralConversion: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../application/tenant/cardValidationService', async (orig) => ({
@@ -26,6 +28,15 @@ vi.mock('../../application/tenant/cardValidationService', async (orig) => ({
   markCardValidatedByCustomer: mocks.markCardValidatedByCustomer,
   markCardValidationFailedByCustomer: mocks.markCardValidationFailedByCustomer,
   clearCardValidationByCustomer: mocks.clearCardValidationByCustomer,
+}));
+vi.mock('../../application/tenant/discountCodeService', () => ({
+  markDiscountRedeemed: mocks.markDiscountRedeemed,
+}));
+vi.mock('../../application/sales/recordReferralConversion', () => ({
+  recordReferralConversion: mocks.recordReferralConversion,
+}));
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: vi.fn(() => ({})),
 }));
 
 import { createWebhookRoutes } from './webhookRoutes';
@@ -159,5 +170,24 @@ describe('subscription.cancelled — card retention', () => {
 
     expect(mocks.clearCardValidationByCustomer).not.toHaveBeenCalled();
     expect(mocks.detachCards).not.toHaveBeenCalled();
+  });
+});
+
+describe('subscription.activated — discount redemption', () => {
+  it('finalizes the reserved discount only after the signed activation event', async () => {
+    mocks.parseWebhook.mockResolvedValue({
+      type: 'subscription.activated',
+      externalCustomerId: 'cus_1',
+      externalSubscriptionId: 'sub_1',
+      tenantId: 7,
+      discountRedemptionId: 'redemption-1',
+      raw: {},
+    });
+
+    const res = await cardValidatedPost();
+
+    expect(res.status).toBe(200);
+    expect(tenantService.handleWebhookEvent).toHaveBeenCalled();
+    expect(mocks.markDiscountRedeemed).toHaveBeenCalledWith(expect.anything(), 7, 'redemption-1');
   });
 });

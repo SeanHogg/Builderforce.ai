@@ -14,6 +14,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { Icon } from '@/components/ui/Icon';
 import {
   capabilitiesForSurface,
   type BrainCapabilityId,
@@ -37,17 +38,17 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
   if (layout === 'compact') {
     return (
       <>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('makingLabel')}</span>
+        <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('makingLabel')}</span>
         <Select
           value={value ?? ''}
           onChange={(e) => onSelect((e.target.value || null) as BrainCapabilityId | null)}
           aria-label={t('pickerAria')}
           disabled={disabled}
-          style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+          style={{ fontSize: 'var(--font-size-small)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
         >
           <option value="">{t('none')}</option>
           {options.map((c) => (
-            <option key={c.id} value={c.id}>{`${c.icon} ${t(`${c.id}.label`)}`}</option>
+            <option key={c.id} value={c.id}>{t(`${c.id}.label`)}</option>
           ))}
         </Select>
       </>
@@ -56,7 +57,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
 
   return (
     <div style={{ width: '100%', maxWidth: 640, padding: '0 16px' }}>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 10 }}>
+      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center', marginBottom: 10 }}>
         {t(surface === 'ide' ? 'tilesHintIde' : 'tilesHintBrainstorm')}
       </div>
       <div
@@ -82,16 +83,16 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
                 gap: 6,
                 minHeight: 84,
                 padding: '12px 8px',
-                borderRadius: 12,
-                border: `1px solid ${active ? 'var(--accent, #3b82f6)' : 'var(--border-subtle)'}`,
+                borderRadius: 'var(--radius-lg)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
                 background: active ? 'var(--accent-subtle, rgba(59,130,246,0.12))' : 'var(--bg-elevated)',
                 color: 'var(--text-primary)',
                 cursor: disabled ? 'default' : 'pointer',
                 textAlign: 'center',
               }}
             >
-              <span aria-hidden style={{ fontSize: 22, lineHeight: 1 }}>{c.icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>{t(`${c.id}.label`)}</span>
+              <span aria-hidden><Icon source={c.icon} size={24} /></span>
+              <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600 }}>{t(`${c.id}.label`)}</span>
             </button>
           );
         })}

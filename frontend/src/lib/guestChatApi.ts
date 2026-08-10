@@ -25,6 +25,8 @@ export interface GuestUsage {
   limit: number;
   /** False when the kill switch has disabled guest chat entirely. */
   enabled: boolean;
+  /** True when this deployment can host SHARED, invitable guest sessions. */
+  roomsEnabled: boolean;
 }
 
 /** The stored guest token if present and not expired, else null. */
@@ -51,6 +53,20 @@ export function clearGuestToken(): void {
 }
 
 /**
+ * Persist a minted guest token. Both the solo session and a shared ROOM entry
+ * (guestRoomApi) write through here — a room token is just a guest token whose
+ * signed payload names the room, and there is exactly one guest token slot, so
+ * the two paths must not each roll their own storage.
+ */
+export function storeGuestToken(token: string, expiresInSeconds: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(GUEST_TOKEN_KEY, token);
+    window.localStorage.setItem(GUEST_TOKEN_EXP_KEY, String(Date.now() + expiresInSeconds * 1000));
+  } catch { /* private mode — token lives only for this page load */ }
+}
+
+/**
  * Mint (or refresh) a guest session: records the lead and returns a token +
  * the guest's remaining allowance. Returns null when guest chat is disabled or
  * the request fails.
@@ -68,24 +84,19 @@ export async function mintGuestSession(): Promise<GuestUsage | null> {
       expectedErrors: [400, 401, 403, 404, 429],
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { token: string; expiresInSeconds: number; remaining: number; limit: number };
-    try {
-      window.localStorage.setItem(GUEST_TOKEN_KEY, data.token);
-      window.localStorage.setItem(GUEST_TOKEN_EXP_KEY, String(Date.now() + data.expiresInSeconds * 1000));
-    } catch { /* private mode — token lives only for this page load */ }
-    return { remaining: data.remaining, limit: data.limit, enabled: true };
+    const data = (await res.json()) as { token: string; expiresInSeconds: number; remaining: number; limit: number; roomsEnabled?: boolean };
+    storeGuestToken(data.token, data.expiresInSeconds);
+    return { remaining: data.remaining, limit: data.limit, enabled: true, roomsEnabled: !!data.roomsEnabled };
   } catch {
     return null;
   }
 }
 
-/** Ensure a valid guest token exists (mint on demand). Returns the token or null. */
-export async function ensureGuestToken(): Promise<string | null> {
-  const existing = getStoredGuestToken();
-  if (existing) return existing;
-  await mintGuestSession();
-  return getStoredGuestToken();
-}
+// NOTE: `ensureGuestToken` lives in `guestRoomApi`, not here. A guest may be in a
+// SHARED room, and re-minting a plain token for them would silently drop them out
+// of it — out of the room's combined allowance and out of its relay. Only that
+// module can see both halves, so the "make sure I can call the gateway" helper
+// belongs there.
 
 /** The guest's current remaining allowance (for the composer's "N left"). */
 export async function getGuestUsage(): Promise<GuestUsage | null> {
@@ -97,8 +108,8 @@ export async function getGuestUsage(): Promise<GuestUsage | null> {
       expectedErrors: [400, 401, 403, 404, 429],
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { remaining: number; limit: number; enabled: boolean };
-    return { remaining: data.remaining, limit: data.limit, enabled: data.enabled };
+    const data = (await res.json()) as { remaining: number; limit: number; enabled: boolean; roomsEnabled?: boolean };
+    return { remaining: data.remaining, limit: data.limit, enabled: data.enabled, roomsEnabled: !!data.roomsEnabled };
   } catch {
     return null;
   }

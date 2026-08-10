@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * ProjectOriginBadge — a small pill marking where a project was born. Self-gating:
@@ -24,13 +25,13 @@ export function ProjectOriginBadge({ origin, style }: { origin?: string | null; 
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
         fontSize: 11, fontWeight: 600, lineHeight: 1.4,
-        padding: '2px 8px', borderRadius: 999,
+        padding: '2px 8px', borderRadius: 'var(--radius-full)',
         background: 'var(--surface-interactive, var(--bg-deep))',
         border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)',
         ...style,
       }}
     >
-      <span aria-hidden>{badge.icon}</span>
+      <span aria-hidden><Icon source={badge.icon} size={14} /></span>
       {t(badge.labelKey)}
     </span>
   );

@@ -15,7 +15,7 @@ import {
   brainChats,
   brainChatMessages,
   creationSessionEvents,
-  creationSessionInvites,
+  creationOutcomeEvents,
   creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
@@ -35,12 +35,12 @@ import {
   taskSpecs,
   specVersions,
   tenantMembers,
-  tenantInvitations,
   tenants,
   users,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import type { HonoEnv } from '../../env';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import type { Env, HonoEnv } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { resolveChatAccess } from '../brain/chatAccess';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
@@ -52,17 +52,31 @@ import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/rel
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { normalizeChatMode } from '../brain/chatMode';
+import { sha256Hex } from '../../domain/shared/hash';
+import { findObject, getObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
+import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
+import { creationSessionQuotaError, resolveCreationSessionQuota } from '../../domain/tenant/creationSessionQuota';
+import {
+  acceptInvitation,
+  acceptInvitationStatement,
+  findByTokenHash,
+  invalidateInvitations,
+  invite as inviteToObject,
+  listForObject,
+  revokeInvitation,
+} from '../kernel/InvitationService';
 
 type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4 };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function creationKindForModality(modality: string): CreationObjectKind {
-  const kinds: Record<string, CreationObjectKind> = {
-    designer: 'website', mobile: 'prototype', webmobile: 'prototype', video: 'video',
-    evermind: 'evermind', llm: 'evermind', finetune: 'llm', voice: 'voice',
-  };
-  return kinds[modality] ?? 'prototype';
+  // An IDE project is one Builder object regardless of the studio it opens.
+  // Mapping modalities to website/video/voice/etc. produced preview cards, but
+  // discarded the IDE binding and made its actual tools unreachable.
+  void modality;
+  return 'build';
 }
 
 type GraphObjectInput = {
@@ -83,7 +97,7 @@ type GraphConnectionInput = {
   metadata?: unknown;
 };
 type CreateSessionBody = { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] };
-type PatchSessionBody = { title?: string; description?: string | null; status?: string; preview?: unknown };
+type PatchSessionBody = { title?: string; description?: string | null; folder?: string | null; status?: string; preview?: unknown; mode?: string };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] };
@@ -96,10 +110,25 @@ type LockBody = { action?: 'acquire' | 'renew' | 'release'; leaseSeconds?: numbe
 type TemplateBody = { name?: string; description?: string; category?: string; visibility?: string; graph?: unknown };
 type BranchBody = { title?: string };
 type MergeBody = { sourceSessionId?: string; resolutions?: Record<string, 'source' | 'target'> };
-type ClaimSessionBody = SaveGraphBody & { clientSessionId?: string; title?: string; initialPrompt?: string; timeline?: Array<{ clientMessageId?: string; role?: string; body?: string; createdAt?: string }> };
+type ClaimSessionBody = SaveGraphBody & { clientSessionId?: string; title?: string; initialPrompt?: string; timeline?: Array<{ clientMessageId?: string; role?: string; body?: string; metadata?: unknown; createdAt?: string }> };
 type MemberBody = { role?: string };
 type ExpandProjectBody = { lens?: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' };
 type TimelineBody = { clientMessageId?: string; role?: 'user' | 'assistant' | 'system'; body?: string; metadata?: unknown };
+type OutcomeBody = {
+  correlationId?: string;
+  action?: string;
+  phase?: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused';
+  actorType?: 'user' | 'agent' | 'brain' | 'system';
+  actorRef?: string;
+  projectId?: number;
+  metricKey?: string;
+  metricValue?: number;
+  unit?: string;
+  artifactId?: string;
+  durationMs?: number;
+  costUsdMillicents?: number;
+  metadata?: unknown;
+};
 
 const BUILT_IN_TEMPLATE_IDS = ['campaign', 'product-discovery', 'data-story', 'stand-up', 'model-build', 'executive-review'] as const;
 
@@ -149,10 +178,44 @@ function cleanRole(raw: unknown): SessionRole | null {
   return typeof raw === 'string' && raw in ROLE_RANK ? raw as SessionRole : null;
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+/**
+ * A session's entry in the object registry — what its invitations point at now
+ * that `creation_session_invites.session_id` is gone (migration 0435).
+ *
+ * TWO helpers rather than one, because the registry write is an upsert and a GET
+ * must not perform one: `ensure` runs on the invite-creation path, where a session
+ * that has never been registered is exactly the case that needs fixing, and `find`
+ * runs on list and revoke, where a missing entry means there are no invitations to
+ * show and a write would be a read path quietly mutating the database.
+ */
+type SessionRef = { id: string; tenantId: number; title: string };
+
+async function ensureSessionObject(db: Db, env: Env, session: SessionRef): Promise<ObjectRef> {
+  return registerObject(db, env, {
+    tenantId: session.tenantId,
+    kind: 'creation_session',
+    refId: session.id,
+    domain: 'canvas',
+    title: session.title,
+  });
 }
+
+async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef | null> {
+  return findObject(db, session.tenantId, 'creation_session', session.id);
+}
+
+/**
+ * Ids are compared the way POSTGRES compares them.
+ *
+ * `UUID_RE` accepts either case (`/i`), and every uniqueness check below used a
+ * case-SENSITIVE `Set` — so `A1B2…` and `a1b2…` passed validation as two
+ * distinct objects, and then hit a `uuid` column that considers them the same
+ * value. The request died on `duplicate key value violates unique constraint
+ * "creation_session_objects_pkey"`, i.e. a 500 for input the validator had
+ * already declared valid. A `uuid` is case-insensitive by definition; the
+ * validator has to agree with the column it is validating for.
+ */
+const uuidKey = (id: string) => id.toLowerCase();
 
 export function validCreationGraph(objects: GraphObjectInput[], connections: GraphConnectionInput[]): string | null {
   if (objects.length > 1_000) return 'A session may contain at most 1,000 objects';
@@ -161,18 +224,46 @@ export function validCreationGraph(objects: GraphObjectInput[], connections: Gra
   for (const object of objects) {
     if (!UUID_RE.test(object.id)) return `Invalid object id: ${object.id}`;
     if (!isCreationObjectKind(object.kind)) return `Unsupported object kind: ${object.kind || 'missing'}`;
-    if (ids.has(object.id)) return `Duplicate object id: ${object.id}`;
-    ids.add(object.id);
+    if (ids.has(uuidKey(object.id))) return `Duplicate object id: ${object.id}`;
+    ids.add(uuidKey(object.id));
   }
   const connectionIds = new Set<string>();
   for (const edge of connections) {
     if (!UUID_RE.test(edge.id)) return `Invalid connection id: ${edge.id}`;
-    if (connectionIds.has(edge.id)) return `Duplicate connection id: ${edge.id}`;
-    connectionIds.add(edge.id);
-    if (!ids.has(edge.sourceObjectId) || !ids.has(edge.targetObjectId)) return 'A connection references an object outside this session';
+    if (connectionIds.has(uuidKey(edge.id))) return `Duplicate connection id: ${edge.id}`;
+    connectionIds.add(uuidKey(edge.id));
+    if (!ids.has(uuidKey(edge.sourceObjectId)) || !ids.has(uuidKey(edge.targetObjectId))) return 'A connection references an object outside this session';
     if (edge.kind && !isCreationConnectionKind(edge.kind)) return `Unsupported connection kind: ${edge.kind}`;
   }
   return null;
+}
+
+/**
+ * Browser-local graph ids are only identities inside that draft. The database
+ * primary keys are global, so carrying a local id across the claim boundary can
+ * collide with an object from an earlier session (for example, a locally saved
+ * copy of a durable canvas). Give every claimed row a new durable identity and
+ * rewrite the edge endpoints as one graph operation.
+ */
+export function durableCreationGraph(
+  objects: GraphObjectInput[],
+  connections: GraphConnectionInput[],
+  newId: () => string = () => crypto.randomUUID(),
+): { objects: GraphObjectInput[]; connections: GraphConnectionInput[] } {
+  // Keyed case-insensitively for the same reason `validCreationGraph` is: an
+  // edge that spells its endpoint in a different case than the object does is
+  // still pointing at that object, and a case-sensitive map would resolve it to
+  // `undefined` and violate the connection's NOT NULL / foreign key instead.
+  const objectIds = new Map(objects.map((object) => [uuidKey(object.id), newId()]));
+  return {
+    objects: objects.map((object) => ({ ...object, id: objectIds.get(uuidKey(object.id))! })),
+    connections: connections.map((edge) => ({
+      ...edge,
+      id: newId(),
+      sourceObjectId: objectIds.get(uuidKey(edge.sourceObjectId))!,
+      targetObjectId: objectIds.get(uuidKey(edge.targetObjectId))!,
+    })),
+  };
 }
 
 export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
@@ -189,7 +280,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       ))
       .where(and(eq(creationSessions.id, sessionId), eq(creationSessions.tenantId, tenantId)))
       .limit(1);
-    return row ?? null;
+    if (row) return row;
+    // Platform superadmins collaborate in associate-owned sales canvases across
+    // tenant boundaries. They must still be explicit session members; this does
+    // not grant blanket access to every canvas.
+    const [adminMember] = await db
+      .select({ session: creationSessions, tenantId: creationSessions.tenantId, role: creationSessionMembers.role })
+      .from(creationSessions)
+      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
+      .innerJoin(users, eq(users.id, userId))
+      .where(and(eq(creationSessions.id, sessionId), eq(users.isSuperadmin, true)))
+      .limit(1);
+    return adminMember ?? null;
   }
 
   async function requireSession(c: Context<HonoEnv>, minimum: SessionRole = 'viewer') {
@@ -238,18 +340,21 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     };
   }
 
-  async function creationLimits(tenantId: number): Promise<PlanLimits> {
+  async function creationPlan(tenantId: number): Promise<TenantPlan> {
     const [tenant] = await db.select({
       plan: tenants.plan,
       billingStatus: tenants.billingStatus,
       trialEndsAt: tenants.trialEndsAt,
     }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-    const effective = tenant ? resolveEffectivePlan({
+    return tenant ? resolveEffectivePlan({
       plan: tenant.plan as TenantPlan,
       billingStatus: tenant.billingStatus as TenantBillingStatus,
       trialEndsAt: tenant.trialEndsAt,
     }) : TenantPlan.FREE;
-    return getLimits(effective);
+  }
+
+  async function creationLimits(tenantId: number): Promise<PlanLimits> {
+    return getLimits(await creationPlan(tenantId));
   }
 
   async function countRows(tableName: 'creation_sessions' | 'creation_session_members' | 'creation_session_templates', clause: ReturnType<typeof sql>): Promise<number> {
@@ -257,10 +362,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return Number((result.rows[0] as { count?: number } | undefined)?.count ?? 0);
   }
 
-  async function sessionQuota(tenantId: number) {
-    const limits = await creationLimits(tenantId);
+  async function sessionQuota(c: Context<HonoEnv>, tenantId: number) {
+    const currentPlan = await creationPlan(tenantId);
+    const limits = getLimits(currentPlan);
     const used = await countRows('creation_sessions', sql`tenant_id = ${tenantId} AND status <> 'deleted'`);
-    return { used, limit: limits.maxCreationSessions, allowed: limits.maxCreationSessions === -1 || used < limits.maxCreationSessions, limits };
+    return resolveCreationSessionQuota({
+      used,
+      planLimit: limits.maxCreationSessions,
+      currentPlan,
+      isSuperadmin: await resolveIsSuperadmin(c.env, c.get('userId') as string),
+    });
   }
 
   async function pruneHistory(sessionId: string, tenantId: number) {
@@ -399,6 +510,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         id: creationSessions.id,
         title: creationSessions.title,
         description: creationSessions.description,
+        folder: creationSessions.folder,
         status: creationSessions.status,
         preview: creationSessions.preview,
         revision: creationSessions.canvasRevision,
@@ -407,8 +519,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         role: creationSessionMembers.role,
         pinned: creationSessionMembers.pinned,
         unread: sql<boolean>`${creationSessionMembers.lastSeenRevision} < ${creationSessions.canvasRevision}`,
-        collaboratorCount: sql<number>`(SELECT COUNT(*)::int FROM creation_session_members member_count WHERE member_count.session_id = ${creationSessions.id})`,
-        projectIds: sql<number[]>`COALESCE((SELECT array_agg(project_id ORDER BY project_id) FROM creation_session_project_links project_link WHERE project_link.session_id = ${creationSessions.id}), ARRAY[]::integer[])`,
+        collaboratorCount: sql<number>`(SELECT COUNT(*)::int FROM creation_session_members member_count WHERE member_count.session_id = ${creationSessions}.id)`,
+        projectIds: sql<number[]>`COALESCE((SELECT array_agg(project_id ORDER BY project_id) FROM creation_session_project_links project_link WHERE project_link.session_id = ${creationSessions}.id), ARRAY[]::integer[])`,
       })
       .from(creationSessions)
       .innerJoin(creationSessionMembers, and(
@@ -432,10 +544,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       countRows('creation_sessions', sql`tenant_id = ${tenantId} AND status <> 'deleted'`),
       countRows('creation_session_templates', sql`tenant_id = ${tenantId} AND segment_id = ${segmentId}`),
     ]);
+    const isSuperadmin = await resolveIsSuperadmin(c.env, c.get('userId') as string);
     return c.json({
       usage: { sessions, templates },
       limits: {
-        sessions: limits.maxCreationSessions,
+        sessions: isSuperadmin ? -1 : limits.maxCreationSessions,
         collaboratorsPerSession: limits.maxCreationSessionCollaborators,
         templates: limits.maxCreationSessionTemplates,
         historyPerSession: limits.maxCreationSessionHistory,
@@ -466,6 +579,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       id: creationSessions.id,
       title: creationSessions.title,
       description: creationSessions.description,
+      folder: creationSessions.folder,
       status: creationSessions.status,
       preview: creationSessions.preview,
       revision: creationSessions.canvasRevision,
@@ -493,15 +607,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
           ilike(creationSessions.title, pattern),
           ilike(creationSessions.description, pattern),
           ilike(creationSessions.status, pattern),
-          sql`EXISTS (SELECT 1 FROM creation_session_objects searchable WHERE searchable.session_id = ${creationSessions.id} AND searchable.search_text ILIKE ${pattern} ESCAPE '\\')`,
-          sql`EXISTS (SELECT 1 FROM creation_session_project_links searchable_project JOIN projects searchable_project_record ON searchable_project_record.id = searchable_project.project_id WHERE searchable_project.session_id = ${creationSessions.id} AND (searchable_project.project_id::text ILIKE ${pattern} ESCAPE '\\' OR searchable_project_record.name ILIKE ${pattern} ESCAPE '\\'))`,
-          sql`EXISTS (SELECT 1 FROM creation_session_members searchable_member JOIN users searchable_user ON searchable_user.id = searchable_member.user_id WHERE searchable_member.session_id = ${creationSessions.id} AND searchable_user.display_name ILIKE ${pattern} ESCAPE '\\')`,
+          sql`EXISTS (SELECT 1 FROM creation_session_objects searchable WHERE searchable.session_id = ${creationSessions}.id AND searchable.search_text ILIKE ${pattern} ESCAPE '\\')`,
+          sql`EXISTS (SELECT 1 FROM creation_session_project_links searchable_project JOIN projects searchable_project_record ON searchable_project_record.id = searchable_project.project_id WHERE searchable_project.session_id = ${creationSessions}.id AND (searchable_project.project_id::text ILIKE ${pattern} ESCAPE '\\' OR searchable_project_record.name ILIKE ${pattern} ESCAPE '\\'))`,
+          sql`EXISTS (SELECT 1 FROM creation_session_members searchable_member JOIN users searchable_user ON searchable_user.id = searchable_member.user_id WHERE searchable_member.session_id = ${creationSessions}.id AND searchable_user.display_name ILIKE ${pattern} ESCAPE '\\')`,
         ),
-        kind ? sql`EXISTS (SELECT 1 FROM creation_session_objects kind_filter WHERE kind_filter.session_id = ${creationSessions.id} AND kind_filter.kind = ${kind})` : undefined,
-        Number.isInteger(projectId) && projectId > 0 ? sql`EXISTS (SELECT 1 FROM creation_session_project_links project_filter WHERE project_filter.session_id = ${creationSessions.id} AND project_filter.project_id = ${projectId})` : undefined,
-        collaborator ? sql`EXISTS (SELECT 1 FROM creation_session_members collaborator_filter JOIN users collaborator_user ON collaborator_user.id = collaborator_filter.user_id WHERE collaborator_filter.session_id = ${creationSessions.id} AND collaborator_user.display_name ILIKE ${`%${collaborator}%`})` : undefined,
+        kind ? sql`EXISTS (SELECT 1 FROM creation_session_objects kind_filter WHERE kind_filter.session_id = ${creationSessions}.id AND kind_filter.kind = ${kind})` : undefined,
+        Number.isInteger(projectId) && projectId > 0 ? sql`EXISTS (SELECT 1 FROM creation_session_project_links project_filter WHERE project_filter.session_id = ${creationSessions}.id AND project_filter.project_id = ${projectId})` : undefined,
+        collaborator ? sql`EXISTS (SELECT 1 FROM creation_session_members collaborator_filter JOIN users collaborator_user ON collaborator_user.id = collaborator_filter.user_id WHERE collaborator_filter.session_id = ${creationSessions}.id AND collaborator_user.display_name ILIKE ${`%${collaborator}%`})` : undefined,
         pinned === 'true' ? eq(creationSessionMembers.pinned, true) : pinned === 'false' ? eq(creationSessionMembers.pinned, false) : undefined,
-        shared === 'true' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions.id}) > 1` : shared === 'false' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions.id}) = 1` : undefined,
+        shared === 'true' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions}.id) > 1` : shared === 'false' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions}.id) = 1` : undefined,
         fromDate ? gte(creationSessions.lastActivityAt, fromDate) : undefined,
         toDate ? sql`${creationSessions.lastActivityAt} <= ${toDate}` : undefined,
       ))
@@ -609,14 +723,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!/^local-[0-9a-f-]{36}$/i.test(clientSessionId)) return c.json({ error: 'A valid local Session id is required' }, 400);
     const [prior] = await db.select({ sessionId: creationSessionClaims.serverSessionId }).from(creationSessionClaims).where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, clientSessionId))).limit(1);
     if (prior) return c.json({ session: { id: prior.sessionId, claimed: true, replayed: true } });
-    const objects = Array.isArray(body.objects) ? body.objects : [];
-    const connections = Array.isArray(body.connections) ? body.connections : [];
-    const graphError = validCreationGraph(objects, connections);
+    const localObjects = Array.isArray(body.objects) ? body.objects : [];
+    const localConnections = Array.isArray(body.connections) ? body.connections : [];
+    const graphError = validCreationGraph(localObjects, localConnections);
     if (graphError) return c.json({ error: graphError }, 400);
-    const resourceError = await validateResourceAccess(objects, tenantId, segmentId, userId);
+    const resourceError = await validateResourceAccess(localObjects, tenantId, segmentId, userId);
     if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED' }, 403);
-    const quota = await sessionQuota(tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, tenantId);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
+    const { objects, connections } = durableCreationGraph(localObjects, localConnections);
     const sessionId = crypto.randomUUID();
     const title = cleanTitle(body.title, 'Untitled session');
     const statements: unknown[] = [
@@ -639,9 +754,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       const text = typeof message.body === 'string' ? message.body.trim().slice(0, 50_000) : '';
       if (!text) return [];
       const messageRole = message.role === 'assistant' || message.role === 'system' ? message.role : 'user';
-      return [{ sessionId, clientMessageId: String(message.clientMessageId || crypto.randomUUID()).slice(0, 128), messageRole, body: text, createdBy: userId }];
+      const rawMeta = message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata) ? message.metadata as Record<string, unknown> : {};
+      const author = rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? rawMeta.authoredBy as Record<string, unknown> : null;
+      const metadata = author ? { authoredBy: {
+        kind: author.kind === 'agent' ? 'agent' : 'brain',
+        ref: String(author.ref || '').slice(0, 128),
+        name: String(author.name || '').slice(0, 160),
+      } } : {};
+      return [{ sessionId, clientMessageId: String(message.clientMessageId || crypto.randomUUID()).slice(0, 128), messageRole, body: text, metadata, createdBy: userId }];
     }) : [];
-    if (!claimedTimeline.length && typeof body.initialPrompt === 'string' && body.initialPrompt.trim()) claimedTimeline.push({ sessionId, clientMessageId: `claim:${clientSessionId}`, messageRole: 'user', body: body.initialPrompt.trim().slice(0, 50_000), createdBy: userId });
+    if (!claimedTimeline.length && typeof body.initialPrompt === 'string' && body.initialPrompt.trim()) claimedTimeline.push({ sessionId, clientMessageId: `claim:${clientSessionId}`, messageRole: 'user', body: body.initialPrompt.trim().slice(0, 50_000), metadata: {}, createdBy: userId });
     if (claimedTimeline.length) statements.push(db.insert(creationSessionTimeline).values(claimedTimeline));
     try {
       await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
@@ -665,8 +787,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         .where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, requestClaimId))).limit(1);
       if (prior) return c.json({ session: prior, replayed: true });
     }
-    const quota = await sessionQuota(tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, tenantId);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const sessionId = crypto.randomUUID();
     const projectIds = [...new Set((body.projectIds ?? []).filter((id) => Number.isInteger(id) && id > 0))].slice(0, 20);
     const validProjects = projectIds.length
@@ -755,6 +877,149 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     ]);
     const currentMember = members.find((member) => member.userId === c.get('userId'));
     return c.json({ session: access.session, role: access.role, currentUserId: c.get('userId'), objects: graph.objects, connections: graph.connections, projectIds: projectLinks.map((p) => p.projectId), members, personalViewport: currentMember?.viewport ?? access.session.viewport });
+  });
+
+  router.post('/:id/outcomes', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const body = await c.req.json<OutcomeBody>().catch(() => ({} as OutcomeBody));
+    const correlationId = typeof body.correlationId === 'string' ? body.correlationId.trim().slice(0, 128) : '';
+    const action = typeof body.action === 'string' ? body.action.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 64) : '';
+    const phases = new Set(['started', 'succeeded', 'failed', 'validated', 'reused']);
+    if (!correlationId || !action || !body.phase || !phases.has(body.phase)) return c.json({ error: 'correlationId, action, and a valid phase are required' }, 400);
+    if (action !== 'session.open' && ROLE_RANK[access.role as SessionRole] < ROLE_RANK.editor) return c.json({ error: 'Session role cannot record this outcome' }, 403);
+    const actorType = action === 'session.open' ? 'user' : body.actorType === 'agent' || body.actorType === 'brain' || body.actorType === 'system' ? body.actorType : 'user';
+    const projectId = Number.isInteger(body.projectId) && Number(body.projectId) > 0 ? Number(body.projectId) : null;
+    if (projectId != null) {
+      const [linked] = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(
+        eq(creationSessionProjectLinks.sessionId, access.session.id), eq(creationSessionProjectLinks.projectId, projectId),
+      )).limit(1);
+      if (!linked) return c.json({ error: 'Project is not linked to this session' }, 400);
+    }
+    const rawMetadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {};
+    let metadata: unknown = rawMetadata;
+    try { if (JSON.stringify(rawMetadata).length > 4_000) metadata = { truncated: true }; } catch { metadata = {}; }
+    const [event] = await db.insert(creationOutcomeEvents).values({
+      correlationId,
+      sessionId: access.session.id,
+      tenantId: access.session.tenantId,
+      projectId,
+      actorType,
+      actorRef: actorType === 'user' ? c.get('userId') as string : typeof body.actorRef === 'string' ? body.actorRef.slice(0, 128) : actorType,
+      action,
+      phase: body.phase,
+      metricKey: typeof body.metricKey === 'string' ? body.metricKey.slice(0, 80) : null,
+      metricValue: Number.isFinite(body.metricValue) ? Number(body.metricValue) : null,
+      unit: typeof body.unit === 'string' ? body.unit.slice(0, 24) : null,
+      artifactId: typeof body.artifactId === 'string' ? body.artifactId.slice(0, 128) : null,
+      durationMs: Number.isFinite(body.durationMs) ? Math.max(0, Math.round(Number(body.durationMs))) : null,
+      costUsdMillicents: Number.isFinite(body.costUsdMillicents) ? Math.max(0, Math.round(Number(body.costUsdMillicents))) : null,
+      metadata,
+    }).onConflictDoNothing().returning({ id: creationOutcomeEvents.id });
+    return c.json({ recorded: !!event, duplicate: !event }, event ? 201 : 200);
+  });
+
+  router.get('/:id/outcome-metrics', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const result = await db.execute(sql`
+      WITH scoped AS (
+        SELECT id, created_at
+        FROM creation_sessions
+        WHERE tenant_id = ${access.session.tenantId} AND status <> 'deleted'
+        ORDER BY last_activity_at DESC
+        LIMIT 500
+      ), facts AS (
+        SELECT s.id,
+          EXTRACT(EPOCH FROM (
+            (SELECT MIN(o.created_at) FROM creation_session_objects o WHERE o.session_id = s.id AND o.kind <> 'chat') -
+            COALESCE((SELECT MIN(t.created_at) FROM creation_session_timeline t WHERE t.session_id = s.id AND t.message_role = 'user'), s.created_at)
+          )) AS time_to_artifact_seconds,
+          (SELECT COUNT(*) FROM creation_session_objects o WHERE o.session_id = s.id AND o.kind <> 'chat') AS artifact_count,
+          (SELECT COUNT(*) FROM creation_session_members m WHERE m.session_id = s.id) AS member_count,
+          (SELECT COUNT(DISTINCT t.metadata #>> '{authoredBy,ref}') FROM creation_session_timeline t WHERE t.session_id = s.id AND t.metadata #>> '{authoredBy,kind}' = 'agent') AS agent_participants,
+          EXISTS (
+            SELECT 1 FROM creation_session_timeline brain_event
+            WHERE brain_event.session_id = s.id AND brain_event.metadata #>> '{authoredBy,kind}' = 'brain'
+              AND brain_event.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
+          ) AS synthesized,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'started') AS delivery_attempts,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded') AS delivery_successes,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'failed') AS delivery_failures,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'delivery.retry' AND e.phase = 'succeeded') AS delivery_retries,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'validated') AS validations,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'validated' AND COALESCE(e.metric_value, 1) > 0) AS validation_passes,
+          EXISTS (SELECT 1 FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'session.open' AND e.phase = 'succeeded' AND e.occurred_at > s.created_at + interval '1 hour' AND e.occurred_at <= s.created_at + interval '7 days') AS resumed_7d,
+          EXISTS (SELECT 1 FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'session.open' AND e.phase = 'succeeded' AND e.occurred_at > s.created_at + interval '1 hour' AND e.occurred_at <= s.created_at + interval '30 days') AS resumed_30d,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'reused') AS reused_outputs,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.actor_type = 'user' AND e.action IN ('agent.approve','artifact.revise','delivery.retry') AND e.phase = 'succeeded') AS human_interventions,
+          (SELECT SUM(e.cost_usd_millicents) FROM creation_outcome_events e WHERE e.session_id = s.id) AS cost_millicents,
+          (SELECT AVG(e.duration_ms) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded' AND e.duration_ms IS NOT NULL) AS avg_latency_ms,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase <> 'started') AS terminal_events,
+          (SELECT COUNT(*) FROM creation_outcome_events terminal WHERE terminal.session_id = s.id AND terminal.phase <> 'started' AND EXISTS (
+            SELECT 1 FROM creation_outcome_events started WHERE started.session_id = terminal.session_id AND started.correlation_id = terminal.correlation_id AND started.action = terminal.action AND started.phase = 'started'
+          )) AS correlated_events
+        FROM scoped s
+      ) SELECT * FROM facts
+    `);
+    type Fact = Record<string, unknown> & { id: string };
+    const facts = result.rows as unknown as Fact[];
+    const current = facts.find((fact) => fact.id === access.session.id);
+    if (!current) return c.json({ error: 'Session metrics unavailable' }, 404);
+    const peers = facts.filter((fact) => fact.id !== access.session.id);
+    const num = (value: unknown): number => Number(value ?? 0);
+    const nullableNum = (value: unknown): number | null => value == null ? null : Number(value);
+    const rate = (part: number, total: number): number | null => total > 0 ? part / total : null;
+    const mean = (values: Array<number | null>): number | null => {
+      const available = values.filter((value): value is number => value != null && Number.isFinite(value));
+      return available.length ? available.reduce((sum, value) => sum + value, 0) / available.length : null;
+    };
+    const bool = (value: unknown): number => value === true || value === 'true' ? 1 : 0;
+    const valueFor = (fact: Fact, key: string): number | null => {
+      const attempts = num(fact.delivery_attempts);
+      const successes = num(fact.delivery_successes);
+      switch (key) {
+        case 'time_to_artifact': return nullableNum(fact.time_to_artifact_seconds);
+        case 'deliverable_rate': return successes > 0 ? 1 : 0;
+        case 'collaboration_rate': return num(fact.member_count) > 1 || num(fact.agent_participants) > 0 ? 1 : 0;
+        case 'agent_participation': return num(fact.agent_participants);
+        case 'synthesis_rate': return num(fact.agent_participants) > 0 ? bool(fact.synthesized) : null;
+        case 'validation_rate': return rate(num(fact.validation_passes), num(fact.validations));
+        case 'delivery_success_rate': return rate(successes, attempts);
+        case 'delivery_retry_rate': return attempts > 0 && nullableNum(fact.delivery_retries) != null ? num(fact.delivery_retries) / attempts : null;
+        case 'resumed_7d': return bool(fact.resumed_7d);
+        case 'resumed_30d': return bool(fact.resumed_30d);
+        case 'output_reuse': return num(fact.reused_outputs);
+        case 'human_intervention': return successes > 0 ? num(fact.human_interventions) / successes : null;
+        case 'cost_per_delivery': return successes > 0 && nullableNum(fact.cost_millicents) != null ? num(fact.cost_millicents) / 100000 / successes : null;
+        case 'latency_per_outcome': return nullableNum(fact.avg_latency_ms) == null ? null : num(fact.avg_latency_ms) / 1000;
+        case 'correlation_coverage': return rate(num(fact.correlated_events), num(fact.terminal_events));
+        default: return null;
+      }
+    };
+    const definitions = [
+      ['time_to_artifact', 'Time to first artifact', 'seconds', 'lower'],
+      ['deliverable_rate', 'Reached a real deliverable', 'percent', 'higher'],
+      ['collaboration_rate', 'Invited a human or agent', 'percent', 'higher'],
+      ['agent_participation', 'Agent group-chat participation', 'agents', 'higher'],
+      ['synthesis_rate', 'Successful agent synthesis', 'percent', 'higher'],
+      ['validation_rate', 'Artifact validation pass rate', 'percent', 'higher'],
+      ['delivery_success_rate', 'Delivery success rate', 'percent', 'higher'],
+      ['delivery_retry_rate', 'Delivery retry rate', 'percent', 'lower'],
+      ['resumed_7d', 'Resumed within 7 days', 'percent', 'higher'],
+      ['resumed_30d', 'Resumed within 30 days', 'percent', 'higher'],
+      ['output_reuse', 'Outputs reused as inputs', 'count', 'higher'],
+      ['human_intervention', 'Human interventions per delivery', 'count', 'lower'],
+      ['cost_per_delivery', 'Cost per delivered outcome', 'usd', 'lower'],
+      ['latency_per_outcome', 'Latency per successful outcome', 'seconds', 'lower'],
+      ['correlation_coverage', 'Actions with correlated outcomes', 'percent', 'higher'],
+    ] as const;
+    return c.json({
+      sessionId: access.session.id,
+      scope: 'tenant',
+      sampleSize: peers.length,
+      metrics: definitions.map(([key, label, unit, direction]) => ({ key, label, unit, direction, current: valueFor(current, key), baseline: mean(peers.map((fact) => valueFor(fact, key))) })),
+    });
   });
 
   router.get('/:id/events', async (c) => {
@@ -857,7 +1122,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       eq(creationSessionTimeline.sessionId, access.session.id),
       after ? gt(creationSessionTimeline.id, after) : undefined,
     )).orderBy(asc(creationSessionTimeline.id)).limit(limit);
-    return c.json({ messages, lastId: messages.at(-1)?.id ?? after, hasMore: messages.length === limit });
+    const humanIds = [...new Set(messages.filter((message) => message.messageRole === 'user' && message.createdBy).map((message) => message.createdBy!))];
+    const humanRows = humanIds.length ? await db.select({ id: users.id, name: users.displayName }).from(users).where(inArray(users.id, humanIds)) : [];
+    const humanNames = new Map(humanRows.map((human) => [human.id, human.name || 'Collaborator']));
+    const attributed = messages.map((message) => {
+      const raw = message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata) ? message.metadata as Record<string, unknown> : {};
+      return message.messageRole === 'user' && message.createdBy && !raw.authoredBy
+        ? { ...message, metadata: { ...raw, authoredBy: { kind: 'human', ref: message.createdBy, name: humanNames.get(message.createdBy) || 'Collaborator' } } }
+        : message;
+    });
+    return c.json({ messages: attributed, lastId: messages.at(-1)?.id ?? after, hasMore: messages.length === limit });
   });
 
   router.post('/:id/timeline', async (c) => {
@@ -869,14 +1143,23 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const body = typeof input.body === 'string' ? input.body.trim().slice(0, 50_000) : '';
     if (!clientMessageId || !body) return c.json({ error: 'clientMessageId and body are required' }, 400);
     const rawMeta = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {};
+    const userId = c.get('userId') as string;
+    const [human] = role === 'user' ? await db.select({ name: users.displayName }).from(users).where(eq(users.id, userId)).limit(1) : [];
     const metadata = {
       ...(typeof rawMeta.scope === 'string' ? { scope: rawMeta.scope.slice(0, 32) } : {}),
       ...(Array.isArray(rawMeta.objectIds) ? { objectIds: rawMeta.objectIds.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) } : {}),
       ...(typeof rawMeta.model === 'string' ? { model: rawMeta.model.slice(0, 120) } : {}),
       ...(typeof rawMeta.error === 'boolean' ? { error: rawMeta.error } : {}),
+      ...(role === 'user' ? { authoredBy: { kind: 'human', ref: userId, name: human?.name || 'Collaborator' } } : rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? {
+        authoredBy: {
+          kind: (rawMeta.authoredBy as Record<string, unknown>).kind === 'agent' ? 'agent' : 'brain',
+          ref: String((rawMeta.authoredBy as Record<string, unknown>).ref || '').slice(0, 128),
+          name: String((rawMeta.authoredBy as Record<string, unknown>).name || '').slice(0, 160),
+        },
+      } : {}),
     };
     const [inserted] = await db.insert(creationSessionTimeline).values({
-      sessionId: access.session.id, clientMessageId, messageRole: role, body, metadata, createdBy: c.get('userId') as string,
+      sessionId: access.session.id, clientMessageId, messageRole: role, body, metadata, createdBy: userId,
     }).onConflictDoNothing({ target: [creationSessionTimeline.sessionId, creationSessionTimeline.clientMessageId] }).returning();
     const message = inserted ?? (await db.select().from(creationSessionTimeline).where(and(
       eq(creationSessionTimeline.sessionId, access.session.id), eq(creationSessionTimeline.clientMessageId, clientMessageId),
@@ -986,11 +1269,17 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const patch: Partial<typeof creationSessions.$inferInsert> = { updatedBy: c.get('userId') as string, updatedAt: new Date(), lastActivityAt: new Date() };
     if (body.title !== undefined) patch.title = cleanTitle(body.title);
     if (body.description !== undefined) patch.description = body.description == null ? null : String(body.description).slice(0, 2_000);
+    if (body.folder !== undefined) patch.folder = body.folder == null || !String(body.folder).trim() ? null : String(body.folder).trim().slice(0, 120);
     if (body.status === 'active' || body.status === 'archived') {
       patch.status = body.status;
       patch.archivedAt = body.status === 'archived' ? new Date() : null;
     }
     if (body.preview !== undefined) patch.preview = body.preview;
+    // Conversation (`chat`) vs execution (`work`) — migration 0409, same vocabulary as
+    // `brain_chats.mode`. An unrecognised value leaves the column untouched rather than
+    // silently demoting a session that is mid-execution.
+    const nextMode = normalizeChatMode(body.mode);
+    if (nextMode) patch.mode = nextMode;
     const [updated] = await db.update(creationSessions).set(patch).where(and(
       eq(creationSessions.id, access.session.id),
       eq(creationSessions.tenantId, access.session.tenantId),
@@ -1151,8 +1440,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found' }, 404);
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const quota = await sessionQuota(tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, tenantId);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const [objects, connections, timeline] = await Promise.all([
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
@@ -1171,7 +1460,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       connections: copiedConnections.map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata })),
     };
     const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: cleanTitle(`Copy of ${access.session.title}`), description: access.session.description, preview: buildPreview(graph.objects), createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: cleanTitle(`Copy of ${access.session.title}`), description: access.session.description, folder: access.session.folder, preview: buildPreview(graph.objects), createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.duplicated', payload: { sourceSessionId: access.session.id } }),
       db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),
@@ -1185,11 +1474,72 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ session: { id: sessionId, title: cleanTitle(`Copy of ${access.session.title}`), revision: 1 } }, 201);
   });
 
+  router.post('/:id/merge', async (c) => {
+    const targetAccess = await requireSession(c, 'editor');
+    if (!targetAccess) return c.json({ error: 'Target session not found or not editable' }, 404);
+    const body = await c.req.json<MergeBody>().catch(() => ({} as MergeBody));
+    const sourceId = body.sourceSessionId ?? '';
+    if (!UUID_RE.test(sourceId) || sourceId === targetAccess.session.id) return c.json({ error: 'A different source session is required' }, 400);
+    const userId = c.get('userId') as string;
+    const sourceAccess = await membership(sourceId, targetAccess.session.tenantId, userId);
+    if (!sourceAccess || ROLE_RANK[sourceAccess.role as SessionRole] < ROLE_RANK.editor || sourceAccess.session.segmentId !== targetAccess.session.segmentId) {
+      return c.json({ error: 'Source session not found or not editable' }, 404);
+    }
+    if (sourceAccess.session.status !== 'active') return c.json({ error: 'Only an active session can be merged' }, 409);
+
+    const [targetObjects, targetConnections, sourceObjects, sourceConnections, sourceTimeline, targetProjectLinks, sourceProjectLinks] = await Promise.all([
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, targetAccess.session.id)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, targetAccess.session.id)),
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, sourceId)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, sourceId)),
+      db.select().from(creationSessionTimeline).where(eq(creationSessionTimeline.sessionId, sourceId)).orderBy(asc(creationSessionTimeline.id)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, targetAccess.session.id)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, sourceId)),
+    ]);
+    const targetResources = new Set(targetObjects.flatMap((object) => object.resourceType && object.resourceId ? [`${object.resourceType}:${object.resourceId}`] : []));
+    const acceptedSourceObjects = sourceObjects.filter((object) => !object.resourceType || !object.resourceId || !targetResources.has(`${object.resourceType}:${object.resourceId}`));
+    const idMap = new Map(acceptedSourceObjects.map((object) => [object.id, crypto.randomUUID()]));
+    const copiedObjects = acceptedSourceObjects.map((object) => {
+      const canvasData = object.canvasData && typeof object.canvasData === 'object' && !Array.isArray(object.canvasData)
+        ? { ...(object.canvasData as Record<string, unknown>), x: Number((object.canvasData as Record<string, unknown>).x ?? 0) + 120, y: Number((object.canvasData as Record<string, unknown>).y ?? 0) + 120 }
+        : { x: 120, y: 120 };
+      return { id: idMap.get(object.id)!, sessionId: targetAccess.session.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId, resourceRevision: object.resourceRevision, canvasData, content: object.content, searchText: object.searchText, createdBy: userId, updatedBy: userId };
+    });
+    const copiedConnections = sourceConnections.flatMap((edge) => {
+      const sourceObjectId = idMap.get(edge.sourceObjectId);
+      const targetObjectId = idMap.get(edge.targetObjectId);
+      return sourceObjectId && targetObjectId ? [{ id: crypto.randomUUID(), sessionId: targetAccess.session.id, sourceObjectId, targetObjectId, kind: edge.kind, label: edge.label, metadata: edge.metadata, createdBy: userId }] : [];
+    });
+    const graphObjects = [...targetObjects, ...copiedObjects].map(({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content }) => ({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content }));
+    const graphConnections = [...targetConnections, ...copiedConnections].map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata }));
+    const graphError = validCreationGraph(graphObjects, graphConnections);
+    if (graphError) return c.json({ error: graphError }, 400);
+
+    const revision = targetAccess.session.canvasRevision + 1;
+    const now = new Date();
+    const graph = { objects: graphObjects, connections: graphConnections };
+    const targetProjects = new Set(targetProjectLinks.map(({ projectId }) => projectId));
+    const newProjectLinks = sourceProjectLinks.filter(({ projectId }) => !targetProjects.has(projectId));
+    const statements: unknown[] = [
+      db.update(creationSessions).set({ canvasRevision: revision, preview: buildPreview(graphObjects), updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(scopedToTenant(creationSessions, targetAccess.session.tenantId, eq(creationSessions.id, targetAccess.session.id))),
+      db.update(creationSessions).set({ status: 'archived', archivedAt: now, updatedBy: userId, updatedAt: now, lastActivityAt: now }).where(scopedToTenant(creationSessions, targetAccess.session.tenantId, eq(creationSessions.id, sourceId))),
+      db.insert(creationSessionEvents).values({ sessionId: targetAccess.session.id, revision, actorType: 'user', actorRef: userId, eventType: 'session.merged', payload: { sourceSessionId: sourceId, importedObjects: copiedObjects.length } }),
+      db.insert(creationSessionSnapshots).values({ sessionId: targetAccess.session.id, revision, graph, viewport: targetAccess.session.viewport, createdBy: userId }),
+    ];
+    if (copiedObjects.length) statements.push(db.insert(creationSessionObjects).values(copiedObjects));
+    if (copiedConnections.length) statements.push(db.insert(creationSessionConnections).values(copiedConnections));
+    if (sourceTimeline.length) statements.push(db.insert(creationSessionTimeline).values(sourceTimeline.map((message) => ({ sessionId: targetAccess.session.id, clientMessageId: `merge:${crypto.randomUUID()}`, messageRole: message.messageRole, body: message.body, metadata: message.metadata, createdBy: message.createdBy }))));
+    if (newProjectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(newProjectLinks.map(({ projectId }) => ({ sessionId: targetAccess.session.id, projectId, addedBy: userId }))));
+    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    await pruneHistory(targetAccess.session.id, targetAccess.session.tenantId);
+    return c.json({ session: { id: targetAccess.session.id, title: targetAccess.session.title, revision }, mergedSessionId: sourceId });
+  });
+
   router.post('/:id/branches', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const quota = await sessionQuota(access.session.tenantId);
-    if (!quota.allowed) return c.json({ error: 'Creation Session limit reached', code: 'CREATION_SESSION_QUOTA', usage: quota.used, limit: quota.limit }, 403);
+    const quota = await sessionQuota(c, access.session.tenantId);
+    if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
     const body = await c.req.json<BranchBody>().catch(() => ({} as BranchBody));
     const userId = c.get('userId') as string;
     const [objects, connections, projectLinks, timeline] = await Promise.all([
@@ -1213,7 +1563,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     };
     const title = cleanTitle(body.title, `${access.session.title} branch`);
     const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId: access.session.tenantId, segmentId: access.session.segmentId, title, description: access.session.description, preview: buildPreview(graph.objects), branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessions).values({ id: sessionId, tenantId: access.session.tenantId, segmentId: access.session.segmentId, title, description: access.session.description, folder: access.session.folder, preview: buildPreview(graph.objects), branchParentSessionId: access.session.id, branchBaseRevision: access.session.canvasRevision, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.branched', payload: { parentSessionId: access.session.id, baseRevision: access.session.canvasRevision } }),
       db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),
@@ -1524,46 +1874,38 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-    const [invitation] = await db.select().from(creationSessionInvites).where(and(
-      eq(creationSessionInvites.tokenHash, tokenHash),
-      eq(creationSessionInvites.tenantId, tenantId),
-    )).limit(1);
-    if (!invitation || invitation.revokedAt || invitation.acceptedAt || invitation.expiresAt.getTime() <= Date.now()) {
+    // `findByTokenHash` returns only rows that are still pending — accepted,
+    // revoked and expired are filtered by the service's one `isPending()` — so the
+    // route no longer re-derives "still usable" from four nullable columns.
+    const invitation = await findByTokenHash(db, tokenHash);
+    if (!invitation || invitation.tenantId !== tenantId || invitation.kind !== 'session') {
       return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     }
-    if (!user?.email || user.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
+    if (!user?.email || !invitation.email || user.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
       return c.json({ error: 'Sign in with the email address that received this invitation' }, 403);
     }
     const role = cleanRole(invitation.role);
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
+    // The invitation points at the session through the object registry, so the
+    // session id is the registry entry's `refId` rather than a column here.
+    const target = invitation.objectId ? await getObject(db, c.env, tenantId, invitation.objectId) : null;
+    if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    const sessionId = target.refId;
     await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId: invitation.sessionId, userId, role, invitedBy: invitation.createdBy })
+      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
         .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
-      db.update(creationSessionInvites).set({ acceptedBy: userId, acceptedAt: new Date() }).where(and(
-        eq(creationSessionInvites.id, invitation.id),
-        eq(creationSessionInvites.tenantId, tenantId),
-        isNull(creationSessionInvites.acceptedAt),
-        isNull(creationSessionInvites.revokedAt),
-      )),
+      acceptInvitationStatement(db, { tenantId, id: invitation.id, inviteeRef: userId }),
     ]);
-    return c.json({ sessionId: invitation.sessionId, role });
+    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
+    await invalidateInvitations(c.env, tenantId);
+    return c.json({ sessionId, role });
   });
 
   router.get('/:id/invitations', async (c) => {
     const access = await requireSession(c, 'owner');
     if (!access) return c.json({ error: 'Session not found or invitations are not visible' }, 404);
-    const invitations = await db.select({
-      id: creationSessionInvites.id,
-      email: creationSessionInvites.email,
-      role: creationSessionInvites.role,
-      expiresAt: creationSessionInvites.expiresAt,
-      acceptedAt: creationSessionInvites.acceptedAt,
-      revokedAt: creationSessionInvites.revokedAt,
-      createdAt: creationSessionInvites.createdAt,
-    }).from(creationSessionInvites).where(and(
-      eq(creationSessionInvites.sessionId, access.session.id),
-      eq(creationSessionInvites.tenantId, access.session.tenantId),
-    )).orderBy(desc(creationSessionInvites.createdAt)).limit(100);
+    const object = await findSessionObject(db, access.session);
+    const invitations = object ? await listForObject(db, access.session.tenantId, object.id) : [];
     return c.json({ invitations });
   });
 
@@ -1572,13 +1914,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found or invitations are not editable' }, 404);
     const invitationId = c.req.param('invitationId');
     if (!UUID_RE.test(invitationId)) return c.json({ error: 'Invalid invitation id' }, 400);
-    const [revoked] = await db.update(creationSessionInvites).set({ revokedAt: new Date() }).where(and(
-      eq(creationSessionInvites.id, invitationId),
-      eq(creationSessionInvites.sessionId, access.session.id),
-      eq(creationSessionInvites.tenantId, access.session.tenantId),
-      isNull(creationSessionInvites.acceptedAt),
-      isNull(creationSessionInvites.revokedAt),
-    )).returning({ id: creationSessionInvites.id });
+    // Scoped to this session's object before revoking, so an owner of one session
+    // cannot revoke an invitation belonging to another.
+    const object = await findSessionObject(db, access.session);
+    const onThisSession = object
+      && (await listForObject(db, access.session.tenantId, object.id)).some((row) => row.id === invitationId);
+    const revoked = onThisSession
+      && (await revokeInvitation(db, c.env, { tenantId: access.session.tenantId, id: invitationId }));
     if (!revoked) return c.json({ error: 'Pending invitation not found' }, 404);
     return c.body(null, 204);
   });
@@ -1640,23 +1982,26 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       const tokenHash = await sha256Hex(rawToken);
       const expiresInHours = Math.min(24 * 30, Math.max(1, Math.floor(Number(body.expiresInHours) || 24 * 7)));
       const expiresAt = new Date(Date.now() + expiresInHours * 3_600_000);
-      const [invitation] = await db.insert(creationSessionInvites).values({
-        sessionId: access.session.id,
+      const object = await ensureSessionObject(db, c.env, access.session);
+      const invitation = await inviteToObject(db, c.env, {
         tenantId,
+        kind: 'session',
+        objectId: object.id,
         email,
         role,
         tokenHash,
         expiresAt,
-        createdBy: c.get('userId') as string,
-      }).returning({ id: creationSessionInvites.id });
-      if (!invitation) return c.json({ error: 'Invitation could not be created' }, 500);
-      const [workspaceInvite] = await db.select({ id: tenantInvitations.id }).from(tenantInvitations).where(and(
-        eq(tenantInvitations.tenantId, tenantId),
-        eq(tenantInvitations.email, email),
-        eq(tenantInvitations.status, 'pending'),
-      )).limit(1);
-      if (!workspaceInvite) await db.insert(tenantInvitations).values({
-        tenantId, email, role: 'developer', status: 'pending', invitedByUserId: c.get('userId') as string,
+        invitedBy: c.get('userId') as string,
+      });
+      // A canvas invite to a stranger implies a workspace invite. No pre-check:
+      // `invite()` is idempotent on (tenant, kind, email) for a pending row, which
+      // is the select-then-insert race the service exists to remove.
+      await inviteToObject(db, c.env, {
+        tenantId,
+        kind: 'tenant',
+        email,
+        role: 'developer',
+        invitedBy: c.get('userId') as string,
       });
       const acceptPath = `/create/invitations/${rawToken}`;
       const [inviter] = await db.select({ name: users.displayName, email: users.email }).from(users)
@@ -1704,18 +2049,21 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     // Keep a durable invitation record even when the person already has an
     // account. acceptedAt distinguishes this immediate membership grant from a
     // pending cold-email invite while preserving the campaign/audit evidence.
-    const auditToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
-    await db.insert(creationSessionInvites).values({
-      sessionId: access.session.id,
+    const auditObject = await ensureSessionObject(db, c.env, access.session);
+    const auditRow = await inviteToObject(db, c.env, {
       tenantId,
-      email: target.email.trim().toLowerCase(),
+      kind: 'session',
+      objectId: auditObject.id,
+      email: target.email,
       role,
-      tokenHash: await sha256Hex(auditToken),
       expiresAt: new Date(Date.now() + 7 * 24 * 3_600_000),
-      acceptedBy: target.id,
-      acceptedAt: new Date(),
-      createdBy: c.get('userId') as string,
+      invitedBy: c.get('userId') as string,
     });
+    // Immediately accepted, which is what distinguishes this record from a pending
+    // cold-email invite. If the person already had a pending invite to this
+    // session, `invite()` returned that row and this resolves it rather than
+    // leaving it open beside a membership they now hold.
+    await acceptInvitation(db, c.env, { id: auditRow.id, tenantId, inviteeRef: target.id });
     await notifyAttention(c, access.session.id, {
       kind: existingMember ? 'creation.session.role_changed' : 'creation.session.invitation', title: existingMember ? `Your role changed in ${access.session.title}` : `You were invited to ${access.session.title}`,
       body: `Access role: ${role}`, directUserIds: [target.id],
@@ -1950,6 +2298,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     )).limit(1);
     if (!build) return c.json({ error: 'Build not found' }, 404);
 
+    const [storageProject] = await db.select({ publicId: projects.publicId })
+      .from(projects)
+      .where(and(eq(projects.id, build.storageProjectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (!storageProject) return c.json({ error: 'Build storage project not found' }, 404);
+
     const kind = creationKindForModality(build.modality);
     const sessionSegment = segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId);
     const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
@@ -1958,8 +2312,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .where(and(
         eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active'),
-        eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'project'),
-        eq(creationSessionObjects.resourceId, String(build.storageProjectId)),
+        eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'ideProject'),
+        eq(creationSessionObjects.resourceId, String(build.id)),
       )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);
     if (existing) return c.json({ ...existing, created: false });
 
@@ -1968,11 +2322,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const workflowObjectId = build.workflowDefinitionId ? crypto.randomUUID() : null;
     const objectContent = {
       kind, title: build.name, status: build.status, modality: build.modality,
-      resourceId: kind === 'evermind' ? `evermind:${build.storageProjectId}` : `project:${build.storageProjectId}`,
+      resourceId: `ideProject:${build.id}`,
       ideProjectId: build.id,
+      storageProjectId: build.storageProjectId,
+      storageProjectPublicId: storageProject.publicId,
+      containerProjectId: build.containerProjectId,
     };
     const graphObjects: GraphObjectInput[] = [{
-      id: objectId, kind, resourceType: 'project', resourceId: String(build.storageProjectId),
+      id: objectId, kind, resourceType: 'ideProject', resourceId: String(build.id),
       canvasData: { x: 160, y: 120, w: 520, h: 340 }, content: objectContent,
     }];
     const graphConnections: GraphConnectionInput[] = [];

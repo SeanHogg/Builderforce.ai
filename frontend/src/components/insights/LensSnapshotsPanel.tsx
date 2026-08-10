@@ -21,14 +21,14 @@ import {
 import { Select } from '@/components/Select';
 
 const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 const selectStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btn: React.CSSProperties = {
-  padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem',
 };
 
@@ -122,7 +122,7 @@ export function LensSnapshotsPanel() {
         </Select>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginBottom: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{error}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
@@ -131,11 +131,11 @@ export function LensSnapshotsPanel() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {snapshots.map((s) => (
-            <div key={s.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+            <div key={s.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 110 }}>{t(`lensNames.${s.lens}`)}</span>
                 <span style={{
-                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)',
                   background: 'var(--bg-surface, var(--bg-base))', color: 'var(--text-secondary)',
                 }}>{s.period}</span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{cadenceLabel(s.cadence)}</span>

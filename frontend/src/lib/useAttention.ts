@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeRunStore, getGlobalRunState, type GlobalRunState } from '@seanhogg/builderforce-brain-embedded';
 import { runtimeApi, type AttentionResponse, type AttentionState } from '@/lib/builderforceApi';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
+import { getStoredTenantToken } from '@/lib/auth';
 
 const EMPTY: AttentionResponse = { tasks: {}, chats: {}, chatUnread: {}, counts: { running: 0, awaiting: 0, unread: 0 }, manager: { lastRunAt: null, recentlyActive: false } };
 
@@ -71,6 +72,15 @@ export function useAttention(projectId?: number, enabled = true): AttentionRespo
   pidRef.current = projectId;
 
   const load = useCallback(async (): Promise<boolean> => {
+    // This endpoint is workspace-scoped. A person may be signed in with only a
+    // web token while onboarding / choosing a workspace; do not turn that valid
+    // intermediate state into an unauthenticated API request (and a global
+    // support-ticket error). Keeping this guard here protects every current and
+    // future attention consumer, even if its component-level gate is too broad.
+    if (!getStoredTenantToken()) {
+      setData(EMPTY);
+      return false;
+    }
     try {
       const res = await runtimeApi.attention(pidRef.current);
       setData(res);

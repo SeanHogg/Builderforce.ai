@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type SpineNode, type SpineResult } from '@/lib/builderforceApi';
@@ -177,24 +178,24 @@ export function PlanningSpineGantt() {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.8rem' }}>
         <strong style={{ color: 'var(--text-primary)' }}>{t('totalInvestment')}: {formatUsd(tot.totalUsd)}</strong>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <i style={{ width: 10, height: 10, borderRadius: 2, background: COST_CLASS_COLORS.capex, display: 'inline-block' }} />
+          <i style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: COST_CLASS_COLORS.capex, display: 'inline-block' }} />
           {t('capex')}: {formatUsd(tot.capexUsd)}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <i style={{ width: 10, height: 10, borderRadius: 2, background: COST_CLASS_COLORS.opex, display: 'inline-block' }} />
+          <i style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: COST_CLASS_COLORS.opex, display: 'inline-block' }} />
           {t('opex')}: {formatUsd(tot.opexUsd)}
         </span>
         {data.anomalyCount > 0 && (
-          <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>⚠ {t('anomalies', { count: data.anomalyCount })}</span>
+          <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}><Icon source="⚠" size="1em" /> {t('anomalies', { count: data.anomalyCount })}</span>
         )}
         <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>{t('estimateNote')}</span>
         <button type="button" onClick={exportCsv}
-          style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+          style={{ padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
           {t('exportCsv')}
         </button>
       </div>
 
-      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: NAME_COL + timelineWidth }}>
             {/* Axis header */}
@@ -268,8 +269,8 @@ export function PlanningSpineGantt() {
                       <span title={node.title} style={{ fontSize: '0.8rem', fontWeight: node.kind === 'task' ? 400 : 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {node.title}
                       </span>
-                      {node.anomaly && <span title={t('anomalyTip')} style={{ color: 'var(--coral-bright)', flexShrink: 0 }}>⚠</span>}
-                      {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: '#e0a93f', flexShrink: 0, fontSize: '0.7rem' }}>⚠</span>}
+                      {node.anomaly && <span title={t('anomalyTip')} style={{ color: 'var(--coral-bright)', flexShrink: 0 }}><Icon source="⚠" size="1em" /></span>}
+                      {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: 'var(--warning)', flexShrink: 0, fontSize: '0.7rem' }}><Icon source="⚠" size="1em" /></span>}
                       {node.cost.totalUsd > 0 && (
                         <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '0.7rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{formatUsd(node.cost.totalUsd)}</span>
                       )}
@@ -297,7 +298,7 @@ export function PlanningSpineGantt() {
                               ? `1px dashed ${cls ? barColor : 'var(--text-muted)'}`
                               : cls ? 'none' : '1px dashed var(--border-strong, var(--text-muted))',
                             opacity: node.kind === 'task' ? 0.75 : 0.92,
-                            borderRadius: milestone ? 3 : 5,
+                            borderRadius: 'var(--radius-sm)',
                             transform: milestone ? 'rotate(45deg)' : undefined,
                             zIndex: 2,
                           }}

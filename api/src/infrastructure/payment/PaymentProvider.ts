@@ -41,10 +41,24 @@ export interface CheckoutSessionOpts {
   billingEmail: string;
   /** Number of seats — only meaningful for Teams plan */
   seats?: number;
+  /** Server-resolved published price used when no pre-created provider Price ID exists. */
+  currency?: string;
+  unitAmountCents?: number;
+  productName?: string;
   /** Absolute URL provider redirects to on success */
   successUrl: string;
   /** Absolute URL provider redirects to on cancel */
   cancelUrl: string;
+  /** Validated server-side offer. Never accept these values directly from a client. */
+  discount?: {
+    id: string;
+    code: string;
+    percentOff: number;
+    durationYears: number;
+    redemptionId: string;
+  };
+  /** Pending first-party referral attribution carried in signed provider metadata. */
+  salesReferralId?: string;
 }
 
 export interface CheckoutSessionResult {
@@ -56,6 +70,17 @@ export interface CheckoutSessionResult {
   externalCustomerId: string | null;
   /** Provider-assigned subscription ID (arrives later via webhook) */
   externalSubscriptionId: string | null;
+}
+
+export interface BusinessPhoneCheckoutOpts {
+  tenantId: number;
+  cartId: string;
+  billingEmail: string;
+  currency: string;
+  activationCents: number;
+  monthlyCents: number;
+  successUrl: string;
+  cancelUrl: string;
 }
 
 /** Options to start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) —
@@ -92,7 +117,10 @@ export interface WebhookEvent {
     | 'payment.succeeded'        // one-off or first payment succeeded
     | 'payment.failed'           // payment declined
     | 'card.validated'           // explicit card-validation (SetupIntent) succeeded
-    | 'card.validation_failed';  // explicit card-validation could not complete
+    | 'card.validation_failed'   // explicit card-validation could not complete
+    | 'addon.activated'
+    | 'addon.past_due'
+    | 'addon.cancelled';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -115,6 +143,14 @@ export interface WebhookEvent {
    *  removal/replace can detach exactly this card instead of sweeping the
    *  customer — see migration 0346. */
   paymentMethodId?: string;
+  /** Signed Checkout metadata used to finalize a reserved one-time discount. */
+  discountRedemptionId?: string;
+  /** Signed checkout/subscription metadata identifying the attributed referral. */
+  salesReferralId?: string;
+  purchaseKind?: 'business_phone';
+  activationCents?: number;
+  monthlyCents?: number;
+  cartId?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;
@@ -127,6 +163,9 @@ export interface PaymentProvider {
    * Throws {@link PaymentNotConfiguredError} when the Stripe secrets are absent.
    */
   createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult>;
+
+  /** Purchase the Business Phone recurring add-on plus its one-time activation. */
+  createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult>;
 
   /**
    * Start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) so the tenant

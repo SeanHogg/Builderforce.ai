@@ -169,9 +169,9 @@ export function OnboardingStepper({
     >
       <div
         style={{
-          background: 'var(--bg-deep, #050914)',
+          background: 'var(--bg-deep)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 16,
+          borderRadius: 'var(--radius-xl)',
           width: '100%',
           maxWidth: 880,
           maxHeight: '92vh',
@@ -205,8 +205,8 @@ export function OnboardingStepper({
             style={{
               background: 'transparent',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              color: canClose ? 'var(--text-muted)' : 'var(--text-faint, #3a4060)',
+              borderRadius: 'var(--radius-md)',
+              color: canClose ? 'var(--text-muted)' : 'var(--text-muted)',
               fontSize: 20,
               lineHeight: 1,
               padding: '4px 10px',
@@ -266,7 +266,7 @@ export function OnboardingStepper({
                         : active
                         ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))'
                         : 'var(--bg-elevated)',
-                      color: done ? '#22c55e' : active ? '#fff' : 'var(--text-muted)',
+                      color: done ? 'var(--success)' : active ? 'var(--text-on-accent)' : 'var(--text-muted)',
                       border: done
                         ? '1px solid rgba(34,197,94,0.4)'
                         : active
@@ -391,7 +391,7 @@ export function OnboardingStepper({
               fontSize: 13,
               background: 'transparent',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               color: 'var(--text-secondary)',
               cursor: activeStep === 0 ? 'not-allowed' : 'pointer',
               opacity: activeStep === 0 ? 0.4 : 1,
@@ -420,9 +420,9 @@ export function OnboardingStepper({
                     fontSize: 14,
                     fontWeight: 600,
                     background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                    color: '#fff',
+                    color: 'var(--text-on-accent)',
                     border: 'none',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     cursor: nextDisabled ? 'not-allowed' : 'pointer',
                     opacity: nextDisabled ? 0.5 : 1,
                   }}
@@ -439,10 +439,10 @@ export function OnboardingStepper({
                 padding: '8px 20px',
                 fontSize: 14,
                 fontWeight: 600,
-                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                color: '#fff',
+                background: 'linear-gradient(135deg, var(--success), var(--success))',
+                color: 'var(--text-on-accent)',
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
               }}
             >

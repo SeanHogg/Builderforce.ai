@@ -11,6 +11,9 @@ import {
 import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
+import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
+import { membershipChanged } from './membershipChanged';
+import type { Env } from '../../env';
 
 export interface CreateTenantDto {
   name: string;
@@ -24,7 +27,20 @@ export class TenantService {
   constructor(
     private readonly tenants: ITenantRepository,
     private readonly payment: PaymentProvider,
+    /**
+     * Present so a membership use case can announce itself (see
+     * {@link membershipChanged}). Optional because the unit tests construct this
+     * service without a worker environment, and a missing cache binding must not
+     * be the reason a member cannot be added.
+     */
+    private readonly env?: Env,
   ) {}
+
+  /** Every membership use case ends here — see `membershipChanged`. */
+  private async announceMembership(tenantId: number, userIds: readonly string[] = []): Promise<void> {
+    if (!this.env) return;
+    await membershipChanged(this.env, tenantId, userIds);
+  }
 
   static readonly PRICING = {
     currency: 'USD',
@@ -48,6 +64,45 @@ export class TenantService {
       perAgentHostMonthly: 49,
     },
   } as const;
+
+  /**
+   * Public pricing/entitlement contract used by marketing and checkout UI.
+   * Prices come from PRICING and feature availability is derived from the same
+   * PLAN_LIMITS object enforced by API guards, so public plan copy cannot drift
+   * from runtime entitlements.
+   */
+  static publicPricingContract() {
+    const free = PLAN_LIMITS[TenantPlan.FREE];
+    const pro = PLAN_LIMITS[TenantPlan.PRO];
+    const teams = PLAN_LIMITS[TenantPlan.TEAMS];
+    const availability = (key: string, values: [boolean, boolean, boolean]) => ({
+      key,
+      free: values[0],
+      pro: values[1],
+      teams: values[2],
+    });
+
+    return {
+      pricing: TenantService.PRICING,
+      generatedFrom: 'TenantService.PRICING + PLAN_LIMITS',
+      featureAvailability: [
+        availability('agentHosts.free', [free.maxAgentHosts === 1, false, false]),
+        availability('agentHosts.pro', [false, pro.maxAgentHosts === 3, false]),
+        availability('agentHosts.teams', [false, false, teams.maxAgentHosts === -1]),
+        availability('projects.free', [free.maxProjects === 5, false, false]),
+        availability('projects.paid', [false, pro.maxProjects === -1, teams.maxProjects === -1]),
+        availability('tokens.free', [free.tokenDailyLimit === 10_000, false, false]),
+        availability('tokens.pro', [false, pro.tokenDailyLimit === 1_000_000, false]),
+        availability('tokens.teams', [false, false, teams.tokenDailyLimit === 5_000_000]),
+        availability('approvalWorkflows', [free.approvalWorkflows, pro.approvalWorkflows, teams.approvalWorkflows]),
+        availability('fleetMesh', [free.fleetMesh, pro.fleetMesh, teams.fleetMesh]),
+        availability('fullTelemetry', [free.fullTelemetry, pro.fullTelemetry, teams.fullTelemetry]),
+        availability('customAgentRoles', [free.customAgentRoles, pro.customAgentRoles, teams.customAgentRoles]),
+        availability('teamApprovalInbox', [free.teamApprovalInbox, pro.teamApprovalInbox, teams.teamApprovalInbox]),
+        availability('seatCostControls', [free.seatCostControls, pro.seatCostControls, teams.seatCostControls]),
+      ],
+    } as const;
+  }
 
   async listTenants(): Promise<Tenant[]> {
     return this.tenants.findAll();
@@ -108,7 +163,12 @@ export class TenantService {
     // rejecting the create, mirroring how project keys auto-disambiguate.
     const slug = await this.resolveUniqueSlug(dto.name);
     const tenant = Tenant.create(dto.name, dto.ownerUserId, slug);
-    return this.tenants.save(tenant);
+    const saved = await this.tenants.save(tenant);
+    // A workspace's FIRST member is created here, inside provisioning — which is
+    // why "there is no insert(tenantMembers) outside the demo seeder" was true
+    // and the roster still went stale.
+    await this.announceMembership(saved.id as number, [dto.ownerUserId]);
+    return saved;
   }
 
   /** Lowest free slug for a display name: `default`, then `default-2`, `default-3`… */
@@ -139,7 +199,9 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.addMember(actorUserId, newUserId, role);
-    return this.tenants.update(updated);
+    const persisted = await this.tenants.update(updated);
+    await this.announceMembership(tenantId, [newUserId]);
+    return persisted;
   }
 
   async removeMember(
@@ -149,7 +211,9 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.removeMember(actorUserId, targetUserId);
-    return this.tenants.update(updated);
+    const persisted = await this.tenants.update(updated);
+    await this.announceMembership(tenantId, [targetUserId]);
+    return persisted;
   }
 
   async changeMemberRole(
@@ -160,7 +224,9 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.changeMemberRole(actorUserId, targetUserId, role);
-    return this.tenants.update(updated);
+    const persisted = await this.tenants.update(updated);
+    await this.announceMembership(tenantId, [targetUserId]);
+    return persisted;
   }
 
   async deleteTenant(id: number): Promise<void> {
@@ -216,12 +282,28 @@ export class TenantService {
       billingEmail: string;
       /** Required for Teams plan */
       seats?: number;
+      /** Published server-side pricing; never sourced from the browser cart. */
+      currency: string;
+      unitAmountCents: number;
+      productName: string;
       successUrl: string;
       cancelUrl: string;
+      discount?: {
+        id: string;
+        code: string;
+        percentOff: number;
+        durationYears: number;
+        redemptionId: string;
+      };
+      salesReferralId?: string;
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     const targetPlan = input.targetPlan ?? TenantPlan.PRO;
     const minimumSeats = TenantService.PRICING.teams.minimumSeats;
+
+    if (!/^[A-Z]{3}$/.test(input.currency) || !Number.isInteger(input.unitAmountCents) || input.unitAmountCents <= 0) {
+      throw new ValidationError('Published subscription pricing is invalid');
+    }
 
     if (targetPlan === TenantPlan.TEAMS) {
       const requestedSeats = input.seats ?? minimumSeats;
@@ -242,8 +324,13 @@ export class TenantService {
       billingCycle: input.billingCycle,
       billingEmail: input.billingEmail,
       seats: targetPlan === TenantPlan.TEAMS ? seats : 1,
+      currency: input.currency,
+      unitAmountCents: input.unitAmountCents,
+      productName: input.productName,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
+      discount: input.discount,
+      salesReferralId: input.salesReferralId,
     });
 
     // Store the customer id now so the activation webhook can correlate back to us.
@@ -255,11 +342,31 @@ export class TenantService {
     return { checkoutUrl: result.checkoutUrl, sessionId: result.sessionId };
   }
 
+  async createBusinessPhoneCheckoutSession(tenantId: number, input: {
+    cartId: string;
+    billingEmail: string;
+    currency: string;
+    activationCents: number;
+    monthlyCents: number;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<{ checkoutUrl: string; sessionId: string }> {
+    const tenant = await this.getTenant(tenantId);
+    if (tenant.billingStatus !== TenantBillingStatus.ACTIVE || tenant.plan === TenantPlan.FREE) {
+      throw new ValidationError('Business Phone requires an active Pro or Teams plan');
+    }
+    const result = await this.payment.createBusinessPhoneCheckoutSession({ tenantId, ...input });
+    return { checkoutUrl: result.checkoutUrl, sessionId: result.sessionId };
+  }
+
   /**
    * Process a normalised webhook event from the payment provider.
    * Called by the webhook route after signature verification.
    */
   async handleWebhookEvent(event: WebhookEvent): Promise<void> {
+    // Add-on lifecycle is persisted by the webhook route in its own bounded context;
+    // it must never mutate the workspace's base plan subscription.
+    if (event.purchaseKind) return;
     const tenant = await this.tenants.findByExternalCustomerId(event.externalCustomerId);
     if (!tenant) {
       // Unknown customer — could be a test event or a race condition; log and ignore

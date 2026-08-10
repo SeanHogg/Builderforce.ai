@@ -22,8 +22,15 @@ export interface NotifyInput {
   ref?: string | null;
 }
 
+export interface NotifyResult {
+  inAppDelivered: boolean;
+  emailDelivered: boolean | null;
+}
+
 /** Insert an in-app notification for the recipient (+ optional email). */
-export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY_EMAIL_KEY'>, input: NotifyInput): Promise<void> {
+export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY_EMAIL_KEY'>, input: NotifyInput): Promise<NotifyResult> {
+  let inAppDelivered = false;
+  let emailDelivered: boolean | null = null;
   try {
     await db.insert(freelancerNotifications).values({
       userId: input.userId,
@@ -33,6 +40,7 @@ export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY
       body: input.body ?? null,
       ref: input.ref ?? null,
     });
+    inAppDelivered = true;
   } catch (err) {
     // Deliberately non-fatal (see docblock), but the drop must not be silent:
     // this row IS the durable feed, so losing it means the recipient never learns
@@ -40,6 +48,7 @@ export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY
     reportCaughtError(err, { source: "application/notifications/notify.ts", operation: "notify", context: { logMessage: `[notify] in-app notification LOST kind=${input.kind} user=${input.userId}:`, details: (err as Error)?.message } });
   }
   if (env.NOTIFY_EMAIL_URL) {
+    emailDelivered = false;
     try {
       const [u] = await db
         .select({ email: users.email })
@@ -52,9 +61,11 @@ export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY
           headers: { 'content-type': 'application/json', ...(env.NOTIFY_EMAIL_KEY ? { authorization: `Bearer ${env.NOTIFY_EMAIL_KEY}` } : {}) },
           body: JSON.stringify({ to: u.email, subject: input.title, body: input.body ?? input.title }),
         });
+        emailDelivered = true;
       }
     } catch (err) {
       reportCaughtError(err, { source: "application/notifications/notify.ts", operation: "notify", level: 'warning', context: { logMessage: `[notify] email failed kind=${input.kind} user=${input.userId}:`, details: (err as Error)?.message } });
     }
   }
+  return { inAppDelivered, emailDelivered };
 }

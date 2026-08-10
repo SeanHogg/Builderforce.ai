@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { getWidget } from '@/lib/widgets/registry';
@@ -34,7 +35,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
 
   const handleBtn: CSSProperties = {
     border: 'none', background: 'transparent', cursor: 'pointer',
-    color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1, padding: '2px 4px', borderRadius: 6,
+    color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)',
   };
 
   return (
@@ -48,9 +49,9 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
               ...SPAN[def.size ?? 'sm'],
               position: 'relative',
               opacity: drag.draggingKey === id ? 0.4 : 1,
-              outline: drag.dropKey === id ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
+              outline: drag.dropKey === id ? '2px dashed var(--coral-bright)' : 'none',
               outlineOffset: 2,
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               transition: 'opacity 120ms ease',
             }}
             {...drag.dropTargetProps(id)}
@@ -59,7 +60,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
                 not the whole card — is the drag source here: a widget card owns its own
                 clicks and inner controls. */}
             <div
-              style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-elevated)', borderRadius: 6, padding: '1px 2px' }}
+              style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '1px 2px' }}
             >
               <span
                 {...drag.dragHandleProps(id)}
@@ -68,8 +69,8 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
                 aria-label={t('reorder.drag')}
                 style={{ ...handleBtn, cursor: 'grab' }}
               >⠿</span>
-              <button type="button" style={handleBtn} disabled={i === 0} onClick={() => drag.nudge(id, -1)} aria-label={t('reorder.moveLeft')} title={t('reorder.moveLeft')}>◀</button>
-              <button type="button" style={handleBtn} disabled={i === known.length - 1} onClick={() => drag.nudge(id, 1)} aria-label={t('reorder.moveRight')} title={t('reorder.moveRight')}>▶</button>
+              <button type="button" style={handleBtn} disabled={i === 0} onClick={() => drag.nudge(id, -1)} aria-label={t('reorder.moveLeft')} title={t('reorder.moveLeft')}><Icon source="◀" size="1em" /></button>
+              <button type="button" style={handleBtn} disabled={i === known.length - 1} onClick={() => drag.nudge(id, 1)} aria-label={t('reorder.moveRight')} title={t('reorder.moveRight')}><Icon source="▶" size="1em" /></button>
             </div>
             <WidgetCard def={def} days={days} />
           </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -13,6 +14,8 @@ import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
+import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
+import type { ProjectConnection } from '@/lib/projectConnections';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface ProjectTableProps {
@@ -20,12 +23,15 @@ export interface ProjectTableProps {
   /** Per-project latest diagnostic scores (SOC 2, Quality, …), keyed by project
    *  id, from the workspace rollup. Rendered as a compact strip; empty hides it. */
   diagnosticsByProject?: Map<number, ProjectDiagnosticSummary[]>;
+  /** Per-project connections (repos, external boards) with live health, build
+   *  verdict and open-PR count, keyed by project id. Empty hides the column cell. */
+  connectionsByProject?: Map<number, ProjectConnection[]>;
   /** Open the project Information panel. The Details button opens the default tab;
    *  the Architecture button opens 'prds' / 'integrations'. A row that can open
    *  details gets the Architecture button — same rule as {@link ProjectCard}. */
   onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
-  /** Override the 💻 IDE action. Defaults to opening the project editor (`/ide/<id>`). */
-  onOpenIde?: (project: Project) => void;
+  /** Override the Builder action. Defaults to opening the project on Canvas. */
+  onOpenBuilder?: (project: Project) => void;
   /** Click the assigned agent name → parent opens the agent panel. */
   onAssignedAgentClick?: (assignedAgentHost: { id: number; name: string }) => void;
   /** Show a delete action; called once the user confirms in the dialog. */
@@ -40,7 +46,7 @@ const iconButtonStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   color: 'var(--coral-bright)',
   border: '1px solid var(--coral-bright)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
@@ -52,14 +58,15 @@ const iconButtonStyle: React.CSSProperties = {
 /**
  * Tabular project list — the List view counterpart to {@link ProjectCard}. Both
  * the Dashboard and Projects/Tasks pages render this so the row actions (Details,
- * Task board, IDE, Architecture, Workflows, Delete) can't drift between surfaces.
+ * Task board, Builder, Architecture, Workflows, Delete) can't drift between surfaces.
  * Delete is self-contained (per-row {@link DeleteProjectDialog}), mirroring the card.
  */
 export function ProjectTable({
   projects,
   diagnosticsByProject,
+  connectionsByProject,
   onDetailsClick,
-  onOpenIde,
+  onOpenBuilder,
   onAssignedAgentClick,
   onDelete,
 }: ProjectTableProps) {
@@ -67,7 +74,7 @@ export function ProjectTable({
   const router = useRouter();
   const openProjectChat = useOpenProjectChat();
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
+  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
 
   return (
     <div style={tableWrapStyle}>
@@ -77,6 +84,7 @@ export function ProjectTable({
             <th style={headStyle}>{t('name')}</th>
             <th style={headStyle}>{t('health')}</th>
             <th style={headStyle}>{t('diagnostics')}</th>
+            <th style={headStyle}>{t('connections')}</th>
             <th style={headStyle}>{t('description')}</th>
             <th style={headStyle}>{t('agent')}</th>
             <th style={headStyle}>{t('actions')}</th>
@@ -104,6 +112,19 @@ export function ProjectTable({
                     <ProjectDiagnosticsStrip
                       diagnostics={diags}
                       onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+                    />
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                  );
+                })()}
+              </td>
+              <td style={cellStyle}>
+                {(() => {
+                  const conns = connectionsByProject?.get(project.id);
+                  return conns && conns.length > 0 ? (
+                    <ProjectConnectionsStrip
+                      connections={conns}
+                      onManage={onDetailsClick ? () => onDetailsClick(project, 'integrations') : undefined}
                     />
                   ) : (
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
@@ -172,7 +193,7 @@ export function ProjectTable({
                     title={project.workflowCount != null ? t('workflowsWithCount', { count: project.workflowCount }) : t('workflows')}
                     style={iconButtonStyle}
                   >
-                    <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
+                    <span style={{ fontSize: 16 }} aria-hidden><Icon source="🔀" size="1em" /></span>
                   </button>
                   <button
                     type="button"
@@ -187,12 +208,12 @@ export function ProjectTable({
                   </button>
                   <button
                     type="button"
-                    onClick={() => openIde(project)}
-                    aria-label={t('openIde')}
-                    title={t('openIde')}
+                    onClick={() => openBuilder(project)}
+                    aria-label={t('openBuilder')}
+                    title={t('openBuilder')}
                     style={iconButtonStyle}
                   >
-                    <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+                    <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>
                   </button>
                   {onDetailsClick && (
                     <RunDiagnosticsButton
@@ -211,7 +232,7 @@ export function ProjectTable({
                         color: 'var(--coral-bright)',
                         background: 'transparent',
                         border: '1px solid var(--coral-bright)',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-md)',
                         cursor: 'pointer',
                       }}
                     >

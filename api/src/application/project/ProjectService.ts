@@ -45,6 +45,23 @@ export interface UpdateProjectDto {
 }
 
 /**
+ * Port for reclaiming the object storage a project owns (its canvas files and
+ * its published site's assets).
+ *
+ * A port rather than a direct call so the service keeps depending on nothing but
+ * interfaces — and so the ONE delete path covers every caller. Deleting a project
+ * from the REST route and deleting it from the `projects.delete` MCP tool used to
+ * differ only in that neither reclaimed anything; wiring the purge here means
+ * neither can start to.
+ */
+export interface ProjectStoragePurge {
+  /** Resolve which storage prefixes the project owns — BEFORE its rows are gone. */
+  plan(projectId: number): Promise<readonly string[]>;
+  /** Delete everything under those prefixes. */
+  run(prefixes: readonly string[]): Promise<void>;
+}
+
+/**
  * Application service: orchestrates Project use cases.
  *
  * Depends only on the repository *interface* (Dependency Inversion Principle).
@@ -59,6 +76,7 @@ export class ProjectService {
   constructor(
     private readonly projects: IProjectRepository,
     private readonly tasks?: ITaskRepository,
+    private readonly purgeStorage?: ProjectStoragePurge | null,
   ) {}
 
   async listProjects(tenantId: number): Promise<Project[]> {
@@ -186,9 +204,42 @@ export class ProjectService {
     return saved;
   }
 
+  /**
+   * Delete a project and the object storage it owns.
+   *
+   * The storage purge runs AFTER the row is gone, and its failure is reported
+   * rather than raised. Both halves of that are deliberate:
+   *   - after, because a purge that succeeded and a delete that then failed
+   *     would have destroyed the assets of a site that is still live;
+   *   - non-fatal, because the database is the source of truth for what exists,
+   *     and refusing to delete a project over a storage hiccup would leave the
+   *     user unable to delete it at all.
+   * The residue is an orphaned prefix, which is exactly what this closes for the
+   * common case and what the reported error lets an operator clean up in the rare one.
+   */
   async deleteProject(id: number, callerTenantId: number): Promise<void> {
     await this.getProject(id, callerTenantId); // throws NotFoundError or ForbiddenError
+
+    // Resolved first — the published site's prefix is stored on a row that the
+    // delete cascades away, so asking afterwards is asking nothing.
+    let prefixes: readonly string[] = [];
+    if (this.purgeStorage) {
+      try {
+        prefixes = await this.purgeStorage.plan(id);
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/project/ProjectService.ts', operation: 'planStoragePurge' });
+      }
+    }
+
     await this.projects.delete(asProjectId(id));
+
+    if (this.purgeStorage && prefixes.length) {
+      try {
+        await this.purgeStorage.run(prefixes);
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/project/ProjectService.ts', operation: 'runStoragePurge' });
+      }
+    }
   }
 }
 

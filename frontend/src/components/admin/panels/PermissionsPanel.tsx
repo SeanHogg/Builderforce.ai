@@ -52,7 +52,7 @@ export default function PermissionsPanel() {
               margin: '0 0 12px',
               fontSize: 13,
               lineHeight: 1.5,
-              color: 'var(--text-secondary, #6b7280)',
+              color: 'var(--text-secondary)',
               maxWidth: '72ch',
             }}
           >
@@ -124,9 +124,9 @@ export default function PermissionsPanel() {
                             textTransform: 'uppercase',
                             letterSpacing: '0.04em',
                             padding: '2px 6px',
-                            borderRadius: 4,
+                            borderRadius: 'var(--radius-sm)',
                             whiteSpace: 'nowrap',
-                            color: isEnforced ? 'var(--success-text, #166534)' : 'var(--text-secondary, #6b7280)',
+                            color: isEnforced ? 'var(--success-text)' : 'var(--text-secondary)',
                             background: isEnforced ? 'var(--success-bg, rgba(34,197,94,0.15))' : 'var(--surface-2, rgba(127,127,127,0.12))',
                             border: `1px solid ${isEnforced ? 'var(--success-border, rgba(34,197,94,0.35))' : 'var(--border, rgba(127,127,127,0.3))'}`,
                           }}
@@ -150,7 +150,7 @@ export default function PermissionsPanel() {
                           ) : (
                             <span
                               aria-label={granted ? t('permissions.granted') : t('permissions.denied')}
-                              style={{ color: granted ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)', fontWeight: 600 }}
+                              style={{ color: granted ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}
                             >
                               {granted ? '✓' : '✗'}
                             </span>

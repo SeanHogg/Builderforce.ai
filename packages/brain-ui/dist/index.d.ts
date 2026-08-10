@@ -1,6 +1,7 @@
 import * as React from 'react';
-import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, ChatErrorAction, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import React__default, { HTMLAttributes, ReactNode } from 'react';
+import { BrainMessage, BrainTraceEvent, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+export { ChatModelOptions, ChatModelSelection, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, activeModelKey, buildModelItems, byoVendorLabel, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -312,45 +313,197 @@ interface ChatErrorBannerProps {
 }
 declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, labels: labelOverrides, style, className, }: ChatErrorBannerProps): React__default.JSX.Element | null;
 
+interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
+    /** Text entry for the prompt. Always occupies the first, full-width row. */
+    input: ReactNode;
+    /** Context, mode, model, voice and send controls for the second row. */
+    actions: ReactNode;
+    /** Chips, queued turns, or other state shown above the text entry. */
+    status?: ReactNode;
+    /** Popovers such as the shared @-mention picker. */
+    overlay?: ReactNode;
+    active?: boolean;
+    dragging?: boolean;
+}
 /**
- * ConsolidateForkControl — the shared "compress this chat / branch it into a new
- * one" control, rendered identically on the web Brain composer and inside the VS
- * Code webview (which historically hand-rolled the same two buttons).
+ * The single structural shell for every BuilderForce prompt surface.
  *
- * Presentational only: it renders two buttons and calls back. The host owns the
- * actual consolidation/fork logic (summarize the chat, append the consolidation
- * marker, or create + seed a forked chat) and the busy/enabled state. Colors come
- * exclusively from theme CSS variables (with layered fallbacks) so the SAME markup
- * reads correctly in the web app's light/dark themes and the VS Code editor theme —
- * no hardcoded hex that only works in one theme.
+ * Hosts own behavior and individual controls, but input/status/action placement,
+ * focus treatment, spacing, and panel shape live here so web, Canvas, marketing,
+ * and editor integrations cannot grow different composer markup again.
  */
-/** Copy for the two buttons — defaulted in English, overridable per host for i18n. */
-interface ConsolidateForkLabels {
+declare function PromptPanel({ input, actions, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+
+/**
+ * The contract for the composer's `/` control — the ONE place a prompt panel
+ * exposes run shaping (effort, thinking), WHICH MODEL IS IN USE, and how to
+ * change it.
+ *
+ * Model choice used to live in a second control beside the `/` menu (a labelled
+ * chip on the web, a chip that punted to a VS Code QuickPick in the editor), so
+ * the composer had two different affordances for "what runs this turn" and the
+ * editor's list could not even be read without leaving the panel. One control,
+ * one contract, both hosts.
+ *
+ * The MODEL half of that contract (which models exist, their order, and who pays
+ * for each) lives in brain-embedded's `modelChoice` — the VS Code extension HOST
+ * shares it too, and it cannot import React.
+ */
+
+/**
+ * Every user-facing string in the menu. Hosts pass their own localized bundle
+ * (the web app via next-intl, the VS Code webview via the host's `vscode.l10n`
+ * bundle); the English defaults below keep the component usable unmapped.
+ */
+interface PromptOptionsLabels extends ModelChoiceLabels {
+    /** Trigger title/aria — the menu as a whole. */
+    options: string;
+    /** Section heading for the conversation-mode block (Chat | Work). */
+    mode: string;
+    /** Section heading + row label for persistent project memory. */
+    memory: string;
+    /** Auto-approve canvas/tool actions for the next turn. */
+    autoMode: string;
+    /** Explains that Auto mode executes actions without a confirmation step. */
+    autoModeHint: string;
+    /** Section heading for the actions that act on the CHAT itself (consolidate, fork). */
+    conversation: string;
     consolidate: string;
     consolidating: string;
+    /** What consolidating actually does to the rest of the conversation. */
+    consolidateHint: string;
     fork: string;
     forking: string;
+    forkHint: string;
+    /** Why neither conversation action can run yet (too short a chat, or a live run). */
+    sessionUnavailable: string;
+    effort: string;
+    effortQuick: string;
+    effortBalanced: string;
+    effortThorough: string;
+    thinking: string;
+    on: string;
+    off: string;
+    /** Section heading for the model block. */
+    model: string;
+    /** Heading of the read-only "what is running this turn" row. */
+    modelInUse: string;
+    searchModels: string;
+    filterModels: string;
+    chooseModel: string;
+    noModels: string;
+    all: string;
+    /** Shown instead of the list when the tenant may not pin a model at all. */
+    modelLocked: string;
+    accountSettings: string;
 }
-declare const DEFAULT_CONSOLIDATE_FORK_LABELS: ConsolidateForkLabels;
-interface ConsolidateForkControlProps {
-    /** Whether the chat is long enough / in a state where consolidation makes sense. */
+declare const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels;
+/** Merge a host's partial overrides over the English defaults. */
+declare function promptOptionsLabels(overrides?: Partial<PromptOptionsLabels>): PromptOptionsLabels;
+
+/** Model wiring for the `/` menu. Omit it on a surface with no model choice. */
+interface PromptOptionsModel {
+    selection: ChatModelSelection;
+    options: ChatModelOptions;
+    onChange: (selection: ChatModelSelection) => void;
+    /**
+     * What the host will actually send while the selection is `auto` — a configured
+     * default or a `project_evermind:<id>` pin. Shown as the model in use, because
+     * "Auto" alone does not answer the question the user opened the menu to ask.
+     */
+    effective?: string;
+    /** False ⇒ the gateway would reject a pin (no paid plan, no connected account):
+     *  the list is replaced by the reason, rather than offering a dead control. */
+    canChoose?: boolean;
+}
+/** One selectable conversation mode. `value` is the host's stable, non-translatable id. */
+interface PromptOptionsModeChoice {
+    value: string;
+    label: string;
+    hint?: string;
+    icon?: string;
+}
+/**
+ * Conversation mode for this turn — on BuilderForce, Chat vs Work.
+ *
+ * It lives in the `/` menu rather than beside it for the same reason the model does:
+ * a composer that grows one pill per setting is a composer nobody can use on a phone.
+ * The trigger keeps naming the ARMED mode, so "can this turn dispatch real work?" is
+ * still answerable without opening anything.
+ */
+interface PromptOptionsMode {
+    value: string;
+    onChange: (value: string) => void;
+    choices: PromptOptionsModeChoice[];
+}
+/** Persistent memory for this conversation, when the host has one to offer. */
+interface PromptOptionsMemory {
+    enabled: boolean;
+    onChange: (on: boolean) => void;
+    /** What being on/off means here — shown under the label. */
+    describe?: (on: boolean) => string;
+    /** Why it cannot be used right now. Set ⇒ the row is inert and states the reason. */
+    unavailableReason?: string;
+}
+/** Whether tool and canvas actions run without a separate approval prompt. */
+interface PromptOptionsAutoMode {
+    enabled: boolean;
+    onChange: (on: boolean) => void;
+    /** What enabling this setting means on the current host. */
+    description?: string;
+}
+/**
+ * The two actions that act on the CONVERSATION rather than on the next turn:
+ * consolidate it into a compact summary, or fork that summary into a new chat.
+ *
+ * They used to be two always-visible pills in the action row on both hosts (the
+ * web composer through a `ConsolidateForkControl`, the VS Code webview through a
+ * hand-rolled copy of the same two buttons) — four controls that were inert for
+ * most of a chat's life and, on a narrow panel, crowded out Send. Here they get
+ * room to say what they do, and the host only supplies state + handlers.
+ */
+interface PromptOptionsSession {
+    /** The chat is long enough / idle enough for a summary to mean anything. */
     canConsolidate: boolean;
-    /** A consolidation is in flight. */
-    consolidating: boolean;
-    /** A fork is in flight. */
-    forking: boolean;
-    onConsolidate(): void;
-    onFork(): void;
-    labels?: Partial<ConsolidateForkLabels>;
+    consolidating?: boolean;
+    forking?: boolean;
+    onConsolidate: () => void;
+    onFork: () => void;
+}
+interface PromptOptionsMenuProps {
+    labels?: Partial<PromptOptionsLabels>;
+    disabled?: boolean;
+    mode?: PromptOptionsMode;
+    memory?: PromptOptionsMemory;
+    autoMode?: PromptOptionsAutoMode;
+    /** Consolidate / fork this chat. Omit on a surface with no chat behind it. */
+    session?: PromptOptionsSession;
+    effort?: Effort;
+    onEffortChange?: (effort: Effort) => void;
+    /** What a level really costs at this host's current state (answer/thinking budgets). */
+    describeEffort?: (effort: Effort) => string;
+    thinking?: boolean;
+    onThinkingChange?: (on: boolean) => void;
+    describeThinking?: (on: boolean) => string;
+    model?: PromptOptionsModel;
+    onAccountSettings?: () => void;
     className?: string;
 }
 /**
- * Two buttons: Consolidate (compress the chat into a summary marker the rest of
- * the conversation builds on) and Fork (branch that summary into a new chat).
- * Both are disabled when consolidation isn't possible or either action is busy,
- * so a host can't fire a second op mid-flight.
+ * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
+ * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * and the model picker, plus account settings. One affordance, shared by every
+ * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
+ *
+ * Every one of those settings used to be its own pill in the composer's action row
+ * — a segmented Chat|Work control, a memory button, a model chip — which on a phone
+ * left a row of eight unlabelled circles and no room for the send button. They live
+ * here now, and the trigger states the two consequential ones (the armed mode, the
+ * model in use) so nothing has to be opened to read what will happen.
+ *
+ * Self-gating: renders nothing until a host wires at least one section.
  */
-declare function ConsolidateForkControl({ canConsolidate, consolidating, forking, onConsolidate, onFork, labels, className, }: ConsolidateForkControlProps): React.JSX.Element;
+declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, autoMode, session, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, onAccountSettings, className, }: PromptOptionsMenuProps): React.JSX.Element | null;
 
 /**
  * Participant avatars — the shared way a chat renders WHO a participant is.
@@ -1706,4 +1859,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

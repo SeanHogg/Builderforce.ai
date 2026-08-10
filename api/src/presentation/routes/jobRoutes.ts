@@ -14,7 +14,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * `mapProposal` (and therefore the wire shape) are keyed on those names.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -184,56 +184,58 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const pid = c.req.param('pid');
-    const [pr] = await db
-      .select({
+    const accepted = await db.transaction(async (tx) => {
+      const [pr] = await tx.select({
         ...proposalColumns,
         job_tenant: jobPostings.tenantId,
         project_id: jobPostings.projectId,
         job_title: jobPostings.title,
-      })
-      .from(jobProposals)
-      .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
-      .where(eq(jobProposals.id, pid));
-    if (!pr || Number(pr.job_tenant) !== Number(tenantId)) return c.json({ error: 'Not found' }, 404);
-    // Reuse or create an active engagement for this freelancer + project.
-    const projectId = pr.project_id == null ? null : Number(pr.project_id);
-    const [existing] = await db
-      .select({ id: freelancerEngagements.id })
-      .from(freelancerEngagements)
-      .where(and(
-        eq(freelancerEngagements.tenantId, tenantId),
-        eq(freelancerEngagements.freelancerUserId, pr.freelancer_user_id),
-        sql`COALESCE(${freelancerEngagements.projectId}, 0) = COALESCE(${projectId}, 0)`,
-        isNull(freelancerEngagements.terminatedAt),
-      ));
-    let engagementId: string;
-    if (existing) {
-      engagementId = existing.id;
-      await db
-        .update(freelancerEngagements)
-        .set({ status: 'active', hiredAt: sql`COALESCE(hired_at, NOW())`, rateCents: pr.rate_cents, updatedAt: sql`NOW()` })
-        .where(eq(freelancerEngagements.id, engagementId));
-    } else {
-      engagementId = crypto.randomUUID();
-      await db.insert(freelancerEngagements).values({
-        id: engagementId,
-        tenantId,
-        projectId,
-        freelancerUserId: pr.freelancer_user_id,
-        status: 'active',
-        rateCents: pr.rate_cents,
-        currency: pr.currency ?? 'USD',
-        title: pr.job_title,
-        createdByUserId: actor,
-        hiredAt: sql`NOW()`,
-      });
-    }
-    await db.update(jobProposals).set({ status: 'accepted', updatedAt: sql`NOW()` }).where(eq(jobProposals.id, pid));
-    await db.update(jobPostings).set({ status: 'filled', updatedAt: sql`NOW()` }).where(eq(jobPostings.id, pr.job_id));
+      }).from(jobProposals)
+        .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
+        .where(and(eq(jobProposals.id, pid), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
+      if (!pr || Number(pr.job_tenant) !== Number(tenantId)) return null;
+
+      // This conditional transition is the concurrency gate. Only one request can
+      // move an open posting to filled; a replay cannot mint another engagement.
+      const claimed = await tx.update(jobPostings)
+        .set({ status: 'filled', closedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(jobPostings.id, pr.job_id), eq(jobPostings.tenantId, tenantId), eq(jobPostings.status, 'open')))
+        .returning({ id: jobPostings.id });
+      if (claimed.length === 0) return { conflict: true as const };
+
+      const projectId = pr.project_id == null ? null : Number(pr.project_id);
+      const [existing] = await tx.select({ id: freelancerEngagements.id })
+        .from(freelancerEngagements)
+        .where(and(
+          eq(freelancerEngagements.tenantId, tenantId),
+          eq(freelancerEngagements.freelancerUserId, pr.freelancer_user_id),
+          sql`COALESCE(${freelancerEngagements.projectId}, 0) = COALESCE(${projectId}, 0)`,
+          isNull(freelancerEngagements.terminatedAt),
+        ));
+      const engagementId = existing?.id ?? crypto.randomUUID();
+      if (existing) {
+        await tx.update(freelancerEngagements)
+          .set({ status: 'active', hiredAt: sql`COALESCE(${freelancerEngagements.hiredAt}, NOW())`, rateCents: pr.rate_cents, updatedAt: new Date() })
+          .where(eq(freelancerEngagements.id, engagementId));
+      } else {
+        await tx.insert(freelancerEngagements).values({
+          id: engagementId, tenantId, projectId,
+          freelancerUserId: pr.freelancer_user_id, status: 'active',
+          rateCents: pr.rate_cents, currency: pr.currency ?? 'USD',
+          title: pr.job_title, createdByUserId: actor, hiredAt: new Date(),
+        });
+      }
+      await tx.update(jobProposals).set({ status: 'accepted', updatedAt: new Date() }).where(eq(jobProposals.id, pid));
+      await tx.update(jobProposals).set({ status: 'declined', updatedAt: new Date() })
+        .where(and(eq(jobProposals.jobId, pr.job_id), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
+      return { conflict: false as const, engagementId, proposal: pr };
+    });
+    if (!accepted) return c.json({ error: 'Not found' }, 404);
+    if (accepted.conflict) return c.json({ error: 'This job has already been filled' }, 409);
     await invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY);
     const [ten] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
-    await notify(db, c.env, { userId: pr.freelancer_user_id, tenantId, kind: 'hired', title: `${ten?.name ?? 'A workspace'} accepted your proposal for "${pr.job_title}"`, ref: engagementId });
-    return c.json({ ok: true, engagementId });
+    await notify(db, c.env, { userId: accepted.proposal.freelancer_user_id, tenantId, kind: 'hired', title: `${ten?.name ?? 'A workspace'} accepted your proposal for "${accepted.proposal.job_title}"`, ref: accepted.engagementId });
+    return c.json({ ok: true, engagementId: accepted.engagementId });
   });
 
   // POST /proposals/:pid/decline — EMPLOYER declines a proposal, with an optional
@@ -445,7 +447,19 @@ export function createJobRoutes(): Hono<HonoEnv> {
   router.get('/', async (c) => {
     const db = buildDatabase(c.env);
     const q = c.req.query();
-    const jobs = await getOrSetCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY, () =>
+    const qq = (q.q ?? '').trim();
+    const hasFilters = Boolean(q.discipline || q.skill || qq);
+    const conditions = [eq(jobPostings.status, 'open'), eq(jobPostings.visibility, 'public')];
+    if (q.discipline) conditions.push(eq(jobPostings.discipline, q.discipline));
+    if (q.skill) conditions.push(sql`EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(COALESCE(${jobPostings.skills}, '[]')::jsonb) skill
+      WHERE lower(skill) = ${q.skill.toLowerCase()}
+    )`);
+    if (qq) {
+      const pattern = `%${qq}%`;
+      conditions.push(or(ilike(jobPostings.title, pattern), ilike(jobPostings.description, pattern), ilike(jobPostings.skills, pattern))!);
+    }
+    const loadJobs = () =>
       db
         .select({
           ...jobColumns,
@@ -455,19 +469,13 @@ export function createJobRoutes(): Hono<HonoEnv> {
         })
         .from(jobPostings)
         .innerJoin(tenants, eq(tenants.id, jobPostings.tenantId))
-        .where(and(eq(jobPostings.status, 'open'), eq(jobPostings.visibility, 'public')))
+        .where(and(...conditions))
         .orderBy(desc(jobPostings.createdAt))
-        .limit(200),
-    );
-    const qq = (q.q ?? '').trim().toLowerCase();
-    const filtered = jobs.filter((j) => {
-      if (q.discipline && String(j.discipline ?? '') !== q.discipline) return false;
-      const skills = parseSkills(j.skills).map((s) => s.toLowerCase());
-      if (q.skill && !skills.includes(q.skill.toLowerCase())) return false;
-      if (qq && !`${j.title ?? ''} ${j.description ?? ''} ${skills.join(' ')}`.toLowerCase().includes(qq)) return false;
-      return true;
-    });
-    return c.json(filtered.map(mapJob));
+        .limit(200);
+    const jobs = hasFilters
+      ? await loadJobs()
+      : await getOrSetCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY, loadJobs);
+    return c.json(jobs.map(mapJob));
   });
 
   // GET /:id — job detail. Private jobs need a signed-in viewer.
@@ -511,11 +519,22 @@ export function createJobRoutes(): Hono<HonoEnv> {
         title: jobPostings.title,
         created_by_user_id: jobPostings.createdByUserId,
         status: jobPostings.status,
+        visibility: jobPostings.visibility,
       })
       .from(jobPostings)
       .where(eq(jobPostings.id, id));
     if (!job) return c.json({ error: 'Not found' }, 404);
     if (job.status !== 'open') return c.json({ error: 'This job is no longer open' }, 409);
+    if (job.visibility === 'private') {
+      const [relationship] = await db.select({ id: freelancerEngagements.id })
+        .from(freelancerEngagements)
+        .where(and(
+          eq(freelancerEngagements.tenantId, Number(job.tenant_id)),
+          eq(freelancerEngagements.freelancerUserId, userId),
+          isNull(freelancerEngagements.terminatedAt),
+        )).limit(1);
+      if (!relationship) return c.json({ error: 'This private job is not available to this account' }, 403);
+    }
     // Must be open to being hired — a dedicated freelancer account OR a builder who
     // opted in (available_for_hire). Keyed on the opt-in flag, not the account type,
     // so opted-in builders can bid too.
@@ -559,7 +578,7 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
   router.get('/', webAuthMiddleware, async (c) => {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
-    const rows = await db
+    const [rows, unreadRows] = await Promise.all([db
       .select({
         id:         freelancerNotifications.id,
         kind:       freelancerNotifications.kind,
@@ -572,8 +591,12 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
       .from(freelancerNotifications)
       .where(eq(freelancerNotifications.userId, userId))
       .orderBy(desc(freelancerNotifications.createdAt))
-      .limit(100);
-    const unread = rows.filter((r) => r.read_at == null).length;
+      .limit(100),
+      db.select({ value: sql<number>`count(*)::int` })
+        .from(freelancerNotifications)
+        .where(and(eq(freelancerNotifications.userId, userId), isNull(freelancerNotifications.readAt))),
+    ]);
+    const unread = Number(unreadRows[0]?.value ?? 0);
     return c.json({
       unread,
       items: rows.map((r) => ({ id: Number(r.id), kind: r.kind, title: r.title, body: r.body ?? null, ref: r.ref ?? null, read: r.read_at != null, createdAt: r.created_at })),

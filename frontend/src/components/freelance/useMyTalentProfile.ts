@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getMyFreelancerProfile, updateMyFreelancerProfile, type FreelancerProfile,
+  getMyFreelancerProfileCached, invalidateMyFreelancerProfile,
+  updateMyFreelancerProfile, type FreelancerProfile,
 } from '@/lib/freelancerApi';
 
 /**
@@ -13,20 +14,12 @@ import {
  * change. The in-flight promise is shared and only invalidated on write, so a
  * wizard pass costs ONE GET.
  */
-let cachedProfile: Promise<FreelancerProfile> | null = null;
-
 export function loadMyTalentProfile(force = false): Promise<FreelancerProfile> {
-  if (force || !cachedProfile) {
-    cachedProfile = getMyFreelancerProfile().catch((err) => {
-      cachedProfile = null; // never cache a failure
-      throw err;
-    });
-  }
-  return cachedProfile;
+  return getMyFreelancerProfileCached(force);
 }
 
 export function invalidateMyTalentProfile(): void {
-  cachedProfile = null;
+  invalidateMyFreelancerProfile();
 }
 
 export interface MyTalentProfileState {

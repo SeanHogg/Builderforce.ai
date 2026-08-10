@@ -84,12 +84,12 @@ export function CanvasPanelProvider({ children }: { children: ReactNode }) {
               disabled={saving}
               style={{
                 padding: '6px 12px',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
-                background: 'var(--accent, #2563eb)',
-                color: '#fff',
+                background: 'var(--accent)',
+                color: 'var(--text-on-accent)',
                 fontWeight: 600,
-                fontSize: 13,
+                fontSize: 'var(--font-size-small)',
                 cursor: saving ? 'default' : 'pointer',
                 opacity: saving ? 0.6 : 1,
               }}

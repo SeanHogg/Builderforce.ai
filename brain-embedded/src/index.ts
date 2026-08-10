@@ -195,6 +195,21 @@ export {
 } from './chatWorkLinking';
 export type { CreatedWorkItemLink, LinkedTicketToAdvance } from './chatWorkLinking';
 
+// Chat MODE — conversation (`chat`) vs execution (`work`). The single source for what
+// a mode MEANS to the model, shared by the web Brain, the VS Code webview and the
+// shared agent loop (migration 0409).
+export {
+  CHAT_MODES,
+  NEW_CHAT_MODE,
+  RESTING_CHAT_MODE,
+  isChatMode,
+  normalizeChatMode,
+  chatModeDirective,
+  chatConversationDirective,
+  chatWorkDirective,
+} from './chatMode';
+export type { ChatMode } from './chatMode';
+
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
 
@@ -243,6 +258,30 @@ export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLe
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
+
+// Model choice — WHICH models a surface offers, in what order, and who pays. Shared
+// by the composer `/` menu (web + webview) AND the VS Code host's QuickPick, which
+// runs in Node and cannot import the React UI package.
+export {
+  buildModelItems,
+  filterModelItems,
+  activeModelKey,
+  modelCategoryLabel,
+  modelInUse,
+  perMillionUsd,
+  premiumCostLabel,
+  byoVendorLabel,
+  MODEL_CATEGORIES,
+  DEFAULT_MODEL_CHOICE_LABELS,
+  PROJECT_EVERMIND_MODEL_PREFIX,
+} from './modelChoice';
+export type {
+  ChatModelOptions,
+  ChatModelSelection,
+  ModelCategory,
+  ModelChoiceLabels,
+  ModelItem,
+} from './modelChoice';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
 export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
 // The tool ROUTER — three fixed tools that keep the whole catalog reachable even when

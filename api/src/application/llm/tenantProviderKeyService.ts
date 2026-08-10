@@ -237,6 +237,7 @@ export interface OpenAICodexResolution {
 /** Resolve and rotate a tenant's ChatGPT/Codex subscription credential. */
 export async function resolveOpenAICodexResolution(env: Env, tenantId: number): Promise<OpenAICodexResolution> {
   const row = await loadProviderRow(env, tenantId, 'openai');
+  if (row?.lookup_failed) return { auth: null, reason: 'lookup_failed' };
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { auth: null };
   let tokens: OpenAICodexOAuthTokens;
   try {
@@ -260,6 +261,7 @@ export interface XaiOAuthResolution { token: string | null; reason?: ByoUnresolv
 
 export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Promise<XaiOAuthResolution> {
   const row = await loadProviderRow(env, tenantId, 'xai');
+  if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
   let tokens: XaiOAuthTokens;
   try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as XaiOAuthTokens; }
@@ -281,6 +283,7 @@ export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Pro
 interface ProviderKeyRow {
   key_enc?: string;
   auth_type?: string;
+  lookup_failed?: boolean;
 }
 
 async function loadProviderRow(
@@ -306,8 +309,9 @@ async function loadProviderRow(
     // Drizzle hands back camelCase; the callers below read the snake_case column
     // names this row shape has always exposed — map back rather than rename them.
     return { key_enc: row.keyEnc ?? undefined, auth_type: row.authType ?? undefined };
-  } catch {
-    return null;
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/llm/tenantProviderKeyService.ts', operation: 'loadProviderRow', context: { tenantId, provider } });
+    return { lookup_failed: true };
   }
 }
 
@@ -327,7 +331,7 @@ async function loadProviderRow(
  *                         under a DIFFERENT workspace they belong to (a tenant mismatch —
  *                         they connected it somewhere else). Detected separately, per-user.
  */
-export type ByoUnresolvedReason = 'revoked' | 'expired' | 'undecryptable' | 'unsupported-auth' | 'other-workspace';
+export type ByoUnresolvedReason = 'revoked' | 'expired' | 'undecryptable' | 'unsupported-auth' | 'other-workspace' | 'lookup_failed';
 
 /** Result of resolving a tenant's Anthropic credential: the usable auth (or null) plus,
  *  when a credential ROW exists but couldn't be used, WHY. `reason` is undefined both when
@@ -351,6 +355,7 @@ export async function resolveAnthropicResolution(
   tenantId: number,
 ): Promise<AnthropicResolution> {
   const row = await loadProviderRow(env, tenantId, 'anthropic');
+  if (row?.lookup_failed) return { auth: null, reason: 'lookup_failed' };
   if (!row?.key_enc) return { auth: null }; // nothing connected — not a failure
   const authType = (row.auth_type ?? 'api_key') as ProviderAuthType;
 
@@ -511,7 +516,10 @@ export interface TenantLlmCredentials {
  * Resolve the Anthropic subscription token, the BYO api-keys, AND the set of
  * configured providers in ONE round-trip (the reads run in parallel). The single
  * entry point for the gateway + cloud completion paths so they don't each duplicate
- * the lookups. Best-effort — each part independently degrades to null/empty, and a
+ * the lookups. Credential decoding is best-effort, while failure to read the
+ * authoritative configured-provider list is fatal: silently treating a DB outage as
+ * "no BYO account" would spend from the operator pool without telling the tenant.
+ * Each configured-but-unresolved provider still shows up in `configuredProviders` (with a
  * configured-but-unresolved provider still shows up in `configuredProviders` (with a
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
@@ -521,7 +529,7 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
     resolveTenantVendorKeys(env, tenantId),
-    listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
+    listTenantProviderKeys(env, tenantId),
     listOpenRouterConnections(env, tenantId).catch(() => [] as OpenRouterConnection[]),
   ]);
   // Decrypt the connections' OWN OpenRouter keys only when the (cached) metadata says at least

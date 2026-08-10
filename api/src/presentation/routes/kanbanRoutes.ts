@@ -337,6 +337,35 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     return c.json({ participant });
   });
 
+  // Staff an existing manifest role. This is deliberately distinct from Resource
+  // Assessment above: assignment never invents another participant row.
+  router.patch('/tasks/:taskId/participants/assign', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    const body = await c.req.json<{ roleKey?: string; assigneeRef?: string; assigneeKind?: 'agent' | 'user' }>();
+    try {
+      const result = await participantsService.assignParticipant(env(c), tenantId, taskId, {
+        roleKey: body.roleKey ?? '',
+        assigneeRef: body.assigneeRef ?? '',
+        assigneeKind: body.assigneeKind as 'agent' | 'user',
+      });
+      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      await recordActivity(env(c), db, {
+        tenantId, projectId: proj?.projectId ?? null,
+        actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
+        verb: 'ticket.participant.assigned', targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
+        summary: `Assigned ${body.assigneeKind} ${body.assigneeRef} to role ${roleLabel(body.roleKey ?? '')}`.slice(0, 300),
+        metadata: { roleKey: body.roleKey, assigneeRef: body.assigneeRef, assigneeKind: body.assigneeKind, updated: result.updated },
+      });
+      return c.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = /not found|not a tenant member/.test(message) ? 404 : 400;
+      return c.json({ error: message }, status);
+    }
+  });
+
   router.delete('/tasks/:taskId/participants/:participantId', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));

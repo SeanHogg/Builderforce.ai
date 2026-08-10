@@ -12,12 +12,13 @@
  * (the `./retrieval` subpath is zero-dep + Worker-safe), so this never duplicates
  * the chunker/BM25.
  */
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, or } from 'drizzle-orm';
 import { bm25Search, chunkText, type Bm25Doc } from '@seanhogg/builderforce-memory/retrieval';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentKnowledgeChunks } from '../../infrastructure/database/schema';
+import { agentKnowledgeChunks, ideAgents } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export interface KnowledgeChunk {
   id: string;
@@ -27,7 +28,7 @@ export interface KnowledgeChunk {
 /** Default number of chunks recalled and injected at inference. */
 export const RECALL_TOP_K = 5;
 
-const cacheKey = (agentId: string) => `agent_knowledge:chunks:${agentId}`;
+const cacheKey = (tenantId: number, agentId: string) => `agent_knowledge:chunks:${tenantId}:${agentId}`;
 
 /**
  * Pure: pick the top-K most relevant chunks for `query` (Okapi BM25) and assemble
@@ -52,15 +53,20 @@ export function chunkDocuments(docs: ReadonlyArray<{ text: string }>): string[] 
 }
 
 /** Load an agent's stored chunks, read-through cached (stable until re-ingest). */
-export async function loadAgentChunks(env: Env, db: Db, agentId: string): Promise<KnowledgeChunk[]> {
+export async function loadAgentChunks(env: Env, db: Db, tenantId: number, agentId: string): Promise<KnowledgeChunk[]> {
   return getOrSetCached(
     env,
-    cacheKey(agentId),
+    cacheKey(tenantId, agentId),
     async () => {
       const rows = await db
         .select({ id: agentKnowledgeChunks.id, chunkText: agentKnowledgeChunks.chunkText })
         .from(agentKnowledgeChunks)
-        .where(eq(agentKnowledgeChunks.agentId, agentId))
+        .where(scopedToTenant(
+          agentKnowledgeChunks,
+          tenantId,
+          eq(agentKnowledgeChunks.agentId, agentId),
+          or(isNull(agentKnowledgeChunks.expiresAt), gt(agentKnowledgeChunks.expiresAt, new Date())),
+        ))
         .orderBy(asc(agentKnowledgeChunks.ordinal));
       return rows.map((r) => ({ id: r.id, text: r.chunkText }));
     },
@@ -76,11 +82,12 @@ export async function loadAgentChunks(env: Env, db: Db, agentId: string): Promis
 export async function recallAgentKnowledge(
   env: Env,
   db: Db,
+  tenantId: number,
   agentId: string,
   query: string,
   topK: number = RECALL_TOP_K,
 ): Promise<string> {
-  const chunks = await loadAgentChunks(env, db, agentId);
+  const chunks = await loadAgentChunks(env, db, tenantId, agentId);
   return selectRecallContext(query, chunks, topK);
 }
 
@@ -93,16 +100,24 @@ export async function recallAgentKnowledge(
 export async function ingestAgentKnowledge(
   env: Env,
   db: Db,
+  tenantId: number,
   agentId: string,
   docs: ReadonlyArray<{ text: string }>,
   source?: string,
 ): Promise<number> {
   const texts = chunkDocuments(docs);
-  await db.delete(agentKnowledgeChunks).where(eq(agentKnowledgeChunks.agentId, agentId));
+  const [agent] = await db.select({ tenantId: ideAgents.tenantId }).from(ideAgents).where(
+    scopedToTenant(ideAgents, tenantId, eq(ideAgents.id, agentId)),
+  ).limit(1);
+  if (!agent) throw new Error('agent not found');
+  await db.delete(agentKnowledgeChunks).where(
+    scopedToTenant(agentKnowledgeChunks, tenantId, eq(agentKnowledgeChunks.agentId, agentId)),
+  );
   if (texts.length > 0) {
     await db.insert(agentKnowledgeChunks).values(
       texts.map((text, i) => ({
         id: crypto.randomUUID(),
+        tenantId: agent.tenantId,
         agentId,
         ordinal: i,
         chunkText: text,
@@ -110,6 +125,6 @@ export async function ingestAgentKnowledge(
       })),
     );
   }
-  await invalidateCached(env, cacheKey(agentId));
+  await invalidateCached(env, cacheKey(tenantId, agentId));
   return texts.length;
 }

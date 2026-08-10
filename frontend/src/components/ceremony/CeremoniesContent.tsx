@@ -72,7 +72,7 @@ export function CeremoniesContent() {
               style={{
                 minHeight: 40,
                 padding: '8px 14px',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',

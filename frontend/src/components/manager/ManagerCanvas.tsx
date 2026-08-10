@@ -10,6 +10,7 @@ import {
 import type { ManagerAction, ManagerOverview } from '@/lib/builderforceApi';
 import { managerActionIcon } from '@/lib/managerActions';
 import styles from './ManagerCanvas.module.css';
+import { Icon } from '@/components/ui/Icon';
 import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 
 interface CanvasMetric { label: string; value: string | number; alert?: boolean }
@@ -53,7 +54,7 @@ function ManagerArtifactBody({ data }: { data: ManagerCanvasNodeData }) {
             <ul className={styles.list}>
               {data.items.map((item, index) => (
                 <li className={styles.listItem} key={`${item.title}-${index}`}>
-                  <span className={styles.listIcon} aria-hidden>{item.icon}</span>
+                  <span className={styles.listIcon} aria-hidden><Icon source={item.icon} size={18} /></span>
                   <span className={styles.listCopy}><b>{item.title}</b>{item.detail && <span>{item.detail}</span>}</span>
                   {item.when && <time>{item.when}</time>}
                 </li>

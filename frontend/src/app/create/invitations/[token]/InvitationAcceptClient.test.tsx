@@ -40,7 +40,7 @@ describe('Creation Session invitation acceptance', () => {
     const navigate = vi.fn();
     render(<InvitationAcceptClient token={TOKEN} navigate={navigate} />);
 
-    const switchAccount = await screen.findByRole('button', { name: 'Use another account' });
+    const switchAccount = await screen.findByRole('button', { name: 'creationInvitation.useAnotherAccount' });
     switchAccount.click();
     expect(mocks.logout).toHaveBeenCalledOnce();
     expect(navigate).toHaveBeenCalledWith(`/login?next=${encodeURIComponent(`/create/invitations/${TOKEN}`)}`);
@@ -48,7 +48,7 @@ describe('Creation Session invitation acceptance', () => {
 
   it('preserves the invitation while a signed-out recipient authenticates', () => {
     render(<InvitationAcceptClient token={TOKEN} />);
-    expect(screen.getByRole('link', { name: 'Sign in with the invited email' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'creationInvitation.signInLink' })).toHaveAttribute(
       'href',
       `/login?next=${encodeURIComponent(`/create/invitations/${TOKEN}`)}`,
     );

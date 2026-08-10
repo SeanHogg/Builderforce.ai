@@ -57,7 +57,12 @@ function detectFileType(filename: string): ImportFileType {
 
 // ── CSV parsing ───────────────────────────────────────────────
 
-export function parseCSV(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
+/**
+ * Parse delimiter-separated text. `delimiter` defaults to a comma; pass "\t"
+ * for TSV so quoted fields, escaped quotes, and ragged rows are handled by the
+ * same parser rather than an ad-hoc split.
+ */
+export function parseCSV(text: string, delimiter = ','): { headers: string[]; rows: Record<string, unknown>[] } {
   // Split lines, handle CRLF
   const lines = text
     .split(/\r?\n/)
@@ -68,11 +73,11 @@ export function parseCSV(text: string): { headers: string[]; rows: Record<string
     return { headers: [], rows: [] };
   }
 
-  const headers = parseCSVLine(lines[0]);
+  const headers = parseCSVLine(lines[0], delimiter);
   const rows: Record<string, unknown>[] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
+    const values = parseCSVLine(lines[i], delimiter);
     const row: Record<string, unknown> = {};
 
     for (let j = 0; j < headers.length; j++) {
@@ -89,7 +94,7 @@ export function parseCSV(text: string): { headers: string[]; rows: Record<string
   return { headers, rows };
 }
 
-function parseCSVLine(line: string): string[] {
+function parseCSVLine(line: string, delimiter = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -104,7 +109,7 @@ function parseCSVLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current.trim());
       current = '';
     } else {

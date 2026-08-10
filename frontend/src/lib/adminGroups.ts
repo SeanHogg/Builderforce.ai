@@ -4,7 +4,7 @@
  * each with its own inner sub-views.
  *
  * Pure data (no React) so both the shell nav (`navGroups.ts`, which renders the
- * top <SectionTabs> from `ADMIN_GROUP_META`) and the admin page (which renders
+ * top <ShellIndex> from `ADMIN_GROUP_META`) and the admin page (which renders
  * the inner sub-tab bar + resolves `?tab=`/`?sub=` to a panel) consume the same
  * config and can never drift.
  *
@@ -24,7 +24,7 @@ export interface AdminSubMeta {
 export interface AdminGroupMeta {
   /** `?tab=` value; '' is the default group (Overview). */
   id: string;
-  /** i18n key under the `nav` namespace (shared with <SectionTabs>). */
+  /** i18n key under the `nav` namespace (shared with <ShellIndex>). */
   labelKey: string;
   icon: string;
   subs: AdminSubMeta[];
@@ -32,7 +32,8 @@ export interface AdminGroupMeta {
 
 export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   { id: '', labelKey: 'tab.adminOverview', icon: '🩺', subs: [
-    { id: '', subKey: 'health', icon: '🩺' },
+    { id: '', subKey: 'outcomes', icon: '↗' },
+    { id: 'health', subKey: 'health', icon: '🩺' },
     { id: 'cron', subKey: 'cron', icon: '⏱' },
   ] },
   { id: 'users', labelKey: 'tab.adminUsers', icon: '👤', subs: [
@@ -63,13 +64,17 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   ] },
   { id: 'growth', labelKey: 'tab.adminGrowth', icon: '💳', subs: [
     { id: '', subKey: 'billing', icon: '💳' },
+    { id: 'pricing', subKey: 'pricing', icon: '＄' },
     { id: 'newsletter', subKey: 'newsletter', icon: '✉️' },
     { id: 'releaseNotes', subKey: 'releaseNotes', icon: '📣' },
+    { id: 'broadcasts', subKey: 'broadcasts', icon: '📢' },
     { id: 'demoFunnel', subKey: 'demoFunnel', icon: '🎬' },
     { id: 'salesLeads', subKey: 'salesLeads', icon: '📇' },
+    { id: 'sales-commissions', subKey: 'salesCommissions', icon: '％' },
   ] },
   { id: 'logs', labelKey: 'tab.adminLogs', icon: '📋', subs: [
     { id: '', subKey: 'errors', icon: '🐞' },
+    { id: 'email-deliveries', subKey: 'emailDeliveries', icon: '✉️' },
     { id: 'audit', subKey: 'audit', icon: '📋' },
     { id: 'feedback', subKey: 'feedback', icon: '💬' },
   ] },
@@ -84,7 +89,8 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
  * deep link (e.g. `/admin?tab=security`, bookmarks, the old email links) working.
  */
 export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string }> = {
-  health: { group: '', sub: '' },
+  health: { group: '', sub: 'health' },
+  outcomes: { group: '', sub: '' },
   users: { group: 'users', sub: '' },
   security: { group: 'users', sub: 'security' },
   impsessions: { group: 'users', sub: 'emulation' },

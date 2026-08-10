@@ -15,7 +15,7 @@
  *   - Snapshots are synced to Cloudflare R2 via the existing artifact endpoint
  */
 
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
+import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
 import type { MambaConfig, MambaStateSnapshot, MambaAgentState } from './types';
 
 // ---------------------------------------------------------------------------
@@ -400,6 +400,22 @@ export class MambaEngine {
   /** Get agent ID */
   get agentId(): string {
     return this.state.agentId;
+  }
+
+  /** Release WebGPU resources owned by this engine. Safe to call repeatedly. */
+  dispose(): void {
+    const gpu = this.gpuBackend;
+    this.gpuBackend = null;
+    this.gpuReady = false;
+    if (!gpu) return;
+
+    gpu.paramsBuffer.destroy();
+    gpu.stateBuffer.destroy();
+    gpu.inputBuffer.destroy();
+    gpu.stateOutBuffer.destroy();
+    gpu.outputBuffer.destroy();
+    gpu.readbackBuffer.destroy();
+    gpu.device.destroy();
   }
 
   // -- Private helpers -------------------------------------------------------

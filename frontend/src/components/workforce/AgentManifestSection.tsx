@@ -27,13 +27,13 @@ const sectionStyle: CSSProperties = {
 const headRow: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 };
 const headLabel: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', color: 'var(--muted)' };
 const copyBtn: CSSProperties = {
-  fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, cursor: 'pointer',
+  fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
   background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)',
 };
 const rowStyle: CSSProperties = { display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' };
 const groupLabel: CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--muted)', minWidth: 58 };
 const chipStyle: CSSProperties = {
-  fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+  fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-full)',
   background: 'var(--surface-coral-soft)', color: 'var(--accent)', whiteSpace: 'nowrap',
 };
 const personaChip: CSSProperties = { ...chipStyle, background: 'var(--bg-elevated)', color: 'var(--text-strong)' };

@@ -62,10 +62,16 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
   asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
   clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
-  // Not a board/ticket source: this key gives CLOUD AGENTS the `web_search` tool. They
-  // can already read a URL you give them; a search key lets them find one. Search bills
-  // per query, so the key is yours — with none saved, agents stay fetch-only.
-  brave_search: { label: 'Brave Search (agent web search)', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
+  // Not a board/ticket source: this key WIDENS research from the keyless encyclopedic
+  // index (which every workspace, and every logged-out visitor, already gets) to a
+  // general web index. Search bills per query, so the key is yours — with none saved,
+  // agents and the canvas still research, just against narrower coverage.
+  // The label is the BRAND NAME only: it is substituted into localized sentences
+  // ("Add {provider} key", "Edit {provider} key"), so an English parenthetical here
+  // both breaks those sentences and ships untranslatable copy through the catalog.
+  tavily: { label: 'Tavily', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'tvly-…' }] },
+  exa: { label: 'Exa', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'exa_…' }] },
+  linkup: { label: 'Linkup', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lp_…' }] },
   // Google connectors — OAuth offline credentials (client id/secret + a refresh
   // token from Google's OAuth playground or your own consent flow). Gmail backs
   // the email workflow node; Drive can back a project's file storage.
@@ -86,7 +92,7 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 20,
 };
 
@@ -94,7 +100,7 @@ const inputStyle: React.CSSProperties = {
   padding: '8px 12px',
   fontSize: 13,
   border: '1px solid var(--border-subtle)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)',
   color: 'var(--text-primary)',
   width: '100%',
@@ -103,14 +109,14 @@ const inputStyle: React.CSSProperties = {
 
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600,
-  background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600,
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 export interface IntegrationCredentialsManagerProps {
@@ -301,7 +307,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
           {readOnly && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{t('workspaceTag')}</span>}
         </span>
         {ok != null && (
-          <span style={{ fontSize: 11, color: ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+          <span style={{ fontSize: 11, color: ok ? 'var(--success)' : 'var(--danger)' }}>
             {ok ? `● ${t('connected')}` : `● ${t('failed')}`}
           </span>
         )}
@@ -324,7 +330,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
             <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>
               {tc('edit')}
             </button>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(c.id)}>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(c.id)}>
               {tc('delete')}
             </button>
           </>
@@ -354,10 +360,10 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
       {adding ? (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{editing ? t('editKeyTitle', { provider: meta.label }) : t('addKeyTitle')}</div>
           <Select
             value={provider}

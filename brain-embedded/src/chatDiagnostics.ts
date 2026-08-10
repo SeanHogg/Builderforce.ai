@@ -84,8 +84,9 @@ export interface ChatDiagnosticsAccount {
 
 /**
  * WHICH purse funds a model, as a machine key: `auto` (no pin — the gateway routes per
- * turn), `byo:<vendor>` (the tenant's own connected account), `plan` (in the plan pool,
- * included), or `premium` (metered at cost + per-request fee).
+ * turn), `evermind` (the project's own learned head), `byo:<vendor>` (the tenant's own
+ * connected account), `plan` (in the plan pool, included), or `premium` (metered at
+ * cost + per-request fee).
  *
  * ONE decision, two consumers: the chat header renders a localized sentence from it and
  * the diagnostics report records it. Kept here (not in a UI file) so the sentence a user
@@ -96,6 +97,12 @@ export function classifyModelFunding(
   surface: { data?: Array<{ id?: string }>; byo?: { models?: Array<{ id?: string; vendor?: string }> } } | null | undefined,
 ): string {
   if (!model) return 'auto';
+  // A `project_evermind:<id>` pin is a plan FEATURE — the gateway expands it to the
+  // project's current learned head — not a catalog model. It is in no pool, so the
+  // fall-through below used to call it `premium`, which on a free plan raised a
+  // "premium model, plan not entitled" warning about a model the user never picked
+  // and the gateway serves happily.
+  if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) return 'evermind';
   const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
   if (byo?.vendor) return `byo:${byo.vendor}`;
   if ((surface?.data ?? []).some((m) => m.id === model)) return 'plan';
@@ -103,6 +110,7 @@ export function classifyModelFunding(
 }
 
 import { DEFAULT_TOOL_LIMIT } from './selectTools';
+import { PROJECT_EVERMIND_MODEL_PREFIX } from './modelChoice';
 
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 export interface ChatDiagnosticsData {
