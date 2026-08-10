@@ -22,7 +22,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
-  boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
+  boards, ideAgents, projects, swimlaneRequirements, swimlanes, tasks, tenantMembers,
+  ticketParticipants, ticketRoleSignoffs, users,
 } from '../../infrastructure/database/schema';
 import { roleDisplayName } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
@@ -159,6 +160,17 @@ export interface AddParticipantInput {
   assignee?: ExplicitAssignee | null;
 }
 
+export interface AssignParticipantInput {
+  roleKey: string;
+  assigneeRef: string;
+  assigneeKind: 'agent' | 'user';
+}
+
+export interface AssignParticipantResult {
+  updated: number;
+  participants: ManifestParticipant[];
+}
+
 /** Port for creating a child work-item task — injected from the route (TaskService). */
 export type CreateChildTask = (input: {
   title: string;
@@ -186,6 +198,87 @@ export class TicketParticipantsService {
   /** Invalidate a ticket's cached manifest/accountability + its project summary. */
   async invalidate(env: Env, taskId: number): Promise<void> {
     await this.bump(env, taskId);
+  }
+
+  /** Assign or reassign every manifest slot for one role. The role must already
+   * exist: resource assessment owns slot creation, while this operation only
+   * staffs an existing contract. Reassignment resets the slot to `assigned` so
+   * evidence produced by the previous assignee cannot silently credit the new one. */
+  async assignParticipant(
+    env: Env,
+    tenantId: number,
+    taskId: number,
+    input: AssignParticipantInput,
+  ): Promise<AssignParticipantResult> {
+    const roleKey = input.roleKey.trim();
+    const assigneeRef = input.assigneeRef.trim();
+    if (!Number.isInteger(taskId) || taskId <= 0) throw new Error('taskId must be a positive integer');
+    if (!roleKey) throw new Error('roleKey is required');
+    if (!assigneeRef) throw new Error('assigneeRef is required');
+    if (input.assigneeKind !== 'agent' && input.assigneeKind !== 'user') {
+      throw new Error('assigneeKind must be "agent" or "user"');
+    }
+
+    const [task] = await this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .innerJoin(projects, and(eq(projects.id, tasks.projectId), eq(projects.tenantId, tenantId)))
+      .where(eq(tasks.id, taskId))
+      .limit(1);
+    if (!task) throw new Error('task not found');
+
+    const slots = await this.db
+      .select({ id: ticketParticipants.id })
+      .from(ticketParticipants)
+      .where(and(
+        eq(ticketParticipants.tenantId, tenantId),
+        eq(ticketParticipants.taskId, taskId),
+        eq(ticketParticipants.roleKey, roleKey),
+      ));
+    if (!slots.length) throw new Error(`participant role "${roleKey}" not found on task`);
+
+    let assigneeName: string;
+    let storedKind: 'agent' | 'human';
+    if (input.assigneeKind === 'agent') {
+      const [agent] = await this.db
+        .select({ name: ideAgents.name })
+        .from(ideAgents)
+        .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, assigneeRef), eq(ideAgents.status, 'active')))
+        .limit(1);
+      if (!agent) throw new Error('active agent assignee not found in tenant');
+      assigneeName = agent.name;
+      storedKind = 'agent';
+    } else {
+      const [member] = await this.db
+        .select({ name: users.displayName, email: users.email })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, assigneeRef)))
+        .limit(1);
+      if (!member) throw new Error('user assignee is not a tenant member');
+      assigneeName = member.name ?? member.email;
+      storedKind = 'human';
+    }
+
+    const updated = await this.db
+      .update(ticketParticipants)
+      .set({
+        assigneeKind: storedKind,
+        assigneeRef,
+        assigneeName,
+        state: 'assigned',
+        signoffId: null,
+        evidence: null,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(ticketParticipants.tenantId, tenantId),
+        eq(ticketParticipants.taskId, taskId),
+        eq(ticketParticipants.roleKey, roleKey),
+      ))
+      .returning();
+    await this.bump(env, taskId);
+    return { updated: updated.length, participants: updated.map((row) => this.mapRow(row)) };
   }
 
   /**
