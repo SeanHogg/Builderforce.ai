@@ -1,4 +1,6 @@
-.promptWidget { display:grid; gap:12px; height:100%; align-content:center; }
+/* The dashboard is a PAGE now, not a canvas node — `height:100%` was sizing this
+   to a fixed 230px node box and has no meaning in flow. */
+.promptWidget { display:grid; gap:12px; align-content:center; }
 .promptWidget > p { margin:0; color:var(--text-secondary); font-size:13px; line-height:1.5; text-align:center; }
 .promptWidget a,.warning a { color:var(--coral-bright); text-decoration:none; }
 .promptWidget > div { width:min(100%,760px); margin:0 auto; }

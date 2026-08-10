@@ -28,7 +28,7 @@ import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost
 import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
 import { usePublishReferenceChrome, usePublishReferenceSelect } from '@/lib/referenceChrome';
-import styles from './DashboardCanvas.module.css';
+import styles from './Dashboard.module.css';
 import { signInHref } from '@/lib/auth';
 
 const DASHBOARD_TABS = ['create', 'projects', 'workforce', 'quality', 'knowledge'] as const;
