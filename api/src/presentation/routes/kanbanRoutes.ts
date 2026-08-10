@@ -368,8 +368,13 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
 
   router.delete('/tasks/:taskId/participants/:participantId', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
-    await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));
-    return c.json({ ok: true });
+    try {
+      await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));
+      return c.json({ ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json({ error: message }, /not found/.test(message) ? 404 : 409);
+    }
   });
 
   // Materialize a child work-item task per resolved participant (the %-complete rollup).

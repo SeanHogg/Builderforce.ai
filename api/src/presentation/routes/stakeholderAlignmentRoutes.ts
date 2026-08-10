@@ -1,9 +1,7 @@
-import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects } from '../../infrastructure/database/schema';
 import { StakeholderMapService } from '../../application/stakeholderAlignment/StakeholderMapService';
 import {
   STAKEHOLDER_ALIGNMENT_QUESTIONS,
@@ -28,19 +26,13 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
   const manager = requireRole(TenantRole.MANAGER);
   router.use('*', authMiddleware);
 
-  async function ownsProject(tenantId: number, projectId: number): Promise<boolean> {
-    const [row] = await db.select({ id: projects.id }).from(projects)
-      .where(and(eq(projects.tenantId, tenantId), eq(projects.id, projectId)));
-    return !!row;
-  }
-
   router.get('/questions', (c) => c.json({ questions: STAKEHOLDER_ALIGNMENT_QUESTIONS }));
 
   router.get('/projects/:projectId/map', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
-    if (!await ownsProject(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
+    if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
     return c.json({ stakeholders: await service.listMap(tenantId, segmentId, projectId) });
   });
 
@@ -48,7 +40,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
-    if (!await ownsProject(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
+    if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
     const body = await c.req.json<{
       initiativeId?: string | null;
       stakeholderRef?: string;
@@ -76,7 +68,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
-    if (!await ownsProject(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
+    if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
     const body = await c.req.json<{ answers?: Partial<Record<StakeholderQuestionKey, StakeholderAnswer>> }>();
     const keys = STAKEHOLDER_ALIGNMENT_QUESTIONS.map((question) => question.key);
     if (!body.answers || keys.some((key) => !ANSWERS.has(body.answers?.[key] as StakeholderAnswer))) {
@@ -93,7 +85,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
-    if (!await ownsProject(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
+    if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
     return c.json({ profile: await service.getHealthProfile(tenantId, segmentId, projectId) });
   });
 
@@ -101,7 +93,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
-    if (!await ownsProject(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
+    if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
     const body = await c.req.json<{ stakeholderRef?: string; teamScope?: string; priorityKey?: string; rationale?: string }>();
     if (!body.stakeholderRef?.trim() || !body.teamScope?.trim() || !body.priorityKey?.trim()) {
       return c.json({ error: 'stakeholderRef, teamScope, and priorityKey are required' }, 400);
@@ -122,7 +114,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
-    if (!await ownsProject(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
+    if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
     const body = await c.req.json<{ subjectRef?: string; summary?: string }>();
     if (!body.subjectRef?.trim() || !body.summary?.trim()) return c.json({ error: 'subjectRef and summary are required' }, 400);
     try {

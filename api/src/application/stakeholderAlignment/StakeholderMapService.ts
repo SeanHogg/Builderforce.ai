@@ -9,6 +9,7 @@ import {
   stakeholderMapEntries,
   stakeholderPrioritySubmissions,
   activityLog,
+  projects,
   tenants,
 } from '../../infrastructure/database/schema';
 import { scopedToSegment, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -146,6 +147,12 @@ export function buildWeeklyStakeholderDigest(input: {
 
 export class StakeholderMapService {
   constructor(private readonly db: Db) {}
+
+  async projectExists(tenantId: number, projectId: number): Promise<boolean> {
+    const [row] = await this.db.select({ id: projects.id }).from(projects)
+      .where(scopedToTenant(projects, tenantId, eq(projects.id, projectId)));
+    return Boolean(row);
+  }
 
   async listMap(tenantId: number, segmentId: string, projectId: number) {
     return this.db.select().from(stakeholderMapEntries).where(and(
