@@ -132,9 +132,21 @@ export function ActiveCanvasProvider({
 
   const projectIds = active ? (projectIdsBySession[active.sessionId] ?? []) : [];
 
+  /**
+   * Once this shell HAS a board, it keeps hosting it.
+   *
+   * The prop answers "does this route put a board on the stage", which is the
+   * right question on arrival and the wrong one afterwards: navigating to a
+   * panel destination makes it false, and a stage that stops being hosted is a
+   * board that unmounts — for a guest, permanently, because an anonymous board
+   * lives in memory. `rendersOperatorShell` is the matching half on the chrome
+   * side; these two must agree or the board is mounted twice or not at all.
+   */
+  const hosted = stageHosted || active != null;
+
   const value = useMemo<ActiveCanvasValue>(
-    () => ({ active, opened, stageHosted, projectIds, open, close, publishProjectIds }),
-    [active, close, open, opened, projectIds, publishProjectIds, stageHosted],
+    () => ({ active, opened, stageHosted: hosted, projectIds, open, close, publishProjectIds }),
+    [active, close, hosted, open, opened, projectIds, publishProjectIds],
   );
 
   return <ActiveCanvasContext.Provider value={value}>{children}</ActiveCanvasContext.Provider>;

@@ -84,14 +84,18 @@ self.addEventListener('fetch', (event) => {
 
   // Static assets: cache-first, update cache in background
   event.respondWith(
-    caches.open(STATIC_CACHE).then(async (cache) => {
-      const cached = await cache.match(request);
-      const networkFetch = fetch(request).then((res) => {
-        if (res.ok) cache.put(request, res.clone());
-        return res;
-      }).catch(() => null);
+    caches.match(request, { cacheName: SHELL_CACHE }).then((precached) => {
+      if (precached) return precached;
 
-      return cached ?? (await networkFetch) ?? new Response('Not found', { status: 404 });
+      return caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        const networkFetch = fetch(request).then((res) => {
+          if (res.ok) cache.put(request, res.clone());
+          return res;
+        }).catch(() => null);
+
+        return cached ?? (await networkFetch) ?? new Response('Not found', { status: 404 });
+      });
     })
   );
 });

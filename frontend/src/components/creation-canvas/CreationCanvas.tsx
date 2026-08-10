@@ -40,6 +40,18 @@ import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
+
+/**
+ * Which guided tour this board offers, and at which revision.
+ *
+ * Exported because the tour's "have I already seen this?" history is keyed by
+ * exactly this pair — so a test (or any other caller) that needs the
+ * returning-visitor state has to write the SAME key. Typed inline in two places
+ * it drifted the moment the version was bumped, and the failure mode is silent:
+ * the seed stops matching, the welcome dialog opens over the board again, and
+ * whatever the test was actually measuring is measured through an overlay.
+ */
+export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
 import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
@@ -765,8 +777,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     ][index],
   })), [t]);
   const sectionTour = useSectionTour({
-    sectionId: 'creation-canvas',
-    version: 2,
+    ...CREATION_CANVAS_TOUR,
     audienceId: currentUserId || (persistence === 'local' ? 'guest' : null),
     activity: { sessionId, clientSurface: canvasSurface() },
   });

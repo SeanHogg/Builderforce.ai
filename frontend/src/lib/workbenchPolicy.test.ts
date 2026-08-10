@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyRoute, isStageRoute, panelOpen, panelWidth } from './workbenchPolicy';
+import { classifyRoute, isStageRoute, panelOpen, panelWidth, rendersOperatorShell } from './workbenchPolicy';
 
 describe('classifyRoute', () => {
   it('puts the canvas surfaces on the stage', () => {
@@ -43,6 +43,50 @@ describe('panelOpen', () => {
   it('stays closed on the stage itself and on standalone routes', () => {
     expect(panelOpen('/create/c_8fa2', true)).toBe(false);
     expect(panelOpen('/projects/7', true)).toBe(false);
+  });
+});
+
+describe('rendersOperatorShell', () => {
+  // The nine destinations the operator named, plus the one that names the rule.
+  const WORKBENCH = [
+    '/insights', '/seat/governance', '/seat/investor', '/seat/hiring', '/seat/people',
+    '/seat/revenue', '/seat/finance', '/growth', '/incidents', '/embedded',
+  ];
+
+  it('keeps a guest their board when they consult a destination', () => {
+    for (const route of WORKBENCH) {
+      expect(rendersOperatorShell(route, false, true)).toBe(true);
+    }
+  });
+
+  it('still gives a guest with NO board marketing chrome', () => {
+    // Nothing to keep, so nothing changes: an app route shows its acquisition
+    // teaser and `/embedded` shows its real page — both in `MarketingShell`,
+    // which is the half of §11.4.5 that keeps the public surface indexable.
+    for (const route of WORKBENCH) {
+      expect(rendersOperatorShell(route, false, false)).toBe(false);
+    }
+  });
+
+  it('keeps a guest their board when they open a reference page', () => {
+    // The public half of §11.4.5 has the same hazard as the app half: a
+    // diagnostic or the embed catalog is exactly what someone checks MID-BUILD.
+    expect(rendersOperatorShell('/tools/ai-cost-estimator', false, true)).toBe(true);
+    expect(rendersOperatorShell('/embedded', false, true)).toBe(true);
+  });
+
+  it('never hands the operator shell to a marketing or framed route', () => {
+    // A long article wants the whole screen, board or no board — and the
+    // storefront, pricing and the auth screens are not panels at any rung.
+    for (const route of ['/pricing', '/blog/post', '/login', '/embed/board', '/projects/7', '/marketplace']) {
+      expect(rendersOperatorShell(route, false, true)).toBe(false);
+    }
+  });
+
+  it('changes nothing for a signed-in person', () => {
+    for (const route of [...WORKBENCH, '/settings', '/create/c_8fa2']) {
+      expect(rendersOperatorShell(route, true, false)).toBe(true);
+    }
   });
 });
 

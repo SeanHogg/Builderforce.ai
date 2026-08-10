@@ -21,13 +21,16 @@ describe('reduced-motion layout safety', () => {
    * never extend past the column, at any viewport, for any trigger position.
    */
   it('anchors the mega panel to the marketing column, never past its edges', () => {
-    const wide = css.match(/\.mh-panel-wide\s*\{([^}]*)\}/s)?.[1] ?? '';
+    // No `s` flag: the only metacharacter it changes is `.`, which is not used
+    // here — `[^}]*` already spans newlines. It cost a TS1501 under the ES2017
+    // target for nothing.
+    const wide = css.match(/\.mh-panel-wide\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(wide).toMatch(/left:\s*var\(--marketing-gutter\)/);
     expect(wide).toMatch(/right:\s*var\(--marketing-gutter\)/);
     // No horizontal transform in either state — a centring offset is exactly
     // what pushed it outside, and `left`/`right` already place it.
     expect(wide).not.toMatch(/translateX/);
-    const open = css.match(/\.mh-item\.has-menu\[data-open\] \.mh-panel-wide\s*\{([^}]*)\}/s)?.[1] ?? '';
+    const open = css.match(/\.mh-item\.has-menu\[data-open\] \.mh-panel-wide\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(open).toMatch(/transform:\s*translateY\(0\)/);
     expect(open).not.toMatch(/translateX/);
     // The panel resolves against `.mh-inner` (the column), which only works

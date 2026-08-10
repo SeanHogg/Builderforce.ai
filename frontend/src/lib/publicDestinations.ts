@@ -149,6 +149,17 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'evermind', seat: 'Brain', icon: '🧠', marketingHref: '/evermind', appHref: '/create', kind: 'link', placement: 'prove', panel: true },
   // ── Learn ▾ · BUILD WITH ─────────────────────────────────────────────────
   { id: 'ref.integrations', copyId: 'integrations', seat: 'CTO', icon: '🔌', marketingHref: '/integrations', appHref: '/settings/integrations', kind: 'foundation', placement: 'buildWith', panel: true },
+  // ONE route, two shells, and here the two are literally the same URL — which
+  // is the honest shape for this page and not true of any other row. `/soc2`
+  // explains a surface that lives at `/seat/governance`; `/embedded` IS the
+  // surface: the capability catalog, the install snippet and the consent log,
+  // with every control self-gating on a workspace (`EmbeddedCapabilities`
+  // renders the catalog with the toggles disabled and a placeholder key when
+  // there is no tenant). So a signed-out visitor reading "what can I embed?"
+  // and an owner turning a capability on are on the same page at the same
+  // address, at two rungs — and `check-destinations` allows the shared href
+  // only because `groupId` says out loud that they are the same destination.
+  { id: 'embedded', seat: 'CTO', icon: '⌗', marketingHref: '/embedded', appHref: '/embedded', kind: 'link', placement: 'buildWith', panel: true, groupId: 'embedded' },
   // `/models` and `/prompts` are not panels: signed in they are already app
   // surfaces (Marketplace's asset family and Knowledge's Prompts tab), and a
   // route cannot be both a panel over the board and a destination in it.
@@ -309,7 +320,7 @@ export interface FooterColumn {
 
 export const FOOTER_COLUMNS: FooterColumn[] = [
   { titleKey: 'colProduct', ids: ['canvas', 'marketplace', 'features', 'pricing', 'about'] },
-  { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'models', 'prompts'] },
+  { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts'] },
   { titleKey: 'colLearn', ids: ['blog', 'tutorials', 'compare', 'diagnostics', 'soc2', 'media'] },
   { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },
 ];

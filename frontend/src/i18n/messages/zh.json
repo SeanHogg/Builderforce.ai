@@ -12557,6 +12557,10 @@
         "title": "Evermind",
         "tagline": "智能体背后的模型。"
       },
+      "embedded": {
+        "title": "嵌入式",
+        "tagline": "把产品嵌入你自己的应用。"
+      },
       "models": {
         "title": "模型",
         "tagline": "运行的是什么，成本是多少。"

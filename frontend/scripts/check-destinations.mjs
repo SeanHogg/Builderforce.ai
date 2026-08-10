@@ -131,9 +131,32 @@ for (const key of labelKeys) {
 const marketingHrefs = new Set(
   [...registrySource.matchAll(/marketingHref:\s*'([^']+)',[\s\S]{0,300}?panel:\s*true/g)].map((m) => m[1]),
 );
+/**
+ * …EXCEPT where the rail row and the public row are the same destination.
+ *
+ * The rule above catches a rail row that navigates a signed-in person OUT of
+ * the product into a page describing it. `/embedded` is not that: the route is
+ * the surface AND its own explainer, self-gating on a workspace, so the public
+ * row and the rail row share one URL on purpose (§11.4.5, "one implementation,
+ * two shells", taken literally). The exemption is not "same href" — that is the
+ * bug — it is "same href AND the public row declares `groupId` for the rail row
+ * that owns it", which is a sentence somebody had to write down.
+ */
+const selfFacedHrefs = new Set(
+  [...referenceSourceForSelfFace(registrySource)].filter(Boolean),
+);
+function referenceSourceForSelfFace(source) {
+  const hrefs = [];
+  for (const row of source.matchAll(/\{[^{}]*marketingHref:\s*'([^']+)'[^{}]*\}/g)) {
+    const [text, href] = row;
+    const appHref = text.match(/appHref:\s*'([^']+)'/)?.[1];
+    if (appHref === href && /groupId:\s*'[^']+'/.test(text)) hrefs.push(href);
+  }
+  return hrefs;
+}
 const groupHrefs = [...(groupBlock?.[0] ?? '').matchAll(/href:\s*'([^']+)'/g)].map((m) => m[1]);
 for (const href of groupHrefs) {
-  if (marketingHrefs.has(href)) {
+  if (marketingHrefs.has(href) && !selfFacedHrefs.has(href)) {
     fail(
       `[marketing-href] A NAV_GROUPS row points at \`${href}\`, which is a reference page.\n` +
       '    Point it at the in-app destination; the explainer belongs in REFERENCE_DESTINATIONS.',

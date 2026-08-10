@@ -16,8 +16,35 @@ import { PANEL_SURFACES } from './navGroups';
  */
 const FOOTER_ONLY_PATHS = ['/login', '/register', '/activate'];
 
+/**
+ * Is `pathname` this route or something UNDER it?
+ *
+ * A bare `startsWith` is not that question, and the difference was a real bug:
+ * `/embedded` — the Embedded Capabilities destination, a rail row with its own
+ * page — starts with `/embed`, so the framed-webview prefix below swallowed it.
+ * It rendered with no chrome at all and, in `ConditionalAppShell`, inside the
+ * lean cross-origin provider tree meant for a partitioned iframe. Prefix lists
+ * compare SEGMENTS here, as `PUBLIC_SHELL_PREFIXES` already did.
+ */
+function underPrefix(pathname: string, prefix: string): boolean {
+  if (prefix.endsWith('/')) return pathname.startsWith(prefix);
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
 /** Full-screen routes that render their own UI with no shell chrome. */
 const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
+
+/**
+ * The framed cross-origin surface — the VS Code webview and third-party hosts.
+ *
+ * Exported because `ConditionalAppShell` asks the same question to pick the lean
+ * provider tree, and it asked it with its own `startsWith('/embed')`, which is
+ * how `/embedded` ended up in the iframe-safe tree with the global Brain and
+ * every bridge missing.
+ */
+export function isFramedEmbed(pathname: string): boolean {
+  return underPrefix(pathname, '/embed');
+}
 
 /**
  * Marketing + public-browse routes. These render in PublicShell (auth-aware
@@ -92,14 +119,14 @@ export function classifyGuestBrainstormEntry(inviteCode: string | null | undefin
  * app route, so new pages get the right chrome by default [1557].
  */
 export function classifyShell(pathname: string): ShellKind {
-  if (NO_CHROME_PREFIXES.some((p) => pathname.startsWith(p))) return 'none';
+  if (NO_CHROME_PREFIXES.some((p) => underPrefix(pathname, p))) return 'none';
   if (FOOTER_ONLY_PATHS.includes(pathname)) return 'footer';
   if (pathname === '/') return 'public';
   // A reference surface is public BY DEFINITION — that is the half of §11.4.5
   // that makes the other half cheap. Reading it off the registry rather than
   // off a second prefix list is what stops the two from disagreeing.
   if (isReferenceSurface(pathname)) return 'public';
-  if (PUBLIC_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'public';
+  if (PUBLIC_SHELL_PREFIXES.some((p) => underPrefix(pathname, p))) return 'public';
   return 'app';
 }
 
@@ -143,5 +170,5 @@ export function rendersAppShell(pathname: string, isAuthenticated: boolean): boo
  * with itself.
  */
 export function isReferenceSurface(pathname: string): boolean {
-  return PANEL_SURFACES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return PANEL_SURFACES.some((p) => underPrefix(pathname, p));
 }

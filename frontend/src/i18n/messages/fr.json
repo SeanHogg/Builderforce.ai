@@ -12557,6 +12557,10 @@
         "title": "Evermind",
         "tagline": "Le modèle derrière les agents."
       },
+      "embedded": {
+        "title": "Intégré",
+        "tagline": "Mettez le produit dans votre propre application."
+      },
       "models": {
         "title": "Modèles",
         "tagline": "Ce qui tourne, et ce que ça coûte."

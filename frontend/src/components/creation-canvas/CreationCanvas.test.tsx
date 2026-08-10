@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CREATION_CANVAS_TOUR, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { writeSectionTourHistory } from '@/lib/onboarding/browserSectionTourHistory';
 import { CreationNode } from './CreationNode';
 import { BrainDock } from './BrainDock';
 import { specsApi } from '@/lib/builderforceApi';
@@ -270,6 +271,14 @@ describe('CreationCanvas', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // The guided-tour offer fires on the FIRST visit to a section, and a guest
+    // board's audience is the constant `guest` — so clearing storage above made
+    // every render in this file open the welcome dialog over the canvas. Two
+    // tests then measured the tour instead of the thing they name (a `dialog`
+    // that should be gone after dismissing the account gate; the Brain mark
+    // behind an overlay). Seeding a dismissed history is the returning-visitor
+    // state 76 of these 78 tests already assume; the tour has its own tests.
+    writeSectionTourHistory(CREATION_CANVAS_TOUR.sectionId, 'guest', { ...CREATION_CANVAS_TOUR, visits: 1, outcome: 'dismissed' });
     capture.failWith = null;
     for (const spy of Object.values(toasts)) spy.mockClear();
   });
@@ -819,14 +828,23 @@ describe('CreationCanvas', () => {
     // Object stops being a second reading of it. It keeps Brain's place in the graph
     // and its state — nothing else. The regression is a board card repeating the same
     // exchange the dock is already showing a few hundred pixels away.
+    // The mark is the house icon language, not a literal glyph: `Icon` maps
+    // every legacy emoji onto an SVG so the same mark renders identically on
+    // every OS. This asserted `textContent === '✦'`, which that migration made
+    // permanently `''` — so the test was measuring the absence of a character
+    // rather than the presence of the mark.
     const marker = screen.getByRole('button', { name: 'Open Brain chat' });
-    expect(marker.textContent).toBe('✦');
+    expect(marker.querySelector('svg.ui-icon')).not.toBeNull();
+    expect(marker.textContent).toBe('');
     expect(marker).toHaveAttribute('data-state', 'idle');
 
     // Closed, the board is the only surface left, so the Object goes back to showing
-    // the conversation rather than a mark pointing at a panel that is not there.
+    // the conversation rather than a mark pointing at a panel that is not there —
+    // and the way back becomes a labelled control on the card, not the mark.
     fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
-    expect(screen.getByRole('button', { name: 'Open Brain chat' }).textContent).not.toBe('✦');
+    const anchor = screen.getByRole('button', { name: 'Open Brain chat' });
+    expect(anchor.textContent).toBe('Open Brain chat');
+    expect(anchor.querySelector('svg.ui-icon')).toBeNull();
   });
 
   it('lets the Brain Object reopen an inline Brain without a second launcher', () => {

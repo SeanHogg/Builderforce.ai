@@ -1,5 +1,5 @@
 .intro {
-  max-width: 760px;
+  max-width: var(--content-narrow);
   color: var(--text-secondary);
   font-size: var(--font-size-card-title);
 }
@@ -7,10 +7,6 @@
 .tableShell {
   margin: 32px 0 24px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--surface-card-strong) 92%, transparent);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
 }
 
 .table {
@@ -65,11 +61,7 @@
   align-items: flex-start;
   gap: 12px;
   margin-top: 24px;
-  padding: 16px 18px;
   color: var(--text-secondary);
-  background: var(--surface-coral-soft);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-lg);
 }
 
 .note > span {

@@ -20,7 +20,7 @@
  * Pure, so the buckets are a unit-testable table rather than emergent behaviour.
  */
 
-import { classifyShell, isReferenceSurface } from './shellRouting';
+import { classifyShell, isReferenceSurface, rendersAppShell } from './shellRouting';
 
 export type RouteBucket = 'stage' | 'workbench' | 'standalone';
 
@@ -72,6 +72,33 @@ export function classifyRoute(pathname: string): RouteBucket {
  */
 export function panelOpen(pathname: string, hasActiveCanvas: boolean): boolean {
   return hasActiveCanvas && classifyRoute(pathname) === 'workbench';
+}
+
+/**
+ * Does THIS visitor get the operator shell on THIS route, given that the shell
+ * is already holding a board?
+ *
+ * `rendersAppShell` answers it from the route and the session alone, and for a
+ * signed-in person that is the whole answer. For a GUEST it was not, and the
+ * gap was the corollary the whole PRD rests on — *a route may never unmount the
+ * stage* — being true for everyone except the person the anonymous board exists
+ * for. Someone building on a local board who clicked Insights, Finance, Growth,
+ * Governance, Reliability, People, Revenue, Investors or Hiring left the app
+ * shell entirely: `MarketingShell` mounted, `CanvasStage` unmounted, and the
+ * board — which lives in memory, because it has no account to be saved to —
+ * was gone. The page they got in exchange was the "This is part of
+ * Builderforce.ai" teaser, i.e. they paid for a locked door with their work.
+ *
+ * So a guest holding a board keeps the operator shell on any route that would
+ * open as a PANEL. The teaser still renders — it is the honest answer to "can I
+ * see Finance?" — but it renders in the panel, over a board that is still
+ * there, and `Esc` puts them back (PRD 21 §11.4.4: a dim row is an invitation).
+ * Scoped to `workbench` deliberately: a full-width route has nowhere to put the
+ * panel, and the public marketing pages must keep marketing chrome.
+ */
+export function rendersOperatorShell(pathname: string, isAuthenticated: boolean, hasBoard: boolean): boolean {
+  if (rendersAppShell(pathname, isAuthenticated)) return true;
+  return hasBoard && classifyRoute(pathname) === 'workbench';
 }
 
 /**

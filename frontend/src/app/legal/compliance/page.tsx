@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CompliancePage } from '@/components/legal/CompliancePage';
 import styles from './page.module.css';
 import { Icon } from '@/components/ui/Icon';
+import { surfaceClassName } from '@/components/ui/Surface';
 
 /**
  * Route, glyph, and the catalog key its label comes from.
@@ -36,7 +37,11 @@ export default async function ComplianceCenter() {
 
       <nav className={styles.grid} aria-label={t('resourcesHeading')}>
         {resources.map((resource) => (
-          <Link className={styles.card} href={resource.href} key={resource.href}>
+          <Link
+            className={surfaceClassName({ tone: 'raised', padding: 'md', interactive: true }, styles.card)}
+            href={resource.href}
+            key={resource.href}
+          >
             <span className={styles.icon} aria-hidden="true"><Icon source={resource.icon} size={22} /></span>
             <span className={styles.cardCopy}>
               <strong>{t(`nav.${resource.key}`)}</strong>
@@ -47,7 +52,7 @@ export default async function ComplianceCenter() {
         ))}
       </nav>
 
-      <div className={styles.assurance}>
+      <div className={surfaceClassName({ tone: 'accent', padding: 'md' }, styles.assurance)}>
         <span className={styles.pulse} aria-hidden="true" />
         <p><strong>{t('center.assuranceLead')}</strong> {t('center.assuranceBody')}</p>
       </div>

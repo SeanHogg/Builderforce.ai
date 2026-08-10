@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyGuestBrainstormEntry, classifyShell, rendersAppShell } from './shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, isFramedEmbed, rendersAppShell } from './shellRouting';
 
 describe('classifyGuestBrainstormEntry', () => {
   it('does not mount the legacy redirect before the browser resolves ?room=', () => {
@@ -58,6 +58,20 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
 
   it('does not treat a prefix collision as public', () => {
     expect(classifyShell('/modelsomething')).toBe('app');
+  });
+
+  it('does not mistake the Embedded destination for the framed embed surface', () => {
+    // `/embedded` starts with `/embed`, and every prefix list here used a bare
+    // `startsWith` — so the Embedded Capabilities page was classified as a
+    // cross-origin iframe: no chrome, the lean provider tree, and invisible to
+    // crawlers. Prefixes compare segments now.
+    expect(isFramedEmbed('/embed/kanban')).toBe(true);
+    expect(isFramedEmbed('/embed')).toBe(true);
+    expect(isFramedEmbed('/embedded')).toBe(false);
+    // It is a reference surface (PRD 21 §11.4.5): a real public page signed out,
+    // a panel over the board signed in.
+    expect(classifyShell('/embedded')).toBe('public');
+    expect(rendersAppShell('/embedded', true)).toBe(true);
   });
 
   it('renders known authenticated routes in the app shell', () => {

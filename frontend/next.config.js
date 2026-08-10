@@ -5,7 +5,23 @@ const { version } = require('./package.json');
 
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
-const developmentConnectOrigins = process.env.NODE_ENV === 'development' ? ' http://localhost:8787' : '';
+/**
+ * Dev-only `connect-src` additions.
+ *
+ * It was the single literal `http://localhost:8787`, and a local API on any
+ * other port was blocked by CSP with no clue in the failure: the request never
+ * leaves the page, so the console says "refused to connect" and the feature
+ * (guest chat, the diagnostics catalog, anything through the gateway) just does
+ * nothing. `wrangler dev` picks a free port when 8787 is taken, and the api,
+ * agent-runtime and worker packages each run one — so pinning one number was
+ * always going to be wrong for somebody.
+ *
+ * Any loopback port and scheme, development only. Production keeps `'self'
+ * https: wss:` exactly as before, so this loosens nothing that ships.
+ */
+const developmentConnectOrigins = process.env.NODE_ENV === 'development'
+  ? ' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*'
+  : '';
 
 const nextConfig = {
   env: {

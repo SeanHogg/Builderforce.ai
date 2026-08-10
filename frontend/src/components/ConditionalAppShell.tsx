@@ -33,7 +33,8 @@ import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
-import { classifyGuestBrainstormEntry, classifyShell, isReferenceSurface, rendersAppShell } from '@/lib/shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, isFramedEmbed, isReferenceSurface, rendersAppShell } from '@/lib/shellRouting';
+import { rendersOperatorShell } from '@/lib/workbenchPolicy';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
@@ -45,7 +46,7 @@ import { LastBoardBridge } from './workspace/LastBoardBridge';
 import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
 import { ProductUpdatesHost } from './releaseNotes/ProductUpdatesHost';
 import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
-import { ActiveCanvasProvider, shellHostsCanvasStage } from '@/lib/canvas/ActiveCanvasContext';
+import { ActiveCanvasProvider, shellHostsCanvasStage, useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { LiveBar } from './live/LiveBar';
 import { NavigationFeaturesProvider } from '@/lib/NavigationFeaturesContext';
 
@@ -109,6 +110,11 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   const isFreelancer = useIsFreelancer();
   const isSales = useIsSalesAssociate();
   const guestRoomCode = useGuestInviteCode();
+  // Whether the shell is currently holding a board. Read here — inside the
+  // provider — rather than passed down, because it is what decides whether a
+  // logged-out visitor keeps the operator shell (see `rendersOperatorShell`),
+  // and a shell that answered from the route alone threw a guest's board away.
+  const hasBoard = useOptionalActiveCanvas()?.active != null;
 
   const kind = classifyShell(pathname);
   if (kind === 'none') return <>{children}</>;
@@ -120,7 +126,16 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
 
   // Marketing + public browse.
   if (kind === 'public') {
-    if (!isAuthenticated) return <MarketingShell>{children}</MarketingShell>;
+    // A guest holding a board is the same case as below: opening `/tools/<id>`
+    // or `/embedded` to check something must cost a panel, not the board. Only
+    // reference surfaces qualify (`rendersOperatorShell` scopes it to routes
+    // that open as a panel), so `/blog` and the storefront keep marketing
+    // chrome — a long article wants the whole screen either way.
+    if (!isAuthenticated) {
+      return rendersOperatorShell(pathname, false, hasBoard)
+        ? <AppShell>{children}</AppShell>
+        : <MarketingShell>{children}</MarketingShell>;
+    }
     // §11.4.5's other half. A reference surface is public — that is why it
     // classified as `public` above and why a signed-out visitor and a crawler
     // both get the real page — but signed in it opens OVER the board, so it
@@ -172,6 +187,13 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // difference between the two visitors is what is ENABLED, not what exists.
     if (rendersAppShell(pathname, false)) {
       return <AppShell>{children}</AppShell>;
+    }
+    // …and a guest who is mid-board keeps that shell while they consult a
+    // destination: the teaser is the honest answer, but it belongs in the panel
+    // over their board, not in a page that destroys it. `AppShell` puts it in
+    // `ShellPanel` on its own, because `panelOpen` is already true here.
+    if (rendersOperatorShell(pathname, false, hasBoard)) {
+      return <AppShell><RouteMarketing pathname={pathname} /></AppShell>;
     }
     return (
       <MarketingShell>
@@ -297,11 +319,24 @@ function MarketingConversionTracker() {
   return null;
 }
 
+/**
+ * The chrome, resolved INSIDE the provider tree.
+ *
+ * `useShellContent` reads the active canvas, and `ActiveCanvasProvider` is
+ * mounted below `AppBrainShell` — deliberately, so the board survives a move
+ * between the operator shell and the public one. Computing the content in the
+ * parent therefore meant deciding which shell to render from a board the
+ * decision could not see. A component is the whole fix: same hook, one level
+ * down, where the context exists.
+ */
+function ShellContent({ children }: { children: React.ReactNode }) {
+  return <>{useShellContent(children)}</>;
+}
+
 function AppBrainShell({ children, qualityEndpoint }: {
   children: React.ReactNode;
   qualityEndpoint: string;
 }) {
-  const content = useShellContent(children);
   const { hasTenant, isAuthenticated } = useAuth();
   const pathname = usePathname() || '';
   // Whether THIS route's shell renders the persistent stage. Derived rather than
@@ -351,7 +386,7 @@ function AppBrainShell({ children, qualityEndpoint }: {
           <BrainActionsProvider>
             <BrainContextProvider>
               <ReportErrorProvider endpoint={qualityEndpoint}>
-              {content}
+              <ShellContent>{children}</ShellContent>
               {/* The room, rendered once at shell level so the call is visible —
                   and controllable — from wherever the person has navigated to.
                   Self-gating: no room, no bar. */}
@@ -439,7 +474,7 @@ export default function ConditionalAppShell({ children, qualityEndpoint }: {
   // the full app tree. Branch by delegating to distinct child components so neither
   // path ever calls the other's hooks conditionally (rules-of-hooks safe).
   const pathname = usePathname() || '';
-  return pathname.startsWith('/embed') ? (
+  return isFramedEmbed(pathname) ? (
     <EmbedShell>{children}</EmbedShell>
   ) : (
     <AppBrainShell qualityEndpoint={qualityEndpoint}>

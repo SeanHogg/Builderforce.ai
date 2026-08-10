@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { CompliancePage } from '@/components/legal/CompliancePage';
+import { Surface, surfaceClassName } from '@/components/ui/Surface';
 import styles from './page.module.css';
 
 const providers = [
@@ -43,7 +44,7 @@ export default async function Page() {
         Providers are used only when the corresponding feature is enabled. Customers receive notice of material additions through this page and may object by contacting <a href="mailto:privacy@builderforce.ai">privacy@builderforce.ai</a>.
       </p>
 
-      <div className={styles.tableShell}>
+      <Surface tone="raised" padding="none" className={styles.tableShell}>
         <table className={styles.table}>
           <caption className={styles.caption}>BuilderForce service providers and their data safeguards</caption>
           <thead>
@@ -63,9 +64,9 @@ export default async function Page() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Surface>
 
-      <aside className={styles.note}>
+      <aside className={surfaceClassName({ tone: 'accent', padding: 'md' }, styles.note)}>
         <span aria-hidden="true">i</span>
         <p>Exact provider selection and region can vary by customer configuration. A tenant-specific list is available on request.</p>
       </aside>

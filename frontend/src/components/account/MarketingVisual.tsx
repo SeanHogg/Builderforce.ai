@@ -78,7 +78,19 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
         {/* Central hub (your agent) */}
         <circle cx="160" cy="75" r="30" fill="var(--coral-bright)" opacity="0.15" />
         <circle cx="160" cy="75" r="24" fill="var(--coral-bright)" />
-        <text x="160" y="81" textAnchor="middle" fontSize="20"></text>
+        <g
+          fill="none"
+          stroke="var(--text-on-accent)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Briefcase + rising line: business ownership and growth. */}
+          <path d="M154 66v-3h12v3" />
+          <rect x="147" y="66" width="26" height="19" rx="3" />
+          <path d="m152 80 5-5 4 3 7-7" />
+          <path d="M164 71h4v4" />
+        </g>
       </svg>
     </div>
   );

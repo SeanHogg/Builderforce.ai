@@ -1,3 +1,80 @@
+## ✅ RESOLVED 2026-08-09 — a tool is a reference page; a destination never costs a guest their board
+
+`/tools/ai-cost-estimator` loaded forever and looked nothing like a reference page, because it was
+not one: the route mounted a whole **`CreationCanvas`** on a public marketing URL, with the tool as
+the single object on an invisible local board. PRD 21 §11.4.5 says a reference page is *one
+component, two shells* — a real indexable page signed out, the same component in `ShellPanel` over
+a board that stays mounted signed in. A canvas on that URL is a **second board** fighting the one
+the session already had, and the capability belongs on the board via **MCP**, not on the brochure.
+
+Nine defects, all closed in this pass.
+
+**1 · `/tools/<id>` is a reference page.** `ToolCanvasClient` is deleted. The route now renders
+`ToolReferenceClient` — the `/soc2` band layout, hero from the API catalog, three anchored sections
+(`assess` · `how` · `canvas`) — with the runner inside `assess` and a CTA that hands the capability
+to the board. `ensureLocalToolCreationSession` is deleted with it, and `listLocalCreationSessions`
+now **purges** the `local-tool-*` boards older builds left in real browsers rather than filtering
+them forever (they would otherwise show in the canvas switcher as drafts nobody created and be
+claimed into the tenant on the next sign-in).
+
+**2 · The infinite load was `nodeTypes` churn, and it was never about tools.** `canvasNodeTypes`
+depended on `runWorkflow` → `compileWorkflow` → `resolveWorkflowNode` → `nodes` **and**
+`selectedNode`. So React Flow got a new `nodeTypes` on **every board edit and every selection**, and
+**every Object on the board remounted**. Most cards survive that; the ones that fetch do not — the
+tool card refetched its definition per selection and never left "Loading…" (hundreds of requests in
+one session). Fixed with the ref indirection the file's own comment already prescribes for
+`exportArtifact`. The runner additionally pins its fetch effect to `[toolId]` alone.
+
+**3 · The canvas gets the capability through MCP.** `canvas_list_diagnostics` (the catalog) and
+`canvas_add_diagnostic` (place one, optionally already scored) — split for the reason
+`creative.capabilities` is split from `creative.compose`: a model that must guess an id guesses.
+Answer keys are filtered against the tool's own `questionIds()` (new, exported from `lib/tools.ts`),
+because a score computed against a shape the tool never declared is a number that *looks* computed.
+
+**4 · The runner left the route folder.** The canvas imported `@/app/tools/[id]/ToolRunnerClient` —
+a shared component living in a presentation leaf. It is `components/tools/ToolRunner` now, and its
+`embedded` boolean (which meant three things) is one `surface: 'reference' | 'canvas'` field.
+
+**5 · `/embedded` was classified as a cross-origin iframe.** Every prefix list in `shellRouting`
+used a bare `startsWith`, and `/embedded` starts with `/embed` — so the Embedded Capabilities
+destination rendered with **no chrome**, inside the lean webview provider tree, invisible to
+crawlers. Prefixes compare **segments** now (`underPrefix`), `isFramedEmbed` is exported so
+`ConditionalAppShell` asks the same question one way, and `/embedded` is a registered reference
+page: one URL, two shells, `groupId: 'embedded'`. `check-destinations` learned that exact case —
+a rail row may share an href with a `panel: true` row **only** when that row declares itself its
+face; "same href" alone is still the bug.
+
+**6 · A guest consulting a destination no longer loses their board.** Clicking Insights, Finance,
+Growth, Governance, Reliability, People, Revenue, Investors or Hiring from an anonymous canvas
+mounted `MarketingShell`, unmounted `CanvasStage`, and destroyed a board that — having no account —
+lives only in memory. The page they got for it was the "This is part of Builderforce.ai" teaser.
+Now `rendersOperatorShell(pathname, isAuthenticated, hasBoard)` keeps the operator shell for a guest
+holding a board on any route that opens as a **panel**; the teaser still renders, but *in the panel,
+over the board*, and `Esc` returns (§11.4.4 — a dim row is an invitation). Two seams made it
+possible: `useShellContent` moved **inside** `ActiveCanvasProvider` (it was deciding which shell to
+render from a board it could not see), and the provider now keeps `stageHosted` true while a board
+exists, so the two halves cannot disagree about who owns the stage.
+
+**7 · The panel says the page's own name.** Reference chrome came from the registry row, so all five
+diagnostics opened a panel titled "Diagnostics". The tool catalog is API-owned and must not be
+restated in the registry, so `lib/referenceChrome.tsx` lets a page whose title is **data** publish
+it; registry rows are unchanged and still win when nothing is published.
+
+**8 · Two `CreationCanvas` tests were measuring through an overlay.** `beforeEach` cleared
+localStorage, which made the guided-tour offer open on *every* render in the file; one test then
+asserted "no dialog" against the tour and another read a mark through it. The tour identity is one
+exported constant (`CREATION_CANVAS_TOUR`) now and the suite seeds the returning-visitor state. A
+third assertion (`textContent === '✦'`) was left behind by the SVG icon migration and could never
+pass again.
+
+**9 · Two guards were red on `main`, and a red guard hides the rest.** `check:design-scale` flagged
+`AboutPage.module.css`'s `max-width: 900px` — a reading measure typed as a number inside the range
+reserved for page columns; it is `68ch` now. And the dev CSP pinned `connect-src` to
+`http://localhost:8787`, so a local API on any other port (wrangler picks a free one) was blocked
+with no clue in the failure — development now allows any loopback port. Production is unchanged.
+
+---
+
 ## ✅ RESOLVED 2026-08-09 — `check:design-tokens` + `check:design-scale` are green again
 
 Both had been red on `main` — and a red guard hides every guard behind it, so the whole chain after

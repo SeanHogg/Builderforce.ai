@@ -12558,6 +12558,10 @@
         "title": "Evermind",
         "tagline": "The model behind the agents."
       },
+      "embedded": {
+        "title": "Embedded",
+        "tagline": "Put the product inside your own app."
+      },
       "models": {
         "title": "Models",
         "tagline": "What runs, and what it costs."

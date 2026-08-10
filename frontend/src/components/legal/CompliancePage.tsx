@@ -1,4 +1,6 @@
 import { Icon } from '@/components/ui/Icon';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { surfaceClassName } from '@/components/ui/Surface';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import styles from './CompliancePage.module.css';
@@ -49,19 +51,22 @@ export async function CompliancePage({
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        <header className={styles.header}>
+        <div className={styles.header}>
           <Link className={styles.backLink} href={backHref}>
             <span aria-hidden="true">←</span> {backLabel ?? t('backToCenter')}
           </Link>
-          <p className={styles.eyebrow}>{eyebrow ?? t('eyebrow')}</p>
-          <h1>{title}</h1>
-          {updated && (
-            <p className={styles.updated}>
-              <span className={styles.statusDot} aria-hidden="true" />
-              {t('lastUpdated')} <time>{updated}</time>
-            </p>
-          )}
-        </header>
+          <PageHeader
+            className={styles.pageHeader}
+            eyebrow={eyebrow ?? t('eyebrow')}
+            title={title}
+            description={updated ? (
+              <span className={styles.updated}>
+                <span className={styles.statusDot} aria-hidden="true" />
+                {t('lastUpdated')} <time>{updated}</time>
+              </span>
+            ) : undefined}
+          />
+        </div>
 
         <nav className={styles.localNav} aria-label={t('navLabel')}>
           <p>{t('resourcesHeading')}</p>
@@ -81,11 +86,13 @@ export async function CompliancePage({
         </nav>
 
         <article className={styles.document}>
-          <p className={styles.authoritative}>{t('authoritativeNotice')}</p>
+          <p className={surfaceClassName({ tone: 'sunken', padding: 'sm' }, styles.authoritative)}>
+            {t('authoritativeNotice')}
+          </p>
 
           <div className={styles.content}>{children}</div>
 
-          <footer className={styles.contact}>
+          <footer className={surfaceClassName({ tone: 'accent', padding: 'lg' }, styles.contact)}>
             <div>
               <strong>{t('contactHeading')}</strong>
               <span>{t('contactBody')}</span>
@@ -101,7 +108,7 @@ export async function CompliancePage({
 
 export function LegalSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className={styles.section}>
+    <section className={surfaceClassName({ tone: 'raised', padding: 'lg' }, styles.section)}>
       <h2>{title}</h2>
       {children}
     </section>
@@ -110,7 +117,7 @@ export function LegalSection({ title, children }: { title: string; children: Rea
 
 export function LegalCallout({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <aside className={styles.callout}>
+    <aside className={surfaceClassName({ tone: 'accent', padding: 'md' }, styles.callout)}>
       <span aria-hidden="true"><Icon source="✓" size="1em" /></span>
       <div><strong>{label}</strong><p>{children}</p></div>
     </aside>

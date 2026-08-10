@@ -324,7 +324,9 @@ export function MeetCarousel() {
       </div>
 
       <style>{`
-        .meet-carousel { max-width: var(--marketing-max); margin: 0 auto; padding: 0 var(--marketing-gutter) var(--marketing-section-padding); scroll-margin-top: 90px; }
+        /* This is a full homepage section, so it needs the same breathing room
+           above and below its content as the shared HomeSection pattern. */
+        .meet-carousel { max-width: var(--marketing-max); margin: 0 auto; padding: var(--marketing-section-padding) var(--marketing-gutter); scroll-margin-top: 90px; }
         .meet-carousel-kicker { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:0 64px 14px; color:var(--text-muted); font:600 .68rem/1 var(--font-display); letter-spacing:.16em; text-transform:uppercase; }
         .meet-carousel-kicker > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .meet-carousel-status { display:flex; align-items:center; gap:12px; flex:none; }
