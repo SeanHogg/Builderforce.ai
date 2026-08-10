@@ -1,16 +1,18 @@
 ---
-title: Product Ideation with Builderforce — From Idea to Execution
+title: Product Ideation with Builderforce — The Original Workflow and Its Creation Canvas Successor
 date: 2026-03-08
-description: Walk through a full product ideation cycle using Builderforce's Brainstorm tool, IDE, project management features, and hired agents from the Workforce to turn a raw idea into a structured execution plan.
-tags: [product-ideation, brainstorm, ide, project-management, workforce]
+description: See how Builderforce's original multi-surface ideation workflow evolved into one Creation Canvas session for evidence, mockups, projects, tasks, and agent delivery.
+tags: [product-ideation, creation-canvas, project-management, workforce]
 author: Sean Hogg
 ---
 
-# Product Ideation with Builderforce — From Idea to Execution
+# Product Ideation with Builderforce — The Original Workflow and Its Creation Canvas Successor
+
+> **Product update:** Brainstorm, the Workflow Builder, and IDE launcher are no longer separate primary creation destinations. Their capabilities now appear as live objects in a [Creation Canvas](/creation-canvas). Existing links remain compatible, but new work should begin in a Creation Session.
 
 Every product starts with an idea and ends — if you're lucky — with something shipped. The gap between those two moments is where most ideas die: unclear requirements, scope creep, the wrong people working on the wrong things.
 
-Builderforce is designed to collapse that gap. This post walks through a full ideation cycle using the platform's **Brainstorm** tool, **IDE**, **project management** features, and **hired agents from the Workforce** — from a raw idea to a structured, executable plan.
+Builderforce is designed to collapse that gap. This article records the original multi-surface workflow and explains the concepts that led to its successor: one visual Creation Session where Brain conversation, prototypes, code, projects, tasks, and hired agents remain connected.
 
 ![Ideation pipeline flowing from Brainstorm to IDE structuring to Timeline to hiring Workforce agents to review and ship](/blog/product-ideation.svg)
 

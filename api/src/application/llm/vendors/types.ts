@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Multi-vendor LLM gateway — type system, error classes, and shared transport.
  *
@@ -12,11 +13,14 @@
  */
 
 import { applyPromptCaching } from '../promptCaching';
+import type { ReasoningParamOpts } from '../reasoningCapability';
 import { parseSseDataLine } from '../sseFrames';
+
+import type { AgentExecParams } from '@builderforce/agent-tools';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
-  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
   // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
   //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
   //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
@@ -26,11 +30,14 @@ export type VendorId =
   //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
   //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
   //    participate in the same dispatch/cooldown/fallback machinery as the rest.
-  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks'
-  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
+  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks' | 'qwen'
+  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'kimi-code' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
-  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax';
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
+  // ── BYO-only vendor: no operator pool key; only reachable when a tenant
+  //    connects their own Meta AI account from the provider-keys settings page.
+  | 'meta';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -48,7 +55,14 @@ export type AiModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
  * and synthesizing this env per call — vendors don't know about plans.
  */
 export interface VendorEnv {
+  OPENAI_CODEX_AUTH?: string | null;
+  XAI_OAUTH_TOKEN?: string | null;
   OPENROUTER_API_KEY?: string | null;
+  /** Optional per-model tenant OpenRouter keys. Keys are indexed by the BARE
+   * OpenRouter model id (`anthropic/claude-...`). The registry resolves this
+   * before the shared key so several named connections can safely use different
+   * OpenRouter accounts in one cascade. */
+  OPENROUTER_MODEL_KEYS?: Readonly<Record<string, string>> | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
   NVIDIA_API_KEY?: string | null;
@@ -58,7 +72,7 @@ export interface VendorEnv {
   /** Anthropic (Claude) API key — direct call to api.anthropic.com/v1/messages.
    *  The last-resort reliability floor for cloud CODING runs: when every
    *  OpenRouter-routed paid coder is unreachable, the coding cascade falls back to
-   *  Claude directly on this key (claude-sonnet-4-6 → claude-opus-4-8). */
+   *  Claude directly on this key (claude-sonnet-5 → claude-opus-4-8). */
   CLAUDE_API_KEY?: string | null;
   /** A connected tenant's Claude Pro/Max SUBSCRIPTION access token (OAuth). When
    *  set, the `anthropic` vendor authenticates with `Authorization: Bearer` + the
@@ -101,8 +115,12 @@ export interface VendorEnv {
   XAI_API_KEY?: string | null;
   /** Perplexity — api.perplexity.ai. */
   PERPLEXITY_API_KEY?: string | null;
-  /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
+  /** Moonshot AI (Kimi) Open Platform — api.moonshot.ai/v1 (international), with
+   *  api.moonshot.cn/v1 (China) resolved automatically when the key is rejected there. */
   MOONSHOT_API_KEY?: string | null;
+  /** Kimi Code subscription — api.kimi.com/coding/v1 (not interchangeable with Moonshot keys). */
+  KIMI_CODE_API_KEY?: string | null;
+  QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string | null;
   /** Novita AI — api.novita.ai/v3/openai. */
@@ -143,6 +161,11 @@ export interface VendorEnv {
   SILICONFLOW_API_KEY?: string | null;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string | null;
+  /** Meta AI (MUSE) — api.meta.ai/v1. BYO-only: populated exclusively from a
+   *  tenant's connected Meta AI provider key (settings → Bring your own models).
+   *  No operator-level key exists; when unset the `meta` vendor is skipped by the
+   *  cascade exactly like any other unbound vendor. */
+  META_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {
@@ -156,6 +179,20 @@ export interface VendorCallParams {
   topP?: number;
   /** Vendor-specific passthrough. Last write wins over the standard fields above. */
   extraBody?: Record<string, unknown>;
+  /**
+   * Vendor-NEUTRAL reasoning intent (the `AgentExecParams` lever a persona or the
+   * client's `reasoning: { level }` produced) — NOT a pre-computed vendor param.
+   *
+   * A dispatch carries a model CHAIN, and `dispatchInternal` walks it on failover, so a
+   * param derived once from the chain head would ride onto whatever model the cascade
+   * lands on (a Cloudflare/deepseek/qwen coder would 400 on Anthropic `thinking`).
+   * Carrying the INTENT instead lets the chain walk derive the CORRECT param per
+   * candidate via the single `reasoningParamsForModel` mapping, merging it into that one
+   * attempt's `extraBody` — and emitting nothing at all for a family that doesn't
+   * support reasoning. `dispatchInternal` CONSUMES this field: it is stripped before the
+   * vendor call, so no `VendorModule` ever receives it.
+   */
+  reasoningIntent?: { execParams: AgentExecParams } & ReasoningParamOpts;
   /** Prompt-cache breakpoint retention for caching-capable (Anthropic-family)
    *  models: `'5m'` (default ephemeral) or `'1h'` (long retention, ~2x write
    *  cost). Carried from a caller's `_builderforce.cacheTtl` hint; only the
@@ -177,7 +214,30 @@ export interface VendorCallParams {
    *  it can load a published `.evermind` model. Undefined for all HTTP vendors
    *  (they reach their backend over the network, not R2). */
   uploads?: import('../evermindRuntime').ArtifactStore;
+  /** Perform this vendor's HTTP call from somewhere OTHER than the Worker — see
+   *  {@link VendorEgress}. Only ever attached to vendors that declare
+   *  {@link VendorModule.requiresLocalEgress}; every other vendor calls `fetch`
+   *  directly, exactly as before. */
+  egress?: VendorEgress;
 }
+
+/**
+ * An alternate origin for a vendor's HTTP call.
+ *
+ * Some providers refuse the Worker itself, not our credentials: Kimi Code's edge
+ * returns an HTML 403 to the Cloudflare Workers egress before the API ever reads the
+ * key — the identical request from an ordinary machine gets a clean JSON answer. No
+ * header can fix that, and impersonating an approved first-party client is off the
+ * table, so the only honest remedy is to make the request from a machine the provider
+ * does not refuse: the tenant's OWN connected runtime, which is the personal
+ * interactive client a Kimi Code subscription is licensed for in the first place.
+ *
+ * The port is deliberately `fetch`-shaped so it drops into
+ * {@link fetchWithVendorTimeout} without the surrounding status ladder, timeout
+ * handling, or error classification knowing anything about it. An implementation
+ * MUST resolve to a normal `Response` (any status) or reject like `fetch` would.
+ */
+export type VendorEgress = (endpoint: string, init: RequestInit, signal: AbortSignal) => Promise<Response>;
 
 export interface VendorUsage {
   prompt_tokens?: number;
@@ -245,6 +305,19 @@ export interface VendorModule {
    */
   autoRoute?: boolean;
   /**
+   * Whether this vendor can execute FUNCTION/TOOL CALLING at all. Default `true`.
+   *
+   * Set `false` for a backend that has no tool-call machinery whatsoever (our own
+   * `evermind` SSM: it generates raw text and cannot emit structured `tool_calls`).
+   * A tool-less vendor that is handed `tools` does not fail — it just answers in
+   * prose — so an agent loop pinned to it NARRATES the calls it can never make and
+   * silently does no work. That is not a model quirk to diagnose after the fact; it
+   * is a routing error, so this flag is the ONE declaration every caller consults
+   * via {@link import('./registry').modelSupportsTools} before pinning a model onto
+   * a tool-driven run, and the vendor itself hard-rejects a tool-bearing request.
+   */
+  supportsTools?: boolean;
+  /**
    * Per-vendor JSON-Schema dialect compatibility. When set, the gateway strips
    * `stripKeywords` from a consumer-supplied `response_format.json_schema.schema`
    * before forwarding to this vendor — because the vendor's strict-mode validator
@@ -256,6 +329,18 @@ export interface VendorModule {
    * here instead of editing the sanitizer (see jsonSchemaSanitize.ts).
    */
   schemaDialect?: { stripKeywords: readonly string[] };
+  /**
+   * Whether this vendor's upstream REFUSES the Worker's own egress and must therefore
+   * be called from the tenant's connected runtime when one is available — see
+   * {@link VendorEgress}. Default `false`.
+   *
+   * The flag is what stops a tenant's laptop becoming the route for all LLM traffic:
+   * `dispatchInternal` attaches the egress transport ONLY to a module that declares
+   * this, so every other vendor keeps calling `fetch` from the Worker. A declaring
+   * vendor still falls back to direct egress when no runtime is online — that path is
+   * likely to fail, but it is strictly better than refusing to try.
+   */
+  requiresLocalEgress?: boolean;
 }
 
 export type ResponseParser = (raw: unknown) => {
@@ -355,6 +440,10 @@ export class VendorRetryableError extends Error {
   public readonly vendorId: string;
   public readonly status: number;
   public readonly model: string;
+  /** Redacted evidence about the upstream response — see {@link UpstreamDiagnostic}.
+   *  Set by the transport on its way out, absent for errors thrown before a
+   *  response existed (timeout, network). */
+  public diagnostic?: UpstreamDiagnostic;
   constructor(vendorId: string, model: string, status: number, message: string) {
     super(`[${vendorId}/${model}] ${status}: ${message}`);
     this.name = 'VendorRetryableError';
@@ -371,6 +460,8 @@ export class VendorRetryableError extends Error {
 export class VendorFatalError extends Error {
   public readonly vendorId: string;
   public readonly status: number;
+  /** See {@link VendorRetryableError.diagnostic}. */
+  public diagnostic?: UpstreamDiagnostic;
   constructor(vendorId: string, status: number, message: string) {
     super(`[${vendorId}] ${status}: ${message}`);
     this.name = 'VendorFatalError';
@@ -401,6 +492,8 @@ export class VendorSchemaError extends Error {
   /** The real upstream HTTP status (usually 400) before the gateway normalized
    *  it to the 422 request-error class. Surfaced as `FailoverEvent.upstreamStatus`. */
   public readonly status: number;
+  /** See {@link VendorRetryableError.diagnostic}. */
+  public diagnostic?: UpstreamDiagnostic;
   constructor(vendorId: string, model: string, status: number, message: string) {
     super(`[${vendorId}/${model}] schema_too_complex (upstream ${status}): ${message}`);
     this.name = 'VendorSchemaError';
@@ -463,29 +556,128 @@ export function isSubrequestCapMessage(msg: string): boolean {
 }
 
 /** Statuses that trigger cascade to the next model.
- *  413 (payload/context too large) is here so a model whose context window the
+ *  410 (model retired) is here so a stale upstream catalog entry cannot abort
+ *  the whole chain; the failed model is recorded and routing advances to a live
+ *  candidate. 413 (payload/context too large) is here so a model whose context window the
  *  request exceeds (e.g. a 97K coding context hitting a 32K Cloudflare model →
  *  "exceeded this model context window limit") FAILS OVER to a bigger-window model
  *  instead of hard-failing the run. The pool is ordered big-window-first, so the
  *  cascade lands on a model that fits. */
 export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
-  404, 408, 413, 429, 500, 502, 503, 504,
+  404, 408, 410, 413, 429, 500, 502, 503, 504,
 ]);
 
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
 /**
- * True when a non-OK 4xx body is a CAPACITY / billing condition — a usage cap,
- * spend limit, low credit balance, or exhausted quota — rather than a malformed
- * request. Several upstreams return these as HTTP **400** (not 429): Anthropic
- * emits `invalid_request_error` "You have reached your specified API usage
- * limits" / "Your credit balance is too low to access the Anthropic API", and
- * OpenAI-shaped vendors use `insufficient_quota` / "exceeded your current
- * quota". These are NOT payload bugs — the *request* is fine and a DIFFERENT
- * vendor can serve it — so the cascade must fail over (and cool this vendor)
- * instead of hard-failing the run with a misleading 400. (Fix: a cloud coding
- * run flooring onto the direct-Anthropic backstop died with a fatal 400 when
- * that account hit its monthly usage cap, never failing over — execution #73.)
+ * Response headers worth keeping off a FAILED upstream call — the correlation
+ * identifiers a provider's own support team asks for first.
+ *
+ * Strictly an allowlist, and deliberately a narrow one: a diagnostic that a human
+ * will paste into a partner ticket must not be able to carry a `set-cookie`, an
+ * `authorization` echo, or anything else the upstream happened to reflect back.
+ * Nothing here is secret — these are request ids, edge node ids, and timestamps.
+ *
+ * `cf-ray` / `server` earn their place because they are how you tell an EDGE
+ * rejection from an API rejection: when a provider's CDN refuses a request before
+ * the key is ever validated, the body is an HTML block page and these headers are
+ * the only machine-readable evidence of who refused it. That distinction is
+ * exactly what Kimi Code's hosted 403 turns on.
+ */
+const UPSTREAM_CORRELATION_HEADERS: readonly string[] = [
+  'cf-ray', 'content-type', 'date', 'request-id', 'server', 'x-amzn-requestid',
+  'x-envoy-upstream-service-time', 'x-msedge-ref', 'x-request-id', 'x-trace-id',
+];
+
+/**
+ * Machine-readable evidence about ONE failed upstream call, safe to show an
+ * operator and to attach — redacted — to a provider support ticket.
+ *
+ * Carries no request body, no prompt, and no credential: only where the call went,
+ * what came back, and the identifiers needed to correlate it on the provider's side.
+ */
+export interface UpstreamDiagnostic {
+  /** Origin + path of the endpoint called. Query string dropped — it can carry keys. */
+  endpoint: string;
+  /** The status the UPSTREAM returned, before any gateway normalization. */
+  status: number;
+  /** Allowlisted correlation headers, lowercased. */
+  headers: Record<string, string>;
+  /** True when the body was an HTML page rather than the provider's JSON error
+   *  envelope — the signature of a CDN/WAF block that ran BEFORE the API saw the
+   *  credential, which is a different problem from a rejected key. */
+  edgeBlocked: boolean;
+  observedAt: string;
+}
+
+/** Capture the redacted diagnostic for a failed upstream response. */
+export function captureUpstreamDiagnostic(
+  endpoint: string,
+  status: number,
+  responseHeaders: Headers,
+  bodyText: string,
+): UpstreamDiagnostic {
+  const headers: Record<string, string> = {};
+  for (const name of UPSTREAM_CORRELATION_HEADERS) {
+    const value = responseHeaders.get(name);
+    if (value) headers[name] = value.slice(0, 200);
+  }
+  let safeEndpoint = endpoint;
+  try {
+    const url = new URL(endpoint);
+    safeEndpoint = `${url.origin}${url.pathname}`;
+  } catch {
+    // A non-URL endpoint is already opaque. Assign explicitly so this intentional
+    // fallback remains visible to the silent-catch ratchet and future reviewers.
+    safeEndpoint = endpoint;
+  }
+  return {
+    endpoint: safeEndpoint,
+    status,
+    headers,
+    edgeBlocked: /^\s*(<!doctype\s+html|<html\b)/i.test(bodyText),
+    observedAt: new Date().toISOString(),
+  };
+}
+
+/** Attach `diagnostic` to a vendor error on its way out, so every throw site in the
+ *  status ladder carries it without repeating the field at each `new`. Returns the
+ *  error so callers can `throw withUpstreamDiagnostic(err, d)`. */
+export function withUpstreamDiagnostic(error: unknown, diagnostic: UpstreamDiagnostic): unknown {
+  if (error instanceof VendorRetryableError
+    || error instanceof VendorFatalError
+    || error instanceof VendorSchemaError) {
+    error.diagnostic = diagnostic;
+  }
+  return error;
+}
+
+/**
+ * True when a non-OK 4xx body is a CAPACITY / BILLING / ACCOUNT condition — a
+ * usage cap, spend limit, low credit balance, exhausted quota, unverified payment
+ * method or a suspended/inactive account — rather than a malformed request.
+ *
+ * Several upstreams return these as HTTP **400** (not 429 or 402): Anthropic emits
+ * `invalid_request_error` "You have reached your specified API usage limits" /
+ * "Your credit balance is too low to access the Anthropic API", OpenAI-shaped
+ * vendors use `insufficient_quota` / "exceeded your current quota", and Meta
+ * answers "Billing verification failed. Please check your payment method."
+ *
+ * None are payload bugs — the *request* is fine and a DIFFERENT vendor can serve
+ * it — so the cascade must fail over (and cool this vendor) instead of hard-failing
+ * the run with a misleading 400. (Fix 1: a cloud coding run flooring onto the
+ * direct-Anthropic backstop died with a fatal 400 when that account hit its monthly
+ * usage cap, never failing over — execution #73. Fix 2: a tenant's Meta BYO account
+ * failed billing verification and, because that 400 classified as request_error —
+ * "the caller's bug" — every run routed to it died terminally with the account
+ * FIRST in that tenant's BYO precedence, instead of standing the vendor down and
+ * moving on — task 683, execution #4259.)
+ *
+ * The account-unusable half is deliberately grouped with capacity rather than with
+ * `auth`: a dead payment method does not recover inside the 5-minute transient
+ * window any more than a monthly cap does, and the capacity class already carries
+ * the right response — a 60-minute backoff that trips the VENDOR cooldown on the
+ * first strike, because one unusable account is unusable for every model on it.
  */
 /**
  * Stable marker embedded in the retryable error a capacity/billing limit raises
@@ -499,9 +691,37 @@ export const CAPACITY_LIMIT_MARKER = 'capacity/usage limit';
 
 export function isCapacityLimitBody(text: string | undefined | null): boolean {
   if (!text) return false;
-  return /usage\s+limit|credit\s+balance|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(
+  return (
+    /usage\s+limit|weekly\b[^.]{0,40}\blimit|hit\s+(?:your|the)\b[^.]{0,40}\blimit|credit\s+balance|extra\s+usage\s+credits|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|(?:usage\s+)?allowance\b[^.]{0,30}\b(depleted|exhausted|used)|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
+    || isAccountUnusableBody(text)
+  );
+}
+
+/**
+ * True when a 4xx body says the ACCOUNT itself cannot serve requests — billing
+ * unverified, no payment method, subscription inactive, account suspended or
+ * deactivated. Split out from the usage-cap patterns above because the two read
+ * differently even though they earn the identical response (fail over + long
+ * vendor cooldown), and because a reader tracing "why did my BYO key stop being
+ * used" needs to find this list by name.
+ *
+ * Deliberately requires an explicit billing/account signal: a bare "invalid
+ * request" or a validation error naming a parameter must stay a request_error, or
+ * a genuine payload bug would be silently retried across every vendor in the chain.
+ */
+export function isAccountUnusableBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /billing\s+(verification|is\s+not|not)\b|verify\s+your\s+billing|payment\s+(method|details|information)|payment\s+required|add\s+a\s+payment|no\s+active\s+subscription|subscription\s+(has\s+)?(expired|inactive|cancell?ed)|account\b[^.]{0,24}?\b(suspended|deactivated|disabled|not\s+active|inactive)|not\s+been\s+activated|access\s+(is\s+)?(suspended|revoked)/i.test(
     text,
   );
+}
+
+/** Some OpenRouter upstreams report context-window overflow as HTTP 400 instead
+ * of 413. The payload is valid for the gateway; a larger-window model can serve
+ * it, so normalize this narrow message class to the existing 413 cascade path. */
+export function isContextOverflowBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /context\s*(window|length)|maximum\s+context|too\s+many\s+tokens|prompt\s+is\s+too\s+long|input.*token.*(?:exceed|limit)|estimated\s+tokens.*exceed/i.test(text);
 }
 
 /**
@@ -554,6 +774,9 @@ export function throwClassified4xx(
   status: number,
   errText: string,
 ): never {
+  if (isContextOverflowBody(errText)) {
+    throw new VendorRetryableError(vendorId, model, 413, `context window exceeded (upstream ${status}): ${errText.slice(0, 200)}`);
+  }
   // Schema-too-complex is checked FIRST: it rides on a 400 (so the fatal branch
   // below would wrongly hard-fail the run) but a DIFFERENT vendor can serve the
   // same schema, so it must cascade — and carry the `schema` class so an
@@ -618,6 +841,11 @@ export async function fetchWithVendorTimeout(
   init: RequestInit,
   timeoutMsArg?: number,
   externalSignal?: AbortSignal,
+  /** Route this call through an alternate origin instead of the Worker's own
+   *  `fetch` — see {@link VendorEgress}. Every other behaviour (deadline, external
+   *  abort, subrequest-cap sentinel, error classification) is identical, which is
+   *  the point of putting the seam HERE: one choke point, no per-vendor variants. */
+  egress?: VendorEgress,
 ): Promise<Response> {
   const timeoutMs = timeoutMsArg && timeoutMsArg > 0 ? timeoutMsArg : DEFAULT_VENDOR_CALL_TIMEOUT_MS;
   const controller = new AbortController();
@@ -632,7 +860,9 @@ export async function fetchWithVendorTimeout(
     else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
   }
   try {
-    return await fetch(endpoint, { ...init, signal: controller.signal });
+    return await (egress
+      ? egress(endpoint, init, controller.signal)
+      : fetch(endpoint, { ...init, signal: controller.signal }));
   } catch (err) {
     if (externalSignal?.aborted) {
       throw new RequestAbortedError(vendorId, model);
@@ -712,11 +942,13 @@ export function forwardCallOpts(params: VendorCallParams): {
   title?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  egress?: VendorEgress;
 } {
   return {
     ...(params.title ? { title: params.title } : {}),
     ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     ...(params.signal ? { signal: params.signal } : {}),
+    ...(params.egress ? { egress: params.egress } : {}),
   };
 }
 
@@ -743,6 +975,8 @@ export async function executeVendorPost<T>(args: {
   headers?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Alternate origin for this call — see {@link VendorEgress}. */
+  egress?: VendorEgress;
   /** Console log prefix for the auth-failure line, e.g. `vendors` / `imageVendors`. */
   logPrefix: string;
   /** Noun in the "Failing over to next <noun>." auth message (`model` / `vendor`). */
@@ -755,7 +989,7 @@ export async function executeVendorPost<T>(args: {
   onFatal: (vendorId: string, model: string, status: number, errText: string) => never;
 }): Promise<T> {
   const {
-    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal,
+    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal, egress,
     logPrefix, authFailoverNoun, parseResponse, onEmbeddedError, onFatal,
   } = args;
 
@@ -769,7 +1003,7 @@ export async function executeVendorPost<T>(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify(body),
-  }, timeoutMs, signal);
+  }, timeoutMs, signal, egress);
 
   if (resp.ok) {
     const raw = await resp.json();
@@ -786,19 +1020,41 @@ export async function executeVendorPost<T>(args: {
 
   const errText = (await resp.text()).slice(0, 400);
 
-  if (CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
-  }
+  // Capture the redacted evidence ONCE and attach it to whichever error the ladder
+  // below throws. Doing it here rather than at each `new` keeps the classification
+  // rules readable and means `onFatal` (whose signature is shared with the image and
+  // embedding surfaces) needs no extra parameter.
+  const diagnostic = captureUpstreamDiagnostic(endpoint, resp.status, resp.headers, errText);
+  try {
+    if (CASCADE_STATUSES.has(resp.status)) {
+      throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+    }
 
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
+    // Some authenticated subscription APIs (notably Kimi Code) report an exhausted
+    // billing-cycle allowance as HTTP 403. Capacity text wins over the generic auth
+    // bucket: the key is valid and replacing it cannot help. Normalize it to the same
+    // retryable/cooldown signal used by providers that return 400/429 for this condition.
+    if (isCapacityLimitBody(errText)) {
+      throw new VendorRetryableError(
+        vendorId,
+        model,
+        429,
+        `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+      );
+    }
 
-  return onFatal(vendorId, model, resp.status, errText);
+    if (AUTH_STATUSES.has(resp.status)) {
+      console.error(
+        `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
+        errText.slice(0, 200),
+      );
+      throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
+    }
+
+    return onFatal(vendorId, model, resp.status, errText);
+  } catch (err) {
+    throw withUpstreamDiagnostic(err, diagnostic);
+  }
 }
 
 export async function executeChatCompletion(args: {
@@ -812,8 +1068,9 @@ export async function executeChatCompletion(args: {
   parseResponse?: ResponseParser;
   timeoutMs?: number;
   signal?: AbortSignal;
+  egress?: VendorEgress;
 }): Promise<VendorCallResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
   return executeVendorPost<VendorCallResult>({
@@ -826,6 +1083,7 @@ export async function executeChatCompletion(args: {
     headers: { 'X-Title': title ?? 'Builderforce.ai', ...(headers ?? {}) },
     ...(timeoutMs != null ? { timeoutMs } : {}),
     ...(signal ? { signal } : {}),
+    ...(egress ? { egress } : {}),
     logPrefix: 'vendors',
     authFailoverNoun: 'model',
     parseResponse: (raw): VendorCallResult => {
@@ -867,8 +1125,9 @@ export async function executeChatCompletionStream(args: {
   title?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  egress?: VendorEgress;
 }): Promise<VendorStreamResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress } = args;
 
   const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
     method: 'POST',
@@ -879,22 +1138,37 @@ export async function executeChatCompletionStream(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify({ ...body, stream: true }),
-  }, timeoutMs, signal);
+  }, timeoutMs, signal, egress);
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);
-    if (CASCADE_STATUSES.has(resp.status)) {
-      throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+    // Same single-capture / attach-on-the-way-out shape as `executeVendorPost`, so a
+    // streamed failure carries the identical evidence as a non-streamed one.
+    const diagnostic = captureUpstreamDiagnostic(endpoint, resp.status, resp.headers, errText);
+    try {
+      if (CASCADE_STATUSES.has(resp.status)) {
+        throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+      }
+      if (isCapacityLimitBody(errText)) {
+        throw new VendorRetryableError(
+          vendorId,
+          model,
+          429,
+          `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+        );
+      }
+      if (AUTH_STATUSES.has(resp.status)) {
+        console.error(
+          `[vendors] ${vendorId}/${model} stream auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY.`,
+          errText.slice(0, 200),
+        );
+        throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}`);
+      }
+      // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+      throwClassified4xx(vendorId, model, resp.status, errText);
+    } catch (err) {
+      throw withUpstreamDiagnostic(err, diagnostic);
     }
-    if (AUTH_STATUSES.has(resp.status)) {
-      console.error(
-        `[vendors] ${vendorId}/${model} stream auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY.`,
-        errText.slice(0, 200),
-      );
-      throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}`);
-    }
-    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
-    throwClassified4xx(vendorId, model, resp.status, errText);
   }
 
   if (!resp.body) {
@@ -905,11 +1179,15 @@ export async function executeChatCompletionStream(args: {
   const [peek, pass] = resp.body.tee();
   const reader = peek.getReader();
   const { value: firstChunk } = await reader.read();
-  reader.cancel().catch(() => { /* ignore */ });
+  reader.cancel().catch((error) => { /* ignore */ 
+    reportCaughtError(error, { source: "application/llm/vendors/types.ts", operation: "executeChatCompletionStream" });
+  });
   const firstText = firstChunk ? new TextDecoder().decode(firstChunk) : '';
 
   if (isChunkError(firstText)) {
-    await pass.cancel().catch(() => { /* ignore */ });
+    await pass.cancel().catch((error) => { /* ignore */ 
+      reportCaughtError(error, { source: "application/llm/vendors/types.ts", operation: "executeChatCompletionStream" });
+    });
     // Schema-too-complex can also surface as a first-chunk embedded error on the
     // streaming surface — classify it the same way so the cascade tags it
     // `schema` (terminal-eligible) rather than a generic embedded failure.

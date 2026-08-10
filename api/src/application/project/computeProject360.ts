@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, ideAgents, memberProfiles, tasks, users } from '../../infrastructure/database/schema';
 import { clampScore } from '../../domain/shared/numbers';
+import { liveExecution } from '../rehearsal/executionMode';
 import { notSystemTask } from '../task/taskScope';
 
 /**
@@ -454,6 +455,8 @@ export async function computeProject360(
       })
       .from(tasks)
       .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask)),
+    // `liveExecution()`: an in-flight REHEARSAL is not in-flight work (0372) — counting
+    // it would show a project as busy because someone is testing an agent config.
     db
       .select({ taskId: executions.taskId, status: executions.status })
       .from(executions)
@@ -463,6 +466,7 @@ export async function computeProject360(
           eq(tasks.projectId, projectId),
           eq(executions.tenantId, tenantId),
           inArray(executions.status, ['pending', 'submitted', 'running', 'paused']),
+          liveExecution(),
         ),
       ),
   ]);

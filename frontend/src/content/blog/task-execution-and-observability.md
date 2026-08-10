@@ -193,6 +193,6 @@ When a spec moves to `approved`, the task list becomes a set of executable tasks
 ## Next Steps
 
 - View your current executions on [Timeline](/timeline)
-- Review pending approvals for high-priority tasks on [Approvals](/approvals)
+- Review pending approvals for high-priority tasks in [Workforce approvals](/workforce?tab=approvals)
 - Explore the [Workflows](/workflows) page to see what your agentHosts are orchestrating right now
 - Read [Approval Gates and Human Oversight](/blog/approval-gates-and-human-oversight) for how to gate high-risk execution steps

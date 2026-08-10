@@ -44,9 +44,9 @@ function fmtDuration(ms: number): string {
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'completed': return 'var(--green, #22c55e)';
-    case 'failed': return 'var(--red, #ef4444)';
-    case 'running': return 'var(--blue, #3b82f6)';
+    case 'completed': return 'var(--success, var(--success))';
+    case 'failed': return 'var(--danger)';
+    case 'running': return 'var(--info)';
     default: return 'var(--text-muted)';
   }
 }
@@ -209,7 +209,7 @@ export function ExecutionTimelineChart({ tracks, colorForKey }: ExecutionTimelin
                     </title>
                   </rect>
                   {bw > 44 && (
-                    <text x={bx + 4} y={y + LANE_H / 2 + 4} fontSize={10} fill="#fff" style={{ pointerEvents: 'none' }}>
+                    <text x={bx + 4} y={y + LANE_H / 2 + 4} fontSize={10} fill="var(--text-on-accent)" style={{ pointerEvents: 'none' }}>
                       {t.label.length > Math.floor(bw / 6) ? t.label.slice(0, Math.floor(bw / 6)) + '…' : t.label}
                     </text>
                   )}

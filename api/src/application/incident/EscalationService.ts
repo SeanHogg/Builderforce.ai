@@ -119,6 +119,31 @@ export class EscalationService {
       tenantId, incident, memberRefs, level: level.level,
       notifyTeams: level.notifyTeams, notifySlack: level.notifySlack, notifyEmail: level.notifyEmail, note,
     });
+
+    // On-call AGENT members ('c:<ref>') have no external notification channel — page
+    // them by ENGAGING the agent: dispatch an incident-triage run against the bridged
+    // ticket assigned to that agent. dispatchIncidentTriage guards against double-
+    // dispatch, so this no-ops when the ticket is already being worked (e.g. the
+    // Incident Manager the open-time dispatch already engaged). Best-effort; recorded.
+    const agentRefs = [...new Set(memberRefs.filter((r) => r.startsWith('c:')).map((r) => r.slice(2)).filter(Boolean))];
+    if (agentRefs.length) {
+      const [row] = await this.db.select({ boardTaskId: prodIncidents.boardTaskId })
+        .from(prodIncidents).where(and(eq(prodIncidents.id, incident.id), eq(prodIncidents.tenantId, tenantId))).limit(1);
+      if (row?.boardTaskId != null) {
+        const { dispatchIncidentTriage } = await import('./incidentDispatch');
+        for (const agentRef of agentRefs) {
+          const dispatched = await dispatchIncidentTriage(env, this.db, {
+            tenantId, incidentId: incident.id, boardTaskId: row.boardTaskId, incidentRef: agentRef,
+          });
+          await this.db.insert(incidentEvents).values({
+            tenantId, incidentId: incident.id, kind: 'notified', actorRef: 'system',
+            channel: 'agent', target: agentRef.slice(0, 255), level: level.level,
+            message: dispatched ? 'Dispatched on-call agent to triage' : 'On-call agent already engaged',
+          });
+          if (dispatched) break; // one triage run per page; the rest are recorded as engaged
+        }
+      }
+    }
     await this.db.update(prodIncidents).set({
       escalationLevel: level.level,
       escalationPolicyId: incident.escalationPolicyId ?? undefined,

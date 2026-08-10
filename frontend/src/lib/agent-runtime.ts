@@ -19,7 +19,7 @@
 
 import { MambaEngine, createMambaEngine } from './mamba-engine';
 import type { ModelProvider } from './model-provider';
-import { ExternalLLMProvider } from './model-provider';
+import { createInferenceProvider } from './model-provider';
 import type { MambaAgentState, MambaStateSnapshot, MambaConfig, TrainingMode, InferenceMode } from './types';
 import { sendAIMessage } from './api';
 
@@ -64,8 +64,11 @@ export interface AgentRuntimeOptions {
   /** Worker base URL for cloud escalation */
   workerUrl?: string;
   /**
-   * Pluggable model provider for inference.
-   * Defaults to ExternalLLMProvider (Workers AI) when not supplied.
+   * Pluggable model provider for inference. Defaults to the local-first cascade
+   * (Chrome Prompt API → optional on-device model → cloud) built by
+   * {@link createInferenceProvider}, so the agent prefers on-device inference
+   * where available and transparently falls back to the cloud. Supply your own
+   * (e.g. one that slots in a trained on-device model) to override.
    */
   modelProvider?: ModelProvider;
 }
@@ -104,9 +107,10 @@ export class AgentRuntime {
       confidenceThreshold: 0.4,
       workerUrl: '',
       mambaConfig: {},
-      modelProvider: new ExternalLLMProvider({
+      modelProvider: createInferenceProvider({
         projectId: options.projectId,
-        label: 'Workers AI',
+        systemPrompt: 'You are an expert AI coding assistant built into Builderforce.ai.',
+        cloudLabel: 'Workers AI',
       }),
       ...options,
     };
@@ -121,6 +125,10 @@ export class AgentRuntime {
       this.options.projectId,
       this.options.mambaConfig
     );
+    // Let the model provider pick its best backend (e.g. Chrome's built-in model
+    // over the cloud). Non-fatal: a provider that fails to init just isn't ready,
+    // and step() falls back to a direct cloud call.
+    await this.options.modelProvider.init?.().catch(() => { /* provider stays not-ready */ });
     this.initialized = true;
   }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 /**
@@ -57,18 +58,18 @@ import {
 // Authenticated nav routes worth smoke-testing the Builderforce app itself
 // (self-test crawl seed when no project is selected).
 const SELF_TEST_ROUTES = [
-  '/dashboard', '/projects', '/ide', '/tasks', '/training',
+  '/dashboard', '/projects', '/create', '/tasks', '/training',
   '/skills', '/personas', '/settings', '/workforce',
   '/workforce?tab=chats', '/workforce?tab=approvals',
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  passed: '#3fb950', failed: '#f85149', error: '#f85149', skipped: '#8b949e',
-  running: '#d29922', queued: '#8b949e',
+  passed: 'var(--success)', failed: 'var(--error)', error: 'var(--error)', skipped: 'var(--text-muted)',
+  running: 'var(--amber-bright)', queued: 'var(--text-muted)',
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#f85149', high: '#f85149', medium: '#d29922', low: '#8b949e',
+  critical: 'var(--error)', high: 'var(--error)', medium: 'var(--amber-bright)', low: 'var(--text-muted)',
 };
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -85,15 +86,15 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 
 function btnStyle(disabled = false): React.CSSProperties {
   return {
-    padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
-    border: '1px solid var(--border-subtle)', background: 'var(--surface-raised, #1c2128)',
+    padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--border-subtle)', background: 'var(--surface-raised)',
     color: 'var(--text-secondary)', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
   };
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-deep, #0d1117)', color: 'var(--text-primary)', minWidth: 120,
+  padding: '6px 8px', fontSize: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
+  background: 'var(--bg-deep)', color: 'var(--text-primary)', minWidth: 120,
 };
 
 export function QaContent() {
@@ -182,7 +183,7 @@ export function QaContent() {
       </div>
 
       {error && (
-        <div style={{ padding: '8px 12px', marginBottom: 16, borderRadius: 6, background: 'rgba(248,81,73,0.1)', color: '#f85149', fontSize: 12 }}>
+        <div style={{ padding: '8px 12px', marginBottom: 16, borderRadius: 'var(--radius-sm)', background: 'rgba(248,81,73,0.1)', color: 'var(--error)', fontSize: 12 }}>
           {error}
         </div>
       )}
@@ -378,8 +379,8 @@ function HeatBar({ heat, max }: { heat: number; max: number }) {
   const pct = max > 0 ? Math.round((heat / max) * 100) : 0;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ display: 'inline-block', width: 60, height: 6, borderRadius: 3, background: 'var(--border-subtle)' }}>
-        <span style={{ display: 'block', width: `${pct}%`, height: 6, borderRadius: 3, background: '#d29922' }} />
+      <span style={{ display: 'inline-block', width: 60, height: 6, borderRadius: 'var(--radius-sm)', background: 'var(--border-subtle)' }}>
+        <span style={{ display: 'block', width: `${pct}%`, height: 6, borderRadius: 'var(--radius-sm)', background: 'var(--amber-bright)' }} />
       </span>
       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{heat}</span>
     </span>
@@ -407,10 +408,10 @@ function FindingsPanel({ explorationId, busy, onRun }: {
 
   if (loadError) return <Empty>{loadError}</Empty>;
   if (findings == null) return <Empty>Loading findings…</Empty>;
-  if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. 🎉</Empty>;
+  if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. <Icon source="🎉" size="1em" /></Empty>;
 
   return (
-    <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)' }}>
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)' }}>
       <Table head={['Severity', 'Type', 'Route', 'Heat', 'Message', '']}>
         {findings.map((f) => (
           <tr key={f.id}>
@@ -421,7 +422,7 @@ function FindingsPanel({ explorationId, busy, onRun }: {
             <Td style={{ maxWidth: 360 }}><code style={{ fontSize: 11 }}>{f.message.slice(0, 200)}</code></Td>
             <Td>
               {f.taskId ? (
-                <span style={{ fontSize: 11, color: '#3fb950' }}>Task #{f.taskId}</span>
+                <span style={{ fontSize: 11, color: 'var(--success)' }}>Task #{f.taskId}</span>
               ) : f.projectId == null ? (
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>self-test</span>
               ) : (
@@ -465,7 +466,7 @@ function TargetsSection({ projectId, targets, busy, onRun }: {
             <tr key={t.id}>
               <Td>{t.name}</Td>
               <Td><code style={{ fontSize: 11 }}>{t.baseUrl}</code></Td>
-              <Td>{t.isDefault ? '★' : ''}</Td>
+              <Td>{t.isDefault ? <Icon source="★" size="1em" /> : ''}</Td>
               <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`target-del-${t.id}`, () => deleteTarget(t.id))}>Delete</button></Td>
             </tr>
           ))}
@@ -611,11 +612,11 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
       {/* Headline metrics */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <Metric label="Quality score" value={trend.qualityScore != null ? pct(trend.qualityScore) : '—'}
-          hint="mean cloud-agent run outcome" color={trend.qualityScore != null && trend.qualityScore < 0.5 ? '#f85149' : '#3fb950'} />
+          hint="mean cloud-agent run outcome" color={trend.qualityScore != null && trend.qualityScore < 0.5 ? 'var(--error)' : 'var(--success)'} />
         <Metric label="Escaped defects" value={String(trend.findings.total)} hint={`${trend.findings.open} open`}
-          color={trend.findings.open > 0 ? '#d29922' : 'var(--text-primary)'} />
+          color={trend.findings.open > 0 ? 'var(--amber-bright)' : 'var(--text-primary)'} />
         <Metric label="CI failure rate" value={trend.ci.builds > 0 ? pct(trend.ci.failureRate) : '—'}
-          hint={`${trend.ci.failures}/${trend.ci.builds} builds`} color={trend.ci.failureRate > 0.2 ? '#f85149' : 'var(--text-primary)'} />
+          hint={`${trend.ci.failures}/${trend.ci.builds} builds`} color={trend.ci.failureRate > 0.2 ? 'var(--error)' : 'var(--text-primary)'} />
         <Metric label="Auto-routed" value={String(trend.findings.autoRouted)} hint="findings → fix agent" />
       </div>
 
@@ -623,7 +624,7 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
       {trend.findings.total > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           {SEVERITY_ORDER.filter((s) => trend.findings.bySeverity[s]).map((s) => (
-            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
+            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
               {s}: {trend.findings.bySeverity[s]}
             </span>
           ))}
@@ -638,8 +639,8 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
             {trend.daily.map((d) => (
               <div key={d.date} title={`${d.date}: ${d.findings} findings, ${d.ciFailures} CI failures`}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minWidth: 4 }}>
-                <span style={{ display: 'block', height: `${(d.ciFailures / peakFindings) * 100}%`, background: '#f85149', borderRadius: '2px 2px 0 0' }} />
-                <span style={{ display: 'block', height: `${(d.findings / peakFindings) * 100}%`, background: '#d29922' }} />
+                <span style={{ display: 'block', height: `${(d.ciFailures / peakFindings) * 100}%`, background: 'var(--error)', borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0'}} />
+                <span style={{ display: 'block', height: `${(d.findings / peakFindings) * 100}%`, background: 'var(--amber-bright)' }} />
               </div>
             ))}
           </div>
@@ -661,7 +662,7 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
 
 function Metric({ label, value, hint, color }: { label: string; value: string; hint?: string; color?: string }) {
   return (
-    <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)', minWidth: 130 }}>
+    <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', minWidth: 130 }}>
       <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1.3 }}>{value}</div>
       {hint && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{hint}</div>}
@@ -679,11 +680,11 @@ function ProducerTable({ title, rows }: { title: string; rows: QaModelQuality[] 
           <tr key={r.key}>
             <Td><code style={{ fontSize: 11 }}>{r.key}</code></Td>
             <Td>{r.runs}</Td>
-            <Td><span style={{ color: r.avgScore < 0.5 ? '#f85149' : 'var(--text-secondary)', fontWeight: 700 }}>{pct(r.avgScore)}</span></Td>
+            <Td><span style={{ color: r.avgScore < 0.5 ? 'var(--error)' : 'var(--text-secondary)', fontWeight: 700 }}>{pct(r.avgScore)}</span></Td>
             <Td>{pct(r.mergedRate)}</Td>
-            <Td><span style={{ color: r.ciGreenRate < 0.6 ? '#d29922' : 'var(--text-secondary)' }}>{pct(r.ciGreenRate)}</span></Td>
-            <Td><span style={{ color: r.defects > 0 ? '#d29922' : 'var(--text-secondary)', fontWeight: 700 }}>{r.defects}</span></Td>
-            <Td><span style={{ color: r.escapedDefects > 0 ? '#f85149' : 'var(--text-secondary)', fontWeight: 700 }}>{r.escapedDefects}</span></Td>
+            <Td><span style={{ color: r.ciGreenRate < 0.6 ? 'var(--amber-bright)' : 'var(--text-secondary)' }}>{pct(r.ciGreenRate)}</span></Td>
+            <Td><span style={{ color: r.defects > 0 ? 'var(--amber-bright)' : 'var(--text-secondary)', fontWeight: 700 }}>{r.defects}</span></Td>
+            <Td><span style={{ color: r.escapedDefects > 0 ? 'var(--error)' : 'var(--text-secondary)', fontWeight: 700 }}>{r.escapedDefects}</span></Td>
           </tr>
         ))}
       </Table>

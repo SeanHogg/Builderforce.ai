@@ -1,8 +1,10 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useCallback, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type AutoRunDiagnostic, type AutoRunReason } from '@/lib/builderforceApi';
+import { RoleGate } from '@/components/RoleGate';
 
 /** Minimal ticket shape the triage control needs from the board. */
 export interface TriageTask {
@@ -26,19 +28,38 @@ interface Props {
 const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   will_run: 'ok',
   already_running: 'info',
+  // Transient and self-clearing (the next lane entry is a different lane), so it
+  // reads like the other "in motion" states rather than as a problem.
+  same_lane_reentry: 'info',
   human_gate: 'warn',
   capability_mismatch: 'warn',
+  run_cap_exhausted: 'warn',
+  // A billing stop, not backpressure: it will not clear by waiting or by clicking
+  // Run now, so it reads as a warning that needs a decision — never as 'info'.
+  cloud_run_limit: 'warn',
+  // Same class of stop, and it holds the WHOLE workspace rather than this ticket.
+  tenant_token_limit: 'warn',
+  cooldown_active: 'info',
   no_agent: 'muted',
+  // A CONFIGURATION defect, not a quiet "nothing staffed": on a managed board this
+  // means no dispatch is possible at all until the stage gets a role-capable
+  // participant, so it must not read as muted the way `no_agent` does.
+  managed_no_role: 'warn',
+  // Stronger still: `managed_no_role` can be staffed its way out of, this one cannot —
+  // the stage names no role to staff, so somebody has to configure the lane (0386).
+  lane_unconfigured: 'warn',
   no_board: 'muted',
   no_lane: 'muted',
   terminal_lane: 'muted',
   not_executable: 'muted',
+  pending_approval: 'warn',
+  lane_requirement_gate: 'warn',
 };
 
 const TONE_COLOR: Record<'ok' | 'warn' | 'muted' | 'info', string> = {
-  ok: 'var(--success, #16a34a)',
-  warn: 'var(--warning, #d97706)',
-  info: 'var(--coral-bright, #f97316)',
+  ok: 'var(--success)',
+  warn: 'var(--warning)',
+  info: 'var(--coral-bright)',
   muted: 'var(--text-muted)',
 };
 
@@ -133,7 +154,7 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
     alignItems: 'center',
     gap: 4,
     padding: '2px 8px',
-    borderRadius: 999,
+    borderRadius: 'var(--radius-full)',
     fontSize: 10,
     fontWeight: 600,
     border: `1px solid ${open ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
@@ -146,7 +167,8 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
   return (
     <div style={{ position: 'relative' }}>
       <button type="button" style={btnStyle} onClick={toggle} aria-expanded={open} title={t('title')}>
-        ⚑ {t('button')} {candidates.length}
+        
+        <Icon source="⚑" size="1em" /> {t('button')} {candidates.length}
       </button>
 
       {open && (
@@ -161,37 +183,41 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
             width: 'min(320px, 80vw)',
             maxHeight: 360,
             overflowY: 'auto',
-            background: 'var(--surface, #1a1a1a)',
+            background: 'var(--surface)',
             border: '1px solid var(--border)',
-            borderRadius: 10,
+            borderRadius: 'var(--radius-lg)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
             padding: 10,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{t('title')}</span>
-            <button
-              type="button"
-              disabled={eligibleCount === 0 || running.size > 0}
-              onClick={() => void runAll()}
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                padding: '3px 8px',
-                borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: eligibleCount > 0 ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-                color: eligibleCount > 0 ? '#fff' : 'var(--text-muted)',
-                cursor: eligibleCount > 0 ? 'pointer' : 'not-allowed',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {t('runAll', { count: eligibleCount })}
-            </button>
+            {/* The DIAGNOSIS (why each ticket is/isn't auto-running) is a read and
+                stays open — only the dispatch is gated to DEVELOPER+. */}
+            <RoleGate capability="runtime.execute" style={{ flexShrink: 0 }}>
+              <button
+                type="button"
+                disabled={eligibleCount === 0 || running.size > 0}
+                onClick={() => void runAll()}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: '3px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: eligibleCount > 0 ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+                  color: eligibleCount > 0 ? 'var(--text-on-accent)' : 'var(--text-muted)',
+                  cursor: eligibleCount > 0 ? 'pointer' : 'not-allowed',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('runAll', { count: eligibleCount })}
+              </button>
+            </RoleGate>
           </div>
 
           {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 2px' }}>{t('loading')}</div>}
-          {error && <div style={{ fontSize: 11, color: 'var(--danger, #dc2626)', padding: '6px 2px' }}>{error}</div>}
+          {error && <div style={{ fontSize: 11, color: 'var(--danger)', padding: '6px 2px' }}>{error}</div>}
 
           {!loading && !error && candidates.map((tk) => {
             const d = diagnostics.get(tk.id);
@@ -221,25 +247,27 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
                     </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={!canRun || isRunning}
-                  onClick={() => void runOne(tk.id)}
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    padding: '3px 8px',
-                    borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    background: canRun && !isRunning ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-                    color: canRun && !isRunning ? '#fff' : 'var(--text-muted)',
-                    cursor: canRun && !isRunning ? 'pointer' : 'not-allowed',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  {isRunning ? t('running') : t('run')}
-                </button>
+                <RoleGate capability="runtime.execute" style={{ flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    disabled={!canRun || isRunning}
+                    onClick={() => void runOne(tk.id)}
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border)',
+                      background: canRun && !isRunning ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+                      color: canRun && !isRunning ? 'var(--text-on-accent)' : 'var(--text-muted)',
+                      cursor: canRun && !isRunning ? 'pointer' : 'not-allowed',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isRunning ? t('running') : t('run')}
+                  </button>
+                </RoleGate>
               </div>
             );
           })}

@@ -68,7 +68,7 @@ describe('upsertProjectFact (write-through)', () => {
 describe('recallProjectFacts', () => {
   it('returns the store rows for a valid project', async () => {
     const facts = await recallProjectFacts(env, recallDb([{ key: 'a', content: 'x' }]), 7, 42, { query: 'x' });
-    expect(facts).toEqual([{ key: 'a', content: 'x' }]);
+    expect(facts).toEqual([{ key: 'a', content: 'x', expiresAt: null }]);
   });
   it('returns [] for an invalid project id (no query needed)', async () => {
     expect(await recallProjectFacts(env, recallDb([{ key: 'a', content: 'x' }]), 7, 0)).toEqual([]);

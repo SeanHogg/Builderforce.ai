@@ -78,8 +78,8 @@ function CostForecastTrendCard({ days }: WidgetCardProps) {
   const fcastLen = data.forecast.length;
   const lastHist = data.history[histLen - 1]?.value ?? 0;
   const series: TrendSeries[] = [
-    { key: 'history', label: t('forecast.history'), values: [...data.history.map((p) => p.value), ...Array(fcastLen).fill(0)], color: 'var(--accent, #2563eb)' },
-    { key: 'forecast', label: t('forecast.projected'), values: [...Array(Math.max(0, histLen - 1)).fill(0), ...(histLen > 0 ? [lastHist] : []), ...data.forecast.map((p) => p.value)], color: '#94a3b8' },
+    { key: 'history', label: t('forecast.history'), values: [...data.history.map((p) => p.value), ...Array(fcastLen).fill(0)], color: 'var(--accent)' },
+    { key: 'forecast', label: t('forecast.projected'), values: [...Array(Math.max(0, histLen - 1)).fill(0), ...(histLen > 0 ? [lastHist] : []), ...data.forecast.map((p) => p.value)], color: 'var(--text-muted)' },
   ];
   return <TrendChart labels={labels} series={series} formatValue={fmt(data.unit)} ariaLabel={t('forecast.title')} />;
 }

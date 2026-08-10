@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Evermind recipes — the one-click starting points a user picks when creating an
  * LLM ("Evermind") project. A recipe is a create-time CONFIGURATOR: it decides how
@@ -17,9 +18,11 @@ import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from './tenantModelService';
+import { assessEvermindCoherence, type ArtifactStore } from './evermindRuntime';
 import {
   provisionDefaultProjectEvermind,
   seedProjectEvermind,
+  reseedProjectEvermind,
   setProjectEvermindTeacher,
   setProjectEvermindInference,
 } from './projectEvermind';
@@ -58,10 +61,14 @@ export interface SeedFromPublishedResult {
 }
 
 /**
- * Seed a project's base Evermind (version 1) from an ALREADY-PUBLISHED Studio model
- * (by slug). Server-side R2 copy — reads the published model's two objects and seeds
- * the project base without the browser round-tripping the blob. Extracted here so
- * BOTH the `/seed-from-model` route and recipe application share one implementation.
+ * Seed a project's base Evermind from an ALREADY-PUBLISHED Studio model (by slug).
+ * Server-side R2 copy — reads the published model's two objects and seeds the project
+ * base without the browser round-tripping the blob. Extracted here so BOTH the
+ * `/seed-from-model` route and recipe application share one implementation.
+ *
+ * `replace: true` is the REPAIR path: it overwrites a head that is already seeded (as a
+ * new version) instead of no-op'ing, which is how a project whose model trained itself
+ * into gibberish is recovered from a known-good published model.
  */
 export async function seedProjectEvermindFromPublished(
   env: Env,
@@ -70,6 +77,7 @@ export async function seedProjectEvermindFromPublished(
   projectId: number,
   slug: string,
   name?: string,
+  opts: { replace?: boolean } = {},
 ): Promise<SeedFromPublishedResult> {
   if (!env.UPLOADS) return { ok: false, version: 0, error: 'R2 artifact storage not configured' };
   const clean = slug.trim();
@@ -97,13 +105,16 @@ export async function seedProjectEvermindFromPublished(
     return { ok: false, version: 0, error: 'published model tokenizer is malformed' };
   }
 
-  const head = await seedProjectEvermind(env, db, env.UPLOADS, {
+  const seedParams = {
     tenantId,
     projectId,
     name: name?.trim() || tm.name || undefined,
     modelBlob,
     tokenizer: { vocab: tokenizer.vocab as Record<string, number>, merges: tokenizer.merges as string[] },
-  });
+  };
+  const head = opts.replace
+    ? await reseedProjectEvermind(env, db, env.UPLOADS, seedParams)
+    : await seedProjectEvermind(env, db, env.UPLOADS, seedParams);
   return { ok: true, version: head.version };
 }
 
@@ -133,8 +144,13 @@ export async function applyEvermindRecipe(
       const seeded = await seedProjectEvermindFromPublished(env, db, tenantId, projectId, input.seedModelSlug, input.name);
       if (seeded.ok) {
         // A published model is already trained → running the project's agents on it
-        // is meaningful, so turn on inference (mode defaults to 'connected' on seed).
-        await setProjectEvermindInference(env, db, tenantId, projectId, true);
+        // is meaningful, so turn on inference (mode defaults to 'connected' on seed) —
+        // BUT still benchmark-gate it (same bar as the manual toggle), so a published
+        // model that can't actually hold coherent chat isn't auto-promoted to serve.
+        // If it fails the probe, inference just stays OFF (the seeded model is still
+        // there; a manager can force-enable later). Store-less env → enable ungated.
+        const store = env.UPLOADS as ArtifactStore | undefined;
+        await setProjectEvermindInference(env, db, tenantId, projectId, true, store ? { assessReadiness: (ref) => assessEvermindCoherence(store, ref) } : undefined);
         return;
       }
       // Slug unresolvable — degrade to a starter base rather than a dead project.
@@ -145,7 +161,9 @@ export async function applyEvermindRecipe(
     if (input.teacherModel?.trim()) {
       await setProjectEvermindTeacher(env, db, tenantId, projectId, input.teacherModel.trim());
     }
-  } catch {
+  } catch (error) {
     /* best-effort: project creation must succeed even if Evermind provisioning fails */
+  
+    reportCaughtError(error, { source: "application/llm/evermindRecipes.ts", operation: "applyEvermindRecipe" });
   }
 }

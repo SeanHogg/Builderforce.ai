@@ -7,6 +7,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { hrs, int, pct } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * BOTTLENECK ANALYSIS lens — pinpoints WHICH SDLC stage stalls work and WHY:
@@ -15,8 +16,9 @@ import { hrs, int, pct } from './format';
  */
 export function BottleneckLens() {
   const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days), [days]);
+  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -100,7 +102,7 @@ export function BottleneckLens() {
 
 const tableStyle: React.CSSProperties = {
   width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem',
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden',
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden',
 };
 const thBase: React.CSSProperties = {
   padding: '10px 14px', fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)',

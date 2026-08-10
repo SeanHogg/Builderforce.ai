@@ -26,10 +26,10 @@ export function PinButton({ widgetKey }: { widgetKey: string }) {
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 28, height: 28, flexShrink: 0,
-        border: `1px solid ${pinned ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
-        borderRadius: 7, cursor: 'pointer',
-        background: pinned ? 'var(--coral-bright, #f4726e)' : 'transparent',
-        color: pinned ? '#fff' : 'var(--text-muted)',
+        border: `1px solid ${pinned ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+        borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+        background: pinned ? 'var(--coral-bright)' : 'transparent',
+        color: pinned ? 'var(--text-on-accent)' : 'var(--text-muted)',
         transition: 'all 0.15s ease',
       }}
     >

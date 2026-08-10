@@ -96,7 +96,7 @@ export function LegalHistoryDrawer({ context, onClose }: LegalHistoryDrawerProps
                   style={{
                     fontSize: 10,
                     padding: '2px 8px',
-                    borderRadius: 999,
+                    borderRadius: 'var(--radius-full)',
                     border: '1px solid var(--border)',
                     background: 'var(--surface)',
                   }}

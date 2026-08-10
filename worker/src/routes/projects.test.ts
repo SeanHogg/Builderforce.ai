@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateId, VANILLA_TEMPLATE, createTemplateFiles } from './projects';
+import { generateId, VANILLA_TEMPLATE, MOBILE_TEMPLATE, createTemplateFiles } from './projects';
 
 // ---------------------------------------------------------------------------
 // generateId
@@ -99,6 +99,32 @@ describe('createTemplateFiles', () => {
     const id = '550e8400-e29b-41d4-a716-446655440000';
     await createTemplateFiles(mockStorage, id, 'vanilla');
     expect(putMock.mock.calls[0][0]).toMatch(new RegExp(`^${id}/`));
+  });
+
+  // The legacy worker used to hard-code the vanilla scaffold and ignore both the
+  // template argument and the project's modality, so a Mobile / Web + Mobile
+  // project created here opened with a Vite app it could never run.
+  it('seeds the React Native scaffold for a mobile modality', async () => {
+    await createTemplateFiles(mockStorage, 'proj-m', null, 'mobile');
+    for (const [path, content] of Object.entries(MOBILE_TEMPLATE)) {
+      expect(putMock).toHaveBeenCalledWith(`proj-m/${path}`, content);
+    }
+    expect(putMock).not.toHaveBeenCalledWith('proj-m/src/main.jsx', expect.anything());
+  });
+
+  it('seeds the React Native scaffold for a webmobile modality', async () => {
+    await createTemplateFiles(mockStorage, 'proj-wm', null, 'webmobile');
+    expect(putMock).toHaveBeenCalledWith('proj-wm/App.js', MOBILE_TEMPLATE['App.js']);
+  });
+
+  it('honours an explicit template over the modality', async () => {
+    await createTemplateFiles(mockStorage, 'proj-x', 'mobile', 'designer');
+    expect(putMock).toHaveBeenCalledWith('proj-x/App.js', MOBILE_TEMPLATE['App.js']);
+  });
+
+  it('writes nothing for a modality that runs no Vite app', async () => {
+    await createTemplateFiles(mockStorage, 'proj-v', null, 'video');
+    expect(putMock).not.toHaveBeenCalled();
   });
 
   it('awaits all R2 puts in parallel (all resolve before returning)', async () => {

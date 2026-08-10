@@ -159,7 +159,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
 
         {/* Tenant selector (for permission/security tabs) */}
         {(tab === 'permissions' || tab === 'sessions' || tab === 'security') && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)' }}>
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
             <Select
               className="admin-select"
               value={selectedTenantId ?? ''}
@@ -221,7 +221,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                   </div>
                   <div className="user-drawer__field">
                     <span className="user-drawer__field-label">{t('users.drawer.fieldSuperadmin')}</span>
-                    <span style={{ color: user.isSuperadmin ? '#22c55e' : 'var(--text-muted)' }}>
+                    <span style={{ color: user.isSuperadmin ? 'var(--success)' : 'var(--text-muted)' }}>
                       {user.isSuperadmin ? t('users.drawer.yes') : t('users.drawer.no')}
                     </span>
                   </div>
@@ -234,7 +234,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <span>{fmtDateTime(user.createdAt)}</span>
                   </div>
 
-                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     <button
                       type="button"
                       className="admin-tab"
@@ -254,7 +254,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <button
                       type="button"
                       className="admin-tab"
-                      style={{ color: '#ef4444' }}
+                      style={{ color: 'var(--error-text)' }}
                       disabled={statusBusy}
                       onClick={() => doSuspend(true)}
                     >
@@ -276,12 +276,12 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       <div style={{ marginBottom: 12, fontSize: 13 }}>
                         {t('users.drawer.roleLabel')} <strong>{effectivePerms.role}</strong>
                         &nbsp;·&nbsp;
-                        <span style={{ color: '#22c55e' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
+                        <span style={{ color: 'var(--success-text)' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
                         {effectivePerms.userGrants.length > 0 && (
-                          <span style={{ marginLeft: 8, color: '#3b82f6' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
+                          <span style={{ marginLeft: 8, color: 'var(--coral-bright)' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
                         )}
                         {effectivePerms.userRevocations.length > 0 && (
-                          <span style={{ marginLeft: 8, color: '#ef4444' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
+                          <span style={{ marginLeft: 8, color: 'var(--error-text)' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
                         )}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -289,13 +289,13 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                           <span
                             key={p}
                             style={{
-                              background: 'var(--bg-card)',
-                              border: '1px solid var(--border-color)',
-                              borderRadius: 4,
+                              background: 'var(--surface-card)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '2px 7px',
                               fontSize: 11,
                               fontFamily: 'monospace',
-                              color: effectivePerms.userRevocations.includes(p) ? '#ef4444' : effectivePerms.userGrants.includes(p) ? '#3b82f6' : 'var(--text)',
+                              color: effectivePerms.userRevocations.includes(p) ? 'var(--error)' : effectivePerms.userGrants.includes(p) ? 'var(--coral-bright)' : 'var(--text)',
                             }}
                           >
                             {p}
@@ -332,7 +332,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                             <td>{s.ipAddress ?? '—'}</td>
                             <td>{fmtDateTime(s.lastSeenAt)}</td>
                             <td>
-                              <span style={{ color: s.isActive ? '#22c55e' : 'var(--text-muted)' }}>
+                              <span style={{ color: s.isActive ? 'var(--success)' : 'var(--text-muted)' }}>
                                 {s.isActive ? t('users.drawer.statusActive') : t('users.drawer.statusRevoked')}
                               </span>
                             </td>
@@ -359,7 +359,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="user-drawer__field">
                         <span className="user-drawer__field-label">{t('users.drawer.fieldMfa')}</span>
-                        <span style={{ color: secDetails.mfa.enabled ? '#22c55e' : '#ef4444' }}>
+                        <span style={{ color: secDetails.mfa.enabled ? 'var(--success)' : 'var(--error)' }}>
                           {secDetails.mfa.enabled ? t('users.drawer.mfaEnabled') : t('users.drawer.mfaDisabled')}
                         </span>
                       </div>
@@ -377,7 +377,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                         <span className="user-drawer__field-label">{t('users.drawer.fieldActiveTokens')}</span>
                         <span>{secDetails.tokens.filter((t) => t.isActive).length}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                         <button
                           type="button"
                           className="admin-tab"

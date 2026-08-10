@@ -9,6 +9,11 @@ function repo(overrides: Partial<ScannedRepo> = {}): ScannedRepo {
     suspectedSecrets: 0, fileCount: 10,
     hasPrivacyPolicy: false, hasTermsOfService: false, hasCookiePolicy: false, hasCookieConsent: false,
     hasUnsubscribe: false, hasDataExport: false, hasDataDeletion: false, hasRetentionPolicy: false,
+    hasRightsRequestWorkflow: false, hasUniversalOptOut: false, hasDpa: false,
+    hasSubprocessorRegister: false, hasDataInventory: false, hasImpactAssessment: false,
+    hasPrivacyIncidentResponse: false, hasAiTransparency: false,
+    hasAutomatedDecisionSafeguards: false, hasMinorSafety: false,
+    hasTransferSafeguards: false, hasAccessibilityEvidence: false,
     ...overrides,
   };
 }
@@ -76,7 +81,15 @@ describe('privacyScan', () => {
   });
 
   it('scores a privacy-complete repo higher than a bare one', () => {
-    const good = privacyScan(ctx([repo({ hasPrivacyPolicy: true, hasCookieConsent: true, hasCookiePolicy: true, hasDataExport: true, hasDataDeletion: true, hasUnsubscribe: true, hasRetentionPolicy: true, hasTermsOfService: true })]));
+    const good = privacyScan(ctx([repo({
+      hasPrivacyPolicy: true, hasCookieConsent: true, hasCookiePolicy: true,
+      hasDataExport: true, hasDataDeletion: true, hasUnsubscribe: true,
+      hasRetentionPolicy: true, hasTermsOfService: true, hasRightsRequestWorkflow: true,
+      hasUniversalOptOut: true, hasDpa: true, hasSubprocessorRegister: true,
+      hasDataInventory: true, hasImpactAssessment: true, hasPrivacyIncidentResponse: true,
+      hasAiTransparency: true, hasAutomatedDecisionSafeguards: true, hasMinorSafety: true,
+      hasTransferSafeguards: true, hasAccessibilityEvidence: true,
+    })]));
     const bad = privacyScan(ctx([repo()]));
     expect(good.score!).toBeGreaterThan(bad.score!);
     expect(good.metrics.some((m) => /CAN-SPAM/.test(m.label))).toBe(true);

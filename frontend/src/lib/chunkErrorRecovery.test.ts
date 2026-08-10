@@ -27,6 +27,29 @@ describe('isChunkLoadError', () => {
     expect(isChunkLoadError(new Error('Loading CSS chunk 12 failed'))).toBe(true);
   });
 
+  it('matches the Turbopack stale-module-graph signature', () => {
+    // The exact message from the 2026-08-09 support ticket: a module deleted
+    // while the page held an earlier build's graph.
+    const err = new Error(
+      'Module [project]/frontend/src/components/freelance/formStyles.ts [app-client] (ecmascript) ' +
+        'was instantiated because it was required from module ' +
+        '[project]/frontend/src/components/onboarding/HiredWizardSteps.tsx [app-client] (ecmascript), ' +
+        'but the module factory is not available. It might have been deleted in an HMR update.',
+    );
+    expect(isChunkLoadError(err)).toBe(true);
+  });
+
+  it('matches the Turbopack async-loader chunk failure', () => {
+    // The exact message from the 2026-08-10 iOS Safari support ticket.
+    const err = new Error(
+      'Failed to load chunk /_next/static/chunks/' +
+        'frontend_src_components_canvas_Canvas3DView_tsx_f75bff4e._.js from module ' +
+        '[project]/frontend/src/components/canvas/Canvas3DView.tsx [app-client] ' +
+        '(ecmascript, next/dynamic entry, async loader)',
+    );
+    expect(isChunkLoadError(err)).toBe(true);
+  });
+
   it('does NOT match unrelated errors', () => {
     expect(isChunkLoadError(new Error('Cannot read properties of undefined'))).toBe(false);
     expect(isChunkLoadError(new TypeError('x is not a function'))).toBe(false);

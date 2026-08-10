@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ITSM-event ingest — route `itsm`-category connector poll results (Freshservice,
  * ServiceNow) into support_tickets (the Quality lens / board Support metrics)
@@ -50,7 +51,9 @@ async function forkIncidentsFromTickets(db: Db, env: Env, conn: ItsmConnection, 
         ticketType: str2(f.ticketType) ?? str2(f.category),
       }, incidentRef);
       if (opened?.created) {
-        await escalation.pageInitial(env, conn.tenantId, opened.incidentId).catch(() => {});
+        await escalation.pageInitial(env, conn.tenantId, opened.incidentId).catch((error) => {
+          reportCaughtError(error, { source: "application/boardsync/itsmIngest.ts", operation: "forkIncidentsFromTickets" });
+        });
         // Enrich with an agent triage run against the incident's board task.
         const detail = await incidents.getIncident(conn.tenantId, opened.incidentId);
         await dispatchIncidentTriage(env, db, {
@@ -58,10 +61,12 @@ async function forkIncidentsFromTickets(db: Db, env: Env, conn: ItsmConnection, 
           incidentId: opened.incidentId,
           boardTaskId: detail?.incident.boardTaskId ?? null,
           incidentRef,
-        }).catch(() => {});
+        }).catch((error) => {
+          reportCaughtError(error, { source: "application/boardsync/itsmIngest.ts", operation: "forkIncidentsFromTickets" });
+        });
       }
     } catch (err) {
-      console.error('[itsm] incident fork failed', ticket.externalId, err);
+      reportCaughtError(err, { source: "application/boardsync/itsmIngest.ts", operation: "forkIncidentsFromTickets", context: { logMessage: '[itsm] incident fork failed', details: ticket.externalId } });
     }
   }
 }
@@ -156,7 +161,7 @@ export async function syncItsmConnection(
     // opt-in by the tenant having an Incident Manager agent).
     if (page.tickets.length > 0) {
       await forkIncidentsFromTickets(db, env, conn, page.tickets).catch((err) => {
-        console.error('[itsm] incident fork sweep failed', conn.id, err);
+        reportCaughtError(err, { source: "application/boardsync/itsmIngest.ts", operation: "syncItsmConnection", context: { logMessage: '[itsm] incident fork sweep failed', details: conn.id } });
       });
     }
 

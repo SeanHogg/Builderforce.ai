@@ -71,17 +71,23 @@ module.exports = __toCommonJS(src_exports);
 function hasWebGPUSupport() {
   return typeof navigator !== "undefined" && "gpu" in navigator;
 }
-async function probeDevice(target = "auto") {
+async function probeDevice(target = "auto", opts = {}) {
   const order = target === "auto" ? ["webnn", "webgpu", "cpu"] : target === "cpu" ? ["cpu"] : target === "webgpu" ? ["webgpu"] : ["webnn"];
   for (const candidate of order) {
-    const probed = await probeOne(candidate);
+    const probed = await probeOne(candidate, opts);
     if (probed) return probed;
   }
   return null;
 }
-async function probeOne(kind) {
+function watchDeviceLoss(device, onLost) {
+  void device.lost.then((info) => {
+    if (info.reason === "destroyed") return;
+    onLost(info);
+  });
+}
+async function probeOne(kind, opts) {
   if (kind === "webnn") return probeWebNN();
-  if (kind === "webgpu") return probeWebGPU();
+  if (kind === "webgpu") return probeWebGPU(opts);
   return probeCpu();
 }
 async function probeWebNN() {
@@ -104,7 +110,7 @@ async function probeWebNN() {
   }
   return null;
 }
-async function probeWebGPU() {
+async function probeWebGPU(opts) {
   if (!hasWebGPUSupport()) return null;
   const nav = navigator;
   if (!nav.gpu) return null;
@@ -119,6 +125,10 @@ async function probeWebGPU() {
           2147483648
         )
       }
+    });
+    watchDeviceLoss(device, (info2) => {
+      console.warn("[device-router] WebGPU device lost:", info2.message || info2.reason);
+      opts.onDeviceLost?.(info2);
     });
     const info = adapter.info;
     const label = [info?.vendor, info?.architecture, info?.device].filter(Boolean).join(" ") || "WebGPU device";
@@ -1377,7 +1387,8 @@ async function planScene(opts, client) {
   const planner = await shotPlannerPass(c, model, opts, director);
   const shots = normaliseShotBudget(
     sanitiseShots(planner.shots, director.characters),
-    opts.totalFrames
+    opts.totalFrames,
+    opts.request
   );
   return {
     treatment: director.treatment,
@@ -1457,13 +1468,13 @@ function sanitiseShots(shots, characters) {
     durationFrames: Number.isFinite(s.durationFrames) && s.durationFrames > 0 ? Math.floor(s.durationFrames) : 1
   }));
 }
-function normaliseShotBudget(shots, total) {
+function normaliseShotBudget(shots, total, fallbackPrompt = "") {
   const target = Math.max(1, Math.floor(total));
   if (shots.length === 0) {
     return [
       {
         id: "shot-1",
-        prompt: "",
+        prompt: fallbackPrompt,
         characterIds: [],
         camera: "static",
         action: "",
@@ -1481,20 +1492,26 @@ function normaliseShotBudget(shots, total) {
   return out;
 }
 async function structuredCall(client, args) {
-  const completion = await client.chat.completions.create({
-    model: args.model,
-    messages: [
-      { role: "system", content: args.system },
-      { role: "user", content: args.user }
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: args.schemaName, schema: args.schema, strict: true }
-    },
-    temperature: 0.7,
-    max_tokens: 1500,
-    signal: args.signal
-  });
+  let completion;
+  try {
+    completion = await client.chat.completions.create({
+      model: args.model,
+      messages: [
+        { role: "system", content: args.system },
+        { role: "user", content: args.user }
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: args.schemaName, schema: args.schema, strict: true }
+      },
+      temperature: 0.7,
+      max_tokens: 1500,
+      signal: args.signal
+    });
+  } catch (err) {
+    if (args.signal?.aborted || err?.name === "AbortError") throw err;
+    return null;
+  }
   const text = completion.choices?.[0]?.message?.content;
   if (!text || typeof text !== "string") return null;
   try {
@@ -1627,19 +1644,28 @@ async function expandPrompt(opts) {
     apiKey: opts.apiKey,
     baseUrl: opts.baseUrl
   });
-  const completion = await client.chat.completions.create({
-    // Explicit lightweight model — the gateway still failovers across the
-    // cascade if this is cooled, but we avoid relying on undocumented
-    // "unknown id → substitute" behaviour that a future strict-pin mode
-    // would break. Override via `promptModel` if a different model is wanted.
-    model: opts.promptModel ?? "googleai/gemini-2.5-flash-lite",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: opts.prompt }
-    ],
-    max_tokens: 200,
-    temperature: 0.7
-  });
+  let completion;
+  try {
+    completion = await client.chat.completions.create({
+      // Explicit lightweight model — the gateway still failovers across the
+      // cascade if this is cooled, but we avoid relying on undocumented
+      // "unknown id → substitute" behaviour that a future strict-pin mode
+      // would break. Override via `promptModel` if a different model is wanted.
+      model: opts.promptModel ?? "googleai/gemini-2.5-flash-lite",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: opts.prompt }
+      ],
+      max_tokens: 200,
+      temperature: 0.7,
+      // Was accepted but never forwarded — a cancelled generation left this call
+      // running and its result was silently discarded.
+      signal: opts.signal
+    });
+  } catch (err) {
+    if (opts.signal?.aborted || err?.name === "AbortError") throw err;
+    return opts.prompt;
+  }
   const text = completion.choices?.[0]?.message?.content?.trim();
   if (!text) {
     return opts.prompt;

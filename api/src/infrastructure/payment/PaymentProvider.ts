@@ -1,22 +1,37 @@
 /**
  * Payment provider abstraction.
  *
- * All payment processors (Stripe, Helcim, etc.) implement this interface.
- * The application layer (`TenantService`) depends only on this interface,
- * never on a concrete provider. To swap processors: implement this interface,
- * add the provider to the factory in `index.ts`, and set PAYMENT_PROVIDER env var.
+ * Stripe is the only implementation ({@link ../StripeProvider}); this interface exists
+ * so the application layer (`TenantService`) depends on a contract rather than on the
+ * concrete Stripe client, and so tests can inject a fake. It is NOT a provider-swap
+ * seam — there is no provider switch and no manual/no-op fallback.
  *
- * Flow:
+ * Flow (there is exactly one — every checkout is hosted):
  *   1. Frontend calls POST /api/tenants/:id/subscription/checkout
  *   2. API calls provider.createCheckoutSession() → returns checkoutUrl
- *   3a. If checkoutUrl: frontend redirects user to hosted checkout
- *       → provider fires webhook → POST /api/webhooks/payment
- *       → handler calls provider.parseWebhook() → normalised WebhookEvent
- *       → handler calls tenantService.activateFromWebhook()
- *   3b. If null (ManualProvider): subscription is immediately active, no redirect
+ *   3. Frontend redirects the user to the hosted checkout
+ *   4. Provider fires a webhook → POST /api/webhooks/payment
+ *      → handler calls provider.parseWebhook() → normalised WebhookEvent
+ *      → handler calls tenantService.handleWebhookEvent()
+ *
+ * A subscription is therefore only ever activated by a signed webhook confirming real
+ * money moved — never synchronously from user-supplied input.
  */
 
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
+
+/**
+ * Thrown when a payment operation is attempted without the Stripe secrets configured.
+ * Deliberately raised at the point of USE rather than at Worker boot: billing being
+ * unconfigured must fail the billing routes (503), not the entire API.
+ */
+export class PaymentNotConfiguredError extends Error {
+  readonly code = 'payment_not_configured' as const;
+  constructor(missing: string) {
+    super(`Payments are not configured: ${missing} is not set on this Worker.`);
+    this.name = 'PaymentNotConfiguredError';
+  }
+}
 
 export interface CheckoutSessionOpts {
   tenantId: number;
@@ -26,21 +41,67 @@ export interface CheckoutSessionOpts {
   billingEmail: string;
   /** Number of seats — only meaningful for Teams plan */
   seats?: number;
+  /** Server-resolved published price used when no pre-created provider Price ID exists. */
+  currency?: string;
+  unitAmountCents?: number;
+  productName?: string;
   /** Absolute URL provider redirects to on success */
   successUrl: string;
   /** Absolute URL provider redirects to on cancel */
   cancelUrl: string;
+  /** Validated server-side offer. Never accept these values directly from a client. */
+  discount?: {
+    id: string;
+    code: string;
+    percentOff: number;
+    durationYears: number;
+    redemptionId: string;
+  };
+  /** Pending first-party referral attribution carried in signed provider metadata. */
+  salesReferralId?: string;
 }
 
 export interface CheckoutSessionResult {
   /** Session/transaction ID from the provider (store for audit trail) */
   sessionId: string;
-  /** Redirect the user here if non-null. Null for manual/noop providers. */
-  checkoutUrl: string | null;
+  /** Hosted checkout URL — always redirect the user here. */
+  checkoutUrl: string;
   /** Provider-assigned customer ID (available immediately for some providers) */
   externalCustomerId: string | null;
-  /** Provider-assigned subscription ID (may arrive later via webhook) */
+  /** Provider-assigned subscription ID (arrives later via webhook) */
   externalSubscriptionId: string | null;
+}
+
+export interface BusinessPhoneCheckoutOpts {
+  tenantId: number;
+  cartId: string;
+  billingEmail: string;
+  currency: string;
+  activationCents: number;
+  monthlyCents: number;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/** Options to start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) —
+ *  used to unlock PREMIUM (any-paid-OpenRouter) model selection, which needs a
+ *  funding instrument on file even though it's metered per-request, not a plan. */
+export interface CardValidationSessionOpts {
+  tenantId: number;
+  billingEmail: string;
+  /** Provider customer id when the tenant already has one (attach the card to it). */
+  externalCustomerId?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface CardValidationSessionResult {
+  sessionId: string;
+  /** Hosted URL where the user enters/confirms the card — always redirect here.
+   *  Validation completes asynchronously via the `card.validated` webhook. */
+  checkoutUrl: string;
+  /** Provider-assigned customer id, when created up-front. */
+  externalCustomerId: string | null;
 }
 
 /**
@@ -54,11 +115,19 @@ export interface WebhookEvent {
     | 'subscription.cancelled'   // customer or admin cancelled
     | 'subscription.past_due'    // payment failed, grace period
     | 'payment.succeeded'        // one-off or first payment succeeded
-    | 'payment.failed';          // payment declined
+    | 'payment.failed'           // payment declined
+    | 'card.validated'           // explicit card-validation (SetupIntent) succeeded
+    | 'card.validation_failed'   // explicit card-validation could not complete
+    | 'addon.activated'
+    | 'addon.past_due'
+    | 'addon.cancelled';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
   externalSubscriptionId: string;
+  /** Signed tenant metadata on card-setup events. This lets a first-time Free
+   * tenant be linked to the Customer Stripe creates when Checkout completes. */
+  tenantId?: number;
 
   /** Present on activation/renewal events */
   billingCycle?: TenantBillingCycle;
@@ -70,27 +139,62 @@ export interface WebhookEvent {
   /** Card details returned by the provider after payment (not entered by user) */
   paymentBrand?: string;
   paymentLast4?: string;
+  /** The provider's payment-method id for that card. Persisted so a later
+   *  removal/replace can detach exactly this card instead of sweeping the
+   *  customer — see migration 0346. */
+  paymentMethodId?: string;
+  /** Signed Checkout metadata used to finalize a reserved one-time discount. */
+  discountRedemptionId?: string;
+  /** Signed checkout/subscription metadata identifying the attributed referral. */
+  salesReferralId?: string;
+  purchaseKind?: 'business_phone';
+  activationCents?: number;
+  monthlyCents?: number;
+  cartId?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;
 }
 
 export interface PaymentProvider {
-  /** Human-readable provider name (e.g. "manual", "stripe", "helcim") */
-  readonly name: string;
-
   /**
-   * Create a checkout session for upgrading to Pro.
-   * For hosted providers: returns a `checkoutUrl` to redirect the user to.
-   * For the manual provider: activates immediately and returns `checkoutUrl: null`.
+   * Create a hosted checkout session for upgrading to Pro/Teams. Returns the
+   * `checkoutUrl` to redirect the user to; the plan activates on the resulting webhook.
+   * Throws {@link PaymentNotConfiguredError} when the Stripe secrets are absent.
    */
   createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult>;
 
+  /** Purchase the Business Phone recurring add-on plus its one-time activation. */
+  createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult>;
+
   /**
-   * Cancel the active subscription for a tenant (called on downgrade to Free).
-   * No-op for manual provider.
+   * Start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) so the tenant
+   * can unlock PREMIUM (any-paid-OpenRouter) model selection. Returns a `checkoutUrl`;
+   * validation confirms asynchronously via the `card.validated` webhook.
+   * Throws {@link PaymentNotConfiguredError} when the Stripe secrets are absent.
    */
+  createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult>;
+
+  /** Cancel the active subscription for a tenant (called on downgrade to Free). */
   cancelSubscription(externalSubscriptionId: string): Promise<void>;
+
+  /**
+   * Detach a stored CARD so the processor no longer holds it. Called when a tenant
+   * removes or replaces their card on file.
+   *
+   * Prefers `paymentMethodId` — that detaches exactly the card we recorded, which
+   * is what a replace needs (revoke the OLD card, keep the new one) and what a
+   * multi-card tenant needs. `externalCustomerId` is the fallback for rows
+   * validated before migration 0346 stored the id: it sweeps every card on the
+   * customer, which is only safe because those tenants have exactly one.
+   *
+   * The caller must ensure no active subscription depends on the card — detaching
+   * one that does would silently break renewal billing.
+   *
+   * Returns how many were detached (0 is a normal outcome — nothing stored, or the
+   * card was already gone). Never throws for "nothing to do".
+   */
+  detachCards(opts: { paymentMethodId?: string | null; externalCustomerId?: string | null }): Promise<number>;
 
   /**
    * Parse and validate an inbound webhook payload.

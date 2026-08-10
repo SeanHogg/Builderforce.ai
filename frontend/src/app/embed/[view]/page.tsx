@@ -87,8 +87,13 @@ export default function EmbedViewPage() {
         minHeight: '100vh',
         padding: 16,
         font: '14px system-ui, -apple-system, sans-serif',
-        background: frame.theme === 'dark' ? '#0b1220' : '#ffffff',
-        color: frame.theme === 'dark' ? '#e2e8f0' : '#0f172a',
+        // The effect above puts the host's theme on <html>, which is what the
+        // token declarations key off — so the chrome can just READ the tokens
+        // instead of re-deciding light/dark for itself. It used to branch on
+        // `frame.theme` with two literals, and the dark branch had drifted onto
+        // `--border-subtle` (a translucent hairline) as its TEXT colour.
+        background: 'var(--bg-deep)',
+        color: 'var(--text-primary)',
         boxSizing: 'border-box',
       }}
     >
@@ -97,7 +102,7 @@ export default function EmbedViewPage() {
   );
 
   const notice = (msg: string, tone: 'muted' | 'error' = 'muted') => (
-    <div style={{ color: tone === 'error' ? '#dc2626' : '#64748b', padding: 8 }} role={tone === 'error' ? 'alert' : undefined}>
+    <div style={{ color: tone === 'error' ? 'var(--error)' : 'var(--text-secondary)', padding: 8 }} role={tone === 'error' ? 'alert' : undefined}>
       {msg}
     </div>
   );
@@ -135,7 +140,7 @@ export default function EmbedViewPage() {
     return wrap(
       <div>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{meta.label}</div>
-        <div style={{ color: '#64748b', marginTop: 6 }}>
+        <div style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
           This surface is coming soon — the embed transport, auth, and gating are wired; the {meta.label} UI lands with its API.
         </div>
       </div>,

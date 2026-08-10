@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Freelancer marketplace routes — /api/freelancers/* and /api/engagements/*.
  *
@@ -12,7 +13,7 @@
  * Employer engagement actions use the TENANT JWT (the hiring workspace).
  */
 import { Hono } from 'hono';
-import { neon } from '@neondatabase/serverless';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -28,8 +29,90 @@ import { notify } from '../../application/notifications/notify';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { parseJsonArray } from '../../domain/shared/json';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import {
+  freelancerEngagements,
+  freelancerProfiles,
+  freelancerReviews,
+  tenants,
+  users,
+} from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+
+/** `freelancer_profiles.*` under the SNAKE_CASE keys every consumer below (and the
+ *  cached browse payload) has always seen — the response shape is the contract. */
+const profileColumns = {
+  user_id: freelancerProfiles.userId,
+  headline: freelancerProfiles.headline,
+  bio: freelancerProfiles.bio,
+  slug: freelancerProfiles.slug,
+  avatar_key: freelancerProfiles.avatarKey,
+  discipline: freelancerProfiles.discipline,
+  skills: freelancerProfiles.skills,
+  hourly_rate_cents: freelancerProfiles.hourlyRateCents,
+  currency: freelancerProfiles.currency,
+  visibility: freelancerProfiles.visibility,
+  published: freelancerProfiles.published,
+  availability: freelancerProfiles.availability,
+  location: freelancerProfiles.location,
+  timezone: freelancerProfiles.timezone,
+  hired_video_user_id: freelancerProfiles.hiredVideoUserId,
+  hired_video_connection_id: freelancerProfiles.hiredVideoConnectionId,
+  hired_video_resume_id: freelancerProfiles.hiredVideoResumeId,
+  hired_video_claim_url: freelancerProfiles.hiredVideoClaimUrl,
+  resume_key: freelancerProfiles.resumeKey,
+  resume_filename: freelancerProfiles.resumeFilename,
+  resume_extract: freelancerProfiles.resumeExtract,
+  created_at: freelancerProfiles.createdAt,
+  updated_at: freelancerProfiles.updatedAt,
+} as const;
+
+/** Profile + the joined global user fields the talent card renders. */
+const profileWithUserColumns = {
+  ...profileColumns,
+  display_name: users.displayName,
+  avatar_url: users.avatarUrl,
+} as const;
+
+/** Review aggregate for a profile row. `direction`/`would_work_again` are real DB
+ *  columns that the Drizzle `freelancerReviews` model does not declare yet, so the
+ *  correlated aggregates stay as SQL fragments (still parameter-safe). */
+const ratingColumns = {
+  avg_rating: sql<string | null>`(SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer')`,
+  rating_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer')::int`,
+} as const;
+
+/** Extra reputation inputs the browse card's derived badge/JSS needs (list only). */
+const reputationColumns = {
+  again_count: sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = ${freelancerProfiles}.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int`,
+  distinct_clients: sql<number>`(SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
+  repeat_clients: sql<number>`(SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int`,
+  awarded: sql<number>`(SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
+  activity_signals: sql<number>`(SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = ${freelancerProfiles}.user_id AND s.occurred_at >= now() - interval '90 days')::int`,
+  earned_cents: sql<string>`(SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = ${freelancerProfiles}.user_id AND i.status = 'paid')::bigint`,
+} as const;
+
+/** `freelancer_engagements.*` under the snake_case keys `mapEngagement` reads. */
+const engagementColumns = {
+  id: freelancerEngagements.id,
+  tenant_id: freelancerEngagements.tenantId,
+  project_id: freelancerEngagements.projectId,
+  freelancer_user_id: freelancerEngagements.freelancerUserId,
+  status: freelancerEngagements.status,
+  access_scope: freelancerEngagements.accessScope,
+  rate_cents: freelancerEngagements.rateCents,
+  currency: freelancerEngagements.currency,
+  title: freelancerEngagements.title,
+  note: freelancerEngagements.note,
+  created_by_user_id: freelancerEngagements.createdByUserId,
+  invited_at: freelancerEngagements.invitedAt,
+  hired_at: freelancerEngagements.hiredAt,
+  terminated_at: freelancerEngagements.terminatedAt,
+  terminated_reason: freelancerEngagements.terminatedReason,
+  created_at: freelancerEngagements.createdAt,
+  updated_at: freelancerEngagements.updatedAt,
+} as const;
 
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
 const PUBLIC_LIST_TTL = 120;
@@ -86,10 +169,13 @@ export function deriveReputation(input: {
 /** Compute (and cache) a freelancer's stat block in ONE DB round-trip. Shared by the
  *  owner's own profile (GET /me) and the public detail (GET /:id) so both render the
  *  identical numbers. `fallbackCurrency` is used when the worker has no paid invoice yet. */
-async function computeFreelancerStats(env: HonoEnv['Bindings'], userId: string, fallbackCurrency: string): Promise<FreelancerStats> {
+async function computeFreelancerStats(db: Db, env: HonoEnv['Bindings'], userId: string, fallbackCurrency: string): Promise<FreelancerStats> {
   return getOrSetCached(env as Env, freelancerStatsCacheKey(userId), async () => {
-    const sql = neon(env.NEON_DATABASE_URL);
-    const [r] = await sql`
+    // Fourteen correlated scalar aggregates in ONE round-trip — expressible only as
+    // raw SQL, so this rides the Drizzle escape hatch (params still bound, never
+    // concatenated). It also reads freelancer_reviews.direction/would_work_again,
+    // which the Drizzle model does not declare.
+    const [r] = (await db.execute(sql`
       SELECT
         (SELECT COUNT(*) FROM freelancer_engagements e
            WHERE e.freelancer_user_id = ${userId} AND e.hired_at IS NOT NULL)::int AS awarded,
@@ -121,7 +207,7 @@ async function computeFreelancerStats(env: HonoEnv['Bindings'], userId: string, 
            WHERE e.freelancer_user_id = ${userId} AND e.hired_at IS NOT NULL)::int AS distinct_clients,
         (SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e
            WHERE e.freelancer_user_id = ${userId} AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int AS repeat_clients
-    `;
+    `)).rows as Record<string, unknown>[];
     const avgRating = r?.avg_rating == null ? null : Number(r.avg_rating);
     const earnedCents = Number(r?.earned_cents ?? 0);
     const { jss, badge } = deriveReputation({
@@ -327,25 +413,31 @@ async function optionalUserId(c: { req: { header(n: string): string | undefined 
 
 export function createFreelancerRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
   /** Resolve a freelancer's hired.video userId — from the stored value, else
    *  reconcile via getByExternalUserId and persist it (covers accounts that were
    *  provisioned before the partner key was configured). ONE place so the résumé,
    *  embed-token and profile paths share the linkage logic (DRY). */
-  async function resolveHiredUserId(env: HonoEnv['Bindings'], userId: string, known?: string | null): Promise<string | null> {
+  async function resolveHiredUserId(db: Db, env: HonoEnv['Bindings'], userId: string, known?: string | null): Promise<string | null> {
     if (known) return known;
     const ref = await hiredGetByExternalUserId(env, userId);
     if (ref.ref?.userId) {
-      await sql(env)`
-        UPDATE freelancer_profiles SET hired_video_user_id = ${ref.ref.userId},
-          hired_video_connection_id = COALESCE(${ref.ref.connectionId ?? null}, hired_video_connection_id), updated_at = NOW()
-        WHERE user_id = ${userId}
-      `;
+      await db.update(freelancerProfiles).set({
+        hiredVideoUserId: ref.ref.userId,
+        hiredVideoConnectionId: sql`COALESCE(${ref.ref.connectionId ?? null}, ${freelancerProfiles.hiredVideoConnectionId})`,
+        updatedAt: sql`NOW()`,
+      }).where(eq(freelancerProfiles.userId, userId));
       return ref.ref.userId;
     }
     return null;
   }
+
+  /** The owner's own profile row (profile + joined user fields + email). */
+  const loadOwnProfile = (db: Db, userId: string) =>
+    db.select({ ...profileWithUserColumns, email: users.email })
+      .from(freelancerProfiles)
+      .innerJoin(users, eq(users.id, freelancerProfiles.userId))
+      .where(eq(freelancerProfiles.userId, userId));
 
   // ------------------------------------------------------------------ SELF ----
   // Registered before the public :id route so "me" isn't swallowed by it.
@@ -353,23 +445,17 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me — the signed-in freelancer's own full profile (creates a stub row on
   // first read so the edit form always has something to bind to).
   router.get('/me', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
-    const [row] = await sql(c.env)`
-      SELECT p.*, u.display_name, u.avatar_url, u.email
-      FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
-      WHERE p.user_id = ${userId}
-    `;
+    const [row] = await loadOwnProfile(db, userId);
     if (!row) {
-      await sql(c.env)`INSERT INTO freelancer_profiles (user_id) VALUES (${userId}) ON CONFLICT DO NOTHING`;
-      const [fresh] = await sql(c.env)`
-        SELECT p.*, u.display_name, u.avatar_url, u.email
-        FROM freelancer_profiles p JOIN users u ON u.id = p.user_id WHERE p.user_id = ${userId}
-      `;
+      await db.insert(freelancerProfiles).values({ userId }).onConflictDoNothing();
+      const [fresh] = await loadOwnProfile(db, userId);
       if (!fresh) return c.json({ error: 'Profile unavailable' }, 500);
-      const stats = await computeFreelancerStats(c.env, userId, (fresh.currency as string) ?? 'USD');
+      const stats = await computeFreelancerStats(db, c.env, userId, (fresh.currency as string) ?? 'USD');
       return c.json({ ...mapPublicProfile(fresh), published: false, hiredVideoConnected: Boolean(fresh.hired_video_user_id), email: fresh.email, stats });
     }
-    const stats = await computeFreelancerStats(c.env, userId, (row.currency as string) ?? 'USD');
+    const stats = await computeFreelancerStats(db, c.env, userId, (row.currency as string) ?? 'USD');
     return c.json({
       ...mapPublicProfile(row),
       published: Boolean(row.published),
@@ -387,6 +473,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // PATCH /me — update editable fields. Also owns the freelancer's display name
   // (users.display_name, since a freelancer is a global account) and vanity slug.
   router.patch('/me', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const b = await c.req.json<Record<string, unknown>>();
     const headline = typeof b.headline === 'string' ? b.headline.slice(0, 200) : null;
@@ -409,7 +496,9 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       else {
         const norm = normalizeSlug(trimmed);
         if (!isValidSlug(norm)) return c.json({ error: 'Invalid slug. Use 3–40 lowercase letters, numbers, or hyphens.', code: 'SLUG_INVALID' }, 400);
-        const [taken] = await sql(c.env)`SELECT user_id FROM freelancer_profiles WHERE lower(slug) = ${norm} AND user_id <> ${userId}`;
+        const [taken] = await db.select({ user_id: freelancerProfiles.userId })
+          .from(freelancerProfiles)
+          .where(and(sql`lower(${freelancerProfiles.slug}) = ${norm}`, ne(freelancerProfiles.userId, userId)));
         if (taken) return c.json({ error: 'That alias is already taken.', code: 'SLUG_TAKEN' }, 409);
         slug = norm;
       }
@@ -418,21 +507,25 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     // Display name lives on the global users row (shown on the talent card).
     if (typeof b.displayName === 'string') {
       const name = b.displayName.trim().slice(0, 255) || null;
-      await sql(c.env)`UPDATE users SET display_name = ${name}, updated_at = NOW() WHERE id = ${userId}`;
+      await db.update(users).set({ displayName: name, updatedAt: sql`NOW()` }).where(eq(users.id, userId));
     }
 
-    await sql(c.env)`
-      INSERT INTO freelancer_profiles (user_id, headline, bio, discipline, skills, hourly_rate_cents, currency, visibility, availability, published, location, timezone, updated_at)
-      VALUES (${userId}, ${headline}, ${bio}, ${discipline}, ${skills}, ${rate}, ${currency}, ${visibility}, ${availability}, ${published}, ${location}, ${timezone}, NOW())
-      ON CONFLICT (user_id) DO UPDATE SET
-        headline = EXCLUDED.headline, bio = EXCLUDED.bio, discipline = EXCLUDED.discipline,
-        skills = EXCLUDED.skills, hourly_rate_cents = EXCLUDED.hourly_rate_cents, currency = EXCLUDED.currency,
-        visibility = EXCLUDED.visibility, availability = EXCLUDED.availability, published = EXCLUDED.published,
-        location = EXCLUDED.location, timezone = EXCLUDED.timezone, updated_at = NOW()
-    `;
+    await db.insert(freelancerProfiles).values({
+      userId, headline, bio, discipline, skills,
+      hourlyRateCents: rate, currency, visibility, availability, published, location, timezone,
+      updatedAt: sql`NOW()`,
+    }).onConflictDoUpdate({
+      target: freelancerProfiles.userId,
+      set: {
+        headline: sql`EXCLUDED.headline`, bio: sql`EXCLUDED.bio`, discipline: sql`EXCLUDED.discipline`,
+        skills: sql`EXCLUDED.skills`, hourlyRateCents: sql`EXCLUDED.hourly_rate_cents`, currency: sql`EXCLUDED.currency`,
+        visibility: sql`EXCLUDED.visibility`, availability: sql`EXCLUDED.availability`, published: sql`EXCLUDED.published`,
+        location: sql`EXCLUDED.location`, timezone: sql`EXCLUDED.timezone`, updatedAt: sql`NOW()`,
+      },
+    });
     // Slug is only touched when the caller sends the field (undefined = leave as-is).
     if (slug !== undefined) {
-      await sql(c.env)`UPDATE freelancer_profiles SET slug = ${slug}, updated_at = NOW() WHERE user_id = ${userId}`;
+      await db.update(freelancerProfiles).set({ slug, updatedAt: sql`NOW()` }).where(eq(freelancerProfiles.userId, userId));
     }
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, slug: slug === undefined ? undefined : slug });
@@ -441,19 +534,24 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me/slug-check?slug= — is this alias available? Returns validity + suggestions
   // so the editor can guide the user to a free one before they save.
   router.get('/me/slug-check', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const raw = c.req.query('slug') ?? '';
     const norm = normalizeSlug(raw);
     if (!isValidSlug(norm)) {
       return c.json({ slug: norm, valid: false, available: false, reason: 'invalid', suggestions: [] as string[] });
     }
-    const [taken] = await sql(c.env)`SELECT user_id FROM freelancer_profiles WHERE lower(slug) = ${norm} AND user_id <> ${userId}`;
+    const [taken] = await db.select({ user_id: freelancerProfiles.userId })
+      .from(freelancerProfiles)
+      .where(and(sql`lower(${freelancerProfiles.slug}) = ${norm}`, ne(freelancerProfiles.userId, userId)));
     if (!taken) return c.json({ slug: norm, valid: true, available: true, suggestions: [] as string[] });
     // Offer a few free variants.
     const candidates = [`${norm}-1`, `${norm}-2`, `${norm}-dev`, `${norm}-io`, `${norm}-${userId.slice(0, 4)}`].filter(isValidSlug);
-    const rows = await sql(c.env)`
-      SELECT lower(slug) AS slug FROM freelancer_profiles WHERE lower(slug) = ANY(${candidates})
-    ` as unknown as Record<string, unknown>[];
+    // No candidates → nothing to look up (the `= ANY('{}')` this replaces matched nothing).
+    const rows = candidates.length === 0 ? [] : await db
+      .select({ slug: sql<string>`lower(${freelancerProfiles.slug})` })
+      .from(freelancerProfiles)
+      .where(inArray(sql`lower(${freelancerProfiles.slug})`, candidates));
     const used = new Set(rows.map((r) => r.slug));
     const suggestions = candidates.filter((s) => !used.has(s)).slice(0, 3);
     return c.json({ slug: norm, valid: true, available: false, suggestions });
@@ -463,6 +561,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // when hired.video is configured + linked, synced there so the parsed profile
   // + embedded viewer stay current.
   router.post('/me/resume', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const form = await c.req.formData();
     const entry = form.get('file');
@@ -481,9 +580,14 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     // register the title (hired.video parses the claimed upload on their side).
     const rawText = type.startsWith('text/') ? (await file.text()).slice(0, 100_000) : undefined;
 
-    const [row] = await sql(c.env)`SELECT hired_video_user_id, skills FROM freelancer_profiles WHERE user_id = ${userId}`;
+    const selected = await db.select({
+      hired_video_user_id: freelancerProfiles.hiredVideoUserId,
+      skills: freelancerProfiles.skills,
+      resume_extract: freelancerProfiles.resumeExtract,
+    }).from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
+    const row = selected[0] as Record<string, unknown> | undefined;
     let resumeId: string | undefined;
-    const hiredId = await resolveHiredUserId(c.env, userId, row?.hired_video_user_id as string | undefined);
+    const hiredId = await resolveHiredUserId(db, c.env, userId, row?.hired_video_user_id as string | undefined);
     if (hiredId) {
       // Text résumés parse on hired.video; binaries are R2-only (uploadResume skips
       // them — hired.video rejects binary — and the worker parses/claims on their side).
@@ -494,12 +598,11 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       if (prof.extract) {
         const hasSkills = parseSkills(row?.skills).length > 0;
         const prefill = !hasSkills && prof.extract.skills.length > 0 ? JSON.stringify(prof.extract.skills.slice(0, 50)) : null;
-        await sql(c.env)`
-          UPDATE freelancer_profiles
-          SET resume_extract = ${JSON.stringify(prof.extract.raw)},
-              skills = COALESCE(${prefill}, skills), updated_at = NOW()
-          WHERE user_id = ${userId}
-        `;
+        await db.update(freelancerProfiles).set({
+          resumeExtract: JSON.stringify(prof.extract.raw),
+          skills: sql`COALESCE(${prefill}, ${freelancerProfiles.skills})`,
+          updatedAt: sql`NOW()`,
+        }).where(eq(freelancerProfiles.userId, userId));
         if (prefill) await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
       }
     }
@@ -510,14 +613,13 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       const parsed = parseResumeText(rawText);
       nativeExtract = { native: true, ...parsed };
     }
-    await sql(c.env)`
-      UPDATE freelancer_profiles
-      SET resume_key = ${key}, resume_filename = ${file.name},
-          hired_video_resume_id = COALESCE(${resumeId ?? null}, hired_video_resume_id),
-          resume_extract = COALESCE(${nativeExtract ? JSON.stringify(nativeExtract) : null}, resume_extract),
-          updated_at = NOW()
-      WHERE user_id = ${userId}
-    `;
+    await db.update(freelancerProfiles).set({
+      resumeKey: key,
+      resumeFilename: file.name,
+      hiredVideoResumeId: sql`COALESCE(${resumeId ?? null}, ${freelancerProfiles.hiredVideoResumeId})`,
+      resumeExtract: sql`COALESCE(${nativeExtract ? JSON.stringify(nativeExtract) : null}, ${freelancerProfiles.resumeExtract})`,
+      updatedAt: sql`NOW()`,
+    }).where(eq(freelancerProfiles.userId, userId));
     // Auto-fill is possible when we have a hired.video link OR any cached extract
     // (this upload's native parse, a prior hired parse, …). Binary résumés without
     // hired.video yield nothing locally — hired.video parses them on claim.
@@ -529,11 +631,15 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // the editor uses to prefill fields (from hired.video when linked, else the cached
   // native parse). Never writes — the user reviews + saves.
   router.get('/me/resume/suggestions', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
-    const [row] = await sql(c.env)`SELECT hired_video_user_id, resume_extract FROM freelancer_profiles WHERE user_id = ${userId}`;
+    const [row] = await db.select({
+      hired_video_user_id: freelancerProfiles.hiredVideoUserId,
+      resume_extract: freelancerProfiles.resumeExtract,
+    }).from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
     const empty: ResumeSuggestions = { available: false, headline: null, summary: null, skills: [], discipline: null };
 
-    const hiredId = await resolveHiredUserId(c.env, userId, row?.hired_video_user_id as string | undefined);
+    const hiredId = await resolveHiredUserId(db, c.env, userId, row?.hired_video_user_id as string | undefined);
     if (hiredId) {
       const prof = await hiredGetProfile(c.env, hiredId);
       if (prof.extract) {
@@ -555,7 +661,9 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
             discipline: inferDiscipline(`${parsed.headline ?? ''} ${skills.join(' ')}`),
           } satisfies ResumeSuggestions);
         }
-      } catch { /* not our native shape */ }
+      } catch (error) { /* not our native shape */ 
+        reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createFreelancerRoutes" });
+      }
     }
     return c.json(empty);
   });
@@ -564,6 +672,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // (GET /:id/avatar) is mirrored onto users.avatar_url so every talent surface that
   // joins users renders it. Freelancer profiles are public, so the served object is too.
   router.post('/me/avatar', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const form = await c.req.formData();
     const entry = form.get('file');
@@ -581,11 +690,13 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     // Absolute, cache-busted public URL → users.avatar_url (surfaced by the joins).
     const origin = new URL(c.req.url).origin;
     const avatarUrl = `${origin}/api/freelancers/${userId}/avatar?v=${Date.now()}`;
-    await sql(c.env)`
-      INSERT INTO freelancer_profiles (user_id, avatar_key, updated_at) VALUES (${userId}, ${key}, NOW())
-      ON CONFLICT (user_id) DO UPDATE SET avatar_key = ${key}, updated_at = NOW()
-    `;
-    await sql(c.env)`UPDATE users SET avatar_url = ${avatarUrl}, updated_at = NOW() WHERE id = ${userId}`;
+    await db.insert(freelancerProfiles)
+      .values({ userId, avatarKey: key, updatedAt: sql`NOW()` })
+      .onConflictDoUpdate({
+        target: freelancerProfiles.userId,
+        set: { avatarKey: key, updatedAt: sql`NOW()` },
+      });
+    await db.update(users).set({ avatarUrl, updatedAt: sql`NOW()` }).where(eq(users.id, userId));
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, avatarUrl });
   });
@@ -593,10 +704,12 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me/embed-token — mint a short-lived hired.video embed URL for the
   // signed-in freelancer's own profile/resume viewer.
   router.get('/me/embed-token', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const kind = c.req.query('kind') === 'resume' ? 'resume' : 'profile';
-    const [row] = await sql(c.env)`SELECT hired_video_user_id FROM freelancer_profiles WHERE user_id = ${userId}`;
-    const hiredId = await resolveHiredUserId(c.env, userId, row?.hired_video_user_id as string | undefined);
+    const [row] = await db.select({ hired_video_user_id: freelancerProfiles.hiredVideoUserId })
+      .from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
+    const hiredId = await resolveHiredUserId(db, c.env, userId, row?.hired_video_user_id as string | undefined);
     if (!hiredId) return c.json({ configured: false, embedUrl: null });
     const res = await hiredCreateEmbedToken(c.env, hiredId, kind);
     return c.json({ configured: res.configured, embedUrl: res.embedUrl ?? null, expiresAt: res.expiresAt ?? null });
@@ -605,9 +718,10 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // POST /me/connect — start the consent flow to link an EXISTING hired.video
   // account (instead of the auto-provisioned one).
   router.post('/me/connect', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ email?: string; redirectUrl?: string }>();
-    const [u] = await sql(c.env)`SELECT email FROM users WHERE id = ${userId}`;
+    const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
     const email = (b.email || (u?.email as string) || '').trim();
     if (!email) return c.json({ error: 'email required' }, 400);
     const res = await hiredConnectExisting(c.env, { email, externalUserId: userId, redirectUrl: b.redirectUrl });
@@ -621,19 +735,22 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   //  - opt OUT → clear the flag + UNPUBLISH the profile so they drop out of the talent
   //              marketplace and the hire gate (the profile row is kept, just hidden).
   router.post('/me/availability', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ available?: boolean }>().catch(() => ({} as { available?: boolean }));
     const available = b.available === true;
 
-    await sql(c.env)`UPDATE users SET available_for_hire = ${available}, updated_at = NOW() WHERE id = ${userId}`;
+    await db.update(users).set({ availableForHire: available, updatedAt: sql`NOW()` }).where(eq(users.id, userId));
     if (available) {
-      const [u] = await sql(c.env)`SELECT email, display_name FROM users WHERE id = ${userId}`;
+      const [u] = await db.select({ email: users.email, display_name: users.displayName })
+        .from(users).where(eq(users.id, userId));
       if (u?.email) {
         await provisionForHireProfile(c.env as Env, { id: userId, email: u.email as string, name: (u.display_name as string) ?? null });
       }
     } else {
       // Hide them from browse + hire without discarding the profile they built.
-      await sql(c.env)`UPDATE freelancer_profiles SET published = false, updated_at = NOW() WHERE user_id = ${userId}`;
+      await db.update(freelancerProfiles).set({ published: false, updatedAt: sql`NOW()` })
+        .where(eq(freelancerProfiles.userId, userId));
       await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     }
     return c.json({ availableForHire: available });
@@ -646,6 +763,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // all-public slice is CACHED under one key and filtered in memory, so search
   // never explodes the cache keyspace. Review aggregate (rating) is joined in.
   router.get('/', async (c) => {
+    const db = buildDatabase(c.env);
     const viewer = await optionalUserId(c);
     const q = c.req.query();
     const filters = {
@@ -654,40 +772,20 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       maxRate: q.maxRate ? Number(q.maxRate) : undefined,
       sort: q.sort, page: Math.max(1, Number(q.page) || 1), pageSize: Math.min(48, Math.max(1, Number(q.pageSize) || 24)),
     };
-    const publicRows = await getOrSetCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY, () =>
-      sql(c.env)`
-        SELECT p.*, u.display_name, u.avatar_url,
-          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer') AS avg_rating,
-          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer')::int AS rating_count,
-          -- Reputation inputs for the derived browse-card badge (run once per cache fill).
-          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int AS again_count,
-          (SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS distinct_clients,
-          (SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int AS repeat_clients,
-          (SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS awarded,
-          (SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = p.user_id AND s.occurred_at >= now() - interval '90 days')::int AS activity_signals,
-          (SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = p.user_id AND i.status = 'paid')::bigint AS earned_cents
-        FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
-        WHERE p.published = true AND p.visibility = 'public'
-        ORDER BY p.updated_at DESC LIMIT 200
-      ` as unknown as Promise<Record<string, unknown>[]>,
-    );
+    // One projection, two visibility slices — the reputation inputs run once per row
+    // (per cache fill for the public slice), exactly as the two hand-written queries did.
+    const browse = (visibility: 'public' | 'private') =>
+      db.select({ ...profileWithUserColumns, ...ratingColumns, ...reputationColumns })
+        .from(freelancerProfiles)
+        .innerJoin(users, eq(users.id, freelancerProfiles.userId))
+        .where(and(eq(freelancerProfiles.published, true), eq(freelancerProfiles.visibility, visibility)))
+        .orderBy(desc(freelancerProfiles.updatedAt))
+        .limit(200) as unknown as Promise<Record<string, unknown>[]>;
+
+    const publicRows = await getOrSetCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY, () => browse('public'));
     let rows = publicRows;
     if (viewer) {
-      const privateRows = await sql(c.env)`
-        SELECT p.*, u.display_name, u.avatar_url,
-          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer') AS avg_rating,
-          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer')::int AS rating_count,
-          -- Reputation inputs for the derived browse-card badge (run once per cache fill).
-          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int AS again_count,
-          (SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS distinct_clients,
-          (SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int AS repeat_clients,
-          (SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS awarded,
-          (SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = p.user_id AND s.occurred_at >= now() - interval '90 days')::int AS activity_signals,
-          (SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = p.user_id AND i.status = 'paid')::bigint AS earned_cents
-        FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
-        WHERE p.published = true AND p.visibility = 'private'
-        ORDER BY p.updated_at DESC LIMIT 200
-      ` as unknown as Record<string, unknown>[];
+      const privateRows = await browse('private');
       rows = [...publicRows, ...privateRows];
     }
     const { items, total } = applyTalentFilters(rows, filters);
@@ -698,9 +796,12 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // (profiles are public), so the talent card / detail / marketplace <img> all resolve
   // without a token. Registered before /:id so it isn't swallowed by it.
   router.get('/:id/avatar', async (c) => {
+    const db = buildDatabase(c.env);
     const id = c.req.param('id');
     if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
-    const [row] = await sql(c.env)`SELECT avatar_key FROM freelancer_profiles WHERE user_id = ${id} OR lower(slug) = ${id.toLowerCase()}`;
+    const [row] = await db.select({ avatar_key: freelancerProfiles.avatarKey })
+      .from(freelancerProfiles)
+      .where(or(eq(freelancerProfiles.userId, id), sql`lower(${freelancerProfiles.slug}) = ${id.toLowerCase()}`));
     const key = row?.avatar_key as string | undefined;
     if (!key) return c.json({ error: 'Not found' }, 404);
     const obj = await c.env.UPLOADS.get(key);
@@ -714,15 +815,16 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /:id — one freelancer's public detail (+ rating + recent reviews). `:id` is
   // EITHER the raw user guid OR the vanity slug. Private profiles require auth.
   router.get('/:id', async (c) => {
+    const db = buildDatabase(c.env);
     const id = c.req.param('id');
     const viewer = await optionalUserId(c);
-    const [row] = await sql(c.env)`
-      SELECT p.*, u.display_name, u.avatar_url,
-        (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer') AS avg_rating,
-        (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer')::int AS rating_count
-      FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
-      WHERE (p.user_id = ${id} OR lower(p.slug) = ${id.toLowerCase()}) AND p.published = true
-    `;
+    const [row] = await db.select({ ...profileWithUserColumns, ...ratingColumns })
+      .from(freelancerProfiles)
+      .innerJoin(users, eq(users.id, freelancerProfiles.userId))
+      .where(and(
+        or(eq(freelancerProfiles.userId, id), sql`lower(${freelancerProfiles.slug}) = ${id.toLowerCase()}`),
+        eq(freelancerProfiles.published, true),
+      ));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (row.visibility === 'private' && !viewer) {
       return c.json({ error: 'This profile is only visible to signed-in members', code: 'AUTH_REQUIRED' }, 401);
@@ -734,13 +836,18 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       const res = await hiredCreateEmbedToken(c.env, row.hired_video_user_id as string, 'profile');
       embedUrl = res.embedUrl ?? null;
     }
-    const reviews = await sql(c.env)`
-      SELECT rv.rating, rv.comment, rv.created_at, ru.display_name AS reviewer_name
-      FROM freelancer_reviews rv LEFT JOIN users ru ON ru.id = rv.reviewer_user_id
-      WHERE rv.freelancer_user_id = ${uid} AND rv.direction = 'employer_to_freelancer'
-      ORDER BY rv.created_at DESC LIMIT 20
-    ` as unknown as Record<string, unknown>[];
-    const stats = await computeFreelancerStats(c.env, uid, (row.currency as string) ?? 'USD');
+    const reviews = await db.select({
+      rating: freelancerReviews.rating,
+      comment: freelancerReviews.comment,
+      created_at: freelancerReviews.createdAt,
+      reviewer_name: users.displayName,
+    }).from(freelancerReviews)
+      .leftJoin(users, eq(users.id, freelancerReviews.reviewerUserId))
+      // `direction` is a real column the Drizzle model does not declare yet.
+      .where(and(eq(freelancerReviews.freelancerUserId, uid), sql`freelancer_reviews.direction = 'employer_to_freelancer'`))
+      .orderBy(desc(freelancerReviews.createdAt))
+      .limit(20);
+    const stats = await computeFreelancerStats(db, c.env, uid, (row.currency as string) ?? 'USD');
     return c.json({
       ...mapPublicProfile(row),
       embedUrl,
@@ -757,9 +864,8 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
  * Employer actions require the tenant JWT; a worker viewing their own
  * engagements uses the web JWT.
  */
-export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
+export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
   const mapEngagement = (r: Record<string, unknown>) => ({
     id: r.id,
@@ -781,25 +887,27 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   // GET /engagements — as EMPLOYER: this tenant's engagements. (Worker view is
   // GET /engagements/mine below.)
   router.get('/', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
-    const rows = await sql(c.env)`
-      SELECT e.*, u.display_name AS freelancer_name
-      FROM freelancer_engagements e JOIN users u ON u.id = e.freelancer_user_id
-      WHERE e.tenant_id = ${tenantId} AND e.terminated_at IS NULL
-      ORDER BY e.invited_at DESC LIMIT 500
-    ` as unknown as Record<string, unknown>[];
+    const rows = await db.select({ ...engagementColumns, freelancer_name: users.displayName })
+      .from(freelancerEngagements)
+      .innerJoin(users, eq(users.id, freelancerEngagements.freelancerUserId))
+      .where(and(eq(freelancerEngagements.tenantId, tenantId), isNull(freelancerEngagements.terminatedAt)))
+      .orderBy(desc(freelancerEngagements.invitedAt))
+      .limit(500);
     return c.json(rows.map(mapEngagement));
   });
 
   // GET /engagements/mine — as WORKER (web JWT): every tenant I'm engaged with.
   router.get('/mine', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
-    const rows = await sql(c.env)`
-      SELECT e.*, t.name AS tenant_name
-      FROM freelancer_engagements e JOIN tenants t ON t.id = e.tenant_id
-      WHERE e.freelancer_user_id = ${userId} AND e.terminated_at IS NULL
-      ORDER BY e.invited_at DESC LIMIT 500
-    ` as unknown as Record<string, unknown>[];
+    const rows = await db.select({ ...engagementColumns, tenant_name: tenants.name })
+      .from(freelancerEngagements)
+      .innerJoin(tenants, eq(tenants.id, freelancerEngagements.tenantId))
+      .where(and(eq(freelancerEngagements.freelancerUserId, userId), isNull(freelancerEngagements.terminatedAt)))
+      .orderBy(desc(freelancerEngagements.invitedAt))
+      .limit(500);
     return c.json(rows.map(mapEngagement));
   });
 
@@ -807,6 +915,7 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   // a project). status 'active' hires immediately; 'interviewing'/'invited' opens
   // an interview first. Idempotent-ish: reuses the active engagement if one exists.
   router.post('/', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const b = await c.req.json<{ freelancerUserId?: string; projectId?: number; rateCents?: number; title?: string; note?: string; status?: string }>();
@@ -815,40 +924,54 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
     // uses. This covers both dedicated 'freelancer' accounts AND standard builders
     // who opted in to being hired (available_for_hire), so hiring never checks the
     // account type directly.
-    const [prof] = await sql(c.env)`
-      SELECT p.user_id, p.hourly_rate_cents, p.currency FROM freelancer_profiles p
-      JOIN users u ON u.id = p.user_id
-      WHERE p.user_id = ${b.freelancerUserId} AND p.published = true
-    `;
+    const [prof] = await db.select({
+      user_id: freelancerProfiles.userId,
+      hourly_rate_cents: freelancerProfiles.hourlyRateCents,
+      currency: freelancerProfiles.currency,
+    }).from(freelancerProfiles)
+      .innerJoin(users, eq(users.id, freelancerProfiles.userId))
+      .where(and(eq(freelancerProfiles.userId, b.freelancerUserId), eq(freelancerProfiles.published, true)));
     if (!prof) return c.json({ error: 'Freelancer not found' }, 404);
     const status = ['invited', 'interviewing', 'active'].includes(b.status ?? '') ? (b.status as string) : 'invited';
     const rate = typeof b.rateCents === 'number' ? Math.round(b.rateCents) : (prof.hourly_rate_cents as number | null);
     const projectId = typeof b.projectId === 'number' ? b.projectId : null;
 
-    const [existing] = await sql(c.env)`
-      SELECT id FROM freelancer_engagements
-      WHERE tenant_id = ${tenantId} AND freelancer_user_id = ${b.freelancerUserId}
-        AND COALESCE(project_id, 0) = COALESCE(${projectId}, 0) AND terminated_at IS NULL
-    `;
-    const [ten] = await sql(c.env)`SELECT name FROM tenants WHERE id = ${tenantId}`;
+    const [existing] = await db.select({ id: freelancerEngagements.id })
+      .from(freelancerEngagements)
+      .where(and(
+        eq(freelancerEngagements.tenantId, tenantId),
+        eq(freelancerEngagements.freelancerUserId, b.freelancerUserId),
+        sql`COALESCE(${freelancerEngagements.projectId}, 0) = COALESCE(${projectId}, 0)`,
+        isNull(freelancerEngagements.terminatedAt),
+      ));
+    const [ten] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
     const tenantName = (ten?.name as string) ?? 'A workspace';
     const notifyKind = status === 'active' ? 'hired' : status === 'interviewing' ? 'interview' : 'invite';
     if (existing) {
-      await sql(c.env)`
-        UPDATE freelancer_engagements SET status = ${status}, updated_at = NOW(),
-          hired_at = CASE WHEN ${status} = 'active' AND hired_at IS NULL THEN NOW() ELSE hired_at END
-        WHERE id = ${existing.id}
-      `;
-      await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: `${tenantName} updated your engagement`, body: b.note ?? null, ref: existing.id as string });
+      await db.update(freelancerEngagements).set({
+        status,
+        updatedAt: sql`NOW()`,
+        hiredAt: sql`CASE WHEN ${status} = 'active' AND ${freelancerEngagements.hiredAt} IS NULL THEN NOW() ELSE ${freelancerEngagements.hiredAt} END`,
+      }).where(eq(freelancerEngagements.id, existing.id));
+      await notify(db, c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: `${tenantName} updated your engagement`, body: b.note ?? null, ref: existing.id as string });
       await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
       return c.json({ id: existing.id, status, reused: true });
     }
     const id = crypto.randomUUID();
-    await sql(c.env)`
-      INSERT INTO freelancer_engagements (id, tenant_id, project_id, freelancer_user_id, status, rate_cents, currency, title, note, created_by_user_id, hired_at)
-      VALUES (${id}, ${tenantId}, ${projectId}, ${b.freelancerUserId}, ${status}, ${rate}, ${prof.currency ?? 'USD'}, ${b.title ?? null}, ${b.note ?? null}, ${actor}, ${status === 'active' ? new Date().toISOString() : null})
-    `;
-    await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
+    await db.insert(freelancerEngagements).values({
+      id,
+      tenantId,
+      projectId,
+      freelancerUserId: b.freelancerUserId,
+      status,
+      rateCents: rate,
+      currency: (prof.currency as string) ?? 'USD',
+      title: b.title ?? null,
+      note: b.note ?? null,
+      createdByUserId: actor,
+      hiredAt: status === 'active' ? new Date() : null,
+    });
+    await notify(db, c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
 
     // Unified audit stream: a hire / engagement decision, attributed to the
@@ -866,28 +989,36 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
         summary: status === 'active' ? `Hired external talent (${status})` : `Invited external talent (${status})`,
         metadata: { engagementId: id, freelancerUserId: b.freelancerUserId, status, projectId },
       });
-    })().catch(() => {}));
+    })().catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createEngagementRoutes" });
+    }));
     return c.json({ id, status }, 201);
   });
 
   // PATCH /engagements/:id — move an engagement's status (interview → active, or
   // decline). Tenant-scoped so an employer can only touch its own engagements.
   router.patch('/:id', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const b = await c.req.json<{ status?: string; rateCents?: number; title?: string }>();
     const status = ['invited', 'interviewing', 'active', 'declined'].includes(b.status ?? '') ? (b.status as string) : null;
     if (!status && b.rateCents == null && b.title == null) return c.json({ error: 'nothing to update' }, 400);
-    const rows = await sql(c.env)`
-      UPDATE freelancer_engagements SET
-        status = COALESCE(${status}, status),
-        rate_cents = COALESCE(${typeof b.rateCents === 'number' ? Math.round(b.rateCents) : null}, rate_cents),
-        title = COALESCE(${b.title ?? null}, title),
-        hired_at = CASE WHEN ${status} = 'active' AND hired_at IS NULL THEN NOW() ELSE hired_at END,
-        updated_at = NOW()
-      WHERE id = ${id} AND tenant_id = ${tenantId} AND terminated_at IS NULL
-      RETURNING id, status, freelancer_user_id
-    `;
+    const rows = await db.update(freelancerEngagements).set({
+      status: sql`COALESCE(${status}, ${freelancerEngagements.status})`,
+      rateCents: sql`COALESCE(${typeof b.rateCents === 'number' ? Math.round(b.rateCents) : null}, ${freelancerEngagements.rateCents})`,
+      title: sql`COALESCE(${b.title ?? null}, ${freelancerEngagements.title})`,
+      hiredAt: sql`CASE WHEN ${status} = 'active' AND ${freelancerEngagements.hiredAt} IS NULL THEN NOW() ELSE ${freelancerEngagements.hiredAt} END`,
+      updatedAt: sql`NOW()`,
+    }).where(and(
+      eq(freelancerEngagements.id, id),
+      eq(freelancerEngagements.tenantId, tenantId),
+      isNull(freelancerEngagements.terminatedAt),
+    )).returning({
+      id: freelancerEngagements.id,
+      status: freelancerEngagements.status,
+      freelancer_user_id: freelancerEngagements.freelancerUserId,
+    });
     const updated = rows[0];
     if (!updated) return c.json({ error: 'Not found' }, 404);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(updated.freelancer_user_id as string));
@@ -898,18 +1029,26 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   // so hours/timecards keep their provenance; the engagement drops out of active
   // lists. Idempotent.
   router.delete('/:id', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* body optional */ }
-    const rows = await sql(c.env)`
-      UPDATE freelancer_engagements SET terminated_at = NOW(), terminated_reason = ${reason}, status = 'terminated', updated_at = NOW()
-      WHERE id = ${id} AND tenant_id = ${tenantId} AND terminated_at IS NULL
-      RETURNING freelancer_user_id
-    `;
+    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* body optional */ 
+      reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createEngagementRoutes" });
+    }
+    const rows = await db.update(freelancerEngagements).set({
+      terminatedAt: sql`NOW()`,
+      terminatedReason: reason,
+      status: 'terminated',
+      updatedAt: sql`NOW()`,
+    }).where(and(
+      eq(freelancerEngagements.id, id),
+      eq(freelancerEngagements.tenantId, tenantId),
+      isNull(freelancerEngagements.terminatedAt),
+    )).returning({ freelancer_user_id: freelancerEngagements.freelancerUserId });
     if (rows[0]) {
-      const [ten] = await sql(c.env)`SELECT name FROM tenants WHERE id = ${tenantId}`;
-      await notify(sql(c.env), c.env, { userId: rows[0].freelancer_user_id as string, tenantId, kind: 'terminated', title: `${(ten?.name as string) ?? 'A workspace'} ended your engagement`, body: reason, ref: id });
+      const [ten] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
+      await notify(db, c.env, { userId: rows[0].freelancer_user_id as string, tenantId, kind: 'terminated', title: `${(ten?.name as string) ?? 'A workspace'} ended your engagement`, body: reason, ref: id });
       await invalidateCached(c.env as Env, freelancerStatsCacheKey(rows[0].freelancer_user_id as string));
     }
     return c.json({ ok: true });
@@ -919,24 +1058,30 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   // Accept → 'active' (sets hired_at); decline → 'declined'. Only the engaged
   // freelancer may respond; notifies the employer who created it.
   router.post('/:id/respond', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ accept?: boolean }>();
     const target = b.accept ? 'active' : 'declined';
-    const rows = await sql(c.env)`
-      UPDATE freelancer_engagements SET status = ${target},
-        hired_at = CASE WHEN ${target} = 'active' AND hired_at IS NULL THEN NOW() ELSE hired_at END,
-        updated_at = NOW()
-      WHERE id = ${id} AND freelancer_user_id = ${userId} AND terminated_at IS NULL
-        AND status IN ('invited', 'interviewing')
-      RETURNING tenant_id, created_by_user_id
-    `;
+    const rows = await db.update(freelancerEngagements).set({
+      status: target,
+      hiredAt: sql`CASE WHEN ${target} = 'active' AND ${freelancerEngagements.hiredAt} IS NULL THEN NOW() ELSE ${freelancerEngagements.hiredAt} END`,
+      updatedAt: sql`NOW()`,
+    }).where(and(
+      eq(freelancerEngagements.id, id),
+      eq(freelancerEngagements.freelancerUserId, userId),
+      isNull(freelancerEngagements.terminatedAt),
+      inArray(freelancerEngagements.status, ['invited', 'interviewing']),
+    )).returning({
+      tenant_id: freelancerEngagements.tenantId,
+      created_by_user_id: freelancerEngagements.createdByUserId,
+    });
     const row = rows[0];
     if (!row) return c.json({ error: 'Not found or not pending' }, 404);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(userId));
-    const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
+    const [me] = await db.select({ display_name: users.displayName }).from(users).where(eq(users.id, userId));
     if (row.created_by_user_id) {
-      await notify(sql(c.env), c.env, {
+      await notify(db, c.env, {
         userId: row.created_by_user_id as string, tenantId: Number(row.tenant_id),
         kind: b.accept ? 'accepted' : 'declined',
         title: `${(me?.display_name as string) ?? 'A freelancer'} ${b.accept ? 'accepted' : 'declined'} the engagement`, ref: id,
@@ -949,26 +1094,32 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   // (1..5 + comment + optional "would work again"). One review per engagement PER
   // DIRECTION; feeds the freelancer's rating + Job Success Score.
   router.post('/:id/review', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
     const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
     if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
-    const [eng] = await sql(c.env)`
-      SELECT id, freelancer_user_id FROM freelancer_engagements WHERE id = ${id} AND tenant_id = ${tenantId}
-    `;
+    const [eng] = await db.select({
+      id: freelancerEngagements.id,
+      freelancer_user_id: freelancerEngagements.freelancerUserId,
+    }).from(freelancerEngagements)
+      .where(and(eq(freelancerEngagements.id, id), eq(freelancerEngagements.tenantId, tenantId)));
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
     const wouldWorkAgain = typeof b.wouldWorkAgain === 'boolean' ? b.wouldWorkAgain : null;
-    await sql(c.env)`
-      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment, direction, would_work_again)
-      VALUES (${crypto.randomUUID()}, ${id}, ${tenantId}, ${eng.freelancer_user_id}, ${actor}, ${rating}, ${b.comment ?? null}, 'employer_to_freelancer', ${wouldWorkAgain})
-      ON CONFLICT (engagement_id, direction) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, would_work_again = EXCLUDED.would_work_again, updated_at = NOW()
-    `;
+    await db.insert(freelancerReviews).values({
+      id: crypto.randomUUID(), engagementId: id, tenantId,
+      freelancerUserId: eng.freelancer_user_id as string, reviewerUserId: actor,
+      rating, comment: b.comment ?? null, direction: 'employer_to_freelancer', wouldWorkAgain,
+    }).onConflictDoUpdate({
+      target: [freelancerReviews.engagementId, freelancerReviews.direction],
+      set: { rating, comment: b.comment ?? null, wouldWorkAgain, updatedAt: new Date() },
+    });
     // Rating + JSS show on the (cached) public list and the freelancer's stat block.
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(eng.freelancer_user_id as string));
-    await notify(sql(c.env), c.env, { userId: eng.freelancer_user_id as string, tenantId, kind: 'review', title: `You received a ${rating}★ review`, body: b.comment ?? null, ref: id });
+    await notify(db, c.env, { userId: eng.freelancer_user_id as string, tenantId, kind: 'review', title: `You received a ${rating}★ review`, body: b.comment ?? null, ref: id });
     return c.json({ ok: true, rating });
   });
 
@@ -976,26 +1127,36 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   // engagement (the reverse direction). Builds the client's two-way reputation shown
   // on job postings so other freelancers can vet who they bid with.
   router.post('/:id/review-client', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
     const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
     if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
-    const [eng] = await sql(c.env)`
-      SELECT id, tenant_id, created_by_user_id FROM freelancer_engagements
-      WHERE id = ${id} AND freelancer_user_id = ${userId} AND hired_at IS NOT NULL
-    `;
+    const [eng] = await db.select({
+      id: freelancerEngagements.id,
+      tenant_id: freelancerEngagements.tenantId,
+      created_by_user_id: freelancerEngagements.createdByUserId,
+    }).from(freelancerEngagements)
+      .where(and(
+        eq(freelancerEngagements.id, id),
+        eq(freelancerEngagements.freelancerUserId, userId),
+        isNotNull(freelancerEngagements.hiredAt),
+      ));
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
     const wouldWorkAgain = typeof b.wouldWorkAgain === 'boolean' ? b.wouldWorkAgain : null;
-    await sql(c.env)`
-      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment, direction, would_work_again)
-      VALUES (${crypto.randomUUID()}, ${id}, ${Number(eng.tenant_id)}, ${userId}, ${userId}, ${rating}, ${b.comment ?? null}, 'freelancer_to_employer', ${wouldWorkAgain})
-      ON CONFLICT (engagement_id, direction) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, would_work_again = EXCLUDED.would_work_again, updated_at = NOW()
-    `;
+    await db.insert(freelancerReviews).values({
+      id: crypto.randomUUID(), engagementId: id, tenantId: Number(eng.tenant_id),
+      freelancerUserId: userId, reviewerUserId: userId, rating,
+      comment: b.comment ?? null, direction: 'freelancer_to_employer', wouldWorkAgain,
+    }).onConflictDoUpdate({
+      target: [freelancerReviews.engagementId, freelancerReviews.direction],
+      set: { rating, comment: b.comment ?? null, wouldWorkAgain, updatedAt: new Date() },
+    });
     // Client rating rides the (cached) open-jobs list — bust it so it reflects promptly.
     await invalidateCached(c.env as Env, 'jobs:public:open');
     if (eng.created_by_user_id) {
-      await notify(sql(c.env), c.env, { userId: eng.created_by_user_id as string, tenantId: Number(eng.tenant_id), kind: 'review', title: `A freelancer left you a ${rating}★ review`, body: b.comment ?? null, ref: id });
+      await notify(db, c.env, { userId: eng.created_by_user_id as string, tenantId: Number(eng.tenant_id), kind: 'review', title: `A freelancer left you a ${rating}★ review`, body: b.comment ?? null, ref: id });
     }
     return c.json({ ok: true, rating });
   });

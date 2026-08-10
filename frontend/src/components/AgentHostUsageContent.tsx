@@ -10,7 +10,7 @@ interface AgentHostUsageContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -26,12 +26,12 @@ function BarFill({ value, max, color }: { value: number; max: number; color: str
     <div
       style={{
         height: 6,
-        borderRadius: 3,
+        borderRadius: 'var(--radius-sm)',
         background: 'var(--bg-elevated)',
         overflow: 'hidden',
       }}
     >
-      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.3s' }} />
+      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 'var(--radius-sm)', transition: 'width 0.3s' }} />
     </div>
   );
 }
@@ -74,8 +74,8 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
         }}
       >
         {[
-          { label: 'Input tokens', value: formatNum(totalInput), color: 'var(--coral-bright, #f4726e)' },
-          { label: 'Output tokens', value: formatNum(totalOutput), color: 'var(--cyan-bright, #00e5cc)' },
+          { label: 'Input tokens', value: formatNum(totalInput), color: 'var(--coral-bright)' },
+          { label: 'Output tokens', value: formatNum(totalOutput), color: 'var(--cyan-bright, var(--cyan-bright))' },
           { label: 'Context tokens', value: formatNum(totalContext), color: 'var(--text-secondary)' },
           { label: 'Compactions', value: String(totalCompactions), color: 'var(--text-muted)' },
         ].map(({ label, value, color }) => (
@@ -110,8 +110,8 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
                 {[
-                  { label: 'Input', value: formatNum(snap.inputTokens), color: 'var(--coral-bright, #f4726e)' },
-                  { label: 'Output', value: formatNum(snap.outputTokens), color: 'var(--cyan-bright, #00e5cc)' },
+                  { label: 'Input', value: formatNum(snap.inputTokens), color: 'var(--coral-bright)' },
+                  { label: 'Output', value: formatNum(snap.outputTokens), color: 'var(--cyan-bright, var(--cyan-bright))' },
                   { label: 'Context', value: formatNum(snap.contextTokens), color: 'var(--text-secondary)' },
                 ].map(({ label, value, color }) => (
                   <div key={label}>
@@ -126,7 +126,7 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
                     <span>Context window</span>
                     <span>{contextPct}% of {formatNum(windowMax)}</span>
                   </div>
-                  <BarFill value={snap.contextTokens} max={windowMax} color="var(--cyan-bright, #00e5cc)" />
+                  <BarFill value={snap.contextTokens} max={windowMax} color="var(--cyan-bright, var(--cyan-bright))" />
                 </div>
               )}
               {snap.compactionCount > 0 && (

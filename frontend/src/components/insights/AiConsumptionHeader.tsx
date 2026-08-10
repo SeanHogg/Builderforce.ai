@@ -41,7 +41,7 @@ export function AiConsumptionHeader() {
     <div
       style={{
         background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-        borderRadius: 12, padding: 20,
+        borderRadius: 'var(--radius-lg)', padding: 20,
       }}
     >
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'stretch' }}>

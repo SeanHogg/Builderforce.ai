@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 /** Deterministic accent from a name (theme-token hues, readable in both themes). */
-const HUES = ['var(--coral-bright)', 'var(--cyan-bright)', 'var(--violet-bright, #a78bfa)', 'var(--amber-bright, #fbbf24)', 'var(--emerald-bright, #34d399)'];
+const HUES = ['var(--coral-bright)', 'var(--cyan-bright)', 'var(--violet-bright, var(--violet-bright))', 'var(--amber-bright, var(--amber-bright))', 'var(--emerald-bright, var(--emerald-bright))'];
 function accentFor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
@@ -71,7 +71,7 @@ export function VideoTile({
       style={{
         position: 'relative',
         aspectRatio: expanded ? '16 / 9' : '4 / 3',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
         background: 'var(--bg-deep)',
         border: `1px solid ${speaking ? accent : 'var(--border-subtle)'}`,
@@ -119,7 +119,7 @@ export function VideoTile({
           style={{
             position: 'absolute', left: 8, top: 8,
             fontSize: 10, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
-            color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '2px 7px', borderRadius: 6,
+            color: 'var(--text-on-accent)', background: 'rgba(0,0,0,0.55)', padding: '2px 7px', borderRadius: 'var(--radius-sm)',
             pointerEvents: 'none',
           }}
         >
@@ -134,7 +134,7 @@ export function VideoTile({
           style={{
             position: 'absolute', right: 8, top: 8,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 22, height: 22, borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff',
+            width: 22, height: 22, borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.45)', color: 'var(--text-on-accent)',
             pointerEvents: 'none',
           }}
         >
@@ -152,8 +152,8 @@ export function VideoTile({
           <span
             style={{
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              fontSize: expanded ? 15 : 12, lineHeight: 1.35, color: '#fff',
-              background: 'rgba(0,0,0,0.62)', padding: '4px 8px', borderRadius: 8,
+              fontSize: expanded ? 15 : 12, lineHeight: 1.35, color: 'var(--text-on-accent)',
+              background: 'rgba(0,0,0,0.62)', padding: '4px 8px', borderRadius: 'var(--radius-md)',
             }}
           >
             {caption}
@@ -171,8 +171,8 @@ export function VideoTile({
       >
         <span
           style={{
-            fontSize: 12, fontWeight: 600, color: '#fff',
-            background: 'rgba(0,0,0,0.55)', padding: '2px 8px', borderRadius: 6,
+            fontSize: 12, fontWeight: 600, color: 'var(--text-on-accent)',
+            background: 'rgba(0,0,0,0.55)', padding: '2px 8px', borderRadius: 'var(--radius-sm)',
             maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}
         >
@@ -183,10 +183,10 @@ export function VideoTile({
             aria-hidden
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 20, height: 20, borderRadius: '50%', background: 'var(--error-bg, #7f1d1d)',
+              width: 20, height: 20, borderRadius: '50%', background: 'var(--error-bg)',
             }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth="2.4" strokeLinecap="round">
               <line x1="1" y1="1" x2="23" y2="23" />
               <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
               <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />

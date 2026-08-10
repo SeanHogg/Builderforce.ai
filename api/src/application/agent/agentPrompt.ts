@@ -13,7 +13,7 @@
  * stock OpenAI SDKs call a user's model verbatim.
  */
 
-import { neon } from '@neondatabase/serverless';
+import { and, eq, sql as dsql } from 'drizzle-orm';
 import {
   agentMemorySignal,
   compilePsychometricProfile,
@@ -23,6 +23,8 @@ import {
   type LimbicPsychProfile,
 } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { ideAgents } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recallAgentKnowledge } from './agentKnowledge';
 
@@ -122,20 +124,30 @@ function parseAgentPsychometric(raw: unknown): LimbicPsychProfile | undefined {
 }
 
 /** The published agent's base config — query-INDEPENDENT, so it is read-through
- *  cached by id (agents change rarely post-publish). Grounded recall is layered on
+ *  cached by tenant + id (agents change rarely post-publish). Grounded recall is layered on
  *  per request (query-dependent) by {@link resolveWorkforceModel}. */
 type WorkforceAgentBase = { baseModel: string | null; descriptor: AgentDescriptor; inferenceMode: 'base' | 'lora' | 'hybrid' };
 
-async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<WorkforceAgentBase | null> {
+async function loadWorkforceAgentBase(env: Env, tenantId: number, agentId: string): Promise<WorkforceAgentBase | null> {
   return getOrSetCached(
     env,
-    `workforce_model:resolve:${agentId}`,
+    `workforce_model:resolve:${tenantId}:${agentId}`,
     async (): Promise<WorkforceAgentBase | null> => {
-      const rows = await neon(env.NEON_DATABASE_URL)`
-        SELECT name, title, bio, skills, base_model, r2_artifact_key, mamba_state, inference_mode, psychometric
-        FROM ide_agents WHERE id = ${agentId} LIMIT 1
-      `;
-      const a = rows[0] as Record<string, unknown> | undefined;
+      const [a] = await buildDatabase(env)
+        .select({
+          name: ideAgents.name,
+          title: ideAgents.title,
+          bio: ideAgents.bio,
+          skills: ideAgents.skills,
+          base_model: ideAgents.baseModel,
+          r2_artifact_key: ideAgents.r2ArtifactKey,
+          mamba_state: ideAgents.mambaState,
+          inference_mode: ideAgents.inferenceMode,
+          psychometric: ideAgents.psychometric,
+        })
+        .from(ideAgents)
+        .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, agentId)))
+        .limit(1);
       if (!a) return null;
       // Compile the agent's OWN personality (ide_agents.psychometric) into persona
       // directives + exec levers so a Workforce agent executes UNDER its traits on every
@@ -174,11 +186,12 @@ async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<Workfo
  * and folded into the directives through the SAME `lowerAgentSpec` lowering every
  * other surface uses — so a stock OpenAI-SDK caller addressing the model by id gets
  * the agent grounded on its own docs, exactly like the dedicated chat path. The agent
- * base is cached by id; recall is layered per request (chunk load is itself cached,
+ * base is cached by tenant + id; recall is layered per request (chunk load is itself cached,
  * selection is pure) so the keyspace stays bounded.
  */
 export async function resolveWorkforceModel(
   env: Env,
+  tenantId: number,
   ref: string | undefined | null,
   query?: string,
 ): Promise<ResolvedWorkforceModel | null> {
@@ -186,11 +199,11 @@ export async function resolveWorkforceModel(
   const agentId = ref.slice(WORKFORCE_MODEL_REF_PREFIX.length).trim();
   if (!agentId) return null;
 
-  const base = await loadWorkforceAgentBase(env, agentId);
+  const base = await loadWorkforceAgentBase(env, tenantId, agentId);
   if (!base) return null;
 
   const recalledContext = query?.trim()
-    ? await recallAgentKnowledge(env, neon(env.NEON_DATABASE_URL), agentId, query)
+    ? await recallAgentKnowledge(env, buildDatabase(env), tenantId, agentId, query)
     : '';
 
   // `buildAgentInference` lowers the descriptor to BOTH the system prompt (now carrying

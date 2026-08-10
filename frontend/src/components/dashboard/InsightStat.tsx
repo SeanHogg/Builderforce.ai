@@ -21,8 +21,8 @@ import type { DeltaDirection } from './metricFormat';
  */
 
 const TONE_COLOR: Record<'good' | 'bad' | 'neutral', string> = {
-  good: 'var(--success, #16a34a)',
-  bad: 'var(--danger, #dc2626)',
+  good: 'var(--success)',
+  bad: 'var(--danger)',
   neutral: 'var(--text-secondary)',
 };
 
@@ -81,7 +81,7 @@ export function InsightStat({
         position: 'relative',
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         padding: 16,
         minWidth: 180,
         height: '100%',
@@ -90,22 +90,22 @@ export function InsightStat({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</span>
+        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</span>
         {recencyLabel && (
-          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{recencyLabel}</span>
+          <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{recencyLabel}</span>
         )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0 2px' }}>
-        <span style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
+        <span style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
         {delta && (
-          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: TONE_COLOR[delta.tone ?? 'neutral'] }}>
+          <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: TONE_COLOR[delta.tone ?? 'neutral'] }}>
             {DIRECTION_ARROW[delta.direction]} {delta.label}
           </span>
         )}
       </div>
 
-      {sub && <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{sub}</div>}
 
       {chart
         ? <div style={{ marginTop: 10 }}>{chart}</div>
@@ -115,7 +115,7 @@ export function InsightStat({
             </div>
           )}
 
-      {nudge && <div style={{ marginTop: 10, fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{nudge}</div>}
+      {nudge && <div style={{ marginTop: 10, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)' }}>{nudge}</div>}
     </div>
   );
 

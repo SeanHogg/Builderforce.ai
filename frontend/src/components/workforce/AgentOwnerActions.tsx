@@ -38,7 +38,7 @@ export function AgentOwnerActions({
       {canDeleteAgent(agent) && (
         <button
           type="button"
-          style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', borderColor: 'rgba(239,68,68,0.3)' }}
+          style={{ ...btnSubtle, color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)' }}
           onClick={() => onDelete?.(agent)}
           title="Delete this draft agent (only available while unpublished and unpurchased)"
         >

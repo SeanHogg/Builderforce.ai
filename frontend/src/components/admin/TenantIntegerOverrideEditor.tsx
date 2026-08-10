@@ -93,7 +93,7 @@ export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config 
         padding: 12,
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         marginBottom: 12,
       }}
     >
@@ -125,7 +125,7 @@ export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config 
             style={{
               width: 120, padding: '4px 8px', fontSize: 12,
               background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 6,
+              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
             }}
           />
           {config.customSuffix}

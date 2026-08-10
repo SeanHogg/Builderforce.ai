@@ -22,22 +22,22 @@ const ALL_CATEGORIES: AllocationCategory[] = ['innovation', 'ktlo', 'support', '
 const CAP_STATUSES: CapitalizationStatus[] = ['capitalized', 'not_capitalized', 'uncategorized'];
 
 const CATEGORY_TONE: Record<AllocationCategory, string> = {
-  innovation: '#2563eb', ktlo: '#16a34a', support: '#d97706', tech_debt: '#9333ea', other: '#9ca3af',
+  innovation: 'var(--info)', ktlo: 'var(--success)', support: 'var(--warning)', tech_debt: 'var(--purple-bright)', other: 'var(--text-muted)',
 };
 /** Capitalization slice tones — reuse the canonical CAPEX/OPEX tokens. */
 const STATUS_TONE: Record<CapitalizationStatus, string> = {
   capitalized: COST_CLASS_COLORS.capex,
   not_capitalized: COST_CLASS_COLORS.opex,
-  uncategorized: '#9ca3af',
+  uncategorized: 'var(--text-muted)',
 };
 
 const inputStyle: CSSProperties = {
-  padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
 };
 const btnStyle: CSSProperties = {
-  padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)',
-  color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 const fte = (n: number): string => (Number.isFinite(n) ? n.toFixed(1) : '0.0');
@@ -50,14 +50,14 @@ function currentMonth(): string {
 /** A compact two-option segmented control (FTE | Cost). */
 function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: string }> }) {
   return (
-    <div style={{ display: 'inline-flex', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ display: 'inline-flex', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
       {options.map((o) => (
         <button
           key={o.value} type="button" onClick={() => onChange(o.value)} aria-pressed={value === o.value}
           style={{
             padding: '5px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: 'none',
-            background: value === o.value ? 'var(--accent, #2563eb)' : 'transparent',
-            color: value === o.value ? '#fff' : 'var(--text-secondary)',
+            background: value === o.value ? 'var(--accent)' : 'transparent',
+            color: value === o.value ? 'var(--text-on-accent)' : 'var(--text-secondary)',
           }}
         >
           {o.label}
@@ -70,7 +70,7 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
 /** A thin value bar relative to a max (the cost-report FTE-month bars). */
 function MiniBar({ frac, color }: { frac: number; color: string }) {
   return (
-    <div style={{ height: 6, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden', marginTop: 4, minWidth: 80 }}>
+    <div style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--border-subtle)', overflow: 'hidden', marginTop: 4, minWidth: 80 }}>
       <div style={{ width: `${Math.max(0, Math.min(1, frac)) * 100}%`, height: '100%', background: color }} />
     </div>
   );
@@ -78,7 +78,7 @@ function MiniBar({ frac, color }: { frac: number; color: string }) {
 
 function StatusPill({ status, label }: { status: CapitalizationStatus; label: string }) {
   return (
-    <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 600, color: '#fff', background: STATUS_TONE[status], whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 'var(--radius-full)', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-on-accent)', background: STATUS_TONE[status], whiteSpace: 'nowrap' }}>
       {label}
     </span>
   );
@@ -88,7 +88,7 @@ function StatusPill({ status, label }: { status: CapitalizationStatus; label: st
 function Variance({ v }: { v: number | undefined }) {
   const t = useTranslations('insights');
   if (v == null) return <span style={{ color: 'var(--text-muted)' }}>{t('alloc.noGoal')}</span>;
-  const tone = Math.abs(v) < 5 ? '#16a34a' : v < 0 ? 'var(--danger, #dc2626)' : '#d97706';
+  const tone = Math.abs(v) < 5 ? 'var(--success)' : v < 0 ? 'var(--danger)' : 'var(--warning)';
   return <span style={{ color: tone, fontWeight: 600 }}>{v >= 0 ? '+' : ''}{v.toFixed(0)}%</span>;
 }
 
@@ -146,10 +146,10 @@ export function AllocationLens() {
   const maxHistFte = Math.max(1e-9, ...(history?.months ?? []).map((m) => m.capitalizedFteMonths));
 
   const tabBtn = (active: boolean): CSSProperties => ({
-    padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'pointer',
+    padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', cursor: 'pointer',
     fontSize: '0.8rem', fontWeight: 600,
-    background: active ? 'var(--accent, #2563eb)' : 'transparent',
-    color: active ? '#fff' : 'var(--text-secondary)',
+    background: active ? 'var(--accent)' : 'transparent',
+    color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
   });
 
   return (
@@ -249,7 +249,7 @@ export function AllocationLens() {
                   <tr key={m.month} style={trStyle}>
                     <td style={tdStyle}>{m.month}</td>
                     <td style={tdStyle}>
-                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: m.status === 'in_progress' ? '#d97706' : '#16a34a' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: m.status === 'in_progress' ? 'var(--warning)' : 'var(--success)' }}>
                         {m.status === 'in_progress' ? t('alloc.inProgress') : t('alloc.ready')}
                       </span>
                     </td>

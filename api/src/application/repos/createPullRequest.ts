@@ -5,11 +5,12 @@
  * browser never holds the token, and the provider API call must run server-side
  * anyway for CORS + secret reasons).
  *
- * GitHub, GitLab, and Bitbucket Cloud are implemented; other providers (e.g.
- * Bitbucket Server) return a typed `unsupported` result so callers degrade to
- * "branch pushed, open PR manually" rather than crashing.
+ * GitHub, GitLab, Bitbucket Cloud and Bitbucket Server (self-hosted, whose
+ * `/rest/api/1.0` dialect uses different paths AND a different request body) are
+ * implemented; other providers return a typed `unsupported` result so callers
+ * degrade to "branch pushed, open PR manually" rather than crashing.
  */
-import { buildGitApiBaseUrl } from './gitProxy';
+import { bitbucketServerRepoPath, buildGitApiBaseUrl, resolveGitApiFlavor } from './gitProxy';
 
 export interface OpenPrInput {
   provider: string;
@@ -30,15 +31,30 @@ export type OpenPrResult =
 /** Build the provider-specific create-PR request (URL + body). Pure + exported
  *  so each provider's documented create endpoint/body is unit-testable. */
 export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: Record<string, unknown> } {
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host);
-  if (input.provider === 'gitlab') {
+  const flavor = resolveGitApiFlavor(input.provider, input.host);
+  const apiBase = buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true });
+  if (flavor === 'gitlab') {
     const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
     return {
       url: `${apiBase}/projects/${projectId}/merge_requests`,
       body: { source_branch: input.head, target_branch: input.base, title: input.title, description: input.body },
     };
   }
-  if (input.provider === 'bitbucket') {
+  if (flavor === 'bitbucket-server') {
+    // Server names branches as fully-qualified refs and repeats the repo coordinates
+    // inside each ref (a PR may cross forks), so the body is nothing like Cloud's.
+    const repository = { slug: input.repo, project: { key: input.owner } };
+    return {
+      url: `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests`,
+      body: {
+        title: input.title,
+        description: input.body,
+        fromRef: { id: `refs/heads/${input.head}`, repository },
+        toRef: { id: `refs/heads/${input.base}`, repository },
+      },
+    };
+  }
+  if (flavor === 'bitbucket-cloud') {
     return {
       url: `${apiBase}/repositories/${input.owner}/${input.repo}/pullrequests`,
       body: {
@@ -65,7 +81,9 @@ function parseCreatePrSuccess(provider: string, body: unknown): { number: number
   }
   if (provider === 'bitbucket') {
     const number = b.id as number | undefined;
-    const url = ((b.links as { html?: { href?: string } } | undefined)?.html?.href) as string | undefined;
+    // Cloud exposes the web link as `links.html.href`; Server as `links.self[0].href`.
+    const links = b.links as { html?: { href?: string }; self?: Array<{ href?: string }> } | undefined;
+    const url = links?.html?.href ?? links?.self?.[0]?.href;
     return typeof number === 'number' && typeof url === 'string' ? { number, url } : null;
   }
   const number = b.number as number | undefined;
@@ -113,7 +131,7 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
   // retried create returns the existing PR instead of erroring. All three
   // providers now do this (was GitHub-only). A null lookup → fall to the error.
   if (res.status === 422 || res.status === 409 || res.status === 400) {
-    const existing = await findOpenPr(input.provider, buildGitApiBaseUrl(input.provider, input.host), headers, input);
+    const existing = await findOpenPr(input.provider, buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true }), headers, input);
     if (existing) return { ok: true, number: existing.number, url: existing.url };
   }
 
@@ -123,6 +141,11 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
 
 /** Build the provider-specific "find the already-open PR for this head" request. */
 export function buildFindOpenPrUrl(provider: string, apiBase: string, input: OpenPrInput): string {
+  if (provider === 'bitbucket' && apiBase.includes('/rest/api/1.0')) {
+    // Server filters by the OUTGOING ref rather than a query language.
+    return `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests`
+      + `?state=OPEN&direction=OUTGOING&at=${encodeURIComponent(`refs/heads/${input.head}`)}`;
+  }
   if (provider === 'gitlab') {
     const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
     return `${apiBase}/projects/${projectId}/merge_requests?state=opened&source_branch=${encodeURIComponent(input.head)}&target_branch=${encodeURIComponent(input.base)}`;

@@ -14,7 +14,7 @@ import { RoleGate } from '@/components/RoleGate';
  * initiativeId. Manager-gated (disable + hint via RoleGate, server-enforced).
  */
 const selectStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8,
+  width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)',
   border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
 

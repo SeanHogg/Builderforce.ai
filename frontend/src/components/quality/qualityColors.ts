@@ -7,19 +7,29 @@
 export const LEVELS = ['fatal', 'error', 'warning', 'info'] as const;
 export const STATUSES = ['unresolved', 'fixing', 'resolved', 'ignored'] as const;
 
+/**
+ * Severity is an ordinal ramp, so `fatal` gets the rung above `--error` rather
+ * than a second red nobody can tell from the first. Every swatch is a token:
+ * these were literals picked against dark stock, so on paper the whole legend
+ * came out at one weight and severity stopped being readable at a glance.
+ */
 export const LEVEL_COLOR: Record<string, string> = {
-  fatal: '#b91c1c', error: '#dc2626', warning: '#d97706', info: '#2563eb',
+  fatal: 'var(--error-strong)', error: 'var(--error)', warning: 'var(--warning)', info: 'var(--info)',
 };
 
 export const STATUS_COLOR: Record<string, string> = {
-  unresolved: '#ef4444', fixing: '#7c3aed', resolved: '#16a34a', ignored: '#6b7280',
+  unresolved: 'var(--error)', fixing: 'var(--violet-bright)', resolved: 'var(--success)', ignored: 'var(--text-muted)',
 };
 
 /** Ingest sources (must mirror api qualitySourceCatalog ids) → swatch colours. */
 export const SOURCE_COLOR: Record<string, string> = {
-  native: '#2563eb', otlp: '#0891b2', sentry: '#7c3aed', posthog: '#d97706', logrocket: '#db2777',
+  native: 'var(--coral-bright)', otlp: 'var(--cyan-bright)', sentry: 'var(--violet-bright)',
+  posthog: 'var(--amber-bright)', logrocket: 'var(--pink-bright)',
 };
 
-export const levelColor = (level: string): string => LEVEL_COLOR[level] ?? '#6b7280';
-export const statusColor = (status: string): string => STATUS_COLOR[status] ?? '#6b7280';
-export const sourceColor = (source: string): string => SOURCE_COLOR[source] ?? '#6b7280';
+/** The unknown value reads as metadata, which is exactly what `--text-muted` is. */
+const UNKNOWN = 'var(--text-muted)';
+
+export const levelColor = (level: string): string => LEVEL_COLOR[level] ?? UNKNOWN;
+export const statusColor = (status: string): string => STATUS_COLOR[status] ?? UNKNOWN;
+export const sourceColor = (source: string): string => SOURCE_COLOR[source] ?? UNKNOWN;

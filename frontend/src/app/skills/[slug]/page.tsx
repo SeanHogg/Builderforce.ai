@@ -2,6 +2,7 @@
 
 export const runtime = 'edge';
 
+import { Icon } from '@/components/ui/Icon';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
@@ -123,15 +124,15 @@ export default function SkillDetailPage() {
       <div style={{ marginBottom: 24 }}>
         <Link href="/skills" style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8, display: 'inline-block' }}>← Back to Skills</Link>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 32 }}>{emoji}</span>
+          <span><Icon source={emoji} size={32} /></span>
           {skill.name}
         </h1>
         <p style={{ fontSize: 14, color: 'var(--muted)' }}>{skill.description}</p>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
           <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? 'var(--error)' : 'var(--muted)' }} onClick={toggleLike}>
-            {stats?.liked ? '❤️' : '🤍'} {stats?.likes ?? 0} likes
+            {stats?.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stats?.likes ?? 0} likes
           </button>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>⬇️ {stats?.installs ?? 0} installs</span>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}><Icon source="⬇️" size="1em" /> {stats?.installs ?? 0} installs</span>
           <ArtifactAssigner artifactType="skill" artifactSlug={skill.slug} artifactName={skill.name} />
           <button type="button" className={`btn btn-sm ${installed ? 'btn-secondary' : 'btn-primary'}`} disabled={!hasAgentHosts} onClick={toggleInstall}>
             {!hasAgentHosts ? 'Register agentHost first' : installed ? 'Uninstall' : 'Install'}
@@ -144,7 +145,7 @@ export default function SkillDetailPage() {
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Slug</div>
-            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 6, fontSize: 13 }}>{skill.slug}</code>
+            <code style={{ background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>{skill.slug}</code>
           </div>
           {'category' in skill && skill.category && (
             <div>

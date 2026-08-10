@@ -19,8 +19,9 @@ import { RepoService } from '../../application/repos/RepoService';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskStatus, TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan as resolveTenantEffectivePlan } from '../../domain/tenant/effectivePlan';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 
 /** Resolve the tenant's effective plan for the analysis token budget. Honours an
  *  unexpired trial (via the shared resolver) and the superadmin premium override. */
@@ -130,6 +131,20 @@ export function createRepoAnalysisRoutes(db: Db, taskService: TaskService): Hono
         executionId: execution?.id ?? null,
       }),
     });
+
+    // The analysis ticket is a ticket landing in a lane (In Progress) like any
+    // other, so it goes through the ONE funnel rather than bypassing the trigger.
+    // Normally a no-op: the `executions` row created above is live, so the
+    // evaluation returns `already_running` and nothing is dispatched. It matters
+    // when that row could NOT be created — the ticket then still gets the lane's
+    // agent instead of sitting untouched until the cron backstop notices.
+    c.executionCtx.waitUntil(onTaskLandedInLane(c.env as Env, db, {
+      tenantId,
+      projectId,
+      taskId:      task.id as unknown as number,
+      status:      TaskStatus.IN_PROGRESS,
+      submittedBy: userId ?? 'system:repo-analysis',
+    }));
 
     return c.json({ task: task.toPlain(), executionId: execution?.id ?? null, run }, 202);
   });

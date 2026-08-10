@@ -25,6 +25,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import { compileGlobs } from './track-globs.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const repoRoot = resolve(here, '../..');
@@ -93,6 +95,34 @@ for (let i = 0; i < bands.length; i++) {
   }
 }
 
+// File-disjoint means real tracked files may resolve to at most one track after
+// exclusions. This catches broad-glob mistakes such as T2 components/** also
+// claiming a component explicitly assigned to T6.
+let trackedFiles = [];
+try {
+  trackedFiles = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
+    .split(/\r?\n/)
+    .filter(Boolean);
+} catch (err) {
+  errors.push(`could not enumerate tracked files for ownership validation: ${err.message}`);
+}
+const sharedHubs = manifest.sharedHubs || [];
+const isSharedHub = compileGlobs(sharedHubs);
+const ownershipMatchers = (tracks || []).map((track) => ({
+  track,
+  owns: compileGlobs(track.owns),
+  excludes: compileGlobs(track.excludes || []),
+}));
+for (const file of trackedFiles) {
+  if (isSharedHub(file)) continue;
+  const owners = ownershipMatchers
+    .filter(({ owns, excludes }) => owns(file) && !excludes(file))
+    .map(({ track }) => track);
+  if (owners.length > 1) {
+    errors.push(`${file} is claimed by multiple tracks: ${owners.map((track) => track.id).join(', ')}`);
+  }
+}
+
 if (errors.length > 0) {
   console.error(`❌  Track manifest invalid (${errors.length}):\n`);
   for (const e of errors) console.error(`   - ${e}`);
@@ -118,7 +148,7 @@ for (const t of tracks) {
   lines.push(`| ${cell(id)} | ${cell(owns)} | ${fmtBand(t.migrationBand)} |`);
 }
 lines.push('');
-lines.push('**Shared hubs** (append-only, every track may edit): ' + manifest.sharedHubs.map((h) => `\`${h}\``).join(', ') + '.');
+lines.push('**Shared coordination files** (every track may edit; serialize changes and rebase before merge): ' + manifest.sharedHubs.map((h) => `\`${h}\``).join(', ') + '.');
 lines.push('');
 const generated = lines.join('\n') + '\n';
 

@@ -20,9 +20,13 @@
  */
 
 const BUILD_VERSION = '__BUILD_VERSION__';
-const CACHE_NAME = 'bf-cache-' + BUILD_VERSION;
+const CACHE_PREFIX = 'bf-';
+const SHELL_CACHE = CACHE_PREFIX + 'shell-' + BUILD_VERSION;
+const STATIC_CACHE = CACHE_PREFIX + 'static-' + BUILD_VERSION;
 
 const PRECACHE_URLS = [
+  '/offline.html',
+  '/offline.js',
   '/manifest.json',
   '/icon-192.png',
   '/agentHost.png',
@@ -33,7 +37,7 @@ const PRECACHE_URLS = [
 // ---------------------------------------------------------------------------
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches.open(SHELL_CACHE)
       .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => { /* non-fatal */ }))
     // Intentionally no self.skipWaiting() — let the update banner drive activation
   );
@@ -46,7 +50,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+        keys
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== SHELL_CACHE && k !== STATIC_CACHE)
+          .map((k) => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   );
@@ -69,7 +75,8 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.match('/').then((r) => r ?? new Response('Offline', { status: 503 }))
+        caches.match('/offline.html', { cacheName: SHELL_CACHE })
+          .then((r) => r ?? new Response('', { status: 503 }))
       )
     );
     return;
@@ -77,14 +84,18 @@ self.addEventListener('fetch', (event) => {
 
   // Static assets: cache-first, update cache in background
   event.respondWith(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request);
-      const networkFetch = fetch(request).then((res) => {
-        if (res.ok) cache.put(request, res.clone());
-        return res;
-      }).catch(() => null);
+    caches.match(request, { cacheName: SHELL_CACHE }).then((precached) => {
+      if (precached) return precached;
 
-      return cached ?? (await networkFetch) ?? new Response('Not found', { status: 404 });
+      return caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        const networkFetch = fetch(request).then((res) => {
+          if (res.ok) cache.put(request, res.clone());
+          return res;
+        }).catch(() => null);
+
+        return cached ?? (await networkFetch) ?? new Response('Not found', { status: 404 });
+      });
     })
   );
 });

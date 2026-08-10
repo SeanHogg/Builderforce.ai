@@ -1,16 +1,38 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
-import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
-import type { Env, HonoEnv } from '../../env';
+import {
+  acceptInvitation,
+  acceptInvitationStatement,
+  findByTokenHash,
+  findPendingByEmail,
+  invalidateInvitations,
+  invite,
+  listPending,
+  revokeInvitation,
+} from '../../application/kernel/InvitationService';
+import { getObject } from '../../application/kernel/ObjectRegistry';
+import { sha256Hex } from '../../domain/shared/hash';
+import { TenantRole, TenantBillingCycle, TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
+import { buildPaymentProvider } from '../../infrastructure/payment';
+import {
+  getCardValidation,
+  isCardValidated,
+  markCardPending,
+  clearCardValidation,
+} from '../../application/tenant/cardValidationService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -19,15 +41,33 @@ import {
   agentHosts,
   agentHostProjects,
   sourceControlIntegrations,
-  tenantInvitations,
+  creationSessionMembers,
   tenantMembers,
   tenants,
   users,
+  salesReferrals,
+  carts,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
+import { getTeamSpendOverview, invalidateTeamSpendCaches, usdToMillicents } from '../../application/consumption/memberSpend';
+import {
+  attachDiscountCheckout,
+  releaseDiscountReservation,
+  reserveDiscount,
+} from '../../application/tenant/discountCodeService';
+import { getPublishedPricing } from '../../application/tenant/pricingConfiguration';
+import { getBusinessPhoneSubscription } from '../../application/tenant/businessPhoneSubscription';
+import {
+  readNavigationFeatures,
+  validateNavigationFeatures,
+  writeNavigationFeatures,
+} from '../../application/tenant/navigationFeatures';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -49,7 +89,9 @@ function emitMemberActivity(
       summary: o.summary,
       metadata: o.metadata ?? null,
     });
-  })().catch(() => {}));
+  })().catch((error) => {
+    reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "emitMemberActivity" });
+  }));
 }
 
 type SourceControlProvider = 'github' | 'bitbucket';
@@ -80,15 +122,6 @@ async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void
   await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
 }
 
-/** Cache key for a tenant's pending-invitation roster (GET /:id/invitations). */
-function invitationsCacheKey(tenantId: number): string {
-  return `tenant-invitations:tenant:${tenantId}`;
-}
-
-async function invalidateInvitations(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, invitationsCacheKey(tenantId));
-}
-
 /**
  * Convert any still-pending invitations addressed to `email` into real
  * memberships for `userId`. Called on login (GET /tenants/mine) so an invite
@@ -109,15 +142,14 @@ async function acceptPendingInvitations(
   const normalized = email.toLowerCase().trim();
   if (!normalized) return;
 
-  const pending = await db
-    .select({
-      id: tenantInvitations.id,
-      tenantId: tenantInvitations.tenantId,
-      role: tenantInvitations.role,
-      invitedByUserId: tenantInvitations.invitedByUserId,
-    })
-    .from(tenantInvitations)
-    .where(and(eq(tenantInvitations.email, normalized), eq(tenantInvitations.status, 'pending')));
+  // One definition of "pending" (kernel `InvitationService`), so a revoked or
+  // expired row cannot be accepted here while the members page shows it gone.
+  const pending = (await findPendingByEmail(db, normalized, 'tenant')).map((row) => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    role: row.role,
+    invitedByUserId: row.invitedBy,
+  }));
 
   // Per-tenant live seat tally, fetched lazily on first use and incremented as we
   // seat invites within this run, so a batch of invites for the same tenant can't
@@ -141,7 +173,7 @@ async function acceptPendingInvitations(
         // frees up or they upgrade) instead of silently auto-accepting past the cap.
         let state = seatState.get(invite.tenantId);
         if (!state) {
-          const cap = await seatCapacityForTenant(db, invite.tenantId);
+          const cap = await seatCapacityForTenant(db, env, invite.tenantId);
           state = { plan: cap.plan, seated: cap.members };
           seatState.set(invite.tenantId, state);
         }
@@ -151,15 +183,13 @@ async function acceptPendingInvitations(
         await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
         state.seated += 1;
       }
-      await db
-        .update(tenantInvitations)
-        .set({ status: 'accepted', acceptedAt: new Date() })
-        .where(eq(tenantInvitations.id, invite.id));
+      await acceptInvitation(db, env, { id: invite.id, tenantId: invite.tenantId, inviteeRef: userId });
       await invalidateTaskAssignees(env, invite.tenantId);
-      await invalidateInvitations(env, invite.tenantId);
-    } catch {
+    } catch (error) {
       // A transient error on one tenant must not block the user's login or the
       // other tenants' invites — leave the row pending so it retries next visit.
+    
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "acceptPendingInvitations" });
     }
   }
 }
@@ -175,6 +205,16 @@ function forbidCrossTenant(c: Context<HonoEnv>, id: number): Response | undefine
 
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // Public published plan contract shared by every marketing pricing surface.
+  router.get('/pricing', async (c) => {
+    const contract = await getPublishedPricing(db, c.env as Env);
+    const etag = `W/\"pricing-${contract.publishedAt}\"`;
+    if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+    c.header('ETag', etag);
+    return c.json(contract);
+  });
 
   // GET /api/tenants/mine  – WebJWT required; returns tenants the caller belongs to
   // Used by the tenant picker immediately after login (before a tenant JWT exists)
@@ -202,8 +242,60 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
+    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+    });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
+  });
+
+  // Accept a Creation Session invitation with the person-level web token. The
+  // invite itself identifies the destination workspace, so this must not depend
+  // on whichever tenant token happens to be selected in another browser tab.
+  // Landing the workspace invitation first also prevents a new account from
+  // being sent through redundant workspace creation.
+  router.post('/creation-invitations/:token/accept', webAuthMiddleware, async (c) => {
+    const rawToken = c.req.param('token');
+    if (!/^[0-9a-f]{64}$/i.test(rawToken)) return c.json({ error: 'Invalid invitation token' }, 400);
+    const tokenHash = await sha256Hex(rawToken);
+    const userId = c.get('userId') as string;
+    const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    // This is the sole deliberate cross-tenant read: the unguessable one-time
+    // token is the lookup key and the selected tenantId becomes the scope for
+    // every subsequent membership check and write.
+    // `findByTokenHash` returns pending rows only — revoked, accepted and expired
+    // are excluded by the service's single `isPending()`, so this route no longer
+    // re-derives "still usable" from four nullable columns.
+    const invitation = await findByTokenHash(db, tokenHash);
+    if (!invitation || invitation.kind !== 'session') {
+      return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    }
+    if (!account?.email || !invitation.email
+      || account.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
+      return c.json({ error: 'Sign in with the email address that received this invitation' }, 403);
+    }
+    // The session it grants access to is the registry entry it points at —
+    // `creation_session_invites.session_id` was dropped by migration 0435.
+    const target = invitation.objectId
+      ? await getObject(db, c.env as Env, invitation.tenantId, invitation.objectId)
+      : null;
+    if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    const sessionId = target.refId;
+    await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+    if (!(await assertTenantMember(db, invitation.tenantId, userId))) {
+      return c.json({ error: 'The invited workspace cannot add another member yet', code: 'TENANT_SEAT_LIMIT' }, 409);
+    }
+    const role = ['viewer', 'commenter', 'editor', 'runner', 'owner'].includes(invitation.role)
+      ? invitation.role as 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner'
+      : null;
+    if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
+    await db.batch([
+      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
+        .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
+      acceptInvitationStatement(db, { id: invitation.id, tenantId: invitation.tenantId, inviteeRef: userId }),
+    ]);
+    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
+    await invalidateInvitations(c.env as Env, invitation.tenantId);
+    return c.json({ sessionId, tenantId: invitation.tenantId, role });
   });
 
   // PATCH /api/tenants/:id/name  – WebJWT required; renames a workspace (owner/manager only)
@@ -221,9 +313,16 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // All routes below require a tenant-scoped JWT
   router.use('*', authMiddleware);
 
-  // GET /api/tenants
+  // GET /api/tenants — membership-scoped: returns only the workspaces the caller
+  // belongs to (billing PII + roster live on toPlain, so an unscoped list would
+  // leak every tenant's data). A superadmin-operated tenant keeps the full,
+  // unscoped view via the same check the token/run caps use.
   router.get('/', async (c) => {
-    const tenants = await tenantService.listTenants();
+    const userId = c.get('userId') as string;
+    const isSuperadmin = await tenantHasSuperadminMember(db, c.get('tenantId') as number, c.env as Env);
+    const tenants = isSuperadmin
+      ? await tenantService.listTenants()
+      : await tenantService.listTenantsForUserFull(userId);
     return c.json({ tenants: tenants.map(t => t.toPlain()) });
   });
 
@@ -278,8 +377,37 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
   });
 
+  // Workspace menu preferences. Any workspace member may tailor the shared
+  // module set from Settings; core navigation is not represented in this list
+  // and therefore can never be hidden. Missing preferences default to all on so
+  // existing workspaces retain their current navigation after deployment.
+  router.get('/:id/navigation-features', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    return c.json({ enabled: readNavigationFeatures(row.settings) });
+  });
+
+  router.put('/:id/navigation-features', async (c) => {
+    const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
+    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({} as { enabled?: unknown }));
+    const enabled = validateNavigationFeatures(body.enabled);
+    if (!enabled) return c.json({ error: 'enabled must contain only known navigation feature ids' }, 400);
+    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    await db.update(tenants).set({
+      settings: writeNavigationFeatures(row.settings, enabled),
+      updatedAt: new Date(),
+    }).where(eq(tenants.id, id));
+    return c.json({ enabled });
+  });
+
   // GET /api/tenants/:id/subscription
-  router.get('/:id/subscription', async (c) => {
+  router.get('/:id/subscription', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -288,27 +416,61 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(subscription);
   });
 
+  router.get('/:id/add-ons/business-phone', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    return c.json({ subscription: await getBusinessPhoneSubscription(db, tenantId) });
+  });
+
+  router.post('/:id/add-ons/business-phone/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json<{ billingEmail?: string }>();
+    if (!body.billingEmail?.trim()) return c.json({ error: 'billingEmail is required' }, 400);
+    const pricing = await getPublishedPricing(db, c.env as Env);
+    const existing = await getBusinessPhoneSubscription(db, tenantId);
+    if (existing?.status === 'active') return c.json({ error: 'Business Phone is already active' }, 409);
+    const baseSubscription = await tenantService.getSubscription(tenantId);
+    if (baseSubscription.billingStatus !== TenantBillingStatus.ACTIVE || baseSubscription.effectivePlan === TenantPlan.FREE) {
+      return c.json({ error: 'Business Phone requires an active Pro or Teams plan' }, 403);
+    }
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
+    const activationCents = Math.round(pricing.businessPhone.activation * 100);
+    const monthlyCents = Math.round(pricing.businessPhone.monthly * 100);
+    const [cart] = await db.insert(carts).values({ tenantId, buyerRef: c.get('userId') as string, currency: pricing.currency, subtotalCents: activationCents + monthlyCents, totalCents: activationCents + monthlyCents }).returning({ id: carts.id });
+    if (!cart) throw new Error('Business Phone cart was not created');
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createBusinessPhoneCheckoutSession(tenantId, {
+        cartId: cart.id,
+        billingEmail: body.billingEmail.trim(), currency: pricing.currency,
+        activationCents, monthlyCents,
+        successUrl: `${appUrl}/crm/phone?purchase=success`, cancelUrl: `${appUrl}/pricing?phone=cancelled`,
+      });
+    } catch (error) {
+      await db.update(carts).set({ status: 'abandoned', updatedAt: sql`now()` }).where(and(eq(carts.id, cart.id), eq(carts.tenantId, tenantId)));
+      throw error;
+    }
+    return c.json(result);
+  });
+
   /**
    * POST /api/tenants/:id/subscription/checkout
    *
-   * Initiate a Pro or Teams upgrade checkout session.
-   *
-   * For ManualProvider: activates immediately; returns { checkoutUrl: null }.
-   * For hosted providers (Stripe, Helcim): returns { checkoutUrl: "https://..." }
-   *   — the frontend should redirect the user to this URL.
-   *   The subscription becomes active once the provider fires a webhook.
+   * Initiate a Pro or Teams upgrade. Returns { checkoutUrl: "https://..." } — the
+   * frontend redirects the user there. The subscription becomes active only once
+   * Stripe fires the activation webhook, never from this request.
    *
    * Body:
    *   targetPlan          "pro" | "teams"        optional (defaults to "pro")
    *   seats               number                 required when targetPlan="teams"
    *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
-   *   billingPaymentBrand string                 optional (manual provider only)
-   *   billingPaymentLast4 string (4 digits)      optional (manual provider only)
+   *   discountCode       string                 optional; retained signup offer
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
-  router.post('/:id/subscription/checkout', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/subscription/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -318,78 +480,242 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats?: number;
       billingCycle: TenantBillingCycle;
       billingEmail: string;
-      billingPaymentBrand?: string;
-      billingPaymentLast4?: string;
       successUrl?: string;
       cancelUrl?: string;
+      discountCode?: string;
     }>();
 
     if (!body.billingCycle || !body.billingEmail) {
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
+    if (body.billingCycle !== TenantBillingCycle.MONTHLY && body.billingCycle !== TenantBillingCycle.YEARLY) {
+      return c.json({ error: 'billingCycle must be monthly or yearly' }, 400);
+    }
 
     const targetPlan = body.targetPlan === 'teams' ? TenantPlan.TEAMS : TenantPlan.PRO;
+    const publishedPricing = await getPublishedPricing(db, c.env as Env);
+    const publishedPlan = publishedPricing.plans.find((plan) => plan.id === targetPlan);
+    if (!publishedPlan) return c.json({ error: 'Published plan pricing is unavailable' }, 503);
+    const unitAmount = body.billingCycle === TenantBillingCycle.YEARLY
+      ? publishedPlan.yearly
+      : publishedPlan.monthly;
 
     if (targetPlan === TenantPlan.TEAMS && (!body.seats || body.seats < 1)) {
       return c.json({ error: 'seats (≥1) is required for the Teams plan' }, 400);
     }
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      targetPlan,
-      seats: body.seats,
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
-      successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
-      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
-    });
+    const discount = body.discountCode
+      ? await reserveDiscount(db, {
+          tenantId,
+          rawCode: body.discountCode,
+          targetPlan,
+          billingCycle: body.billingCycle,
+        })
+      : undefined;
+
+    const [pendingReferral] = await db.select({ id: salesReferrals.id, tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(
+      eq(salesReferrals.referredUserId, c.get('userId') as string), isNull(salesReferrals.convertedAt),
+    )).limit(1);
+
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createCheckoutSession(tenantId, {
+        targetPlan,
+        seats: body.seats,
+        billingCycle: body.billingCycle,
+        billingEmail: body.billingEmail,
+        currency: publishedPricing.currency,
+        unitAmountCents: Math.round(unitAmount * 100),
+        productName: `Builderforce.ai ${publishedPlan.name}`,
+        successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
+        cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
+        discount: discount ? {
+          id: discount.discountId,
+          code: discount.code,
+          percentOff: discount.percentOff,
+          durationYears: discount.durationYears,
+          redemptionId: discount.redemptionId,
+        } : undefined,
+        salesReferralId: pendingReferral?.id,
+      });
+    } catch (error) {
+      if (discount) {
+        await releaseDiscountReservation(db, tenantId, discount.redemptionId).catch((releaseError) => {
+          reportCaughtError(releaseError, { source: 'presentation/routes/tenantRoutes.ts', operation: 'releaseDiscountReservation' });
+        });
+      }
+      throw error;
+    }
+    if (discount) {
+      await attachDiscountCheckout(db, tenantId, discount.redemptionId, result.sessionId).catch((error) => {
+        reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'attachDiscountCheckout' });
+      });
+    }
+
+    // Bind attribution to the exact workspace entering checkout. This is more
+    // accurate than assuming the first workspace owner was the purchaser and
+    // lets the signed activation webhook resolve the referral deterministically.
+    if (pendingReferral) {
+      try {
+        // Latest valid checkout owns the still-pending attribution. Clear an
+        // abandoned earlier checkout before binding this one, atomically.
+        await db.batch([
+          db.update(salesReferrals).set({ tenantId: null }).where(and(eq(salesReferrals.tenantId, tenantId), isNull(salesReferrals.convertedAt))),
+          db.update(salesReferrals).set({ tenantId }).where(eq(salesReferrals.id, pendingReferral.id)),
+        ]);
+      } catch (error) {
+        // Checkout already exists at the provider at this point. Attribution must
+        // never turn a valid payment session into a 500.
+        reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'bindSalesReferralAttribution' });
+      }
+    }
 
     return c.json(result);
   });
 
   /**
-   * POST /api/tenants/:id/subscription/pro  (kept for backward compatibility)
-   * Delegates to the checkout endpoint using ManualProvider semantics.
-   * New integrations should call /subscription/checkout instead.
+   * GET /api/tenants/:id/card-validation
+   *
+   * Current card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model
+   * selection. `validated` is the same predicate the gateway enforces.
    */
-  router.post('/:id/subscription/pro', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/:id/card-validation', async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{
-      billingCycle: TenantBillingCycle;
-      billingEmail: string;
-      billingPaymentBrand: string;
-      billingPaymentLast4: string;
-    }>();
+    const state = await getCardValidation(c.env, tenantId);
+    return c.json({
+      status: state.status,
+      validated: isCardValidated(state),
+      validatedAt: state.validatedAt?.toISOString() ?? null,
+      brand: state.brand,
+      last4: state.last4,
+    });
+  });
 
-    if (!body.billingCycle || !body.billingEmail) {
-      return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
+  /**
+   * POST /api/tenants/:id/card-validation
+   *
+   * Start the explicit card-validation flow (Stripe SetupIntent / $0 auth) that unlocks
+   * PREMIUM model selection — any paid OpenRouter model, billed at OpenRouter cost + a
+   * flat 1¢ per request.
+   *
+   * Returns { checkoutUrl } to redirect to; the card is stamped validated when Stripe
+   * fires the `card.validated` webhook.
+   *
+   * Body:
+   *   billingEmail  string   required
+   *   successUrl    string   optional
+   *   cancelUrl     string   optional
+   */
+  router.post('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const body = await c.req.json<{ billingEmail?: string; successUrl?: string; cancelUrl?: string }>()
+      .catch(() => ({} as { billingEmail?: string; successUrl?: string; cancelUrl?: string }));
+
+    const tenant = await tenantService.getTenant(tenantId);
+    let billingEmail = body.billingEmail ?? tenant.billingEmail;
+    if (!billingEmail) {
+      const [account] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, c.get('userId') as string))
+        .limit(1);
+      billingEmail = account?.email ?? null;
     }
+    if (!billingEmail) return c.json({ error: 'billingEmail is required' }, 400);
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
-      successUrl: `${appUrl}/pricing?success=1`,
-      cancelUrl: `${appUrl}/pricing?cancelled=1`,
+    const payment = buildPaymentProvider(c.env);
+    const result = await payment.createCardValidationSession({
+      tenantId,
+      billingEmail,
+      externalCustomerId: tenant.externalCustomerId,
+      // Return to the BILLING CONSOLE, which is `/pricing` — that's where the card
+      // controls live (<PremiumModelUnlock> / <CardOnFile>). `/settings` has no card
+      // surface at all, so the old default dropped the user on a page that couldn't
+      // confirm what had just happened.
+      successUrl: body.successUrl ?? `${appUrl}/pricing?card=validated`,
+      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?card=cancelled`,
     });
 
-    // Legacy response shape: return updated tenant for in-place subscription activation
-    if (result.checkoutUrl === null) {
-      const sub = await tenantService.getSubscription(tenantId);
-      return c.json({ tenant: sub });
+    // ADD-then-swap, never reset-then-add.
+    //
+    // Marking `pending` clears the validated verdict, which SUSPENDS premium model
+    // access. That's right for a first-time validation (there was no access to
+    // lose) but wrong for a REPLACE: it revoked a paying tenant's premium for as
+    // long as the processor took to confirm the new card, for no reason — the old
+    // card is still perfectly valid until the new one lands. So an already-validated
+    // tenant keeps their verdict, and the swap completes in the webhook, which
+    // overwrites the card and detaches the displaced one.
+    const existing = await getCardValidation(c.env, tenantId);
+    const replacing = isCardValidated(existing);
+    if (!replacing) await markCardPending(c.env, tenantId);
+
+    return c.json({
+      checkoutUrl: result.checkoutUrl,
+      sessionId: result.sessionId,
+      // A replace reports the state the tenant is actually still in — they remain
+      // validated on the OLD card until the new one is confirmed.
+      validated: replacing,
+      status: replacing ? existing.status : 'pending',
+    });
+  });
+
+  /**
+   * DELETE /api/tenants/:id/card-validation
+   *
+   * Remove the card on file: detach it at the processor, then clear our own record.
+   * Premium model selection goes with it — the gate reads `isCardValidated`, and
+   * continuing to sell premium off a card we no longer hold would be the bug.
+   *
+   * REFUSED while a paid subscription is live (409). Those cards are the renewal
+   * instrument; detaching one would break billing at the next cycle with no signal
+   * to the user. Downgrading to Free cancels the subscription and clears the way,
+   * so the response names that path rather than half-performing the removal.
+   *
+   * Order matters: detach FIRST, clear second. If the processor call fails we've
+   * changed nothing, and the tenant keeps the access they paid for — the opposite
+   * order would revoke premium while Stripe still held the card.
+   */
+  router.delete('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const forbidden = forbidCrossTenant(c, tenantId);
+    if (forbidden) return forbidden;
+
+    const tenant = await tenantService.getTenant(tenantId);
+
+    if (tenant.externalSubscriptionId && tenant.billingStatus === 'active') {
+      return c.json({
+        error: 'Cancel your paid plan before removing the card it bills. Downgrade to Free, then remove the card.',
+        code: 'card_backs_active_subscription',
+      }, 409);
     }
-    return c.json(result);
+
+    // Detach the card WE recorded. Pre-0346 rows carry no payment-method id and
+    // fall back to a customer-wide sweep (safe: those tenants predate multi-card
+    // support). With neither handle there is nothing stored at the processor, but
+    // clearing our own record still matters — a stale `validated` status would
+    // keep premium open against a card we no longer have.
+    const { paymentMethodId } = await getCardValidation(c.env, tenantId);
+    if (paymentMethodId || tenant.externalCustomerId) {
+      await buildPaymentProvider(c.env).detachCards({
+        paymentMethodId,
+        externalCustomerId: tenant.externalCustomerId,
+      });
+    }
+    await clearCardValidation(c.env, tenantId);
+
+    return c.json({ status: 'none', validated: false, validatedAt: null, brand: null, last4: null });
   });
 
   // POST /api/tenants/:id/subscription/free
-  router.post('/:id/subscription/free', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/subscription/free', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -672,24 +998,28 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
+    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+    });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
   // POST /api/tenants/:id/members
-  router.post('/:id/members', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/members', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_INVITE), async (c) => {
     const id   = Number(c.req.param('id'));
     const body = await c.req.json<{ newUserId: string; role: TenantRole }>();
     const actorUserId = c.get('userId') as string;
 
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkSeatLimit(id);
     if (limitErr) return c.json(limitErr, 402);
 
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
     await invalidateTaskAssignees(c.env as Env, id);
     // New membership must resolve at the gateway immediately, not after the 60s TTL.
-    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+    });
     return c.json(tenant.toPlain());
   });
 
@@ -697,7 +1027,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // Existing account → add as a member immediately (status 'added'). No account
   // yet → record a pending invitation (status 'pending') that auto-converts to a
   // membership the first time they log in with that email (see GET /mine).
-  router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_INVITE), async (c) => {
     const id          = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -712,7 +1042,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     // Seat limit guards both paths: a pending invite is a promise of a seat, so
     // refuse to queue one the plan can't honour. (It is not yet counted as a
     // filled seat — see the Consolidated Gap Register.)
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkSeatLimit(id);
     if (limitErr) return c.json(limitErr, 402);
 
@@ -725,7 +1055,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (found) {
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
-      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch(() => {});
+      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+      });
       emitMemberActivity(c, db, 'member.added', {
         targetId: found.id, targetLabel: found.email,
         summary: `Added ${found.email} as ${role}`, metadata: { role, userId: found.id },
@@ -733,30 +1065,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
     }
 
-    // No account: upsert the pending invitation (the partial-unique index allows
-    // only one open invite per email, so re-inviting refreshes role + timestamp).
-    const [existing] = await db
-      .select({ id: tenantInvitations.id })
-      .from(tenantInvitations)
-      .where(and(
-        eq(tenantInvitations.tenantId, id),
-        eq(tenantInvitations.email, email),
-        eq(tenantInvitations.status, 'pending'),
-      ))
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(tenantInvitations)
-        .set({ role, invitedByUserId: actorUserId, createdAt: new Date() })
-        .where(eq(tenantInvitations.id, existing.id));
-    } else {
-      await db
-        .insert(tenantInvitations)
-        .values({ tenantId: id, email, role, invitedByUserId: actorUserId });
-    }
-
-    await invalidateInvitations(c.env as Env, id);
+    // No account: the kernel invitation. `invite()` is find-or-refresh on
+    // (tenant, kind, email), which is what the select-then-insert here used to
+    // approximate — with a race between the two statements — and it invalidates
+    // the tenant's cached roster itself.
+    await invite(db, c.env as Env, {
+      tenantId: id,
+      kind: 'tenant',
+      email,
+      role,
+      invitedBy: actorUserId,
+    });
 
     emitMemberActivity(c, db, 'member.invited', {
       targetId: email, targetLabel: email,
@@ -772,16 +1091,28 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         db.select({ displayName: users.displayName, email: users.email })
           .from(users).where(eq(users.id, actorUserId)).limit(1),
       ]);
-      const frontendBase = ((c.env as Env).APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+      const frontendBase = resolveAppBaseUrl(c.env as Env);
       const signupUrl = `${frontendBase}/register?email=${encodeURIComponent(email)}`;
-      await sendWorkspaceInviteEmail(c.env as Env, email, {
-        workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
-        inviterName: inviter?.displayName ?? inviter?.email ?? 'A teammate',
-        signupUrl,
-        role,
-      });
+      // Locale: the resolver first looks up the INVITEE's stored locale — an
+      // already-registered user being added to a second workspace gets their own
+      // language. Only a genuinely cold address (no `users` row, so nothing to look
+      // up) falls through to the INVITER's request locale, which is the best
+      // available guess: colleagues being invited to a workspace usually share one.
+      await sendTransactionalEmail(
+        c.env as Env,
+        db,
+        email,
+        ({ locale }) => sendWorkspaceInviteEmail(c.env as Env, email, {
+          workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
+          inviterName: inviter?.displayName ?? inviter?.email ?? 'A teammate',
+          signupUrl,
+          role,
+          locale,
+        }),
+        { headers: headerHints(c.req) },
+      );
     } catch (err) {
-      console.error('[invite-by-email] notification failed (invite still recorded):', err);
+      reportCaughtError(err, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes", context: { logMessage: '[invite-by-email] notification failed (invite still recorded):', details: err } });
     }
 
     return c.json({ ok: true, status: 'pending', email });
@@ -793,19 +1124,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const invitations = await getOrSetCached(c.env as Env, invitationsCacheKey(tenantId), async () => {
-      const rows = await db
-        .select({
-          id: tenantInvitations.id,
-          email: tenantInvitations.email,
-          role: tenantInvitations.role,
-          createdAt: tenantInvitations.createdAt,
-        })
-        .from(tenantInvitations)
-        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.status, 'pending')))
-        .orderBy(desc(tenantInvitations.createdAt));
-      return rows;
-    });
+    // Same cached read the seat guard counts, so the page and the cap can never
+    // disagree. The response shape is unchanged for the frontend.
+    const rows = await listPending(db, c.env as Env, tenantId, 'tenant');
+    const invitations = rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      createdAt: row.createdAt,
+    }));
 
     return c.json({ invitations });
   });
@@ -819,33 +1146,27 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const invId = c.req.param('invId');
     if (!invId) return c.json({ error: 'invId is required' }, 400);
 
-    await db
-      .update(tenantInvitations)
-      .set({ status: 'revoked', revokedAt: new Date() })
-      .where(and(
-        eq(tenantInvitations.id, invId),
-        eq(tenantInvitations.tenantId, tenantId),
-        eq(tenantInvitations.status, 'pending'),
-      ));
-
-    await invalidateInvitations(c.env as Env, tenantId);
+    // THE revocation path (§2): one, and it drops the cached roster itself.
+    await revokeInvitation(db, c.env as Env, { id: invId, tenantId });
     return c.json({ ok: true });
   });
 
   // DELETE /api/tenants/:id/members/:userId
-  router.delete('/:id/members/:userId', requireRole(TenantRole.MANAGER), async (c) => {
+  router.delete('/:id/members/:userId', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_REMOVE), async (c) => {
     const id           = Number(c.req.param('id'));
     const targetUserId = c.req.param('userId');
     const actorUserId  = c.get('userId') as string;
     const tenant = await tenantService.removeMember(id, actorUserId, targetUserId);
     await invalidateTaskAssignees(c.env as Env, id);
     // Revoke the removed member's gateway access at once (not after the 60s TTL).
-    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+    });
     return c.json(tenant.toPlain());
   });
 
   // PATCH /api/tenants/:id/members/:userId/role — change an existing member's role.
-  router.patch('/:id/members/:userId/role', requireRole(TenantRole.MANAGER), async (c) => {
+  router.patch('/:id/members/:userId/role', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_PROMOTE), async (c) => {
     const id           = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -860,8 +1181,81 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const tenant = await tenantService.changeMemberRole(id, actorUserId, targetUserId, body.role);
     await invalidateTaskAssignees(c.env as Env, id);
     // The role rides in the member's next JWT mint; clear the cached membership now.
-    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+    });
     return c.json(tenant.toPlain());
+  });
+
+  // ── Per-seat AI spend limits (Teams) ──────────────────────────────────────
+  // Owner-configured monthly $ ceiling on each seat's non-BYO AI spend (metered at
+  // the OpenRouter rate). Reads are MANAGER+ (spend visibility); writes are OWNER
+  // only (they own the budget). The enforcement + resolution rule lives ONCE in
+  // application/consumption/memberSpend.ts — these routes are the config surface.
+  const MAX_SPEND_CAP_USD = 100_000;
+
+  // GET /api/tenants/:id/spend-limits — overview: default cap + every seat's cap & spend.
+  router.get('/:id/spend-limits', requireRole(TenantRole.MANAGER), async (c) => {
+    const id = Number(c.req.param('id'));
+    if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
+    const overview = await getTeamSpendOverview(db, c.env as Env, id);
+    return c.json(overview);
+  });
+
+  // PATCH /api/tenants/:id/spend-limits — set the team-wide DEFAULT per-seat cap.
+  //   body { amountUsd: number | null } — null clears the default (seats uncapped
+  //   unless individually set); a number >= 0 applies to every seat with no override.
+  router.patch('/:id/spend-limits', requireRole(TenantRole.OWNER), async (c) => {
+    const id = Number(c.req.param('id'));
+    if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json<{ amountUsd?: number | null }>().catch(() => ({} as { amountUsd?: number | null }));
+    const amount = body.amountUsd;
+    let millicents: number | null;
+    if (amount == null) {
+      millicents = null;
+    } else if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > MAX_SPEND_CAP_USD) {
+      return c.json({ error: `amountUsd must be null or a number between 0 and ${MAX_SPEND_CAP_USD}` }, 400);
+    } else {
+      millicents = usdToMillicents(amount);
+    }
+    await db.update(tenants).set({ memberDefaultSpendCapMillicents: millicents }).where(eq(tenants.id, id));
+    await invalidateTeamSpendCaches(c.env as Env, id);
+    return c.json(await getTeamSpendOverview(db, c.env as Env, id));
+  });
+
+  // PATCH /api/tenants/:id/members/:userId/spend-limit — set ONE seat's cap.
+  //   body { mode: 'inherit' | 'unlimited' | 'custom', amountUsd?: number }
+  //     inherit   → null (use the team default)
+  //     unlimited → -1   (exempt this seat from the default)
+  //     custom    → amountUsd >= 0 (0 = no paid spend allowed)
+  router.patch('/:id/members/:userId/spend-limit', requireRole(TenantRole.OWNER), async (c) => {
+    const id = Number(c.req.param('id'));
+    if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
+    const targetUserId = c.req.param('userId');
+    type SeatLimitBody = { mode?: 'inherit' | 'unlimited' | 'custom'; amountUsd?: number };
+    const body = await c.req.json<SeatLimitBody>().catch(() => ({} as SeatLimitBody));
+    let millicents: number | null;
+    if (body.mode === 'inherit') {
+      millicents = null;
+    } else if (body.mode === 'unlimited') {
+      millicents = -1;
+    } else if (body.mode === 'custom') {
+      const amount = body.amountUsd;
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > MAX_SPEND_CAP_USD) {
+        return c.json({ error: `amountUsd must be a number between 0 and ${MAX_SPEND_CAP_USD}` }, 400);
+      }
+      millicents = usdToMillicents(amount);
+    } else {
+      return c.json({ error: "mode must be one of: 'inherit', 'unlimited', 'custom'" }, 400);
+    }
+    const updated = await db
+      .update(tenantMembers)
+      .set({ monthlySpendCapMillicents: millicents })
+      .where(and(eq(tenantMembers.tenantId, id), eq(tenantMembers.userId, targetUserId), eq(tenantMembers.isActive, true)))
+      .returning({ id: tenantMembers.id });
+    if (updated.length === 0) return c.json({ error: 'Member not found in this workspace' }, 404);
+    await invalidateTeamSpendCaches(c.env as Env, id, targetUserId);
+    return c.json(await getTeamSpendOverview(db, c.env as Env, id));
   });
 
   // GET /api/tenants/:id/security/users
@@ -954,6 +1348,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         .where(
           and(
             eq(authTokens.userId, userId),
+            eq(authTokens.tenantId, tenantId),
             inArray(authTokens.sessionId, sessionIds),
             isNull(authTokens.revokedAt),
             gt(authTokens.expiresAt, new Date()),
@@ -1037,7 +1432,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1062,7 +1457,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1083,7 +1478,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });

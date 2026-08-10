@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { listConversations, type MessagingSide } from '@/lib/freelancerApi';
@@ -39,20 +40,22 @@ export function MessagesButton({ side, context, variant = 'button', label }: {
 
   const text = label ?? t('title');
   const badge = unread > 0 ? (
-    <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, background: variant === 'inline' ? 'var(--surface-coral-soft)' : 'rgba(255,255,255,0.25)', color: variant === 'inline' ? 'var(--coral-bright)' : '#fff' }}>{unread}</span>
+    <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '1px 7px', borderRadius: 'var(--radius-full)', background: variant === 'inline' ? 'var(--surface-coral-soft)' : 'rgba(255,255,255,0.25)', color: variant === 'inline' ? 'var(--coral-bright)' : 'var(--text-on-accent)' }}>{unread}</span>
   ) : null;
 
   return (
     <>
       {variant === 'inline' ? (
         <button type="button" onClick={() => setOpen(true)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--coral-bright, #f4726e)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
-          💬 {text} {badge}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+          
+          <Icon source="💬" size="1em" /> {text} {badge}
         </button>
       ) : (
         <button type="button" onClick={() => setOpen(true)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-          💬 {text} {badge}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
+          
+          <Icon source="💬" size="1em" /> {text} {badge}
         </button>
       )}
       <MessagesPanel open={open} onClose={() => setOpen(false)} side={side} context={open ? context : null} />

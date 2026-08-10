@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Persistent vendor-model cooldown store.
  *
@@ -231,7 +232,7 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
         JSON.stringify({ cls, status, until, trialAfter }),
         { expirationTtl: ttlSec },
       ).catch((err) => {
-        console.warn(`[cooldown] kv.put failed for ${vendor}/${model}: ${err}`);
+        reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "write", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for ${vendor}/${model}: ${err}` } });
       });
     },
     async readVendor(vendor) {
@@ -248,7 +249,7 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
         JSON.stringify({ cls, until }),
         { expirationTtl: ttlSec },
       ).catch((err) => {
-        console.warn(`[cooldown] kv.put failed for vendor ${vendor}: ${err}`);
+        reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendor", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for vendor ${vendor}: ${err}` } });
       });
     },
     async readVendorFailures(vendor) {
@@ -261,7 +262,9 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
     },
     async writeVendorFailures(vendor, ring) {
       if (ring.length === 0) {
-        await kv.delete(vendorFailuresKey(vendor)).catch(() => { /* absorb */ });
+        await kv.delete(vendorFailuresKey(vendor)).catch((error) => { /* absorb */ 
+          reportCaughtError(error, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendorFailures" });
+        });
         return;
       }
       await kv.put(
@@ -269,7 +272,7 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
         JSON.stringify({ ring }),
         { expirationTtl: Math.ceil(VENDOR_FAILURE_WINDOW_MS / 1000) },
       ).catch((err) => {
-        console.warn(`[cooldown] kv.put failed for vendor-failures ${vendor}: ${err}`);
+        reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendorFailures", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for vendor-failures ${vendor}: ${err}` } });
       });
     },
   };

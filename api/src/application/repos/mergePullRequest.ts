@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * mergePullRequest — merge an OPEN pull request via the provider's PR-merge API,
  * server-side with the tenant's decrypted token. This is the "Approve & Merge"
@@ -9,11 +10,11 @@
  * chosen merge method (squash | merge | rebase), so the PR shows as merged and the
  * branch history reflects the operator's choice.
  *
- * GitHub, GitLab, and Bitbucket Cloud are implemented; other providers (e.g.
- * Bitbucket Server) return a typed `unsupported` result so callers degrade to
- * "open the PR on the provider". Never throws.
+ * GitHub, GitLab, Bitbucket Cloud and Bitbucket Server (self-hosted) are
+ * implemented; other providers return a typed `unsupported` result so callers
+ * degrade to "open the PR on the provider". Never throws.
  */
-import { buildGitApiBaseUrl } from './gitProxy';
+import { bitbucketServerRepoPath, buildGitApiBaseUrl, resolveGitApiFlavor } from './gitProxy';
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
@@ -42,13 +43,34 @@ export function normalizeMergeMethod(v: unknown): MergeMethod {
   return typeof v === 'string' && VALID_METHODS.has(v as MergeMethod) ? (v as MergeMethod) : 'squash';
 }
 
+/**
+ * GitHub reports several distinct merge blockers with the same HTTP 405 status.
+ * Keep content conflicts separate from policy/review blockers: callers can repair
+ * a conflict by sending the ticket agent back to the branch, while retrying a
+ * branch-rule failure cannot make progress.
+ */
+export function isMergeConflictMessage(message: string): boolean {
+  return /\bmerge conflicts?\b|\bhas conflicts?\b|\bconflicting files?\b|\bconflicts? must be resolved\b/i.test(message);
+}
+
 /** Build the provider-specific merge request (URL + method + body). Pure +
  *  exported so the per-provider request construction is unit-testable without a
  *  live API. Endpoints per each provider's documented PR-merge API. */
 export function buildMergeRequest(input: MergePrInput): { url: string; method: 'PUT' | 'POST'; body: Record<string, unknown> } {
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host);
+  const flavor = resolveGitApiFlavor(input.provider, input.host);
+  const apiBase = buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true });
   const method = normalizeMergeMethod(input.method);
-  if (input.provider === 'gitlab') {
+  if (flavor === 'bitbucket-server') {
+    // Server has no per-request strategy — the merge strategy is a repository
+    // setting there — so `method` cannot be honoured and is deliberately dropped
+    // rather than sent and silently ignored. `version=-1` means "current version".
+    return {
+      url: `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests/${input.number}/merge?version=-1`,
+      method: 'POST',
+      body: { ...(input.commitMessage ? { message: input.commitMessage } : {}) },
+    };
+  }
+  if (flavor === 'gitlab') {
     // PUT /projects/:id/merge_requests/:iid/merge — `:id` is the URL-encoded
     // `owner/repo` path; GitLab squashes via a boolean (no rebase-on-merge here).
     const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
@@ -61,7 +83,7 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
       },
     };
   }
-  if (input.provider === 'bitbucket') {
+  if (flavor === 'bitbucket-cloud') {
     // POST /repositories/:owner/:repo/pullrequests/:id/merge — strategy names
     // differ: squash→squash, merge→merge_commit, rebase→fast_forward (closest).
     const strategy = method === 'merge' ? 'merge_commit' : method === 'rebase' ? 'fast_forward' : 'squash';
@@ -94,7 +116,9 @@ function parseMergeSuccess(provider: string, body: unknown): { merged: boolean; 
     return { merged: b.state === 'merged' || !!sha, sha: sha ?? null };
   }
   if (provider === 'bitbucket') {
-    const sha = (b.merge_commit as { hash?: string } | undefined)?.hash;
+    // Cloud → `merge_commit.hash`; Server → `properties.mergeCommit.id`.
+    const sha = (b.merge_commit as { hash?: string } | undefined)?.hash
+      ?? (b.properties as { mergeCommit?: { id?: string } } | undefined)?.mergeCommit?.id;
     return { merged: b.state === 'MERGED' || !!sha, sha: sha ?? null };
   }
   return { merged: (b.merged as boolean) ?? true, sha: (b.sha as string) ?? null };
@@ -110,7 +134,7 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
   try {
     req = buildMergeRequest(input);
   } catch (e) {
-    // e.g. Bitbucket Server (self-hosted) has no mapped REST base.
+    // A provider with no mapped REST base at all.
     return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' };
   }
 
@@ -136,7 +160,34 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
   // surfaces a 409 the UI can explain. GitHub 405 / GitLab 405-406 = not
   // mergeable; 409 (all) = head moved / conflict.
   const text = await res.text().catch(() => '');
-  if (res.status === 405 || res.status === 406) return { ok: false, code: 'not_mergeable', reason: `not mergeable: ${text.slice(0, 200)}` };
-  if (res.status === 409) return { ok: false, code: 'conflict', reason: `merge conflict: ${text.slice(0, 200)}` };
+  const providerMessage = extractProviderMessage(text);
+  if (
+    res.status === 409
+    || ([405, 406, 422].includes(res.status) && isMergeConflictMessage(providerMessage))
+  ) {
+    return {
+      ok: false,
+      code: 'conflict',
+      reason: `merge conflict${providerMessage ? `: ${providerMessage}` : ''}`,
+    };
+  }
+  if (res.status === 405 || res.status === 406) {
+    const reason = input.provider === 'github'
+      ? `GitHub could not merge this pull request${providerMessage ? `: ${providerMessage}` : ''}. Check for merge conflicts, draft status, required checks or reviews, branch rules or merge-queue requirements, and whether '${normalizeMergeMethod(input.method)}' merges are enabled. Open the pull request on GitHub for the exact blocker.`
+      : `The pull request is not mergeable${providerMessage ? `: ${providerMessage}` : ''}. Check the provider for unresolved merge requirements.`;
+    return { ok: false, code: 'not_mergeable', reason };
+  }
   return { ok: false, code: 'provider_error', reason: `${input.provider} ${res.status}: ${text.slice(0, 200)}` };
+}
+
+/** Extract the useful provider error without leaking a raw JSON envelope to the UI. */
+function extractProviderMessage(text: string): string {
+  if (!text.trim()) return '';
+  try {
+    const body = JSON.parse(text) as { message?: unknown };
+    if (typeof body.message === 'string') return body.message.trim().slice(0, 200);
+  } catch (error) { /* non-JSON provider response */ 
+    reportCaughtError(error, { source: "application/repos/mergePullRequest.ts", operation: "extractProviderMessage" });
+  }
+  return text.trim().slice(0, 200);
 }

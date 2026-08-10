@@ -1,9 +1,11 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { RoleGate } from '@/components/RoleGate';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   workflows,
@@ -27,15 +29,15 @@ interface WorkflowsContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'var(--text-muted)',
-  running: 'var(--cyan-bright, #00e5cc)',
+  running: 'var(--cyan-bright, var(--cyan-bright))',
   completed: 'rgba(34,197,94,0.9)',
-  failed: 'var(--coral-bright, #f4726e)',
+  failed: 'var(--coral-bright)',
   cancelled: 'var(--text-muted)',
 };
 
@@ -47,9 +49,9 @@ const primaryBtn: React.CSSProperties = {
   fontSize: '0.875rem',
   fontWeight: 600,
   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-  color: '#fff',
+  color: 'var(--text-on-accent)',
   border: 'none',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   cursor: 'pointer',
   fontFamily: 'var(--font-display)',
   boxShadow: '0 4px 14px var(--shadow-coral-mid)',
@@ -62,7 +64,7 @@ const subtleBtn: React.CSSProperties = {
   color: 'var(--coral-bright)',
   background: 'var(--bg-base)',
   border: '1px solid var(--coral-bright)',
-  borderRadius: 8,
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
 };
 
@@ -83,7 +85,7 @@ function hasAgent(def: WorkflowDefinitionSummary): boolean {
 function StatusPill({ status }: { status: string }) {
   const color = STATUS_COLORS[status] ?? 'var(--text-muted)';
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: `${color}22`, color, whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: `${color}22`, color, whiteSpace: 'nowrap' }}>
       {status}
     </span>
   );
@@ -117,7 +119,7 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
             {task.output}
           </div>
         )}
-        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright, #f4726e)', marginTop: 4 }}>{task.error}</div>}
+        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 4 }}>{task.error}</div>}
       </div>
       <StatusPill status={task.status} />
     </div>
@@ -134,7 +136,7 @@ function ScopeChip({ def }: { def: WorkflowDefinitionSummary }) {
         fontSize: 11,
         fontWeight: 600,
         padding: '2px 8px',
-        borderRadius: 5,
+        borderRadius: 'var(--radius-sm)',
         background: bound ? 'var(--surface-coral-soft, rgba(244,114,94,0.12))' : 'var(--surface-interactive)',
         color: bound ? 'var(--coral-bright)' : 'var(--text-muted)',
         whiteSpace: 'nowrap',
@@ -152,7 +154,7 @@ function AgentLabel({ def }: { def: WorkflowDefinitionSummary }) {
   if (hasAgent(def)) {
     return <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{def.agentName ?? t('assignedAgent')}</span>;
   }
-  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}>⚠ {t('noAgent')}</span>;
+  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}><Icon source="⚠" size="1em" /> {t('noAgent')}</span>;
 }
 
 /** A workflow (definition) as a card — mirrors the project card layout. */
@@ -169,9 +171,9 @@ function WorkflowDefCard({
   const t = useTranslations('workflowsContent');
   const tc = useTranslations('common');
   return (
-    <div style={{ padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <span style={{ fontSize: 18 }} aria-hidden>🔀</span>
+        <span style={{ fontSize: 18 }} aria-hidden><Icon source="🔀" size="1em" /></span>
         <button type="button" onClick={() => onOpen(def)} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
           <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>{def.name}</h3>
           {def.description && (
@@ -198,9 +200,13 @@ function WorkflowDefCard({
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => onOpen(def)} style={subtleBtn}>{t('open')}</button>
-        <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
-          {running ? t('running') : `▶ ${t('run')}`}
-        </button>
+        {/* Starting a workflow puts an agent to work, so it carries the same
+            DEVELOPER+ dispatch gate as a task run. Open / view-runs stay reads. */}
+        <RoleGate capability="runtime.execute">
+          <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
+            {running ? t('running') : `${t('run')}`}
+          </button>
+        </RoleGate>
         {(def.runCount ?? 0) > 0 && (
           <button type="button" onClick={() => onViewRuns(def)} style={subtleBtn}>{t('runsCount', { count: def.runCount ?? 0 })}</button>
         )}
@@ -334,7 +340,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   if (selectedDetail) {
     const tasks = selectedDetail.tasks ?? [];
     const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-      padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 7,
+      padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
       border: '1px solid var(--border-subtle)',
       background: active ? 'var(--surface-interactive)' : 'transparent',
       color: active ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer',
@@ -346,7 +352,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
           <button
             type="button"
             onClick={() => setSelectedDetail(null)}
-            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
+            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
             ← {t('back')}
           </button>
@@ -408,7 +414,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
           <button
             type="button"
             onClick={() => { setRunsForDef(null); setDefRuns([]); }}
-            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
+            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
             ← {t('back')}
           </button>
@@ -416,9 +422,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{runsForDef.name} · {t('runs')}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t('executionHistory')}</div>
           </div>
-          <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
-            {runningId === runsForDef.id ? t('running') : `▶ ${t('runNow')}`}
-          </button>
+          <RoleGate capability="runtime.execute">
+            <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
+              {runningId === runsForDef.id ? t('running') : `${t('runNow')}`}
+            </button>
+          </RoleGate>
         </div>
 
         {loadingRuns ? (
@@ -426,7 +434,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
         ) : defRuns.length === 0 ? (
           <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>{t('noRunsPeriod')}</div>
         ) : (
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
             {defRuns.map((r) => (
               <button
                 key={r.id}
@@ -466,7 +474,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
 
       {/* Active project filter banner */}
       {projectId != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 10, fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', fontSize: 13 }}>
           <span style={{ color: 'var(--text-secondary)' }}>
             {t('filteredToProject')} <strong style={{ color: 'var(--text-primary)' }}>{filteredProjectName}</strong>
           </span>
@@ -491,8 +499,8 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>{t('error', { message: error })}</div>}
 
       {!loading && visibleDefs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🔀</div>
+        <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}><Icon source="🔀" size="1em" /></div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
             {projectId != null ? t('emptyForProject') : t('empty')}
           </p>
@@ -537,9 +545,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button type="button" onClick={() => openDef(d)} style={subtleBtn}>{t('open')}</button>
-                      <button type="button" onClick={() => runDef(d)} disabled={runningId === d.id} style={{ ...subtleBtn, opacity: runningId === d.id ? 0.6 : 1 }}>
-                        {runningId === d.id ? t('running') : `▶ ${t('run')}`}
-                      </button>
+                      <RoleGate capability="runtime.execute">
+                        <button type="button" onClick={() => runDef(d)} disabled={runningId === d.id} style={{ ...subtleBtn, opacity: runningId === d.id ? 0.6 : 1 }}>
+                          {runningId === d.id ? t('running') : `${t('run')}`}
+                        </button>
+                      </RoleGate>
                       <button type="button" onClick={() => deleteDef(d)} style={subtleBtn}>{tc('delete')}</button>
                     </div>
                   </td>

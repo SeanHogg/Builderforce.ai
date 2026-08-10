@@ -19,7 +19,7 @@ import { useTranslations } from 'next-intl';
  */
 
 /** Built-in kinds we ship a localized label for; others fall back to a title-cased slug. */
-const KNOWN_KINDS = new Set(['validator', 'security', 'product_manager', 'designer', 'incident_manager']);
+const KNOWN_KINDS = new Set(['validator', 'security', 'product_manager', 'designer', 'incident_manager', 'cto', 'product_owner']);
 
 export function BuiltinKindBadge({ kind }: { kind?: string | null }) {
   const t = useTranslations('workforce.builtinKind');
@@ -33,14 +33,14 @@ export function BuiltinKindBadge({ kind }: { kind?: string | null }) {
       title={label}
       style={{
         display: 'inline-block',
-        fontSize: 10,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         letterSpacing: 0.4,
         textTransform: 'uppercase',
         padding: '2px 7px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         background: 'rgba(139,92,246,0.15)',
-        color: '#7c3aed',
+        color: 'var(--violet-bright)',
         border: '1px solid rgba(139,92,246,0.3)',
         verticalAlign: 'middle',
       }}

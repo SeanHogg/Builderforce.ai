@@ -85,7 +85,7 @@ export function AllowedOriginsField({ value, onChange, disabled }: Props) {
             width: '100%', marginLeft: 24, marginBottom: 8, marginTop: 4,
             fontFamily: 'var(--font-mono)', fontSize: 12, padding: 8,
             background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 6,
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
             boxSizing: 'border-box',
           }}
         />

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Agentic QA routes — /api/qa
  *
@@ -40,6 +41,7 @@ import { Hono } from 'hono';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
+  projects,
   qaCredentials,
   qaExplorations,
   qaFindings,
@@ -63,7 +65,7 @@ import {
   type QaFindingLike,
 } from '../../application/qa/QaFindingRouter';
 import { getProjectQualityTrend, QA_QUALITY_VERSION_KEY } from '../../application/qa/QaQualityService';
-import { maybeAutoRunOnLaneEntry } from './taskRoutes';
+import { onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 import { dispatchQaRunner } from '../../application/qa/dispatchQaRunner';
 import {
   buildExplorationPlan,
@@ -182,7 +184,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       await db.insert(qaJourneyEvents).values(rows);
       // New interactions move the heatmap — bump the per-tenant version token so
       // the next /heatmap read recomputes instead of serving a stale ranking.
-      void bumpCacheVersion(c.env as Env, QA_HEAT_VERSION_KEY(tenantId)).catch(() => {});
+      void bumpCacheVersion(c.env as Env, QA_HEAT_VERSION_KEY(tenantId)).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/qaRoutes.ts", operation: "createQaRoutes" });
+      });
     }
     return c.json({ inserted: rows.length }, 201);
   });
@@ -696,7 +700,11 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
    * project has no staffed fix lane, or no finding clears the threshold.
    */
   async function autoRouteFindings(env: Env, tenantId: number, projectId: number, candidates: QaFindingLike[]): Promise<void> {
-    const [policy] = await db.select().from(qaRoutingSettings).where(eq(qaRoutingSettings.projectId, projectId)).limit(1);
+    // Scope the policy lookup by tenant: qaRoutingSettings.projectId is UNIQUE and
+    // projects.id is an enumerable serial, so loading by projectId alone would honor
+    // a foreign tenant's routing row for an id that happens to collide.
+    const [policy] = await db.select().from(qaRoutingSettings)
+      .where(and(eq(qaRoutingSettings.tenantId, tenantId), eq(qaRoutingSettings.projectId, projectId))).limit(1);
     if (!policy || !policy.enabled) return;
 
     const laneKey = await findingRouter.resolveAutoFixLaneKey(projectId, policy.targetLaneKey);
@@ -716,11 +724,13 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         // Move the ticket into the fix lane (the lane key IS the task status) and
         // fire the canonical lane auto-run trigger — same path as a board drag.
         await taskService.updateTask(taskId, { status: laneKey });
-        await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-          tenantId, projectId, taskId, status: laneKey, submittedBy: 'system:qa-autoroute',
+        await onTaskLandedInLane(env, db, {
+          tenantId, projectId, taskId, status: laneKey, submittedBy: 'system:qa-autoroute', runtimeService,
         });
-      } catch {
+      } catch (error) {
         // One finding's routing failure must not abort the rest of the batch.
+      
+        reportCaughtError(error, { source: "presentation/routes/qaRoutes.ts", operation: "autoRouteFindings" });
       }
     }
   }
@@ -775,9 +785,12 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       return c.json({ error: 'Project has no active QA target (root URL). Add one first.' }, 400);
     }
 
-    const zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit: heatBudget * 3 });
+    let zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit: heatBudget * 3 });
     if (zones.length === 0) {
-      return c.json({ error: 'No heatmap data yet — capture usage in the app before running the agentic tester.' }, 400);
+      // No interaction history yet (e.g. a just-deployed app with no captured
+      // usage) — fall back to a crawl from the site root so the tester still runs
+      // instead of hard-failing. Once real usage is captured, the heatmap takes over.
+      zones = [{ route: '/', selector: null, kind: 'pageview', label: null, heat: 0, score: 0 }];
     }
     const plan = buildExplorationPlan(zones, heatBudget);
 
@@ -955,7 +968,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
           heat: qaFindings.heat, taskId: qaFindings.taskId, fingerprint: qaFindings.fingerprint,
         });
       // A new finding moves the quality trend — invalidate the cached rollup.
-      void bumpCacheVersion(c.env as Env, QA_QUALITY_VERSION_KEY(tenantId)).catch(() => {});
+      void bumpCacheVersion(c.env as Env, QA_QUALITY_VERSION_KEY(tenantId)).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/qaRoutes.ts", operation: "createQaRoutes" });
+      });
     }
 
     // Refresh the rolled-up count from the source of truth.
@@ -1012,7 +1027,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     }
 
     try {
-      const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId);
+      const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId, { env: c.env as Env });
       return c.json({ task: plain, deduped, finding: { ...finding, status: 'task_created', taskId } }, 201);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Failed to create task' }, 400);
@@ -1129,6 +1144,14 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       ? body.minSeverity : ROUTING_DEFAULTS.minSeverity;
     const targetLaneKey = body.targetLaneKey ? String(body.targetLaneKey).slice(0, 120) : null;
     const maxPerBatch = Math.min(Math.max(1, Math.trunc(body.maxPerBatch ?? ROUTING_DEFAULTS.maxPerBatch)), 50);
+
+    // Ownership gate: projects.id is an enumerable serial and qaRoutingSettings.projectId
+    // is UNIQUE (global conflict target), so without this check tenant A could upsert
+    // over tenant B's routing row by supplying B's projectId in the URL.
+    const [ownedProject] = await db.select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    if (!ownedProject) return c.json({ error: 'Project not found' }, 404);
+
     const now = new Date();
     const [row] = await db
       .insert(qaRoutingSettings)

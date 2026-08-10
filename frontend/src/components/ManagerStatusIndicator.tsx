@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { useTranslations, useFormatter } from 'next-intl';
 import { useAttention } from '@/lib/useAttention';
@@ -46,13 +47,13 @@ export function ManagerStatusIndicator() {
         alignItems: 'center',
         gap: 6,
         padding: '4px 10px',
-        borderRadius: 999,
+        borderRadius: 'var(--radius-full)',
         textDecoration: 'none',
         fontSize: '0.78rem',
         fontWeight: 600,
-        color: active ? 'var(--accent, #2563eb)' : 'var(--text-muted)',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
         border: '1px solid var(--border-subtle)',
-        background: active ? 'var(--accent-soft, rgba(37, 99, 235, 0.10))' : 'transparent',
+        background: active ? 'var(--accent-subtle, rgba(37, 99, 235, 0.10))' : 'transparent',
         whiteSpace: 'nowrap',
         maxWidth: '40vw',
         overflow: 'hidden',
@@ -69,7 +70,7 @@ export function ManagerStatusIndicator() {
           animation: active ? 'bf-mgr-pulse 1.2s ease-in-out infinite' : 'none',
         }}
       />
-      <span aria-hidden>🧭</span>
+      <span aria-hidden><Icon source="🧭" size="1em" /></span>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
       <style>{'@keyframes bf-mgr-pulse{0%,100%{opacity:.35}50%{opacity:1}}'}</style>
     </Link>

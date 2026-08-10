@@ -10,7 +10,7 @@ interface AgentHostConfigContentProps {
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
 };
 
@@ -96,7 +96,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               background: 'var(--bg-elevated)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               cursor: jsonValid ? 'pointer' : 'not-allowed',
             }}
           >
@@ -112,7 +112,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               background: 'var(--bg-elevated)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
             }}
           >
@@ -136,9 +136,9 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
             lineHeight: 1.6,
             fontFamily: 'var(--font-mono)',
             background: 'var(--bg-elevated)',
-            color: jsonValid ? 'var(--text-primary)' : 'var(--coral-bright, #f4726e)',
-            border: `1px solid ${jsonValid ? 'var(--border-subtle)' : 'var(--coral-bright, #f4726e)'}`,
-            borderRadius: 8,
+            color: jsonValid ? 'var(--text-primary)' : 'var(--coral-bright)',
+            border: `1px solid ${jsonValid ? 'var(--border-subtle)' : 'var(--coral-bright)'}`,
+            borderRadius: 'var(--radius-md)',
             resize: 'vertical',
             outline: 'none',
             boxSizing: 'border-box',
@@ -146,13 +146,13 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
         />
 
         {!jsonValid && (
-          <div style={{ fontSize: 11, color: 'var(--coral-bright, #f4726e)', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 6 }}>
             Invalid JSON — fix before saving.
           </div>
         )}
 
         {saveError && (
-          <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 6 }}>
             {saveError}
           </div>
         )}
@@ -171,10 +171,10 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               padding: '8px 18px',
               fontSize: 13,
               fontWeight: 600,
-              background: jsonValid && !saving ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-              color: jsonValid && !saving ? '#fff' : 'var(--text-muted)',
+              background: jsonValid && !saving ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+              color: jsonValid && !saving ? 'var(--text-on-accent)' : 'var(--text-muted)',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               cursor: !jsonValid || saving ? 'not-allowed' : 'pointer',
             }}
           >

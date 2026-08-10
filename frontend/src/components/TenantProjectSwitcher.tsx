@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
+import { useDismissable } from '@/lib/useDismissable';
+import { MenuDivider, MenuScroll, MenuSectionLabel, MenuSurface, menuItemStyle } from '@/components/workspace/MenuSurface';
 
 /** Down chevron matching the legacy workspace chip. */
 function Chevron() {
@@ -22,6 +23,11 @@ function Chevron() {
  * project-scoped surface reads {@link useProjectScope}, so we never re-inline a
  * per-page project dropdown.
  *
+ * Switching PROJECT is a filter: it never crosses an identity boundary, so an
+ * open canvas and a live session are untouched by it. Switching WORKSPACE is an
+ * identity change, which is why that action leaves via `/tenants` rather than
+ * being a row in this menu.
+ *
  * Outside the authenticated app shell (public/marketing shell, embed) there is
  * no ProjectScopeProvider, so it degrades to the plain workspace chip.
  */
@@ -29,24 +35,7 @@ export function TenantProjectSwitcher() {
   const t = useTranslations('projectScope');
   const { tenant, isAuthenticated } = useAuth();
   const scope = useOptionalProjectScope();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const { open, toggle, close, ref } = useDismissable<HTMLDivElement>();
 
   if (!isAuthenticated || !tenant) return null;
 
@@ -66,27 +55,12 @@ export function TenantProjectSwitcher() {
   const { projects, currentProjectId, currentProject, setProject } = scope;
   const projectLabel = currentProject ? currentProject.name : t('allProjects');
 
-  const itemStyle = (active: boolean): React.CSSProperties => ({
-    display: 'block',
-    width: '100%',
-    textAlign: 'left',
-    padding: '7px 10px',
-    fontSize: 13,
-    borderRadius: 6,
-    border: 'none',
-    cursor: 'pointer',
-    color: 'var(--text-primary)',
-    background: active ? 'var(--surface-coral-soft)' : 'transparent',
-    fontWeight: active ? 600 : 400,
-    textDecoration: 'none',
-  });
-
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         type="button"
         className="tenant-chip"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
         title={`${tenantName} · ${projectLabel}`}
@@ -99,33 +73,15 @@ export function TenantProjectSwitcher() {
       </button>
 
       {open && (
-        <div
-          role="menu"
-          aria-label={t('selectAria')}
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 'calc(100% + 6px)',
-            minWidth: 220,
-            maxWidth: 320,
-            background: 'var(--panel-drawer-bg, var(--bg-elevated))',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
-            zIndex: 100000,
-            padding: 6,
-          }}
-        >
-          <div style={{ padding: '4px 10px 2px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
-            {t('projectLabel')}
-          </div>
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+        <MenuSurface label={t('selectAria')}>
+          <MenuSectionLabel>{t('projectLabel')}</MenuSectionLabel>
+          <MenuScroll>
             <button
               type="button"
               role="menuitemradio"
               aria-checked={currentProjectId == null}
-              onClick={() => { setProject(null); setOpen(false); }}
-              style={itemStyle(currentProjectId == null)}
+              onClick={() => { setProject(null); close(); }}
+              style={menuItemStyle(currentProjectId == null)}
             >
               {t('allProjects')}
             </button>
@@ -135,8 +91,8 @@ export function TenantProjectSwitcher() {
                 type="button"
                 role="menuitemradio"
                 aria-checked={currentProjectId === p.id}
-                onClick={() => { setProject(p.id); setOpen(false); }}
-                style={itemStyle(currentProjectId === p.id)}
+                onClick={() => { setProject(p.id); close(); }}
+                style={menuItemStyle(currentProjectId === p.id)}
               >
                 {p.name}
               </button>
@@ -144,17 +100,12 @@ export function TenantProjectSwitcher() {
             {projects.length === 0 && (
               <div style={{ padding: '7px 10px', fontSize: 13, color: 'var(--text-muted)' }}>{t('noProjects')}</div>
             )}
-          </div>
-          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '6px 4px' }} />
-          <Link
-            href="/tenants"
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            style={itemStyle(false)}
-          >
+          </MenuScroll>
+          <MenuDivider />
+          <Link href="/tenants" role="menuitem" onClick={close} style={menuItemStyle(false)}>
             {t('switchWorkspace')}
           </Link>
-        </div>
+        </MenuSurface>
       )}
     </div>
   );

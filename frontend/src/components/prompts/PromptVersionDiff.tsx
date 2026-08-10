@@ -14,8 +14,8 @@ import { diffLines, diffStat, sideBySide, type DiffRow } from '@/lib/textDiff';
  * is computed client-side with the dependency-free LCS util in lib/textDiff.
  */
 
-const ADD_BG = 'color-mix(in srgb, var(--success, #16a34a) 16%, transparent)';
-const DEL_BG = 'color-mix(in srgb, var(--danger, #dc2626) 16%, transparent)';
+const ADD_BG = 'color-mix(in srgb, var(--success) 16%, transparent)';
+const DEL_BG = 'color-mix(in srgb, var(--danger) 16%, transparent)';
 
 export interface PromptVersionDiffProps {
   promptId: string;
@@ -68,7 +68,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('title')} width="min(760px, 96vw)">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {error && <div style={{ color: 'var(--danger, #e5484d)' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
         {!versions && !error && <div style={{ color: 'var(--text-muted)' }}>{t('loading')}</div>}
 
         {versions && versions.length > 0 && (
@@ -94,23 +94,23 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
             </div>
 
             {/* Diff summary */}
-            <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
-              <span style={{ color: 'var(--success, #16a34a)', fontWeight: 700 }}>+{stat.added} {t('added')}</span>
-              <span style={{ color: 'var(--danger, #dc2626)', fontWeight: 700 }}>−{stat.removed} {t('removed')}</span>
+            <div style={{ display: 'flex', gap: 14, fontSize: 'var(--font-size-small)' }}>
+              <span style={{ color: 'var(--success)', fontWeight: 700 }}>+{stat.added} {t('added')}</span>
+              <span style={{ color: 'var(--danger)', fontWeight: 700 }}>−{stat.removed} {t('removed')}</span>
               <span style={{ color: 'var(--text-muted)' }}>{t('unchanged', { n: stat.unchanged })}</span>
             </div>
 
             {/* Diff body */}
-            <div style={{ overflowX: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 10 }}>
+            <div style={{ overflowX: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
               {mode === 'unified' ? <UnifiedDiff rows={rows} /> : <SplitDiff rows={rows} />}
             </div>
 
             {/* Version notes list */}
             <div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('allVersions')}</div>
+              <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('allVersions')}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[...versions].reverse().map((v) => (
-                  <div key={v.version} style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--text-muted)' }}>
+                  <div key={v.version} style={{ display: 'flex', gap: 10, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)', minWidth: 44 }}>{t('versionN', { n: v.version })}</span>
                     <span style={{ whiteSpace: 'nowrap' }}>{new Date(v.createdAt).toLocaleDateString()}</span>
                     {v.notes && <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.notes}</span>}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { semanticLookup, semanticStore } from './semanticCache';
+import { semanticInvalidate, semanticLookup, semanticStore } from './semanticCache';
 import type { Env } from '../../env';
 
 // Minimal Map-backed KV stub (get supports the 'json' mode used by the service).
@@ -72,6 +72,18 @@ describe('semanticStore + semanticLookup', () => {
     const t = nextTenant();
     await expect(semanticStore(env, t, 'default', [1, 0], 'x')).resolves.toBeUndefined();
     expect(await semanticLookup(env, t, 'default', [1, 0], 0.5)).toBeNull();
+  });
+
+  it('invalidates only the requested tenant and namespace partition', async () => {
+    const env = envWith(fakeKV());
+    const a = nextTenant(), b = nextTenant();
+    await semanticStore(env, a, 'scope-a', [1, 0], 'remove');
+    await semanticStore(env, a, 'scope-b', [1, 0], 'keep namespace');
+    await semanticStore(env, b, 'scope-a', [1, 0], 'keep tenant');
+    await semanticInvalidate(env, a, 'scope-a');
+    expect(await semanticLookup(env, a, 'scope-a', [1, 0], .9)).toBeNull();
+    expect((await semanticLookup(env, a, 'scope-b', [1, 0], .9))?.response).toBe('keep namespace');
+    expect((await semanticLookup(env, b, 'scope-a', [1, 0], .9))?.response).toBe('keep tenant');
   });
 
   it('rejects empty / malformed inputs', async () => {

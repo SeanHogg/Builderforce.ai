@@ -31,21 +31,21 @@ type Step = (typeof STEPS)[number];
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-deep)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   padding: 14,
 };
 const inputStyle: React.CSSProperties = {
   padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)',
-  borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
+  borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
   width: '100%', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 export interface MigrationWizardProps {
@@ -65,7 +65,7 @@ export interface MigrationWizardProps {
 
 /** Map a run's status to the wizard step the operator should resume at. */
 function stepForStatus(status: MigrationRunDetail['run']['status']): Step {
-  if (status === 'completed') return 'import';
+  if (status === 'completed' || status === 'rolled_back') return 'import';
   if (status === 'mapped') return 'review';
   return 'projects';
 }
@@ -170,6 +170,18 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
     } finally { setBusy(false); }
   };
 
+  const rollbackImport = async () => {
+    if (!runId || !window.confirm('Roll back only the projects, tasks, and sync connections created by this import? Later work will be preserved.')) return;
+    setBusy(true); setError(null);
+    try {
+      const run = await migrationsApi.rollback(runId);
+      setDetail((prev) => prev ? { ...prev, run } : prev);
+      onImported?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rollback failed');
+    } finally { setBusy(false); }
+  };
+
   // ── Mutators on the local detail snapshot ───────────────────────────────────
   const patchProject = (id: string, patch: Partial<MigrationRunDetail['projects'][number]>) =>
     setDetail((d) => d ? { ...d, projects: d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) } : d);
@@ -198,7 +210,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {error && (
-          <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)', background: 'var(--surface-2, rgba(220,38,38,0.08))', padding: '8px 12px', borderRadius: 8 }}>
+          <div role="alert" style={{ fontSize: 13, color: 'var(--danger)', background: 'var(--surface-2, rgba(220,38,38,0.08))', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
             {error}
           </div>
         )}
@@ -350,7 +362,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {detail.run.status === 'completed' ? (
               <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success, #16a34a)' }}>✓ {t('migration.done')}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>✓ {t('migration.done')}</div>
                 <div style={cardStyle}>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <li>{t('migration.summaryProjects', { count: detail.run.summary?.projectsCreated ?? 0 })}</li>
@@ -359,8 +371,10 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
                     <li>{t('migration.summaryConnections', { count: detail.run.summary?.connectionsCreated ?? 0 })}</li>
                   </ul>
                 </div>
-                <div><button type="button" style={btnPrimary} onClick={close}>{t('migration.finish')}</button></div>
+                <div style={{ display: 'flex', gap: 8 }}><button type="button" style={btnPrimary} onClick={close}>{t('migration.finish')}</button><button type="button" style={btnSubtle} disabled={busy} onClick={rollbackImport}>{busy ? 'Rolling back…' : 'Roll back import'}</button></div>
               </>
+            ) : detail.run.status === 'rolled_back' ? (
+              <><div style={{ fontSize: 15, fontWeight: 700 }}>Import rolled back</div><p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>Artifacts created by this import were removed. Projects containing later work were preserved.</p><div><button type="button" style={btnPrimary} onClick={close}>{t('migration.finish')}</button></div></>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('migration.importing')}</div>
             )}

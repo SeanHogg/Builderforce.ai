@@ -70,7 +70,7 @@ export interface VoiceStudio {
 }
 
 export function useVoiceStudio(
-  { enabled, storageProjectId }: { enabled: boolean; storageProjectId: number },
+  { enabled, storageProjectId }: { enabled: boolean; storageProjectId?: number | null },
 ): VoiceStudio {
   const [ideProjectId, setIdeProjectId] = useState<number | undefined>(undefined);
   const [onDevice, setOnDevice] = useState<boolean | null>(null);
@@ -87,7 +87,10 @@ export function useVoiceStudio(
   // Resolve the IDE project backing this storage project so clones scope to this
   // project's own custom voices. Falls back to the unscoped (tenant) studio.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || storageProjectId == null || !Number.isInteger(storageProjectId) || storageProjectId <= 0) {
+      setIdeProjectId(undefined);
+      return;
+    }
     let cancelled = false;
     fetchIdeProjectByStorage(storageProjectId)
       .then((ip) => { if (!cancelled) setIdeProjectId(ip.id); })

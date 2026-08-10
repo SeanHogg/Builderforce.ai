@@ -5,6 +5,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
 import { NODE_KIND_MAP } from './nodeKinds';
 import { integrationAccent, integrationForConfig, integrationIcon } from './integrations';
+import { Icon } from '@/components/ui/Icon';
 
 export interface BuilderNodeData extends Record<string, unknown> {
   kind: WorkflowNodeKind;
@@ -12,8 +13,13 @@ export interface BuilderNodeData extends Record<string, unknown> {
   config: Record<string, unknown>;
 }
 
-/** A short one-line summary of the node's key config, shown under the title. */
-function configSummary(kind: WorkflowNodeKind, config: Record<string, unknown>): string {
+/**
+ * A short one-line summary of the node's key config, shown under the title.
+ *
+ * Exported so the 3D reading of the same graph says the same thing about a step
+ * as the flat node does — two summaries of one node would read as two nodes.
+ */
+export function configSummary(kind: WorkflowNodeKind, config: Record<string, unknown>): string {
   switch (kind) {
     case 'agent':
       return [config.role, config.runtime].filter(Boolean).join(' · ') || 'agent';
@@ -21,6 +27,10 @@ function configSummary(kind: WorkflowNodeKind, config: Record<string, unknown>):
       return [config.provider, config.model].filter(Boolean).join(' · ') || 'llm';
     case 'mcp':
       return [config.integration, config.operation].filter(Boolean).join(' · ') || 'tool';
+    case 'connector':
+      // Reads as "twilio · send_sms" on the canvas — which integration and which
+      // action is the whole identity of this node.
+      return [config.connector, config.action].filter(Boolean).join(' · ') || 'integration';
     case 'memory':
       return `${String(config.op ?? 'recall')}${config.query ? ` · ${String(config.query).slice(0, 24)}` : ''}`;
     case 'knowledge':
@@ -48,9 +58,9 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
     <div
       style={{
         minWidth: 168,
-        background: 'var(--bg-elevated, #1a1c23)',
+        background: 'var(--bg-elevated)',
         border: `1px solid ${selected ? accent : 'var(--border-subtle, rgba(255,255,255,0.1))'}`,
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
         boxShadow: selected ? `0 0 0 1px ${accent}` : 'none',
         overflow: 'hidden',
         fontFamily: 'inherit',
@@ -62,15 +72,15 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
       )}
       <div style={{ padding: '8px 11px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontSize: 15 }}>{meta?.icon ?? '◻'}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary, #e2e5ec)' }}>
+          <span><Icon source={meta?.icon ?? 'template'} size={16} /></span>
+          <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
             {d.label || meta?.label || d.kind}
           </span>
         </div>
         <div
           style={{
             marginTop: 3,
-            fontSize: 10,
+            fontSize: 'var(--font-size-field-label)',
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: '0.04em',
@@ -80,7 +90,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
           {meta?.group ?? d.kind}
         </div>
         {summary && (
-          <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--text-muted, #8a8f9c)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
+          <div style={{ marginTop: 4, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
             {summary}
           </div>
         )}

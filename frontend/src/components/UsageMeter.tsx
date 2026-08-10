@@ -20,8 +20,8 @@ import { Sparkline } from '@/components/charts/Sparkline';
  *
  * Each card's TITLE deep-links to the configuration / key entry point that governs
  * that resource (see METER_CONFIG_HREF) — tokens → API keys, cloud runs → the IDE,
- * data → integrations, errors → the quality collectors, uptime → the finance report
- * — while its trend chart drills into the matching Insights report and "See plans"
+ * data → integrations, errors → the quality collectors, outbound fetches → the finance
+ * report — while its trend chart drills into the matching Insights report and "See plans"
  * routes to billing. The whole section collapses via the header toggle, persisted so
  * a member who folds it away keeps it folded.
  */
@@ -46,9 +46,9 @@ function formatAmount(unit: MeterSnapshot['unit'], n: number): string {
 
 /** Bar colour escalates as the allowance fills — neutral → amber → red. */
 function barColor(percent: number): string {
-  if (percent >= 100) return 'var(--danger, #ef4444)';
-  if (percent >= 80) return 'var(--warning, #f59e0b)';
-  return 'var(--coral-bright, #4d9eff)';
+  if (percent >= 100) return 'var(--danger)';
+  if (percent >= 80) return 'var(--warning, var(--warning))';
+  return 'var(--coral-bright, var(--coral-bright))';
 }
 
 const METER_ICON: Record<MeterSnapshot['key'], string> = {
@@ -63,12 +63,12 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
  * Each meter's TITLE deep-links to the configuration / key entry point that
  * represents its functionality — AI tokens → provider API keys, cloud runs → the
  * IDE launcher where they run, data → the integrations/connectors that feed
- * ingestion, errors → the quality error collectors, uptime (outbound web fetches)
- * → the Finance hub where that metered activity is reported.
+ * ingestion, errors → the quality error collectors, outbound fetches (the Brain's
+ * /fetch-url proxy) → the Finance hub where that metered activity is reported.
  */
 const METER_CONFIG_HREF: Record<MeterSnapshot['key'], string> = {
-  ai_tokens: '/settings/api-keys',
-  cloud_runs: '/ide/dashboard',
+  ai_tokens: '/settings/integrations',
+  cloud_runs: '/create?filter=build',
   ingestion: '/settings/integrations',
   error_events: '/quality?tab=collectors',
   outbound_fetches: '/insights/finance',
@@ -88,7 +88,18 @@ const METER_INSIGHT_HREF: Record<MeterSnapshot['key'], string> = {
   outbound_fetches: '/insights/finance',
 };
 
-function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean }) {
+export function ConsumptionMeterCard({
+  meter, isFree, title, usageOnly = false, periodLabel,
+}: {
+  meter: MeterSnapshot;
+  isFree: boolean;
+  /** Optional scoped title, e.g. "Errors · Web app". */
+  title?: string;
+  /** Compact amount-only treatment for a scoped meter with no separate quota. */
+  usageOnly?: boolean;
+  /** Optional window shown by the compact treatment, e.g. "Last 30 days". */
+  periodLabel?: string;
+}) {
   const t = useTranslations('usageMeter');
   const { percentUsed, unlimited, unit } = meter;
 
@@ -98,14 +109,38 @@ function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean })
     : isFree
     ? t('freePerMo', { amount })
     : t('perMo', { amount });
-  const meterName = t(`meter.${meter.key}`);
+  const meterName = title ?? t(`meter.${meter.key}`);
+
+  if (usageOnly) {
+    return (
+      <div
+        style={{
+          minWidth: 112,
+          padding: '9px 11px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-elevated, rgba(255,255,255,0.08))',
+          border: '1px solid var(--border-subtle, var(--border))',
+        }}
+      >
+        <div style={{ fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted, var(--muted))', whiteSpace: 'nowrap' }}>
+          {meterName}
+        </div>
+        <div style={{ marginTop: 2, fontSize: 15, fontWeight: 750, color: 'var(--text-primary, var(--fg))', whiteSpace: 'nowrap' }}>
+          {formatAmount(unit, meter.used)}
+        </div>
+        <div style={{ marginTop: 1, fontSize: 10.5, color: 'var(--text-muted, var(--muted))', whiteSpace: 'nowrap' }}>
+          {periodLabel ?? t('usedAmount', { amount: '' }).trim()}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle, var(--border))',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         padding: 12,
         marginBottom: 8,
       }}
@@ -130,7 +165,7 @@ function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean })
       <div
         style={{
           height: 6,
-          borderRadius: 3,
+          borderRadius: 'var(--radius-sm)',
           background: 'var(--bg-elevated, rgba(255,255,255,0.08))',
           overflow: 'hidden',
           margin: '10px 0 8px',
@@ -141,7 +176,7 @@ function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean })
             width: unlimited ? '0%' : `${percentUsed}%`,
             height: '100%',
             background: barColor(percentUsed),
-            borderRadius: 3,
+            borderRadius: 'var(--radius-sm)',
             transition: 'width 0.3s, background 0.3s',
           }}
         />
@@ -151,7 +186,7 @@ function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean })
         <span style={{ fontSize: 12, color: 'var(--text-muted, var(--muted))' }}>
           {unlimited ? t('usedAmount', { amount: formatAmount(unit, meter.used) }) : t('percentUsed', { percent: percentUsed })}
         </span>
-        <Link href="/pricing" className="usage-meter-link" style={{ fontSize: 12, fontWeight: 500, color: 'var(--coral-bright, #4d9eff)' }}>
+        <Link href="/pricing" className="usage-meter-link" style={{ fontSize: 12, fontWeight: 500, color: 'var(--coral-bright, var(--coral-bright))' }}>
           {isFree ? t('seePlans') : t('manage')} →
         </Link>
       </div>
@@ -224,7 +259,7 @@ export default function UsageMeter() {
       </button>
 
       {!collapsed && snapshot.meters.map((meter) => (
-        <MeterCard key={meter.key} meter={meter} isFree={isFree} />
+        <ConsumptionMeterCard key={meter.key} meter={meter} isFree={isFree} />
       ))}
     </div>
   );

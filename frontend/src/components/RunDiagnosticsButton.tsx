@@ -27,7 +27,7 @@ export function RunDiagnosticsButton({ project, onOpen }: RunDiagnosticsButtonPr
         color: 'var(--coral-bright)',
         background: 'transparent',
         border: '1px solid var(--coral-bright)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         padding: '4px 10px',
         cursor: 'pointer',
         whiteSpace: 'nowrap',

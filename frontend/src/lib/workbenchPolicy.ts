@@ -1,0 +1,139 @@
+/**
+ * Which bucket a route falls into — the classifier that replaces "every route is
+ * a page that replaces the screen".
+ *
+ * Three buckets, and a route declares its bucket by SHAPE rather than by being
+ * listed in a central map that becomes a six-hundred-line file nobody reviews:
+ *
+ *  - `stage`      — the board itself. The route sets active-canvas state and
+ *                   renders nothing, so switching between canvas modes no longer
+ *                   remounts the board.
+ *  - `workbench`  — an operational page. It opens OVER the board as a panel
+ *                   instead of replacing it, so "show me the runway" no longer
+ *                   costs you the thing you were building. PRD 21 §3.4 fixes the
+ *                   panel's width to one of three; {@link panelWidth} decides
+ *                   which, here, so a route cannot invent a fourth.
+ *  - `standalone` — marketing, auth, framed embeds, public browse, the restricted
+ *                   gig shell. Unchanged: they keep their own chrome, and an
+ *                   external viewer must never see the operator shell.
+ *
+ * Pure, so the buckets are a unit-testable table rather than emergent behaviour.
+ */
+
+import { classifyShell, isReferenceSurface, rendersAppShell } from './shellRouting';
+
+export type RouteBucket = 'stage' | 'workbench' | 'standalone';
+
+/**
+ * Canvas surfaces. Each is a MODE of one stage rather than its own component
+ * tree — which is the reason this list can grow (PRD 18 brings more runtimes)
+ * without the stage being rebuilt per runtime.
+ */
+const STAGE_PATTERNS: RegExp[] = [
+  /^\/create\/[^/]+/,
+  /^\/brainstorm(?:\/|$)/,
+  /^\/workflows\/builder(?:\/|$)/,
+];
+
+/**
+ * App-shell routes that still own the whole screen. A single Project keeps its
+ * dedicated editor for now; build workspaces are opened from Canvas objects.
+ */
+const FULL_WIDTH_PATTERNS: RegExp[] = [
+  /^\/projects\/[^/]+$/,
+  /^\/freelancer(?:\/|$)/,
+  /^\/sales(?:\/|$)/,
+];
+
+/** True when this route puts a board on the stage rather than rendering a page. */
+export function isStageRoute(pathname: string): boolean {
+  return STAGE_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+export function classifyRoute(pathname: string): RouteBucket {
+  // A reference surface is a page to a visitor and a PANEL to a signed-in
+  // person (§11.4.5). It reaches here only once `rendersAppShell` has decided
+  // the operator shell applies, i.e. only when signed in — so by the time we
+  // are classifying it, it is a workbench.
+  if (isReferenceSurface(pathname)) return 'workbench';
+  // Anything else outside the operator shell keeps its own chrome, by definition.
+  if (classifyShell(pathname) !== 'app') return 'standalone';
+  if (isStageRoute(pathname)) return 'stage';
+  if (FULL_WIDTH_PATTERNS.some((pattern) => pattern.test(pathname))) return 'standalone';
+  return 'workbench';
+}
+
+/**
+ * Should the panel be open right now?
+ *
+ * The panel exists to keep the board while you consult a page — so with no board
+ * there is nothing to keep, and the page takes the screen exactly as it does
+ * today. That is what makes this change free for anyone who never opens a canvas.
+ */
+export function panelOpen(pathname: string, hasActiveCanvas: boolean): boolean {
+  return hasActiveCanvas && classifyRoute(pathname) === 'workbench';
+}
+
+/**
+ * Does THIS visitor get the operator shell on THIS route, given that the shell
+ * is already holding a board?
+ *
+ * `rendersAppShell` answers it from the route and the session alone, and for a
+ * signed-in person that is the whole answer. For a GUEST it was not, and the
+ * gap was the corollary the whole PRD rests on — *a route may never unmount the
+ * stage* — being true for everyone except the person the anonymous board exists
+ * for. Someone building on a local board who clicked Insights, Finance, Growth,
+ * Governance, Reliability, People, Revenue, Investors or Hiring left the app
+ * shell entirely: `MarketingShell` mounted, `CanvasStage` unmounted, and the
+ * board — which lives in memory, because it has no account to be saved to —
+ * was gone. The page they got in exchange was the "This is part of
+ * Builderforce.ai" teaser, i.e. they paid for a locked door with their work.
+ *
+ * So a guest holding a board keeps the operator shell on any route that would
+ * open as a PANEL. The teaser still renders — it is the honest answer to "can I
+ * see Finance?" — but it renders in the panel, over a board that is still
+ * there, and `Esc` puts them back (PRD 21 §11.4.4: a dim row is an invitation).
+ * Scoped to `workbench` deliberately: a full-width route has nowhere to put the
+ * panel, and the public marketing pages must keep marketing chrome.
+ */
+export function rendersOperatorShell(pathname: string, isAuthenticated: boolean, hasBoard: boolean): boolean {
+  if (rendersAppShell(pathname, isAuthenticated)) return true;
+  return hasBoard && classifyRoute(pathname) === 'workbench';
+}
+
+/**
+ * Which of the three widths a destination opens at (PRD 21 §3.4).
+ *
+ *   sheet — your own account: settings, profile, security, pricing.
+ *   full  — a dashboard that needs the room; the board is one Esc away.
+ *   wide  — everything else: an index beside a detail.
+ *
+ * A pure table rather than a `width` prop at each call site, because a prop is
+ * how the documented three-step scale became twenty distinct panel widths.
+ */
+const SHEET_PATTERNS: RegExp[] = [
+  /^\/settings(?:\/|$)/,
+  /^\/security(?:\/|$)/,
+  /^\/pricing(?:\/|$)/,
+  /^\/profile(?:\/|$)/,
+];
+
+const FULL_PATTERNS: RegExp[] = [
+  // The home dashboard is a wall of panels — metrics, the creation launcher and
+  // the library. At `wide` it was a single column of squeezed cards.
+  /^\/dashboard(?:\/|$)/,
+  /^\/insights(?:\/|$)/,
+  /^\/dashboards(?:\/|$)/,
+  /^\/finops(?:\/|$)/,
+  /^\/admin(?:\/|$)/,
+  /^\/seat(?:\/|$)/,
+];
+
+export function panelWidth(pathname: string): 'sheet' | 'wide' | 'full' {
+  if (SHEET_PATTERNS.some((pattern) => pattern.test(pathname))) return 'sheet';
+  // A reference surface was written as a full-bleed marketing page, so it opens
+  // at full and the reader narrows it if they would rather see more board.
+  if (isReferenceSurface(pathname)) return 'full';
+  if (FULL_PATTERNS.some((pattern) => pattern.test(pathname))) return 'full';
+  return 'wide';
+}

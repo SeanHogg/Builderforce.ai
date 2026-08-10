@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { knowledgeApi, type KnowledgeListing, type DocType } from '@/lib/knowledgeApi';
+import { signInHref } from '@/lib/auth';
 
 /**
  * Marketplace section for KNOWLEDGE listings (SOPs / processes / docs / canvases
@@ -36,7 +37,7 @@ export function KnowledgeMarketSection() {
   async function acquire(listing: KnowledgeListing) {
     // Buying/installing writes into a workspace — a logged-out visitor signs in first.
     if (!hasTenant) {
-      router.push('/login?next=/marketplace');
+      router.push(signInHref('/marketplace'));
       return;
     }
     setInstalling(listing.id);
@@ -61,22 +62,22 @@ export function KnowledgeMarketSection() {
 
   return (
     <section style={{ marginBottom: 32 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 4px' }}>{t('marketTitle')}</h2>
-      <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px' }}>{t('marketSubtitle')}</p>
+      <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 4px' }}>{t('marketTitle')}</h2>
+      <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', margin: '0 0 16px' }}>{t('marketSubtitle')}</p>
       {error && (
-        <p role="alert" style={{ color: 'var(--danger, #ef4444)', fontSize: 13, margin: '0 0 12px' }}>{error}</p>
+        <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', margin: '0 0 12px' }}>{error}</p>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {listings.map((l) => (
           <div key={l.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 15 }}>
+              <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)' }}>
                 {TYPE_ICON[l.docType]} {l.title}
               </span>
               <span className="badge badge-gray">{t(TYPE_LABEL[l.docType])}</span>
             </div>
             {l.summary && (
-              <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
+              <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', lineHeight: 1.5, margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
                 {l.summary}
               </p>
             )}
@@ -85,7 +86,7 @@ export function KnowledgeMarketSection() {
                 <span key={tg} className="badge badge-gray">{tg}</span>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginTop: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 'auto' }}>
               <span>{l.authorName ? t('by', { author: l.authorName }) : ''}</span>
               <span>{t('installs', { count: l.installCount })}</span>
             </div>

@@ -54,7 +54,7 @@ const chatProviders: IntegrationItem[] = [
   { name: 'Matrix', icon: si(siMatrix), color: '#000000', desc: 'Matrix protocol', docs: '/docs/channels/matrix' },
   { name: 'Nostr', icon: lc('message-circle'), color: '#8F2CFF', desc: 'Decentralized DMs via NIP-04', docs: '/docs/channels/nostr' },
   { name: 'Zalo', icon: si(siZalo), color: '#0068FF', desc: 'Zalo Bot API', docs: '/docs/channels/zalo' },
-  { name: 'WebChat', icon: lc('globe'), color: '#00E5CC', desc: 'Browser-based UI', docs: '/docs/webchat' },
+  { name: 'WebChat', icon: lc('globe'), color: 'var(--cyan-bright)', desc: 'Browser-based UI', docs: '/docs/webchat' },
 ];
 
 const modelProviders: IntegrationItem[] = [
@@ -62,30 +62,30 @@ const modelProviders: IntegrationItem[] = [
   { name: 'OpenAI', icon: lc('bot'), color: '#00A67E', desc: 'GPT-4, GPT-5, o1', docs: '/docs/models' },
   { name: 'Google', icon: si(siGoogle), color: '#4285F4', desc: 'Gemini 2.5 Pro/Flash', docs: '/docs/models' },
   { name: 'MiniMax', icon: cs(minimaxIcon), color: '#E91E63', desc: 'MiniMax-M2.1', docs: '/docs/providers/minimax' },
-  { name: 'xAI', icon: si(siX), color: '#FFFFFF', desc: 'Grok 3 & 4', docs: '/docs/models' },
-  { name: 'Vercel AI Gateway', icon: si(siVercel), color: '#FFFFFF', desc: 'Hundreds of models, 1 API key', docs: '/docs/providers/vercel-ai-gateway' },
+  { name: 'xAI', icon: si(siX), color: 'var(--text-on-accent)', desc: 'Grok 3 & 4', docs: '/docs/models' },
+  { name: 'Vercel AI Gateway', icon: si(siVercel), color: 'var(--text-on-accent)', desc: 'Hundreds of models, 1 API key', docs: '/docs/providers/vercel-ai-gateway' },
   { name: 'OpenRouter', icon: lc('zap'), color: '#6366F1', desc: 'Unified API gateway', docs: '/docs/models' },
   { name: 'Mistral', icon: si(siMistralai), color: '#FF7000', desc: 'Mistral Large & Codestral', docs: '/docs/models' },
   { name: 'DeepSeek', icon: lc('brain'), color: '#4D6BFE', desc: 'DeepSeek V3 & R1', docs: '/docs/models' },
   { name: 'Perplexity', icon: si(siPerplexity), color: '#20B8CD', desc: 'Search-augmented AI', docs: '/docs/models' },
   { name: 'Hugging Face', icon: si(siHuggingface), color: '#FFD21E', desc: 'Open-source models', docs: '/docs/models' },
-  { name: 'Local Models', icon: si(siOllama), color: '#FFFFFF', desc: 'Ollama, LM Studio', docs: '/docs/models' },
+  { name: 'Local Models', icon: si(siOllama), color: 'var(--text-on-accent)', desc: 'Ollama, LM Studio', docs: '/docs/models' },
 ];
 
 const productivityApps: IntegrationItem[] = [
   { name: 'Apple Notes', icon: lc('sticky-note'), color: '#FFCC00', desc: 'Native macOS/iOS notes', docs: '/agents/skills' },
   { name: 'Apple Reminders', icon: lc('check-square'), color: '#FF9500', desc: 'Task management', docs: '/agents/skills' },
   { name: 'Things 3', icon: lc('list-todo'), color: '#4A90D9', desc: 'GTD task manager', docs: '/agents/skills' },
-  { name: 'Notion', icon: si(siNotion), color: '#FFFFFF', desc: 'Workspace & databases', docs: '/agents/skills' },
+  { name: 'Notion', icon: si(siNotion), color: 'var(--text-on-accent)', desc: 'Workspace & databases', docs: '/agents/skills' },
   { name: 'Obsidian', icon: si(siObsidian), color: '#7C3AED', desc: 'Knowledge graph notes', docs: '/agents/skills/obsidian' },
   { name: 'Bear Notes', icon: lc('pen-tool'), color: '#DD4C4F', desc: 'Markdown notes', docs: '/agents/skills' },
   { name: 'Trello', icon: si(siTrello), color: '#0079BF', desc: 'Kanban boards', docs: '/agents/skills/trello' },
-  { name: 'GitHub', icon: si(siGithub), color: '#FFFFFF', desc: 'Code, issues, PRs', docs: '/agents/skills' },
+  { name: 'GitHub', icon: si(siGithub), color: 'var(--text-on-accent)', desc: 'Code, issues, PRs', docs: '/agents/skills' },
 ];
 
 const musicAudio: IntegrationItem[] = [
   { name: 'Spotify', icon: si(siSpotify), color: '#1DB954', desc: 'Music playback control', docs: '/agents/skills/spotify-player' },
-  { name: 'Sonos', icon: si(siSonos), color: '#FFFFFF', desc: 'Multi-room audio', docs: '/agents/skills' },
+  { name: 'Sonos', icon: si(siSonos), color: 'var(--text-on-accent)', desc: 'Multi-room audio', docs: '/agents/skills' },
   { name: 'Shazam', icon: si(siShazam), color: '#0088FF', desc: 'Song recognition', docs: '/agents/skills' },
 ];
 
@@ -109,17 +109,17 @@ const tools: IntegrationItem[] = [
 const mediaCreative: IntegrationItem[] = [
   { name: 'Image Gen', icon: lc('image'), color: '#E91E63', desc: 'AI image generation', docs: '/agents/skills' },
   { name: 'GIF Search', icon: lc('search'), color: '#00DCDC', desc: 'Find the perfect GIF', docs: '/agents/skills' },
-  { name: 'Peekaboo', icon: lc('eye'), color: '#FF6B6B', desc: 'Screen capture & control', docs: '/agents/skills' },
+  { name: 'Peekaboo', icon: lc('eye'), color: 'var(--red-bright)', desc: 'Screen capture & control', docs: '/agents/skills' },
   { name: 'Camera', icon: lc('camera'), color: '#607D8B', desc: 'Photo/video capture', docs: '/agents/skills' },
 ];
 
 const socialComms: IntegrationItem[] = [
-  { name: 'Twitter/X', icon: si(siX), color: '#FFFFFF', desc: 'Tweet, reply, search', docs: '/agents/skills' },
+  { name: 'Twitter/X', icon: si(siX), color: 'var(--text-on-accent)', desc: 'Tweet, reply, search', docs: '/agents/skills' },
   { name: 'Email', icon: lc('mail'), color: '#D44638', desc: 'Send & read emails', docs: '/agents/skills' },
 ];
 
 const companionApps: IntegrationItem[] = [
-  { name: 'macOS', icon: si(siMacos), color: '#FFFFFF', desc: 'Menu bar app + Voice Wake', docs: '/docs/macos' },
+  { name: 'macOS', icon: si(siMacos), color: 'var(--text-on-accent)', desc: 'Menu bar app + Voice Wake', docs: '/docs/macos' },
   { name: 'iOS', icon: si(siIos), color: '#007AFF', desc: 'Canvas, camera, Voice Wake', docs: '/docs/ios' },
   { name: 'Android', icon: si(siAndroid), color: '#34A853', desc: 'Canvas, camera, screen', docs: '/docs/android' },
   { name: 'Windows', icon: lc('monitor'), color: '#0078D4', desc: 'WSL2 recommended', docs: '/docs/windows' },
@@ -172,7 +172,7 @@ export default function IntegrationsPage() {
         .cc-int-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(2rem, 5vw, 3rem);
+          font-size: var(--font-size-page-title);
           margin: 0;
           color: var(--text-primary);
         }

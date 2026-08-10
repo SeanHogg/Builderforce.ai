@@ -1,7 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { llmApi, tenantModelApi, type TenantModel } from './builderforceApi';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { byoVendorLabel, perMillionUsd, type ChatModelOptions } from '@seanhogg/builderforce-brain-ui';
+import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
+import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
+import { getStoredTenantToken } from './auth';
+import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
  * Shared loader for the gateway model list. `models` is the full plan pool;
@@ -16,6 +21,9 @@ import { llmApi, tenantModelApi, type TenantModel } from './builderforceApi';
  */
 export interface LlmModelLists {
   models: string[];
+  /** Free subset of `models`, supplied by the gateway so paid-plan clients do
+   * not have to guess a model's funding tier from its id. */
+  freeModels: string[];
   codingModels: string[];
   /** Models eligible to be a FRONTIER TEACHER (distil into an Evermind): the tenant's
    *  OWN connected BYO frontier models FIRST (a BYO-Anthropic tenant teaches with
@@ -33,6 +41,15 @@ export interface LlmModelLists {
   /** Pinnable models the tenant's connected providers (BYO) can serve, as
    *  `<vendor>/<id>` refs — the model choices follow the connected providers. */
   byoModels: string[];
+  /** The tenant's connected provider keys ('anthropic', 'openai', …). Empty ⇒ every
+   *  turn is funded by the plan allowance rather than the tenant's own account. */
+  byoProviders: string[];
+  /** The vendor-tagged model surface the shared `classifyModelFunding` reads to say
+   *  WHICH purse funds a model. Built once here rather than reconstructed per caller:
+   *  {@link byoModels} flattens away the vendor, so a consumer that needs funding
+   *  attribution would otherwise have to re-fetch `/llm/v1/models` for the same data
+   *  this cache already holds. */
+  fundingSurface: { data: Array<{ id: string }>; byo: { models: ByoModel[] } };
   /** True when the tenant may pick a model at all: a paid plan OR at least one
    *  connected provider (BYO). The authoritative gate the server enforces in
    *  `pickCloudModel` / the strict-pin gate — this is the UI mirror. */
@@ -43,25 +60,47 @@ export interface LlmModelLists {
    *  THIS (not `isPaid`) for any "requires a paid plan to use a frontier model" gate,
    *  so a superadmin or a BYO tenant is never shown a false paywall. */
   canUseFrontierModels: boolean;
+  /** True when the tenant may select ANY paid OpenRouter model (billed at OpenRouter
+   *  cost + a flat 1¢/request). STRICTER than {@link canUseFrontierModels}: it needs
+   *  billing details and a validated card, because premium routes on Builderforce's
+   *  metered key rather than the tenant's own. Subscription tier is independent. */
+  canUsePremiumModels: boolean;
+  /** Why premium is (un)available + the card-validation unlock step
+   *  + the per-request surcharge. Undefined only on an older/failed payload. */
+  premiumInfo?: PremiumModelInfo;
+  /** The paid OpenRouter models premium unlocks, cheapest-first. Loaded from the cached
+   *  public catalog ONLY when the tenant is entitled — an un-entitled tenant never pays
+   *  for a fetch it can't use. Empty until then. */
+  premiumModels: ModelRecord[];
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false };
+const EMPTY: LlmModelLists = { models: [], freeModels: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
-let cache: LlmModelLists | null = null;
-let inflight: Promise<LlmModelLists> | null = null;
+const CACHE_KEY = 'llm-models:lists';
 
 function load(): Promise<LlmModelLists> {
-  if (cache) return Promise.resolve(cache);
-  if (!inflight) {
-    inflight = Promise.all([
+  const cached = readClientCached<LlmModelLists>(CACHE_KEY);
+  if (cached) return Promise.resolve(cached);
+  // The local Creation Canvas is intentionally usable by guests. It mounts this
+  // shared picker too, but tenant model/catalog endpoints require a workspace JWT.
+  // Do not manufacture noisy 401 support tickets for an expected guest session;
+  // guest inference chooses its model server-side.
+  if (!getStoredTenantToken()) return Promise.resolve(EMPTY);
+  return getOrSetClientCached(CACHE_KEY, () => Promise.all([
       llmApi.models(),
       // Tenant models are tenant-scoped + optional; a failure must not block the pool.
       tenantModelApi.list().then((r) => r.models).catch(() => [] as TenantModel[]),
     ])
-      .then(([res, tenantModels]) => {
+      .then(async ([res, tenantModels]) => {
         const models = 'data' in res ? res.data.map((m) => m.model) : res.models;
         const isPaid = res.premium === true || res.effectivePlan !== 'free';
         const byoModels = res.byo?.models.map((m) => m.id) ?? [];
+        const byoProviders = res.byo?.providers ?? [];
+        // Keep the vendor-tagged shape the funding classifier needs (see the field doc).
+        const fundingSurface = {
+          data: (models ?? []).map((id) => ({ id })),
+          byo: { models: res.byo?.models ?? [] },
+        };
         // Server sends canChooseModel; fall back to isPaid || has-BYO for older payloads.
         const canChooseModel = res.canChooseModel ?? (isPaid || byoModels.length > 0);
         // Frontier access = the server's unified rule (superadmin || override || BYO ||
@@ -72,30 +111,67 @@ function load(): Promise<LlmModelLists> {
         // BYO models ∪ coding pool so a BYO tenant still sees their own frontier models.
         const teacherModels = res.teacherModels
           ?? (canUseFrontierModels ? Array.from(new Set([...byoModels, ...(res.codingModels ?? [])])) : []);
-        cache = { models: models ?? [], codingModels: res.codingModels ?? [], teacherModels, tenantModels, isPaid, byoModels, canChooseModel, canUseFrontierModels };
-        return cache;
+        // Premium (any-paid-OpenRouter) selection. Older payloads have no flag → false
+        // (never assume entitlement, or the picker offers models the gateway 402s).
+        const canUsePremiumModels = res.canUsePremiumModels === true;
+        // Only fetch the premium catalog for an entitled tenant. It's the cached public
+        // catalog, so this is one shared request — and skipped entirely for everyone else.
+        const premiumModels = canUsePremiumModels
+          ? await getPremiumModelCatalog().catch(() => [] as ModelRecord[])
+          : [];
+        const value: LlmModelLists = {
+          models: models ?? [], freeModels: res.freeModels ?? (res.effectivePlan === 'free' ? models ?? [] : []), codingModels: res.codingModels ?? [], teacherModels, tenantModels,
+          isPaid, byoModels, byoProviders, fundingSurface, canChooseModel, canUseFrontierModels,
+          canUsePremiumModels,
+          ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),
+          premiumModels,
+        };
+        return value;
       })
-      .catch(() => {
-        inflight = null; // allow a later retry after a transient failure
-        return EMPTY;
-      });
-  }
-  return inflight;
+      .catch(() => EMPTY));
 }
 
 /** Drop the module cache so the next mount re-fetches (call after creating/editing
  *  a tenant model, so freshly-saved "LLMs" show up in every picker). */
 export function invalidateLlmModels(): void {
-  cache = null;
-  inflight = null;
+  invalidateClientCache(CACHE_KEY);
 }
 
 export function useLlmModels(): LlmModelLists {
-  const [state, setState] = useState<LlmModelLists>(cache ?? EMPTY);
+  const [state, setState] = useState<LlmModelLists>(readClientCached(CACHE_KEY) ?? EMPTY);
   useEffect(() => {
     let alive = true;
     load().then((r) => { if (alive) setState(r); });
     return () => { alive = false; };
   }, []);
   return state;
+}
+
+/**
+ * The composer's model surface, grouped by WHO PAYS — the exact shape the shared
+ * `/` options menu consumes. Every chat surface (Brain panel, Creation Canvas)
+ * reads it from here, so no two composers can offer different lists or price the
+ * same premium model differently.
+ */
+export function useChatModelOptions(): { options: ChatModelOptions; canChooseModel: boolean } {
+  const lists = useLlmModels();
+  const t = useTranslations('chatInput');
+  // The two funding lines that carry per-row values (the vendor billed, the metered
+  // price) are formatted HERE, through next-intl, and ride each row's `cost` — the
+  // menu's own label defaults only cover rows a host does not price itself.
+  return useMemo(() => ({
+    options: {
+      configured: lists.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
+      // `byoVendorLabel` is the SHARED vendor map, so a connected account reads the same
+      // ('Kimi Code', not 'kimi-code') here, in the editor composer, and in its QuickPick.
+      byo: lists.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor, cost: t('byoDetail', { vendor: byoVendorLabel(vendor) }) })),
+      free: lists.freeModels,
+      plan: lists.models,
+      paid: lists.premiumModels.map((model) => ({
+        id: model.id,
+        cost: t('paidCostDetail', { input: perMillionUsd(model.pricing.prompt), output: perMillionUsd(model.pricing.completion) }),
+      })),
+    },
+    canChooseModel: lists.canChooseModel,
+  }), [lists, t]);
 }

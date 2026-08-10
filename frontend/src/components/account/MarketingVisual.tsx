@@ -9,10 +9,10 @@
  * Shared by the /register split-panel and the post-OAuth role chooser so the
  * two surfaces stay visually identical.
  */
-export default function MarketingVisual({ variant }: { variant: 'standard' | 'freelancer' }) {
+export default function MarketingVisual({ variant }: { variant: 'standard' | 'freelancer' | 'sales' }) {
   const wrap: React.CSSProperties = {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 'var(--radius-xl)',
     marginBottom: 24,
     padding: '20px 20px 8px',
     background: 'linear-gradient(135deg, var(--surface-coral-soft), transparent 70%)',
@@ -43,7 +43,19 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
           <circle cx="204" cy="102" r="3" fill="var(--coral-bright)" />
           {/* Play badge (hired.video résumé) */}
           <circle cx="278" cy="102" r="14" fill="var(--coral-bright)" />
-          <path d="M274 96l8 6-8 6z" fill="#fff" />
+          <path d="M274 96l8 6-8 6z" fill="var(--text-on-accent)" />
+        </svg>
+      </div>
+    );
+  }
+  if (variant === 'sales') {
+    return (
+      <div style={wrap} aria-hidden>
+        <svg viewBox="0 0 320 150" width="100%" role="presentation" style={{ display: 'block' }}>
+          <rect x="18" y="16" width="284" height="116" rx="14" fill="var(--bg-elevated)" stroke="var(--border-subtle)" />
+          {[86, 65, 42, 24].map((w, i) => <rect key={w} x="38" y={35 + i * 22} width={w} height="10" rx="5" fill="var(--coral-bright)" opacity={1 - i * .16} />)}
+          <path d="M155 104 L188 78 L220 87 L274 39" fill="none" stroke="var(--coral-bright)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          {[155, 188, 220, 274].map((x, i) => <circle key={x} cx={x} cy={[104, 78, 87, 39][i]} r="6" fill="var(--bg-elevated)" stroke="var(--coral-bright)" strokeWidth="3" />)}
         </svg>
       </div>
     );
@@ -56,16 +68,29 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
           <line key={i} x1="160" y1="75" x2={x} y2={y} stroke="var(--coral-bright)" strokeWidth="1.5" opacity="0.4" />
         ))}
         {/* Specialist nodes */}
-        {[[70, 40, '🧠'], [70, 110, '🔁'], [250, 40, '🧪'], [250, 110, '▦']].map(([x, y, icon], i) => (
+        {[[70, 40], [70, 110], [250, 40], [250, 110]].map(([x, y], i) => (
           <g key={i}>
             <circle cx={x as number} cy={y as number} r="20" fill="var(--bg-elevated)" stroke="var(--border-subtle)" />
-            <text x={x as number} y={(y as number) + 6} textAnchor="middle" fontSize="16">{icon as string}</text>
+            <circle cx={x as number} cy={y as number} r="7" fill="none" stroke="var(--coral-bright)" strokeWidth="1.6" />
+            <circle cx={x as number} cy={y as number} r="2" fill="var(--coral-bright)" />
           </g>
         ))}
         {/* Central hub (your agent) */}
         <circle cx="160" cy="75" r="30" fill="var(--coral-bright)" opacity="0.15" />
         <circle cx="160" cy="75" r="24" fill="var(--coral-bright)" />
-        <text x="160" y="81" textAnchor="middle" fontSize="20">🚀</text>
+        <g
+          fill="none"
+          stroke="var(--text-on-accent)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Briefcase + rising line: business ownership and growth. */}
+          <path d="M154 66v-3h12v3" />
+          <rect x="147" y="66" width="26" height="19" rx="3" />
+          <path d="m152 80 5-5 4 3 7-7" />
+          <path d="M164 71h4v4" />
+        </g>
       </svg>
     </div>
   );

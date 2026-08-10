@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { Icon } from '@/components/ui/Icon';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,8 +10,6 @@ import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
-  Controls,
-  MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -30,16 +29,21 @@ import {
   type WorkflowTriggerInfo,
 } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
+import { downloadText } from '@/lib/download';
 import type { Project } from '@/lib/types';
-import { BuilderNode, type BuilderNodeData } from './BuilderNode';
+import { BuilderNode, configSummary, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { EvermindBuildPanel } from './EvermindBuildPanel';
-import { NODE_GROUPS, NODE_KINDS, NODE_KIND_MAP } from './nodeKinds';
+import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, type NodeGroup } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
   type Integration,
 } from './integrations';
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 
 /** dataTransfer MIME for palette → canvas drag-and-drop. */
 const DND_MIME = 'application/x-wf-node';
@@ -48,15 +52,15 @@ type DndPayload = { kind?: WorkflowNodeKind; integrationId?: string };
 const nodeTypes: NodeTypes = { builder: BuilderNode };
 
 const btnPrimary: React.CSSProperties = {
-  padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright, #f4726e)',
-  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '7px 14px', fontSize: 12.5, fontWeight: 600, background: 'var(--coral-bright)',
+  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '7px 12px', fontSize: 12.5, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const fieldStyle: React.CSSProperties = {
-  padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
 const groupLabelStyle: React.CSSProperties = {
@@ -69,7 +73,7 @@ function paletteItemStyle(accent: string): React.CSSProperties {
     padding: '6px 8px', marginBottom: 4, fontSize: 12, fontWeight: 600,
     background: 'var(--bg-elevated)', color: 'var(--text-primary)',
     border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${accent}`,
-    borderRadius: 7, cursor: 'grab',
+    borderRadius: 'var(--radius-sm)', cursor: 'grab',
   };
 }
 
@@ -119,9 +123,13 @@ interface Props {
   definitionId?: string | null;
   /** Pre-bind a new workflow to this project (from /workflows?projectId=…). */
   initialProjectId?: number | null;
+  /** Render inside an isolated Canvas focus surface without changing routes. */
+  embedded?: boolean;
+  onSaved?: (definitionId: string, name: string) => void;
+  onRunStarted?: (workflowId: number | string) => void;
 }
 
-export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props) {
+export function WorkflowBuilder({ definitionId, initialProjectId = null, embedded = false, onSaved, onRunStarted }: Props) {
   const router = useRouter();
   const t = useTranslations('evermindBuild');
   const tc = useTranslations('common');
@@ -140,6 +148,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!definitionId);
   const [buildOpen, setBuildOpen] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
 
   useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
   // Projects power the binding selector — a workflow runs under a project, or is
@@ -182,6 +191,45 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   const rfRef = useRef<ReactFlowInstance<Node<BuilderNodeData>, Edge> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [paletteSearch, setPaletteSearch] = useState('');
+
+  const cleanLayout = useCanvasCleanLayout({ boardRef: canvasRef, instanceRef: rfRef, setNodes, edges });
+
+  const threeD = useCanvasThreeD();
+  /**
+   * The one place a node family is named for a reader.
+   *
+   * The palette headings and the 3D group badge are the same seven families, so
+   * they read from one translation rather than each shipping its own copy of the
+   * catalog's internal English.
+   */
+  const nodeGroupLabel = useCallback(
+    (group: NodeGroup) => t(`nodeGroup.${NODE_GROUP_KEYS[group]}` as 'nodeGroup.trigger'),
+    [t],
+  );
+  /**
+   * How a step reads in the 3D space.
+   *
+   * A workflow IS a dependency flow, so the depth axis is the graph's own subject:
+   * stacked by it, "what runs after what" is distance rather than a line to follow,
+   * and a branch that rejoins three steps later reads at a glance. The node-kind
+   * catalog already owns each step's icon, accent and family, so the space uses
+   * exactly the vocabulary the palette and the flat node do.
+   */
+  const describeThreeD = useCallback((node: Node<BuilderNodeData>): Canvas3DDescriptor => {
+    const meta = NODE_KIND_MAP[node.data.kind];
+    return {
+      label: node.data.label || meta?.label || node.data.kind,
+      sublabel: configSummary(node.data.kind, node.data.config ?? {}),
+      group: nodeGroupLabel(meta?.group ?? 'Integrations'),
+      icon: meta?.icon,
+      accent: meta?.accent,
+      depthOffset: canvas3dDepthOffset(node),
+    };
+  }, [nodeGroupLabel]);
+  const moveThreeD = useCallback(
+    (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
+    [setNodes],
+  );
 
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, id: crypto.randomUUID() }, eds)),
@@ -290,13 +338,15 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
         await workflowDefinitions.update(defId, { name: nameVal, definition: graph, ...runTargetFields });
         setStatus(t('statusSaved'));
         refreshTriggers(defId);
+        onSaved?.(defId, nameVal);
         return defId;
       }
       const created = await workflowDefinitions.create({ name: nameVal, definition: graph, ...runTargetFields });
       setDefId(created.id);
-      router.replace(`/workflows/builder?id=${created.id}`);
+      if (!embedded) router.replace(`/workflows/builder?id=${created.id}`);
       setStatus(t('statusSaved'));
       refreshTriggers(created.id);
+      onSaved?.(created.id, nameVal);
       return created.id;
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusSaveFailed'));
@@ -304,7 +354,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
     } finally {
       setBusy(false);
     }
-  }, [defId, name, toGraph, router, runTargetFields, refreshTriggers]);
+  }, [defId, embedded, name, onSaved, refreshTriggers, router, runTargetFields, toGraph]);
 
   const run = useCallback(async () => {
     if (!runTarget) { setStatus(t('statusSelectRunTarget')); return; }
@@ -315,13 +365,15 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       const id = await save();             // ensure the latest graph + target is persisted
       if (!id) return;
       const { workflowId } = await workflowDefinitions.run(id, runTarget);
-      router.push(`/workflows?run=${workflowId}`);
+      onRunStarted?.(workflowId);
+      if (!embedded) router.push(`/workflows?run=${workflowId}`);
+      else setStatus(`Workflow run ${workflowId} started`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusRunFailed'));
     } finally {
       setBusy(false);
     }
-  }, [runTarget, nodes.length, save, router]);
+  }, [embedded, nodes.length, onRunStarted, router, runTarget, save]);
 
   // Load a one-click Evermind BUILD template onto the canvas (replaces the graph)
   // as an editable, wired step chain — then the user runs it with "🧠 Build".
@@ -357,12 +409,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       const id = await save();
       if (!id) return;
       const yaml = await workflowDefinitions.exportYaml(id);
-      const url = URL.createObjectURL(new Blob([yaml], { type: 'application/yaml' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(name.trim() || 'workflow').replace(/[^a-z0-9-_]+/gi, '_')}.yaml`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadText(yaml, `${(name.trim() || 'workflow').replace(/[^a-z0-9-_]+/gi, '_')}.yaml`, 'application/yaml');
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusExportFailed'));
     } finally {
@@ -378,14 +425,28 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       try {
         const text = await file.text();
         const created = await workflowDefinitions.importYaml(file.name.replace(/\.ya?ml$|\.json$/i, ''), text);
-        router.push(`/workflows/builder?id=${created.id}`);
+        if (!embedded) {
+          router.push(`/workflows/builder?id=${created.id}`);
+        } else {
+          const detail = await workflowDefinitions.get(created.id);
+          setDefId(detail.id);
+          setName(detail.name);
+          setProjectId(detail.projectId ?? null);
+          setRunTarget(detail.runTargetRuntime === 'cloud'
+            ? { runtime: 'cloud', cloudAgentRef: detail.runTargetCloudAgentRef ?? null }
+            : detail.runTargetAgentHostId ? { runtime: 'host', agentHostId: detail.runTargetAgentHostId } : null);
+          setNodes(detail.definition.nodes.map((node) => ({ id: node.id, type: 'builder', position: node.position, data: { kind: node.kind, label: node.label, config: node.config ?? {} } })));
+          setEdges(detail.definition.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target })));
+          onSaved?.(detail.id, detail.name);
+          setStatus(t('statusSaved'));
+        }
       } catch (e) {
         setStatus(e instanceof Error ? e.message : t('statusImportFailed'));
       } finally {
         setBusy(false);
       }
     },
-    [router],
+    [embedded, onSaved, router, setEdges, setNodes, t],
   );
 
   const selectedNode = useMemo(
@@ -394,7 +455,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   );
 
   if (loading) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
+    return <div style={{ padding: 24, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
   }
 
   const q = paletteSearch.trim().toLowerCase();
@@ -412,7 +473,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ ...fieldStyle, fontWeight: 700, fontSize: 14, minWidth: 220, flex: 1 }}
+          style={{ ...fieldStyle, fontWeight: 700, fontSize: 'var(--font-size-small)', minWidth: 220, flex: 1 }}
           placeholder={t('workflowNamePlaceholder')}
         />
         <Select
@@ -466,10 +527,10 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void importYaml(f); e.target.value = ''; }}
         />
         {hasBuild && (
-          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}>🧠 {t('builderBuild')}</button>
+          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}><Icon source="🧠" size="1em" /> {t('builderBuild')}</button>
         )}
-        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ {t('builderRun')}</button>
-        {status && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{status}</span>}
+        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}><Icon source="▶" size="1em" /> {t('builderRun')}</button>
+        {status && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{status}</span>}
       </div>
 
       <EvermindBuildPanel
@@ -487,9 +548,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             value={paletteSearch}
             onChange={(e) => setPaletteSearch(e.target.value)}
             placeholder={t('searchIntegrations')}
-            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 12 }}
+            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 'var(--font-size-small)' }}
           />
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
+          <div style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
 
           {/* Core node kinds */}
           {NODE_GROUPS.map((group) => {
@@ -497,7 +558,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             if (!items.length) return null;
             return (
               <div key={group} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{group}</div>
+                <div style={groupLabelStyle}>{nodeGroupLabel(group)}</div>
                 {items.map((m) => (
                   <button
                     key={m.kind}
@@ -508,7 +569,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
                     title={m.blurb}
                     style={paletteItemStyle(m.accent)}
                   >
-                    <span>{m.icon}</span> {m.label}
+                    <Icon source={m.icon} size={18} /> {m.label}
                   </button>
                 ))}
               </div>
@@ -521,7 +582,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             if (!items.length) return null;
             return (
               <div key={cat.id} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{cat.icon} {cat.label}</div>
+                <div style={groupLabelStyle}><Icon source={cat.icon} size={16} /> {cat.label}</div>
                 {items.map((i) => (
                   <button
                     key={i.id}
@@ -532,14 +593,14 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
                     title={i.description}
                     style={paletteItemStyle(integrationAccent(i.category))}
                   >
-                    <span>{integrationIcon(i)}</span> {i.label}
+                    <Icon source={integrationIcon(i)} size={18} /> {i.label}
                   </button>
                 ))}
               </div>
             );
           })}
           {filteredIntegrations.length === 0 && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
           )}
         </div>
 
@@ -550,6 +611,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           onDragOver={onCanvasDragOver}
           onDrop={onCanvasDrop}
         >
+          <Canvas3DControlsProvider>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -561,15 +623,32 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             onNodeClick={(_, n) => setSelectedId(n.id)}
             onPaneClick={() => setSelectedId(null)}
             fitView
+            fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }}
+            minZoom={CANVAS_FIT_MIN_ZOOM}
             proOptions={{ hideAttribution: true }}
           >
             <Background color="var(--border-subtle)" gap={18} />
-            <Controls />
-            <MiniMap pannable zoomable style={{ background: 'var(--bg-deep)' }} />
+            <CanvasCommands
+              minimapOpen={minimapOpen}
+              setMinimapOpen={setMinimapOpen}
+              onCleanLayout={cleanLayout}
+              minimapStyle={{ background: 'var(--bg-deep)' }}
+              {...threeD.commandProps}
+            />
           </ReactFlow>
+          {threeD.active && <Canvas3DView
+            nodes={nodes}
+            edges={edges.map((edge) => ({ source: edge.source, target: edge.target }))}
+            describe={describeThreeD}
+            selectedIds={selectedId ? [selectedId] : []}
+            onSelect={setSelectedId}
+            onMove={moveThreeD}
+            onExit={threeD.exit}
+          />}
+          </Canvas3DControlsProvider>
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center' }}>
                 {t('canvasHintLine1')}<br />{t('canvasHintLine2')}
               </div>
             </div>

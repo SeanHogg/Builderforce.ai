@@ -5,6 +5,7 @@
  * and the meeting scheduler stay provider-agnostic.
  */
 import type { Env } from '../../env';
+import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
 
 export type CalendarProviderName = 'google' | 'microsoft';
 
@@ -245,9 +246,7 @@ export function getCalendarProvider(name: string): CalendarProvider | null {
 
 /** Providers whose OAuth client credentials are configured on this environment. */
 export function availableCalendarProviders(env: Env): CalendarProviderName[] {
-  const rec = env as unknown as Record<string, string | undefined>;
-  return (Object.keys(PROVIDERS) as CalendarProviderName[]).filter((n) => {
-    const p = PROVIDERS[n];
-    return !!rec[p.clientIdKey as string] && !!rec[p.clientSecretKey as string];
-  });
+  const rec = env as unknown as Record<string, unknown>;
+  return (Object.keys(PROVIDERS) as CalendarProviderName[])
+    .filter((n) => isProviderOAuthConfigured(rec, PROVIDERS[n]));
 }

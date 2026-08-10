@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * RepoService — application service for multi-repo associations and
  * PR/branch dispatch.
@@ -219,7 +220,9 @@ export class RepoService {
         eq(pullRequests.branchName, message.branchName),
         isNull(pullRequests.number),
       ))
-      .catch(() => { /* best-effort cleanup — never block the new dispatch record */ });
+      .catch((error) => { /* best-effort cleanup — never block the new dispatch record */ 
+        reportCaughtError(error, { source: "application/repos/RepoService.ts", operation: "dispatchPrCreation" });
+      });
 
     // Record the pull request as 'open' (the agentHost later calls recordPrResult).
     const [prRow] = await this.db

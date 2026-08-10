@@ -17,6 +17,7 @@ import {
   type Persona, type Lens,
 } from './lensPersona';
 import { memberPersonasApi } from './personaCadenceApi';
+import { getOrSetClientCached, readClientCached } from '@/infrastructure/http/readThrough';
 
 export interface LensPersonaState {
   /** Loaded primary persona (defaults to 'ic' until resolved). */
@@ -35,28 +36,24 @@ export interface LensPersonaState {
 }
 
 // Module-level cache so multiple mounts share one fetch per session.
-let cached: Persona | null = null;
-let inFlight: Promise<Persona> | null = null;
+const CACHE_KEY = 'lens-persona:primary';
 
 async function loadPersona(): Promise<Persona> {
-  if (cached) return cached;
-  if (!inFlight) {
-    inFlight = memberPersonasApi.get()
-      .then((r) => { cached = r.primary ?? 'ic'; return cached; })
-      .catch(() => { cached = 'ic'; return cached; })
-      .finally(() => { inFlight = null; });
-  }
-  return inFlight;
+  return getOrSetClientCached(CACHE_KEY, () => memberPersonasApi.get()
+    .then((r) => r.primary ?? 'ic')
+    .catch(() => 'ic' as Persona));
 }
 
 export function useLensPersona(): LensPersonaState {
+  const cached = readClientCached<Persona>(CACHE_KEY);
   const [persona, setPersona] = useState<Persona>(cached ?? 'ic');
   const [loading, setLoading] = useState(!cached);
   const [loaded, setLoaded] = useState(!!cached);
 
   useEffect(() => {
     let alive = true;
-    if (cached) { setPersona(cached); setLoading(false); setLoaded(true); return; }
+    const current = readClientCached<Persona>(CACHE_KEY);
+    if (current) { setPersona(current); setLoading(false); setLoaded(true); return; }
     void loadPersona().then((p) => {
       if (!alive) return;
       setPersona(p); setLoading(false); setLoaded(true);

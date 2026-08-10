@@ -20,7 +20,7 @@ Builderforce.ai is the same seven layers — built as **one platform**. This pos
 
 | # | Layer | The reference design | Builderforce.ai |
 |---|-------|----------------------|-----------------|
-| 1 | Foundation model | Pick one vendor | Multi-vendor gateway, 30+ providers, learned routing + fallback |
+| 1 | Foundation model | Pick one vendor | Supported multi-vendor gateway, routing + fallback |
 | 2 | Orchestration | LangGraph ReAct loop | Native ReAct loop + multi-agent orchestrator (roles, DAG, retries) |
 | 3 | Memory | A library for working + episodic | All four memory types, SSM-native, write-through cognition |
 | 4 | Vector DB & RAG | Pinecone/Chroma + embeddings | **Chunking + hybrid (dense+BM25) + rerank** over LanceDB or SSM store |
@@ -32,7 +32,7 @@ Five of these already exceeded the reference design. Two — RAG and evaluation 
 
 ## Layer 1 — Foundation model
 
-The reference advice is "choose GPT-5.5 or Claude or Gemini." Builderforce.ai treats the model as a **swappable, routed resource** rather than a commitment. One OpenAI-compatible gateway fronts 30+ providers (OpenRouter, Cerebras, NVIDIA NIM, Cloudflare Workers AI, Ollama, Anthropic direct). It learns from run outcomes which model wins for a given action type and biases routing toward it, exhausts cheaper models before premium ones, and fails over on capacity errors — all behind a single endpoint with BYO keys and adjustable reasoning effort.
+Builderforce.ai treats the model as a **swappable, routed resource** rather than a permanent commitment. Its OpenAI-compatible gateway exposes the providers available in the current catalog and supports configured routing, fallback, BYO credentials, and reasoning controls. Availability varies by plan, region, credentials, and runtime.
 
 **Verdict: exceeds.** You don't bet the product on one vendor's roadmap.
 

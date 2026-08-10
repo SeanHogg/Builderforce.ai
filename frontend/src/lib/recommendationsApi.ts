@@ -8,6 +8,28 @@ import { apiRequest } from './apiClient';
 
 export type RecSeverity = 'critical' | 'warning' | 'info';
 export type RecCategory = 'cost' | 'quality' | 'allocation' | 'delivery';
+export type RecLinkKind = 'budget' | 'model' | 'allocation_category' | 'dora' | 'project' | 'initiative';
+export type RecActionKind = 'navigate' | 'reassign' | 'update_status' | 'add_due_date' | 'hide';
+
+export interface RecLink {
+  kind: RecLinkKind;
+  id?: string | number;
+  label: string;
+  href?: string;
+  field?: string;
+}
+
+export interface RecAction {
+  label: string;
+  kind: RecActionKind;
+  href?: string;
+}
+
+export interface RecDataTrace {
+  field: string;
+  value: string;
+  source: string;
+}
 
 export interface Recommendation {
   key: string;
@@ -17,6 +39,10 @@ export interface Recommendation {
   detail: string;
   metric: string;
   recommendation: string;
+  action?: RecAction;
+  links?: RecLink[];
+  whyItMatters?: string;
+  dataTrace?: RecDataTrace[];
   rank: number;
 }
 
@@ -48,6 +74,6 @@ export const recommendationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recKey }),
     }),
-  space: (days = 30): Promise<SpaceMetrics> =>
-    apiRequest<SpaceMetrics>(`/api/insights/space?days=${days}`),
+  space: (days = 30, projectId?: number | null): Promise<SpaceMetrics> =>
+    apiRequest<SpaceMetrics>(`/api/insights/space?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 };

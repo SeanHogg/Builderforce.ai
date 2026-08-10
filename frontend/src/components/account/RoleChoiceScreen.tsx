@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { REGISTER_MARKETING } from '@/lib/content';
 import MarketingVisual from './MarketingVisual';
 import AccountTypeChooser, { type AccountType } from './AccountTypeChooser';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Full-screen, blocking role chooser shown by the onboarding gate to an account
@@ -17,12 +18,13 @@ import AccountTypeChooser, { type AccountType } from './AccountTypeChooser';
 export default function RoleChoiceScreen({
   onSelect,
 }: {
-  onSelect: (accountType: AccountType) => Promise<void>;
+  onSelect: (accountType: AccountType, ageAttested: boolean) => Promise<void>;
 }) {
   const t = useTranslations('welcomeRole');
   const [selected, setSelected] = useState<AccountType>('standard');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ageAttested, setAgeAttested] = useState(false);
 
   const marketing = REGISTER_MARKETING[selected];
 
@@ -30,7 +32,7 @@ export default function RoleChoiceScreen({
     setError(null);
     setSubmitting(true);
     try {
-      await onSelect(selected);
+      await onSelect(selected, ageAttested);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error'));
       setSubmitting(false);
@@ -58,7 +60,7 @@ export default function RoleChoiceScreen({
           maxWidth: 860,
           background: 'var(--surface-card)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 20,
+          borderRadius: 'var(--radius-xl)',
           boxShadow: '0 16px 48px var(--shadow-coral-soft)',
           padding: 'clamp(24px, 4vw, 40px)',
         }}
@@ -67,18 +69,18 @@ export default function RoleChoiceScreen({
           <span
             style={{
               display: 'inline-block', marginBottom: 12,
-              fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+              fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
-              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
               fontFamily: 'var(--font-display)',
             }}
           >
             {t('eyebrow')}
           </span>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.4rem, 3vw, 1.75rem)', fontWeight: 700, margin: '0 0 8px' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, margin: '0 0 8px' }}>
             {t('title')}
           </h1>
-          <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
             {t('subtitle')}
           </p>
         </div>
@@ -96,21 +98,21 @@ export default function RoleChoiceScreen({
             style={{
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 14,
+              borderRadius: 'var(--radius-lg)',
               padding: 18,
             }}
           >
             <MarketingVisual variant={selected} />
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: '0 0 6px' }}>
               {marketing.heading}
             </h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 14px' }}>
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 14px' }}>
               {marketing.intro}
             </p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {marketing.bullets.slice(0, 4).map((b) => (
-                <li key={b.title} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <span style={{ flexShrink: 0 }} aria-hidden>{b.icon}</span>
+                <li key={b.title} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>
               ))}
@@ -124,32 +126,33 @@ export default function RoleChoiceScreen({
               marginTop: 20,
               background: 'rgba(239,68,68,0.12)',
               border: '1px solid rgba(239,68,68,0.4)',
-              color: '#f87171',
-              borderRadius: 10,
+              color: 'var(--error-text)',
+              borderRadius: 'var(--radius-lg)',
               padding: '10px 14px',
-              fontSize: '0.875rem',
+              fontSize: 'var(--font-size-small)',
             }}
           >
             {error}
           </div>
         )}
 
+        <label style={{ display: 'flex', gap: 10, marginTop: 20, color: 'var(--text-secondary)' }}><input type="checkbox" checked={ageAttested} onChange={(e) => setAgeAttested(e.target.checked)} /> I confirm I am at least 18 years old.</label>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
           <button
             type="button"
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || !ageAttested}
             style={{
               padding: '13px 28px',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
-              fontSize: '0.95rem',
+              fontSize: 'var(--font-size-body)',
               cursor: submitting ? 'wait' : 'pointer',
-              opacity: submitting ? 0.6 : 1,
+              opacity: submitting || !ageAttested ? 0.6 : 1,
               boxShadow: '0 6px 20px var(--shadow-coral-mid)',
               letterSpacing: '0.02em',
             }}

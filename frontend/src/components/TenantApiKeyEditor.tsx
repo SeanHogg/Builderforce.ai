@@ -17,7 +17,7 @@ import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 const cardStyle: React.CSSProperties = {
   marginTop: 10,
   padding: 14,
-  borderRadius: 10,
+  borderRadius: 'var(--radius-lg)',
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-subtle)',
 };
@@ -72,7 +72,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
         style={{
           width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
           background: 'var(--bg-base)', color: 'var(--text-primary)',
-          border: '1px solid var(--border-subtle)', borderRadius: 8,
+          border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
           boxSizing: 'border-box',
         }}
       />
@@ -87,7 +87,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
       />
 
       {error && (
-        <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginTop: 8 }}>{error}</div>
+        <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 8 }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -98,7 +98,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
           style={{
             padding: '6px 12px', fontSize: 12, fontWeight: 600,
             background: 'var(--surface-interactive)', color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
             opacity: saving || name.trim().length === 0 ? 0.5 : 1,
           }}
         >
@@ -111,7 +111,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
           style={{
             padding: '6px 12px', fontSize: 12, fontWeight: 600,
             background: 'none', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+            border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
           }}
         >
           Cancel

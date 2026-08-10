@@ -1,0 +1,3 @@
+# International data transfer assessment
+
+Inventory exporter/importer, roles, countries, data, purposes, frequency, onward transfers, remote access, storage and key locations. Select the lawful mechanism (adequacy, certification/framework where applicable, SCCs plus UK Addendum, or narrow derogation). For SCC transfers, assess local surveillance/redress law, practical access likelihood, encryption and key control, minimization/pseudonymization, transparency, challenge policy, and onward-transfer controls. Record residual risk and approval; re-evaluate after provider, country, law, or architecture changes.

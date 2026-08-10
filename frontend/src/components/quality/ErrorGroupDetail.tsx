@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
@@ -15,15 +16,15 @@ const panel: React.CSSProperties = {
   padding: 24, overflowY: 'auto', boxSizing: 'border-box',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
-  border: 'none', borderRadius: 8, cursor: 'pointer',
+  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
+  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const btnSubtle: React.CSSProperties = {
   padding: '7px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const pre: React.CSSProperties = {
-  background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12,
+  background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 12,
   fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
 };
 
@@ -98,10 +99,10 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
       <div style={panel} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>{g?.title ?? t('loading')}</h2>
-          <button type="button" style={btnSubtle} onClick={onClose} aria-label={t('detail.close')}>✕</button>
+          <button type="button" style={btnSubtle} onClick={onClose} aria-label={t('detail.close')}><Icon source="✕" size="1em" /></button>
         </div>
 
-        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
         {g && (
           <>
@@ -109,7 +110,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
               {g.type ? `${g.type} · ` : ''}{t(`level.${g.level}`)} · {t(`status.${g.status}`)}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 16 }}>
               <Metric label={t('detail.events')} value={g.eventCount} />
               <Metric label={t('detail.users')} value={detail?.affectedUsers ?? g.userCount} />
               <Metric label={t('detail.environment')} value={g.environment ?? '—'} />
@@ -145,7 +146,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
             )}
 
             {fixMsg && (
-              <div style={{ marginTop: 14, fontSize: 13, color: '#16a34a' }}>{fixMsg}</div>
+              <div style={{ marginTop: 14, fontSize: 13, color: 'var(--success-text)' }}>{fixMsg}</div>
             )}
 
             {/* Actions */}
@@ -174,7 +175,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
 
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div style={{ background: 'var(--bg-deep)', borderRadius: 8, padding: 10 }}>
+    <div style={{ background: 'var(--bg-deep)', borderRadius: 'var(--radius-md)', padding: 10 }}>
       <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
       <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</div>
     </div>

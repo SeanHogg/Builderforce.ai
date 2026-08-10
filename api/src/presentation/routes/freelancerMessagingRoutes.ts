@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * In-platform messaging for the freelance marketplace — /api/conversations/*.
  *
@@ -17,13 +18,27 @@
  * private, and mutates on every send/read, so a cache would thrash and risk staleness
  * with no cross-request reuse — the same rationale the notification feed follows. New
  * messages surface via the shared notification pipeline (kind='message').
+ *
+ * Data access is Drizzle end-to-end (query builder; `db.execute(sql\`\`)` only where the
+ * builder cannot express the statement). No raw `neon()` client lives here.
  */
 import { Hono } from 'hono';
-import { neon } from '@neondatabase/serverless';
+import { and, asc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt, verifyJwt } from '../../infrastructure/auth/JwtService';
 import { notify } from '../../application/notifications/notify';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import {
+  freelancerConversations,
+  freelancerEngagements,
+  freelancerMessages,
+  freelancerProfiles,
+  jobPostings,
+  jobProposals,
+  tenants,
+  users,
+} from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 
@@ -31,77 +46,113 @@ const MESSAGE_MAX = 8000;
 const ATTACH_MAX_BYTES = 15 * 1024 * 1024;
 const SUBJECT_TYPES = ['engagement', 'job', 'proposal', 'direct'] as const;
 
-type Sql = ReturnType<typeof neon<false, false>>;
+type ConversationRow = typeof freelancerConversations.$inferSelect;
+type ConversationView = ConversationRow & {
+  tenantName?: string | null;
+  freelancerName?: string | null;
+  unread?: number | null;
+};
+type MessageView = typeof freelancerMessages.$inferSelect & { senderName?: string | null };
 
-const mapMessage = (r: Record<string, unknown>, freelancerUserId: string) => ({
-  id: r.id as string,
-  conversationId: r.conversation_id as string,
-  senderUserId: r.sender_user_id as string,
-  senderName: (r.sender_name as string) ?? null,
-  fromFreelancer: r.sender_user_id === freelancerUserId,
-  body: r.body as string,
-  attachmentName: (r.attachment_name as string) ?? null,
-  attachmentType: (r.attachment_type as string) ?? null,
-  hasAttachment: Boolean(r.attachment_key),
-  createdAt: r.created_at ?? null,
+const mapMessage = (r: MessageView, freelancerUserId: string) => ({
+  id: r.id,
+  conversationId: r.conversationId,
+  senderUserId: r.senderUserId,
+  senderName: r.senderName ?? null,
+  fromFreelancer: r.senderUserId === freelancerUserId,
+  body: r.body,
+  attachmentName: r.attachmentName ?? null,
+  attachmentType: r.attachmentType ?? null,
+  hasAttachment: Boolean(r.attachmentKey),
+  createdAt: r.createdAt ?? null,
 });
 
-const mapConversation = (r: Record<string, unknown>) => ({
-  id: r.id as string,
-  tenantId: Number(r.tenant_id),
-  tenantName: (r.tenant_name as string) ?? null,
-  freelancerUserId: r.freelancer_user_id as string,
-  freelancerName: (r.freelancer_name as string) ?? null,
-  employerUserId: (r.employer_user_id as string) ?? null,
-  subjectType: (r.subject_type as string) ?? 'direct',
-  engagementId: (r.engagement_id as string) ?? null,
-  jobId: (r.job_id as string) ?? null,
-  proposalId: (r.proposal_id as string) ?? null,
-  projectId: r.project_id == null ? null : Number(r.project_id),
-  title: (r.title as string) ?? null,
-  lastMessageAt: r.last_message_at ?? null,
-  lastMessagePreview: (r.last_message_preview as string) ?? null,
+const mapConversation = (r: ConversationView) => ({
+  id: r.id,
+  tenantId: Number(r.tenantId),
+  tenantName: r.tenantName ?? null,
+  freelancerUserId: r.freelancerUserId,
+  freelancerName: r.freelancerName ?? null,
+  employerUserId: r.employerUserId ?? null,
+  subjectType: r.subjectType ?? 'direct',
+  engagementId: r.engagementId ?? null,
+  jobId: r.jobId ?? null,
+  proposalId: r.proposalId ?? null,
+  projectId: r.projectId == null ? null : Number(r.projectId),
+  title: r.title ?? null,
+  lastMessageAt: r.lastMessageAt ?? null,
+  lastMessagePreview: r.lastMessagePreview ?? null,
   unread: r.unread == null ? 0 : Number(r.unread),
-  updatedAt: r.updated_at ?? null,
+  updatedAt: r.updatedAt ?? null,
 });
 
-export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
+/** Conversations, newest-active first — the ordering both list views share. */
+const CONVERSATION_ORDER = [
+  sql`${freelancerConversations.lastMessageAt} DESC NULLS LAST`,
+  sql`${freelancerConversations.createdAt} DESC`,
+];
+
+/** Messages the OTHER side sent since this side's read watermark. `side` picks which
+ *  watermark and which direction of the sender_user_id = freelancer_user_id test. */
+const unreadCount = (side: 'employer' | 'freelancer') => {
+  // employer reads messages FROM the freelancer (=); the freelancer reads everything
+  // that is NOT from themselves (<>). Inverting this silently breaks unread badges.
+  const direction = side === 'employer'
+    ? sql`${freelancerMessages.senderUserId} = ${freelancerConversations.freelancerUserId}`
+    : sql`${freelancerMessages.senderUserId} <> ${freelancerConversations.freelancerUserId}`;
+  const watermark = side === 'employer'
+    ? freelancerConversations.employerLastReadAt
+    : freelancerConversations.freelancerLastReadAt;
+  return sql<number>`(SELECT COUNT(*) FROM ${freelancerMessages}
+      WHERE ${freelancerMessages.conversationId} = ${freelancerConversations}.id
+        AND ${direction}
+        AND ${freelancerMessages.createdAt} > COALESCE(${watermark}, 'epoch'))::int`;
+};
+
+export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
   /** Append a message to an already-authorized conversation, refresh the denormalized
    *  last-message cache, and notify the OTHER side. ONE writer both sides share. */
   async function appendMessage(
-    db: Sql, env: HonoEnv['Bindings'],
-    conv: Record<string, unknown>, senderUserId: string, body: string,
+    db: Db, env: HonoEnv['Bindings'],
+    conv: ConversationRow, senderUserId: string, body: string,
     attach?: { key: string; name: string; type: string } | null,
   ): Promise<{ id: string }> {
     const id = crypto.randomUUID();
     const trimmed = body.slice(0, MESSAGE_MAX);
-    await db`
-      INSERT INTO freelancer_messages (id, conversation_id, sender_user_id, body, attachment_key, attachment_name, attachment_type)
-      VALUES (${id}, ${conv.id as string}, ${senderUserId}, ${trimmed}, ${attach?.key ?? null}, ${attach?.name ?? null}, ${attach?.type ?? null})
-    `;
+    await db.insert(freelancerMessages).values({
+      id,
+      conversationId: conv.id,
+      senderUserId,
+      body: trimmed,
+      attachmentKey: attach?.key ?? null,
+      attachmentName: attach?.name ?? null,
+      attachmentType: attach?.type ?? null,
+    });
     const preview = (trimmed || (attach ? `📎 ${attach.name}` : '')).slice(0, 280);
-    await db`
-      UPDATE freelancer_conversations
-      SET last_message_at = NOW(), last_message_preview = ${preview}, last_sender_user_id = ${senderUserId},
-          updated_at = NOW()
-      WHERE id = ${conv.id as string}
-    `;
+    await db.update(freelancerConversations)
+      .set({
+        lastMessageAt: sql`NOW()`,
+        lastMessagePreview: preview,
+        lastSenderUserId: senderUserId,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(freelancerConversations.id, conv.id));
     // Notify the other party. Employer→freelancer targets freelancer_user_id; the
     // reverse targets the manager who opened the thread (employer_user_id fallback).
-    const freelancerUserId = conv.freelancer_user_id as string;
+    const freelancerUserId = conv.freelancerUserId;
     const fromFreelancer = senderUserId === freelancerUserId;
-    const [sender] = await db`SELECT display_name FROM users WHERE id = ${senderUserId}` as unknown as Record<string, unknown>[];
-    const senderName = (sender?.display_name as string) ?? (fromFreelancer ? 'A freelancer' : 'A client');
+    const [sender] = await db.select({ displayName: users.displayName })
+      .from(users).where(eq(users.id, senderUserId)).limit(1);
+    const senderName = sender?.displayName ?? (fromFreelancer ? 'A freelancer' : 'A client');
     if (fromFreelancer) {
-      const target = (conv.employer_user_id as string) ?? (conv.last_sender_user_id as string);
+      const target = conv.employerUserId ?? conv.lastSenderUserId;
       if (target && target !== senderUserId) {
-        await notify(db, env, { userId: target, tenantId: Number(conv.tenant_id), kind: 'message', title: `${senderName} sent you a message`, body: preview, ref: conv.id as string });
+        await notify(db, env, { userId: target, tenantId: Number(conv.tenantId), kind: 'message', title: `${senderName} sent you a message`, body: preview, ref: conv.id });
       }
     } else {
-      await notify(db, env, { userId: freelancerUserId, tenantId: Number(conv.tenant_id), kind: 'message', title: `${senderName} sent you a message`, body: preview, ref: conv.id as string });
+      await notify(db, env, { userId: freelancerUserId, tenantId: Number(conv.tenantId), kind: 'message', title: `${senderName} sent you a message`, body: preview, ref: conv.id });
     }
     return { id };
   }
@@ -125,12 +176,11 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
       const file = entry as unknown as File;
       if (file.size > ATTACH_MAX_BYTES) return { error: 'Attachment too large (max 15MB)', status: 413 };
       const type = file.type || 'application/octet-stream';
-      if (c.env.UPLOADS) {
-        const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-        const key = `messages/${senderUserId}/${crypto.randomUUID()}.${ext}`;
-        await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
-        attach = { key, name: file.name.slice(0, 255), type: type.slice(0, 120) };
-      }
+      if (!c.env.UPLOADS) return { error: 'Attachments are not available', status: 415 };
+      const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+      const key = `messages/${senderUserId}/${crypto.randomUUID()}.${ext}`;
+      await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
+      attach = { key, name: file.name.slice(0, 255), type: type.slice(0, 120) };
     }
     return { body, attach };
   }
@@ -140,36 +190,46 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
   // literal segment isn't swallowed. Accepts a tenant OR web token and authorizes the
   // viewer as a party to the conversation.
   router.get('/attachment/:messageId', async (c) => {
+    const db = buildDatabase(c.env);
     const messageId = c.req.param('messageId');
     const h = c.req.header('Authorization') ?? '';
     const token = h.startsWith('Bearer ') ? h.slice(7) : '';
     if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
-    const [row] = await sql(c.env)`
-      SELECT m.attachment_key, m.attachment_name, m.attachment_type, cv.tenant_id, cv.freelancer_user_id
-      FROM freelancer_messages m JOIN freelancer_conversations cv ON cv.id = m.conversation_id
-      WHERE m.id = ${messageId}
-    `;
-    if (!row || !row.attachment_key) return c.json({ error: 'Not found' }, 404);
+    const [row] = await db.select({
+      attachmentKey: freelancerMessages.attachmentKey,
+      attachmentName: freelancerMessages.attachmentName,
+      attachmentType: freelancerMessages.attachmentType,
+      tenantId: freelancerConversations.tenantId,
+      freelancerUserId: freelancerConversations.freelancerUserId,
+    })
+      .from(freelancerMessages)
+      .innerJoin(freelancerConversations, eq(freelancerConversations.id, freelancerMessages.conversationId))
+      .where(eq(freelancerMessages.id, messageId));
+    if (!row || !row.attachmentKey) return c.json({ error: 'Not found' }, 404);
     // Authorize: the freelancer (web token sub = freelancer_user_id) OR a tenant member
     // (tenant token tid = tenant_id). The two sides carry different token kinds, so try
     // the web verifier first, then the tenant verifier.
     let authorized = false;
     try {
       const p = await verifyWebJwt(token, c.env.JWT_SECRET);
-      if (p.sub && p.sub === row.freelancer_user_id) authorized = true;
-    } catch { /* not a web token */ }
+      if (p.sub && p.sub === row.freelancerUserId) authorized = true;
+    } catch (error) { /* not a web token */ 
+      reportCaughtError(error, { source: "presentation/routes/freelancerMessagingRoutes.ts", operation: "createFreelancerMessagingRoutes" });
+    }
     if (!authorized) {
       try {
         const p = await verifyJwt(token, c.env.JWT_SECRET);
-        if (p.tid != null && Number(p.tid) === Number(row.tenant_id)) authorized = true;
-      } catch { /* not a tenant token */ }
+        if (p.tid != null && Number(p.tid) === Number(row.tenantId)) authorized = true;
+      } catch (error) { /* not a tenant token */ 
+        reportCaughtError(error, { source: "presentation/routes/freelancerMessagingRoutes.ts", operation: "createFreelancerMessagingRoutes" });
+      }
     }
     if (!authorized) return c.json({ error: 'Forbidden' }, 403);
-    const obj = await c.env.UPLOADS.get(row.attachment_key as string);
+    const obj = await c.env.UPLOADS.get(row.attachmentKey);
     if (!obj) return c.json({ error: 'Not found' }, 404);
     const headers = new Headers();
-    headers.set('Content-Type', (row.attachment_type as string) ?? obj.httpMetadata?.contentType ?? 'application/octet-stream');
-    headers.set('Content-Disposition', `inline; filename="${encodeURIComponent((row.attachment_name as string) ?? 'attachment')}"`);
+    headers.set('Content-Type', row.attachmentType ?? obj.httpMetadata?.contentType ?? 'application/octet-stream');
+    headers.set('Content-Disposition', `inline; filename="${encodeURIComponent(row.attachmentName ?? 'attachment')}"`);
     headers.set('Cache-Control', 'private, max-age=3600');
     return new Response(obj.body, { headers });
   });
@@ -179,18 +239,20 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
 
   // GET /mine — the freelancer's conversations across all tenants, with unread counts.
   router.get('/mine', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
-    const rows = await sql(c.env)`
-      SELECT cv.*, t.name AS tenant_name, fu.display_name AS freelancer_name,
-        (SELECT COUNT(*) FROM freelancer_messages m WHERE m.conversation_id = cv.id
-           AND m.sender_user_id <> cv.freelancer_user_id
-           AND m.created_at > COALESCE(cv.freelancer_last_read_at, 'epoch'))::int AS unread
-      FROM freelancer_conversations cv
-      JOIN tenants t ON t.id = cv.tenant_id
-      JOIN users fu ON fu.id = cv.freelancer_user_id
-      WHERE cv.freelancer_user_id = ${userId}
-      ORDER BY cv.last_message_at DESC NULLS LAST, cv.created_at DESC LIMIT 200
-    ` as unknown as Record<string, unknown>[];
+    const rows = await db.select({
+      ...getTableColumns(freelancerConversations),
+      tenantName: tenants.name,
+      freelancerName: users.displayName,
+      unread: unreadCount('freelancer'),
+    })
+      .from(freelancerConversations)
+      .innerJoin(tenants, eq(tenants.id, freelancerConversations.tenantId))
+      .innerJoin(users, eq(users.id, freelancerConversations.freelancerUserId))
+      .where(eq(freelancerConversations.freelancerUserId, userId))
+      .orderBy(...CONVERSATION_ORDER)
+      .limit(200);
     const items = rows.map(mapConversation);
     return c.json({ items, unread: items.reduce((s, r) => s + r.unread, 0) });
   });
@@ -198,53 +260,76 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
   // POST /mine — freelancer opens a thread with a tenant they are ENGAGED with
   // (reuses the engagement-scoped thread when one exists).
   router.post('/mine', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ engagementId?: string; body?: string; title?: string }>().catch(() => ({} as Record<string, string>));
     if (!b.engagementId) return c.json({ error: 'engagementId required' }, 400);
-    const [eng] = await sql(c.env)`
-      SELECT id, tenant_id, project_id, title, created_by_user_id FROM freelancer_engagements
-      WHERE id = ${b.engagementId} AND freelancer_user_id = ${userId} AND terminated_at IS NULL
-    `;
+    const [eng] = await db.select({
+      id: freelancerEngagements.id,
+      tenantId: freelancerEngagements.tenantId,
+      projectId: freelancerEngagements.projectId,
+      title: freelancerEngagements.title,
+      createdByUserId: freelancerEngagements.createdByUserId,
+    })
+      .from(freelancerEngagements)
+      .where(and(
+        eq(freelancerEngagements.id, b.engagementId),
+        eq(freelancerEngagements.freelancerUserId, userId),
+        isNull(freelancerEngagements.terminatedAt),
+      ));
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
-    const conv = await getOrCreateConversation(sql(c.env), {
-      tenantId: Number(eng.tenant_id), freelancerUserId: userId,
-      employerUserId: (eng.created_by_user_id as string) ?? null,
-      subjectType: 'engagement', engagementId: eng.id as string, jobId: null, proposalId: null,
-      projectId: eng.project_id == null ? null : Number(eng.project_id),
-      title: (b.title as string) ?? (eng.title as string) ?? null,
+    const conv = await getOrCreateConversation(db, {
+      tenantId: Number(eng.tenantId), freelancerUserId: userId,
+      employerUserId: eng.createdByUserId ?? null,
+      subjectType: 'engagement', engagementId: eng.id, jobId: null, proposalId: null,
+      projectId: eng.projectId == null ? null : Number(eng.projectId),
+      title: b.title ?? eng.title ?? null,
     });
-    if (b.body && b.body.trim()) await appendMessage(sql(c.env), c.env, conv, userId, b.body.trim());
+    if (b.body && b.body.trim()) await appendMessage(db, c.env, conv, userId, b.body.trim());
     return c.json({ id: conv.id }, 201);
   });
 
   // GET /mine/:id/messages — thread messages (freelancer side).
   router.get('/mine/:id/messages', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const [conv] = await sql(c.env)`SELECT * FROM freelancer_conversations WHERE id = ${id} AND freelancer_user_id = ${userId}`;
+    const [conv] = await db.select().from(freelancerConversations)
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.freelancerUserId, userId)));
     if (!conv) return c.json({ error: 'Not found' }, 404);
-    return c.json({ conversation: mapConversation({ ...conv, unread: 0 }), messages: await loadMessages(sql(c.env), id, userId) });
+    return c.json({ conversation: mapConversation({ ...conv, unread: 0 }), messages: await loadMessages(db, id, userId) });
   });
 
   // POST /mine/:id/messages — freelancer sends (text or attachment).
   router.post('/mine/:id/messages', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const [conv] = await sql(c.env)`SELECT * FROM freelancer_conversations WHERE id = ${id} AND freelancer_user_id = ${userId}`;
+    const [conv] = await db.select().from(freelancerConversations)
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.freelancerUserId, userId)));
     if (!conv) return c.json({ error: 'Not found' }, 404);
     const payload = await readSendPayload(c, userId);
     if ('error' in payload) return c.json({ error: payload.error }, payload.status);
-    const { id: msgId } = await appendMessage(sql(c.env), c.env, conv, userId, payload.body, payload.attach);
-    // Sending implies reading everything before it on your side.
-    await sql(c.env)`UPDATE freelancer_conversations SET freelancer_last_read_at = NOW() WHERE id = ${id}`;
+    // Capture the read boundary BEFORE inserting. A peer message committed while this
+    // send is in flight remains newer than the watermark and cannot be marked read unseen.
+    const readThrough = new Date();
+    const { id: msgId } = await appendMessage(db, c.env, conv, userId, payload.body, payload.attach);
+    await db.update(freelancerConversations)
+      .set({ freelancerLastReadAt: readThrough })
+      .where(eq(freelancerConversations.id, id));
     return c.json({ id: msgId }, 201);
   });
 
   // POST /mine/:id/read — advance the freelancer's read watermark.
   router.post('/mine/:id/read', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    await sql(c.env)`UPDATE freelancer_conversations SET freelancer_last_read_at = NOW() WHERE id = ${id} AND freelancer_user_id = ${userId}`;
+    const rows = await db.update(freelancerConversations)
+      .set({ freelancerLastReadAt: sql`NOW()` })
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.freelancerUserId, userId)))
+      .returning({ id: freelancerConversations.id });
+    if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true });
   });
 
@@ -252,18 +337,20 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
 
   // GET / — this tenant's conversations, with unread counts.
   router.get('/', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
-    const rows = await sql(c.env)`
-      SELECT cv.*, t.name AS tenant_name, fu.display_name AS freelancer_name,
-        (SELECT COUNT(*) FROM freelancer_messages m WHERE m.conversation_id = cv.id
-           AND m.sender_user_id = cv.freelancer_user_id
-           AND m.created_at > COALESCE(cv.employer_last_read_at, 'epoch'))::int AS unread
-      FROM freelancer_conversations cv
-      JOIN tenants t ON t.id = cv.tenant_id
-      JOIN users fu ON fu.id = cv.freelancer_user_id
-      WHERE cv.tenant_id = ${tenantId}
-      ORDER BY cv.last_message_at DESC NULLS LAST, cv.created_at DESC LIMIT 200
-    ` as unknown as Record<string, unknown>[];
+    const rows = await db.select({
+      ...getTableColumns(freelancerConversations),
+      tenantName: tenants.name,
+      freelancerName: users.displayName,
+      unread: unreadCount('employer'),
+    })
+      .from(freelancerConversations)
+      .innerJoin(tenants, eq(tenants.id, freelancerConversations.tenantId))
+      .innerJoin(users, eq(users.id, freelancerConversations.freelancerUserId))
+      .where(eq(freelancerConversations.tenantId, tenantId))
+      .orderBy(...CONVERSATION_ORDER)
+      .limit(200);
     const items = rows.map(mapConversation);
     return c.json({ items, unread: items.reduce((s, r) => s + r.unread, 0) });
   });
@@ -271,6 +358,7 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
   // POST / — employer opens (or reuses) a conversation with a freelancer. Optionally
   // scoped to an engagement / job / proposal, with an optional first message.
   router.post('/', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const b = await c.req.json<{ freelancerUserId?: string; engagementId?: string; jobId?: string; proposalId?: string; subjectType?: string; title?: string; body?: string; projectId?: number }>();
@@ -279,63 +367,95 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
     let subjectType = SUBJECT_TYPES.includes(b.subjectType as never) ? (b.subjectType as string) : 'direct';
     let engagementId: string | null = null, jobId: string | null = null, proposalId: string | null = null, projectId: number | null = typeof b.projectId === 'number' ? b.projectId : null;
     if (b.engagementId) {
-      const [eng] = await sql(c.env)`SELECT id, project_id FROM freelancer_engagements WHERE id = ${b.engagementId} AND tenant_id = ${tenantId} AND freelancer_user_id = ${b.freelancerUserId}`;
+      const [eng] = await db.select({ id: freelancerEngagements.id, projectId: freelancerEngagements.projectId })
+        .from(freelancerEngagements)
+        .where(and(
+          eq(freelancerEngagements.id, b.engagementId),
+          eq(freelancerEngagements.tenantId, tenantId),
+          eq(freelancerEngagements.freelancerUserId, b.freelancerUserId),
+        ));
       if (!eng) return c.json({ error: 'Engagement not found' }, 404);
-      engagementId = eng.id as string; subjectType = 'engagement'; projectId = eng.project_id == null ? projectId : Number(eng.project_id);
+      engagementId = eng.id; subjectType = 'engagement'; projectId = eng.projectId == null ? projectId : Number(eng.projectId);
     }
     if (b.jobId) {
-      const [job] = await sql(c.env)`SELECT id, project_id FROM job_postings WHERE id = ${b.jobId} AND tenant_id = ${tenantId}`;
+      const [job] = await db.select({ id: jobPostings.id, projectId: jobPostings.projectId })
+        .from(jobPostings)
+        .where(and(eq(jobPostings.id, b.jobId), eq(jobPostings.tenantId, tenantId)));
       if (!job) return c.json({ error: 'Job not found' }, 404);
-      jobId = job.id as string; if (subjectType === 'direct') subjectType = 'job'; projectId = projectId ?? (job.project_id == null ? null : Number(job.project_id));
+      jobId = job.id; if (subjectType === 'direct') subjectType = 'job'; projectId = projectId ?? (job.projectId == null ? null : Number(job.projectId));
     }
     if (b.proposalId) {
-      const [pr] = await sql(c.env)`SELECT pr.id, pr.job_id FROM job_proposals pr JOIN job_postings j ON j.id = pr.job_id WHERE pr.id = ${b.proposalId} AND j.tenant_id = ${tenantId} AND pr.freelancer_user_id = ${b.freelancerUserId}`;
+      const [pr] = await db.select({ id: jobProposals.id, jobId: jobProposals.jobId })
+        .from(jobProposals)
+        .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
+        .where(and(
+          eq(jobProposals.id, b.proposalId),
+          eq(jobPostings.tenantId, tenantId),
+          eq(jobProposals.freelancerUserId, b.freelancerUserId),
+        ));
       if (!pr) return c.json({ error: 'Proposal not found' }, 404);
-      proposalId = pr.id as string; jobId = jobId ?? (pr.job_id as string); if (subjectType === 'direct') subjectType = 'proposal';
+      proposalId = pr.id; jobId = jobId ?? pr.jobId; if (subjectType === 'direct') subjectType = 'proposal';
     }
     // Must be a hireable target (published profile) — same gate as engagements.
-    const [prof] = await sql(c.env)`SELECT user_id FROM freelancer_profiles WHERE user_id = ${b.freelancerUserId} AND published = true`;
+    const [prof] = await db.select({ userId: freelancerProfiles.userId })
+      .from(freelancerProfiles)
+      .where(and(eq(freelancerProfiles.userId, b.freelancerUserId), eq(freelancerProfiles.published, true)));
     if (!prof && !engagementId) return c.json({ error: 'Freelancer not found' }, 404);
 
-    const conv = await getOrCreateConversation(sql(c.env), {
+    const conv = await getOrCreateConversation(db, {
       tenantId, freelancerUserId: b.freelancerUserId, employerUserId: actor,
-      subjectType, engagementId, jobId, proposalId, projectId, title: (b.title as string) ?? null,
+      subjectType, engagementId, jobId, proposalId, projectId, title: b.title ?? null,
     });
     if (b.body && b.body.trim()) {
-      await appendMessage(sql(c.env), c.env, conv, actor, b.body.trim());
-      await sql(c.env)`UPDATE freelancer_conversations SET employer_last_read_at = NOW() WHERE id = ${conv.id as string}`;
+      const readThrough = new Date();
+      await appendMessage(db, c.env, conv, actor, b.body.trim());
+      await db.update(freelancerConversations)
+        .set({ employerLastReadAt: readThrough })
+        .where(eq(freelancerConversations.id, conv.id));
     }
     return c.json({ id: conv.id }, 201);
   });
 
   // GET /:id/messages — thread messages (employer side).
   router.get('/:id/messages', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const [conv] = await sql(c.env)`SELECT * FROM freelancer_conversations WHERE id = ${id} AND tenant_id = ${tenantId}`;
+    const [conv] = await db.select().from(freelancerConversations)
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.tenantId, tenantId)));
     if (!conv) return c.json({ error: 'Not found' }, 404);
-    return c.json({ conversation: mapConversation({ ...conv, unread: 0 }), messages: await loadMessages(sql(c.env), id, conv.freelancer_user_id as string) });
+    return c.json({ conversation: mapConversation({ ...conv, unread: 0 }), messages: await loadMessages(db, id, conv.freelancerUserId) });
   });
 
   // POST /:id/messages — employer sends (text or attachment).
   router.post('/:id/messages', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
-    const [conv] = await sql(c.env)`SELECT * FROM freelancer_conversations WHERE id = ${id} AND tenant_id = ${tenantId}`;
+    const [conv] = await db.select().from(freelancerConversations)
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.tenantId, tenantId)));
     if (!conv) return c.json({ error: 'Not found' }, 404);
     const payload = await readSendPayload(c, actor);
     if ('error' in payload) return c.json({ error: payload.error }, payload.status);
-    const { id: msgId } = await appendMessage(sql(c.env), c.env, conv, actor, payload.body, payload.attach);
-    await sql(c.env)`UPDATE freelancer_conversations SET employer_last_read_at = NOW() WHERE id = ${id}`;
+    const readThrough = new Date();
+    const { id: msgId } = await appendMessage(db, c.env, conv, actor, payload.body, payload.attach);
+    await db.update(freelancerConversations)
+      .set({ employerLastReadAt: readThrough })
+      .where(eq(freelancerConversations.id, id));
     return c.json({ id: msgId }, 201);
   });
 
   // POST /:id/read — advance the employer side's read watermark.
   router.post('/:id/read', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    await sql(c.env)`UPDATE freelancer_conversations SET employer_last_read_at = NOW() WHERE id = ${id} AND tenant_id = ${tenantId}`;
+    const rows = await db.update(freelancerConversations)
+      .set({ employerLastReadAt: sql`NOW()` })
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.tenantId, tenantId)))
+      .returning({ id: freelancerConversations.id });
+    if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true });
   });
 
@@ -343,45 +463,78 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
 }
 
 /** Load a conversation's messages (oldest→newest), tagging sender identity. */
-async function loadMessages(db: Sql, conversationId: string, freelancerUserId: string) {
-  const rows = await db`
-    SELECT m.*, su.display_name AS sender_name
-    FROM freelancer_messages m LEFT JOIN users su ON su.id = m.sender_user_id
-    WHERE m.conversation_id = ${conversationId} ORDER BY m.created_at ASC LIMIT 500
-  ` as unknown as Record<string, unknown>[];
+async function loadMessages(db: Db, conversationId: string, freelancerUserId: string) {
+  const rows = await db.select({
+    ...getTableColumns(freelancerMessages),
+    senderName: users.displayName,
+  })
+    .from(freelancerMessages)
+    .leftJoin(users, eq(users.id, freelancerMessages.senderUserId))
+    .where(eq(freelancerMessages.conversationId, conversationId))
+    .orderBy(asc(freelancerMessages.createdAt))
+    .limit(500);
   return rows.map((r) => mapMessage(r, freelancerUserId));
 }
 
 /** Find the scoped conversation for (tenant, freelancer, engagement|job) or create it.
  *  Engagement scope wins over job scope; a null-scope thread is always new (direct). */
-async function getOrCreateConversation(db: Sql, input: {
+async function getOrCreateConversation(db: Db, input: {
   tenantId: number; freelancerUserId: string; employerUserId: string | null;
   subjectType: string; engagementId: string | null; jobId: string | null; proposalId: string | null;
   projectId: number | null; title: string | null;
-}): Promise<Record<string, unknown>> {
-  if (input.engagementId) {
-    const [ex] = await db`SELECT * FROM freelancer_conversations WHERE tenant_id = ${input.tenantId} AND freelancer_user_id = ${input.freelancerUserId} AND engagement_id = ${input.engagementId}`;
-    if (ex) return ex;
-  } else if (input.jobId) {
-    const [ex] = await db`SELECT * FROM freelancer_conversations WHERE tenant_id = ${input.tenantId} AND freelancer_user_id = ${input.freelancerUserId} AND job_id = ${input.jobId} AND engagement_id IS NULL`;
-    if (ex) return ex;
-  }
+}): Promise<ConversationRow> {
+  /** The scoped lookup the partial unique indexes back (uq_fl_conv_engagement / _job). */
+  const findScoped = async (): Promise<ConversationRow | undefined> => {
+    if (input.engagementId) {
+      const [ex] = await db.select().from(freelancerConversations).where(and(
+        eq(freelancerConversations.tenantId, input.tenantId),
+        eq(freelancerConversations.freelancerUserId, input.freelancerUserId),
+        eq(freelancerConversations.engagementId, input.engagementId),
+      ));
+      return ex;
+    }
+    if (input.jobId) {
+      const [ex] = await db.select().from(freelancerConversations).where(and(
+        eq(freelancerConversations.tenantId, input.tenantId),
+        eq(freelancerConversations.freelancerUserId, input.freelancerUserId),
+        eq(freelancerConversations.jobId, input.jobId),
+        isNull(freelancerConversations.engagementId),
+      ));
+      return ex;
+    }
+    return undefined;
+  };
+
+  const existing = await findScoped();
+  if (existing) return existing;
+
   const id = crypto.randomUUID();
-  const [created] = await db`
-    INSERT INTO freelancer_conversations (id, tenant_id, freelancer_user_id, employer_user_id, subject_type, engagement_id, job_id, proposal_id, project_id, title)
-    VALUES (${id}, ${input.tenantId}, ${input.freelancerUserId}, ${input.employerUserId}, ${input.subjectType}, ${input.engagementId}, ${input.jobId}, ${input.proposalId}, ${input.projectId}, ${input.title})
-    ON CONFLICT DO NOTHING
-    RETURNING *
-  `;
+  const insert = db.insert(freelancerConversations).values({
+    id,
+    tenantId: input.tenantId,
+    freelancerUserId: input.freelancerUserId,
+    employerUserId: input.employerUserId,
+    subjectType: input.subjectType,
+    engagementId: input.engagementId,
+    jobId: input.jobId,
+    proposalId: input.proposalId,
+    projectId: input.projectId,
+    title: input.title,
+  });
+  const [created] = input.engagementId
+    ? await insert.onConflictDoNothing({
+        target: [freelancerConversations.tenantId, freelancerConversations.freelancerUserId, freelancerConversations.engagementId],
+        where: sql`${freelancerConversations.engagementId} IS NOT NULL`,
+      }).returning()
+    : input.jobId
+      ? await insert.onConflictDoNothing({
+          target: [freelancerConversations.tenantId, freelancerConversations.freelancerUserId, freelancerConversations.jobId],
+          where: sql`${freelancerConversations.jobId} IS NOT NULL AND ${freelancerConversations.engagementId} IS NULL`,
+        }).returning()
+      : await insert.returning();
   if (created) return created;
   // Lost a race on the unique index — read the winner back.
-  if (input.engagementId) {
-    const [ex] = await db`SELECT * FROM freelancer_conversations WHERE tenant_id = ${input.tenantId} AND freelancer_user_id = ${input.freelancerUserId} AND engagement_id = ${input.engagementId}`;
-    if (ex) return ex;
-  } else if (input.jobId) {
-    const [ex] = await db`SELECT * FROM freelancer_conversations WHERE tenant_id = ${input.tenantId} AND freelancer_user_id = ${input.freelancerUserId} AND job_id = ${input.jobId} AND engagement_id IS NULL`;
-    if (ex) return ex;
-  }
-  const [any] = await db`SELECT * FROM freelancer_conversations WHERE id = ${id}`;
-  return any as Record<string, unknown>;
+  const winner = await findScoped();
+  if (winner) return winner;
+  throw new Error('Conversation conflict could not be resolved to its scoped row');
 }

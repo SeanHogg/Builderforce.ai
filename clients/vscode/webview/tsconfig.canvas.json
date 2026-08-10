@@ -1,0 +1,51 @@
+{
+  // The CANVAS project.
+  //
+  // This bundle compiles the frontend's own sources (see vite.canvas.config.ts),
+  // so it must typecheck them under the options they are WRITTEN against —
+  // `frontend/tsconfig.json`. Checking them under the Brain webview's stricter
+  // project reported that project's lint preferences (`noUnusedLocals`) and its
+  // narrowed ambient `types` (which hides the WebGPU globals `mamba-engine`
+  // relies on) as errors in files this package does not own.
+  //
+  // Kept separate rather than loosening the Brain project, so the webview's own
+  // code stays strictly checked.
+  "compilerOptions": {
+    // lib/target mirror frontend/tsconfig.json exactly. Not cosmetic: `esnext`
+    // is where the WebGPU globals `mamba-engine` uses are declared, and it also
+    // supplies the `crypto.randomUUID` signature the canvas is written against.
+    "target": "ES2017",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@/*": ["../../../frontend/src/*"],
+      "@builderforce/creation-canvas-contract": [
+        "../../../packages/creation-canvas-contract/src/index.ts"
+      ],
+      // The three Next couplings, resolved to the shims the bundler also uses —
+      // so types and runtime agree on what `useTranslations` / `useRouter` are.
+      "next-intl": ["./src/shims/next-intl.ts"],
+      "next/navigation": ["./src/shims/next-navigation.ts"],
+      "next/link": ["./src/shims/next-link.tsx"]
+    }
+  },
+  "include": [
+    "src/canvas",
+    "src/shims",
+    "src/vscodeBridge.ts",
+    "vite.canvas.config.ts",
+    // The frontend's ambient module declarations. Pulled in explicitly because a
+    // `.d.ts` nobody imports is never loaded, and the canvas compiles frontend
+    // sources that rely on them.
+    "../../../frontend/src/types/**/*.d.ts"
+  ]
+}

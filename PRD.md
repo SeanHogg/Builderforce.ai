@@ -1,108 +1,125 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #336
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Recommendations for Missing Integrations
+# PRD: Guided (Interactive) and Bulk (Import) Input Modes
 
 ## Problem & Goal
 
-Users of the platform lack visibility into third-party tools and services they are not yet connected to but would benefit from. This creates friction in adoption, leaves value on the table, and increases churn risk as users may not realize the platform can integrate with tools already in their workflow.
+Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
 
-**Goal:** Surface contextually relevant integration recommendations to users who have not yet connected available third-party services, increasing integration adoption rate and deepening platform stickiness.
+**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Role | Description |
-|---|---|
-| **Platform Admins** | Responsible for configuring integrations across the organization; need a clear view of what is available vs. installed |
-| **Power Users / Operators** | Day-to-day users who trigger workflows; benefit from integrations that reduce manual effort |
-| **New Users (Onboarding)** | Recently activated accounts with few or no integrations connected; highest opportunity for first-time adoption |
-| **Customer Success Managers (Internal)** | Monitor integration health per account and use recommendations data to drive expansion conversations |
+| Role | Primary Mode | Context |
+|---|---|---|
+| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
+| Power User | Both | Switches between modes depending on task size |
+| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
+| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
+| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
 
 ---
 
 ## Scope
 
-This feature covers the discovery and recommendation layer for missing integrations within the platform's existing integration marketplace or settings surface. It includes:
+### In Scope
 
-- Identifying which integrations are available but not installed for a given user or workspace
-- Generating and ranking recommendations based on contextual signals
-- Displaying recommendations in appropriate in-product surfaces
-- Tracking engagement with recommendations (impressions, clicks, installs)
+- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
+- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
+- Unified data schema enforced across both modes
+- Pre-import preview and dry-run capability in Bulk Mode
+- Post-submission confirmation and summary for both modes
+- Error handling and recovery paths in both modes
+- Mode-selection entry point accessible from the primary action surface
+
+### Out of Scope
+
+- Real-time streaming ingestion or webhook-based input
+- API-only bulk endpoints (covered separately in API PRD)
+- Automated scheduling or recurring imports
+- Machine-learning-assisted field suggestions beyond basic format validation
+- Editing or deleting records post-submission (covered by record management PRD)
 
 ---
 
 ## Functional Requirements
 
-### FR-1: Integration Gap Detection
-- The system must compare the full catalog of available integrations against the set of integrations currently active for a given workspace.
-- Gap data must refresh in real time or near real time (≤ 5 minutes) when a new integration is connected or disconnected.
+### FR-1 — Mode Selection
 
-### FR-2: Recommendation Engine
-- The system must rank uninstalled integrations by relevance score computed from one or more of the following signals:
-  - **Usage patterns:** Features or workflows the user has already engaged with that commonly pair with a given integration
-  - **Peer adoption:** Integrations popular among accounts with similar industry, team size, or plan tier
-  - **Admin-curated rules:** Manually configured rules that promote or suppress specific integrations per segment
-  - **Recency / trending:** Integrations with recent high install velocity across the platform
-- The engine must return a ranked list of up to 10 recommendations per user session.
+- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
+- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
+- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
 
-### FR-3: Recommendation Display Surfaces
-- Recommendations must appear in at least the following surfaces:
-  1. **Integration marketplace / directory** — highlighted "Recommended for You" section at the top
-  2. **Onboarding checklist** — surfaced as an optional step after core setup tasks
-  3. **In-context nudges** — inline banners or tooltips on feature pages where a missing integration is directly relevant (e.g., CRM integration prompt on the Contacts page)
-- Each recommendation card must display: integration name, logo, one-line value proposition, and a primary CTA ("Connect" or "Learn More").
+---
 
-### FR-4: Dismissal and Feedback
-- Users must be able to dismiss any individual recommendation ("Not interested").
-- Dismissed recommendations must not reappear for at least 30 days unless the user explicitly resets preferences.
-- An optional single-tap reason picker must be offered on dismissal (e.g., "Already use a different tool," "Not relevant," "Will set up later").
+### FR-2 — Guided (Interactive) Mode
 
-### FR-5: Admin Controls
-- Workspace admins must be able to:
-  - Pin up to 3 integrations to always appear at the top of the recommended list for their workspace
-  - Suppress specific integrations from ever appearing in recommendations for their workspace
-  - View an aggregated report of which integrations have been recommended, clicked, and installed within their workspace
+- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
+- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
+- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
+- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
+- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
+- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
+- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
 
-### FR-6: Analytics & Instrumentation
-- The following events must be tracked and available in the internal analytics pipeline:
-  - `recommendation_impression` (integration_id, surface, user_id, timestamp)
-  - `recommendation_click` (integration_id, surface, user_id, timestamp)
-  - `recommendation_dismissed` (integration_id, surface, reason, user_id, timestamp)
-  - `integration_installed_from_recommendation` (integration_id, surface, user_id, timestamp)
-- A/B testing hooks must be supported so recommendation algorithms can be experimented on independently per surface.
+---
 
-### FR-7: Notification Channel (Phase 1 — Email)
-- A weekly digest email must be sent to workspace admins who have 3 or more unconnected recommended integrations.
-- Email must be suppressible at the user level via standard unsubscribe.
-- Email send logic must respect global communication frequency caps.
+### FR-3 — Bulk (Import) Mode
+
+- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
+- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
+- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
+- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
+- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
+- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
+- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
+- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
+- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
+- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+
+---
+
+### FR-4 — Shared / Cross-Mode Requirements
+
+- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
+- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
+- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
+- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
+- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criterion |
-|---|---|
-| AC-1 | Given a workspace with at least one available but uninstalled integration, the recommendation endpoint returns a non-empty ranked list of up to 10 items within 300 ms (p95). |
-| AC-2 | Recommendations shown in the marketplace "Recommended for You" section are limited to integrations not already active in the workspace. |
-| AC-3 | A dismissed recommendation does not reappear on any surface for the same user within 30 calendar days. |
-| AC-4 | Clicking "Connect" on a recommendation card navigates the user to the correct integration auth/setup flow and fires a `recommendation_click` event. |
-| AC-5 | After a successful install originating from a recommendation card, an `integration_installed_from_recommendation` event is recorded with the correct `surface` and `integration_id`. |
-| AC-6 | Admin pin and suppress controls take effect within one page reload for all users in the workspace (≤ 5-minute cache TTL). |
-| AC-7 | The weekly digest email is sent only to admins with ≥ 3 unconnected recommended integrations, and includes an unsubscribe link that resolves within one click. |
-| AC-8 | In-context nudges are rendered only on the feature pages mapped to a given integration; no nudge appears on an unrelated page. |
-| AC-9 | The recommendation engine falls back gracefully (showing a default popularity-ranked list) when insufficient signal data exists for a workspace (e.g., new accounts < 7 days old). |
-| AC-10 | All recommendation surfaces pass WCAG 2.1 AA accessibility checks for color contrast, keyboard navigation, and screen reader labels. |
+| ID | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
+| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
+| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
+| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
+| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
+| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
+| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
+| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
+| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
+| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
+| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
+| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
+| AC-13 | Switching modes before submission retains mappable field data | E2E test |
+| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
 
 ---
 
 ## Out of Scope
 
-- **Building new integrations** — this feature is about surfacing and recommending existing catalog integrations only.
-- **Cross-platform / external recommendations** — suggesting tools not in the integration catalog or external app stores.
-- **Pricing or upsell logic** — recommendations will not be gated or influenced by plan-upgrade prompts in this phase; that is handled by the Monetization team.
-- **Mobile native apps** — recommendation surfaces are web-only in this phase; mobile surfaces are deferred to a follow-on milestone.
-- **Automated integration setup** — the feature recommends and navigates users to the setup flow but does not auto-configure or pre-fill credentials.
-- **Integration health monitoring** — alerting on broken or degraded connected integrations is owned by the Integrations Reliability team.
-- **Personalization model retraining pipeline** — data science infrastructure for model training is managed by the ML Platform team; this PRD covers the serving/display layer only.
+- API-only or SDK-driven bulk ingestion endpoints
+- Webhook or event-stream based real-time input
+- Scheduled or recurring automated imports
+- Post-submission record editing (handled by record management module)
+- AI/ML-assisted auto-mapping or data enrichment
+- Mobile viewports below 768 px width
+- Multi-file batch uploads in a single import session
+- Localization / i18n beyond English in the initial release

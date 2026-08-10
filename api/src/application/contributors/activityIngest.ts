@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Activity ingestion core (the producer→store seam).
  *
@@ -370,14 +371,20 @@ export async function ingestActivityEvents(
 
   // Refresh derived metrics once per affected (contributor, day).
   for (const { contributorId, day } of touched.values()) {
-    await aggregateDailyMetrics(db, tenantId, contributorId, day).catch(() => {});
+    await aggregateDailyMetrics(db, tenantId, contributorId, day).catch((error) => {
+      reportCaughtError(error, { source: "application/contributors/activityIngest.ts", operation: "ingestActivityEvents" });
+    });
   }
 
   // Invalidate the read-through caches that read this stream so the owner's rollup
   // and the engagement scores reflect the new activity (and any auto-created person).
   if (inserted > 0) {
-    await bumpTenantActivityVersion(env, tenantId).catch(() => {});
-    await bumpWorkforceMetricsVersion(env, tenantId).catch(() => {});
+    await bumpTenantActivityVersion(env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "application/contributors/activityIngest.ts", operation: "ingestActivityEvents" });
+    });
+    await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "application/contributors/activityIngest.ts", operation: "ingestActivityEvents" });
+    });
   }
 
   return { inserted, skipped };

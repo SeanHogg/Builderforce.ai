@@ -8,9 +8,9 @@ import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import type { ToolResult, SavedToolRun } from '@/lib/tools';
 
-const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
+const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const btnSubtle: React.CSSProperties = {
-  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)',
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
@@ -55,7 +55,7 @@ export function DataDrivenPanel({ toolId, projectId }: { toolId: string; project
   return (
     <RoleGate capability="tools.runDataDriven" variant="block">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{t('dataIntro')}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: 0 }}>{t('dataIntro')}</p>
 
         {loading ? (
           <div style={{ color: 'var(--muted)', padding: 16 }}>{t('computingData')}</div>
@@ -76,10 +76,10 @@ export function DataDrivenPanel({ toolId, projectId }: { toolId: string; project
 
         {history.length > 0 && (
           <div style={card}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{t('history')}</h3>
+            <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{t('history')}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {history.map((h) => (
-                <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--font-size-small)', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>
                     {new Date(h.createdAt).toLocaleDateString()} · {h.kind === 'data' ? t('modeData') : t('modeSelf')}
                   </span>

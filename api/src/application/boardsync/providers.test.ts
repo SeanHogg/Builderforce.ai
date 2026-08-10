@@ -14,6 +14,7 @@ import {
   GitLabBoardProvider,
   BitbucketBoardProvider,
   RallyBoardProvider,
+  PermanentBoardProviderError,
   type FetchLike,
 } from './providers';
 import { BOARD_PROVIDER_IDS } from './providerCatalog';
@@ -89,6 +90,30 @@ describe('GitHubBoardProvider', () => {
     );
     await provider.pushUpdate('1', { title: 'New title' });
     expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a malformed repository scope before making a request', async () => {
+    const fetchFn: FetchLike = vi.fn();
+    const provider = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'repo-without-owner' },
+      fetchFn,
+    );
+
+    await expect(provider.fetchTicketsSince(null)).rejects.toMatchObject({
+      name: 'PermanentBoardProviderError',
+      code: 'invalid_scope',
+    });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('classifies an inaccessible repository as a permanent configuration failure', async () => {
+    const fetchFn: FetchLike = vi.fn(async () => jsonResponse({ message: 'Not Found' }, 404));
+    const provider = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'owner/repo' },
+      fetchFn,
+    );
+
+    await expect(provider.fetchTicketsSince(null)).rejects.toBeInstanceOf(PermanentBoardProviderError);
   });
 });
 
@@ -475,5 +500,31 @@ describe('createBoardProvider', () => {
     for (const id of BOARD_PROVIDER_IDS) {
       expect(() => createBoardProvider(id, { credentials: {} }, f)).not.toThrow();
     }
+  });
+
+  /**
+   * Providers call their injected fetch as a METHOD (`this.fetchFn(…)`), which
+   * sets `this` to the provider instance. The Workers runtime rejects the global
+   * `fetch` invoked on anything but `globalThis` — "Illegal invocation" — and
+   * that broke every board sync in production before a request was ever sent.
+   * The factory must therefore hand the constructor a BOUND function.
+   */
+  it('binds the injected fetch so providers never invoke it with the wrong `this`', async () => {
+    const seenThis: unknown[] = [];
+    const f = function (this: unknown) {
+      seenThis.push(this);
+      return Promise.resolve(jsonResponse([]));
+    } as unknown as FetchLike;
+
+    const provider = createBoardProvider(
+      'github',
+      { credentials: { accessToken: 't' }, externalBoardId: 'o/r' },
+      f,
+    );
+    await provider.fetchTicketsSince(null);
+
+    expect(seenThis).toHaveLength(1);
+    expect(seenThis[0]).toBe(globalThis);
+    expect(seenThis[0]).not.toBeInstanceOf(GitHubBoardProvider);
   });
 });

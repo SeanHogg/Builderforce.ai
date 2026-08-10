@@ -1,13 +1,17 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { usePermissionDebugger, type PermissionRegistration } from '@/lib/PermissionDebuggerContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useRolePreview } from '@/lib/RolePreviewContext';
+import { downloadText, toCsv } from '@/lib/download';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 type PanelTab = 'page' | 'user' | 'role' | 'missing';
 
 export default function PermissionDebuggerPanel() {
+  const t = useTranslations('permissionDebugger');
   const { debuggerActive, gates, toggleDebugger } = usePermissionDebugger();
   const { emulation } = useEmulation();
   const { previewRole } = useRolePreview();
@@ -46,62 +50,65 @@ export default function PermissionDebuggerPanel() {
       null,
       2,
     );
-    navigator.clipboard.writeText(json).catch(() => undefined);
+    // Fire-and-forget as before — this panel shows no copy confirmation.
+    void copyTextToClipboard(json);
   }
 
   function exportCsv() {
-    const header = 'permission,status,grantedVia,apiEndpoint,count';
-    const rows = (panelTab === 'role' ? roleGrouped : displayed).map((g) =>
-      [`"${g.permission}"`, `"${g.status}"`, `"${g.grantedVia ?? ''}"`, `"${(g as PermissionRegistration & { count?: number }).apiEndpoint ?? ''}"`, String((g as PermissionRegistration & { count?: number }).count ?? 1)].join(','),
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'permission-debug.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    const rows = (panelTab === 'role' ? roleGrouped : displayed).map((g) => {
+      const withCount = g as PermissionRegistration & { count?: number; apiEndpoint?: string };
+      return [g.permission, g.status, g.grantedVia ?? '', withCount.apiEndpoint ?? '', withCount.count ?? 1];
+    });
+    const csv = toCsv(['permission', 'status', 'grantedVia', 'apiEndpoint', 'count'], rows);
+    downloadText(csv, 'permission-debug.csv', 'text/csv');
   }
 
+  /** Status colours come from the shared semantic tokens, not literal hex, so the
+   *  panel stays legible in light mode (a raw var(--success) on a light surface fails
+   *  contrast where var(--success) is theme-tuned). */
   function statusColor(status: string) {
-    if (status === 'granted') return '#22c55e';
-    if (status === 'soft-gate') return '#eab308';
-    return '#ef4444';
+    if (status === 'granted') return 'var(--success, var(--success))';
+    if (status === 'soft-gate') return 'var(--warning)';
+    return 'var(--error)';
   }
+
+  /** A gate's status is a fixed enum from the permission registry (`granted` /
+   *  `denied` / `soft-gate`), so it is translated through a key rather than
+   *  upper-cased in place — several locales have no cased alphabet. */
+  const statusLabel = (status: string) => t(`status.${status}` as 'status.granted');
 
   return (
-    <div className="perm-debugger-panel" role="dialog" aria-label="Permission Debugger">
+    <div className="perm-debugger-panel" role="dialog" aria-label={t('title')}>
       {/* Header */}
       <div className="perm-debugger-header">
-        <span className="perm-debugger-title">Permission Debugger</span>
+        <span className="perm-debugger-title">{t('title')}</span>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button type="button" className="perm-debugger-btn" onClick={copyAll} title="Copy all as JSON">Copy All</button>
-          <button type="button" className="perm-debugger-btn" onClick={exportCsv} title="Export as CSV">Export CSV</button>
-          <button type="button" className="perm-debugger-btn perm-debugger-btn--close" onClick={toggleDebugger} aria-label="Close">×</button>
+          <button type="button" className="perm-debugger-btn" onClick={copyAll} title={t('copyAllHint')}>{t('copyAll')}</button>
+          <button type="button" className="perm-debugger-btn" onClick={exportCsv} title={t('exportCsvHint')}>{t('exportCsv')}</button>
+          <button type="button" className="perm-debugger-btn perm-debugger-btn--close" onClick={toggleDebugger} aria-label={t('close')}>×</button>
         </div>
       </div>
 
       {/* Summary */}
       <div className="perm-debugger-summary">
-        <span>Role: <strong>{activeRole}</strong></span>
-        <span style={{ marginLeft: 12 }}>Active: <strong style={{ color: '#22c55e' }}>{granted.length}</strong> / {gates.length} permissions</span>
-        {denied.length > 0 && <span style={{ marginLeft: 12, color: '#ef4444' }}>{denied.length} denied</span>}
-        {soft.length > 0 && <span style={{ marginLeft: 12, color: '#eab308' }}>{soft.length} soft-gated</span>}
+        <span>{t('role')} <strong>{activeRole}</strong></span>
+        <span>{t('activeCount', { granted: granted.length, total: gates.length })}</span>
+        {denied.length > 0 && <span style={{ color: 'var(--error)' }}>{t('deniedCount', { count: denied.length })}</span>}
+        {soft.length > 0 && <span style={{ color: 'var(--warning)' }}>{t('softGatedCount', { count: soft.length })}</span>}
       </div>
 
       {/* Tabs */}
       <div className="perm-debugger-tabs">
-        {(['page', 'user', 'role', 'missing'] as PanelTab[]).map((t) => (
+        {(['page', 'user', 'role', 'missing'] as PanelTab[]).map((tab) => (
           <button
-            key={t}
+            key={tab}
             type="button"
-            className={`perm-debugger-tab${panelTab === t ? ' perm-debugger-tab--active' : ''}`}
-            onClick={() => setPanelTab(t)}
+            className={`perm-debugger-tab${panelTab === tab ? ' perm-debugger-tab--active' : ''}`}
+            onClick={() => setPanelTab(tab)}
           >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-            {t === 'missing' && denied.length > 0 && (
-              <span style={{ marginLeft: 4, background: '#ef4444', color: '#fff', borderRadius: 8, padding: '0 5px', fontSize: 10 }}>{denied.length}</span>
+            {t(`tab.${tab}` as 'tab.page')}
+            {tab === 'missing' && denied.length > 0 && (
+              <span className="perm-debugger-count-badge">{denied.length}</span>
             )}
           </button>
         ))}
@@ -112,35 +119,35 @@ export default function PermissionDebuggerPanel() {
         <table className="perm-debugger-table">
           <thead>
             <tr>
-              <th>Permission</th>
-              <th>Status</th>
-              <th>Source</th>
-              {panelTab === 'role' && <th>Count</th>}
-              {panelTab !== 'role' && <th>API Endpoint</th>}
+              <th>{t('col.permission')}</th>
+              <th>{t('col.status')}</th>
+              <th>{t('col.source')}</th>
+              {panelTab === 'role' && <th>{t('col.count')}</th>}
+              {panelTab !== 'role' && <th>{t('col.apiEndpoint')}</th>}
             </tr>
           </thead>
           <tbody>
             {(panelTab === 'role' ? roleGrouped : displayed).map((g) => (
               <tr key={g.id ?? g.permission}>
-                <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>{g.permission}</td>
+                <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--font-size-eyebrow)' }}>{g.permission}</td>
                 <td>
-                  <span style={{ color: statusColor(g.status), fontWeight: 600, fontSize: 11 }}>
-                    {g.status.toUpperCase()}
+                  <span style={{ color: statusColor(g.status), fontWeight: 600, fontSize: 'var(--font-size-eyebrow)' }}>
+                    {statusLabel(g.status)}
                   </span>
                 </td>
-                <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.grantedVia ?? '—'}</td>
+                <td style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{g.grantedVia ?? '—'}</td>
                 {panelTab === 'role' && (
-                  <td style={{ fontSize: 11 }}>{(g as PermissionRegistration & { count?: number }).count ?? 1}</td>
+                  <td style={{ fontSize: 'var(--font-size-eyebrow)' }}>{(g as PermissionRegistration & { count?: number }).count ?? 1}</td>
                 )}
                 {panelTab !== 'role' && (
-                  <td style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{g.apiEndpoint ?? '—'}</td>
+                  <td style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{g.apiEndpoint ?? '—'}</td>
                 )}
               </tr>
             ))}
             {displayed.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 16 }}>
-                  No permissions in this view.
+                  {t('empty')}
                 </td>
               </tr>
             )}

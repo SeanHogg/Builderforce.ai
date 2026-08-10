@@ -8,7 +8,8 @@
     "types": ["node", "vscode"],
     "paths": {
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
-      "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"]
+      "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],
+      "@builderforce/creation-canvas-contract": ["../../packages/creation-canvas-contract/src/index.ts"]
     },
     "sourceMap": true,
     "strict": true,
