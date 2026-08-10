@@ -110,7 +110,7 @@ import { useSectionTour } from '@/components/onboarding/useSectionTour';
 import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
-import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
+import { PromptUseCasePicker, cSuiteCanvasOwner } from '@/components/PromptUseCasePicker';
 import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
@@ -4943,7 +4943,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
     <PromptUseCasePicker placement="top" align="end" onSelect={(nextPrompt, useCase) => {
-      setPrompt(nextPrompt);
+      const owner = cSuiteCanvasOwner(useCase);
+      setPrompt(owner
+        ? `${nextPrompt}\n\nThis supports the ${owner.stages.join(' → ')} stage of Builderforce's IDEA → REAL loop. Read the existing Builderforce ${owner.domains.join(', ')} domain data first with canvas_read_domain, then create or update only these existing Canvas object kinds as appropriate: ${owner.objects.join(', ')}. Do not propose a new database table.`
+        : nextPrompt);
       if (useCase.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
     }} />
   </div>;

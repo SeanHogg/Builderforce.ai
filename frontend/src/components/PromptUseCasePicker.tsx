@@ -7,6 +7,26 @@ import { Icon } from '@/components/ui/Icon';
 
 export type PromptUseCase = { id?: string; category: string; label: string; prompt: string; categoryLabel?: string };
 
+/** Explicit extraction owners: source screens become existing Canvas objects
+ * backed by existing domain APIs. This is also the table-need decision—none of
+ * these families requires a new persistence shape. */
+export const C_SUITE_CANVAS_OWNERS = {
+  executiveDelivery: { stages: ['make', 'measure'], domains: ['delivery'], objects: ['dashboard', 'chart', 'report', 'table', 'roadmap'] },
+  executiveRevenue: { stages: ['run', 'measure'], domains: ['revenue'], objects: ['salesPipeline', 'dashboard', 'table', 'chart', 'kpi'] },
+  executiveOverview: { stages: ['measure'], domains: ['delivery', 'revenue', 'finance', 'governance', 'people'], objects: ['dashboard', 'report'] },
+  executiveFinance: { stages: ['run', 'measure'], domains: ['finance'], objects: ['kpi', 'dashboard', 'table', 'chart', 'report'] },
+  executiveGovernance: { stages: ['run'], domains: ['governance'], objects: ['table', 'report', 'dashboard', 'roadmap'] },
+  executiveInvestor: { stages: ['idea', 'run'], domains: ['investor'], objects: ['targetMarket', 'report', 'dataset'] },
+  executiveMarketing: { stages: ['run', 'measure'], domains: ['growth'], objects: ['table', 'dashboard', 'report', 'chart', 'evaluation'] },
+  executivePeople: { stages: ['run'], domains: ['people'], objects: ['dashboard', 'roadmap', 'chart', 'spreadsheet', 'report'] },
+  executiveProduct: { stages: ['idea', 'make'], domains: ['investor', 'delivery', 'canvas'], objects: ['table', 'featureSummary', 'report', 'targetMarket', 'dashboard'] },
+  executiveResearch: { stages: ['idea'], domains: ['canvas'], objects: ['dataset', 'report', 'document', 'slides'] },
+} as const;
+
+export function cSuiteCanvasOwner(useCase: PromptUseCase) {
+  return C_SUITE_CANVAS_OWNERS[useCase.category as keyof typeof C_SUITE_CANVAS_OWNERS] ?? null;
+}
+
 /**
  * BurnRateOS' 48 executive "tools" were starting-point intents: each one asked
  * the assistant to assemble or amend a management view.  Creation Canvas already

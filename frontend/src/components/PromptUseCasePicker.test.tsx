@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker } from './PromptUseCasePicker';
+import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
+import { C_SUITE_CANVAS_OWNERS, C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner } from './PromptUseCasePicker';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => Object.assign(
@@ -25,6 +26,11 @@ describe('PromptUseCasePicker', () => {
     expect(ids).toContain('research.web_search');
     expect(ids).toContain('scratchpad.create_deck');
     expect(C_SUITE_CANVAS_USE_CASES.every((item) => item.categoryLabel && item.prompt.length > 80)).toBe(true);
+    expect(C_SUITE_CANVAS_USE_CASES.every((item) => cSuiteCanvasOwner(item) !== null)).toBe(true);
+    const supportedKinds = new Set<string>(CREATION_OBJECT_KINDS);
+    expect(Object.values(C_SUITE_CANVAS_OWNERS).flatMap((owner) => owner.objects).every((kind) => supportedKinds.has(kind))).toBe(true);
+    const ideaToRealStages = new Set(['idea', 'make', 'run', 'measure']);
+    expect(Object.values(C_SUITE_CANVAS_OWNERS).flatMap((owner) => owner.stages).every((stage) => ideaToRealStages.has(stage))).toBe(true);
   });
 
   it('renders the tab above a constrained prompt and returns the selected prescription', () => {

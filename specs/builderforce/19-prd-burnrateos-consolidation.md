@@ -2,9 +2,10 @@
 
 **Status:** In progress — **NO-GO for BurnRateOS shutdown** · **Owner:** platform · **Created:** 2026-08-07 · **Audited:** 2026-08-10
 **Companion to:** [PRD 18 — hired.video port](./18-prd-hired-video-port.md)
-**Goal:** absorb all of `C:\code\burnrateos.com` into Builderforce.ai, completing the AI
-C-suite: hired.video contributes the **Recruiter** and **HR** agents; BurnRateOS contributes
-**CEO, CFO, CRO, CMO, CPO, CISO** and the eight product domains they own.
+**Goal:** extract the parts of `C:\code\burnrateos.com` that move Builderforce's **IDEA → REAL**
+loop forward, completing the AI C-suite without copying BurnRateOS's application or schema.
+hired.video contributes the **Recruiter** and **HR** agents; BurnRateOS contributes **CEO, CFO,
+CRO, CMO, CPO, CISO** perspectives and selected domain behavior they need.
 
 ## Implementation audit — 2026-08-10
 
@@ -119,6 +120,39 @@ Implementation evidence:
 - Verification on 2026-08-10: focused Vitest **5/5 passed**; frontend `tsgo --noEmit` passed; no
   schema or migration file was added.
 
+### Extraction boundary — IDEA → REAL decision (2026-08-10)
+
+This supersedes “port every BurnRateOS page.” The source is a capability quarry, not the target
+architecture. A capability is extracted only when it shortens or strengthens this loop:
+
+| Stage | Extract from BurnRateOS | Existing Builderforce destination |
+|---|---|---|
+| **Idea** | scratch pad/notes, product ideas, validation evidence, market and competitor research, company/market analysis, pitch narrative | Creation Canvas documents/datasets/slides, Product Discovery, validation owners, CEO/CPO agents |
+| **Make** | scenario-to-plan handoff, sprint/velocity/bottleneck/debt/deployment evidence, release readiness | Projects, tasks, sprints, ceremonies, roadmaps, Builder workspaces, Manager/CTO agents |
+| **Run** | runway/forecast/break-even/ARR, pipeline/deal risk/quota, campaigns/experiments, headcount/cadence, governance/vendors/incidents | Existing finance, revenue, growth, people and governance domains rendered into Canvas |
+| **Measure** | cross-domain risk, conversion, channel performance, delivery health and executive snapshots | `metric_facts`, domain summaries and Canvas dashboards/charts/reports |
+
+Explicit non-targets:
+
+- BurnRateOS navigation, page-for-page Mantine UI, AI hub/assistant rooms, duplicate auth/tenant
+  administration, duplicate Kanban/CRM/campaign/support implementations and per-feature authoring
+  containers are retired—not ported.
+- A source table is **not** evidence that a target table is required. Authored/session content lands
+  in Canvas/kernel primitives; derived values land in `metric_facts`; vendor state lands in the
+  connector platform; duplicate business entities land in their existing domain owner.
+- No new table may be introduced for this extraction unless a reviewed invariant cannot be stored
+  safely in an existing owner, production source rows prove the capability is used, and a named
+  workflow reads/writes it. Generic registry reachability does not meet this threshold.
+- Data belonging to an extracted capability is transformed into its existing owner. Data belonging
+  only to a retired capability receives a customer-readable export and retention/erasure handling;
+  it does not force dead schema into Builderforce.
+
+The C-suite catalog encodes the same decision: every family declares its IDEA/MAKE/RUN/MEASURE
+stage, existing owner domains and allowed Canvas object kinds. Selecting one instructs Brain to
+read those owners through `canvas_read_domain` and explicitly forbids proposing a database table.
+Tests assert all 48 contracts have an extraction owner, every stage belongs to IDEA → REAL, and
+every output kind already exists in the Creation Canvas contract.
+
 ### Source code still unique to BurnRateOS
 
 These are concrete source-only implementation families, not just missing schema names. Some should
@@ -205,9 +239,11 @@ EntityBrowser” do not satisfy them.
 - [ ] **Data gate:** run idempotent ETL against a production snapshot; publish per-table source,
   transformed, inserted, merged, rejected and orphan counts plus financial totals and attachment
   checksums; rerun to prove zero duplicates.
-- [ ] **Feature gate:** every feature used by an active BurnRateOS tenant has either a tested
-  Builderforce workflow or an explicit, customer-approved retirement/export. Reduce the
-  **222 registry-only** adoption count for active capabilities; generic CRUD is not parity.
+- [ ] **Extraction gate:** every feature used by an active BurnRateOS tenant is classified by the
+  IDEA → REAL boundary: an extracted capability has a tested Builderforce workflow and transformed
+  data; a non-target has an explicit customer-approved retirement/export. Do not activate the
+  **222 registry-only** tables merely to reduce a metric; generic CRUD and unused source DDL are not
+  product requirements.
 - [x] **C-suite menu gate:** map all 48 CxO intents to existing Creation Canvas objects/actions,
   retain searchable legacy ids, test uniqueness and selection, and add no tables.
 - [ ] **Agent execution gate:** the generic tenant-scoped domain read is implemented; prove each
@@ -692,10 +728,9 @@ actual shutdown readiness.
 
 Two honest qualifications, both decisions rather than gaps:
 
-1. **Not every table survives, by design.** Where §2 names Builderforce (or hired.video) the
-   owner, BurnRateOS's implementation is *dropped, not ported* — its data migrates into the
-   surviving table. "All functionality" is preserved; roughly 120–160 of the 404 models are
-   not.
+1. **Not every feature or table survives, by design.** The extraction boundary above is now the
+   product decision: IDEA → REAL capabilities move into an existing owner; duplicate application
+   structure is retired; non-target customer data is exported rather than used to justify schema.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
    credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. The 2026-08-10
    audit found that the implemented company/relationship model does not yet satisfy the tenancy
