@@ -3,9 +3,13 @@ import {
   activeResumeRevision,
   createResumeFamily,
   deriveResume,
+  initializeResumeFromPatch,
+  originalResumeRevision,
   promoteResumeToMaster,
   preserveResumeSourceForPatch,
   restoreResumeAsNew,
+  renderResumeMarkdown,
+  resumeDocumentFromJson,
   selectResumeRevision,
   updateActiveResume,
 } from './canvasResume';
@@ -52,5 +56,61 @@ describe('Canvas resume lineage', () => {
     expect(next.revisions[0]?.markdown).toBe('# Source');
     expect(activeResumeRevision(next)).toMatchObject({ id: 'agent-version', markdown: '# Tailored', sourceRevisionId: 'original' });
     expect(patch.content).toBe('# Tailored');
+  });
+
+  it('accepts a canonical agent document without persisting a parallel field', () => {
+    const family = createResumeFamily({ title: 'Uploaded', markdown: '# Source', document: { basics: { name: 'Source' } }, idFactory: ids('original') });
+    const patch = preserveResumeSourceForPatch(
+      { kind: 'resume', title: 'Uploaded', resumeFamily: family },
+      { resumeDocument: { basics: { name: 'Tailored' }, skills: [{ name: 'Leadership' }] } },
+      { idFactory: ids('structured-agent-version') },
+    );
+    const next = patch.resumeFamily as ReturnType<typeof createResumeFamily>;
+    expect(activeResumeRevision(next).document?.basics?.name).toBe('Tailored');
+    expect(activeResumeRevision(next).markdown).toContain('# Tailored');
+    expect(patch.resumeDocument).toBeUndefined();
+    expect(next.revisions[0]?.document?.basics?.name).toBe('Source');
+  });
+
+  it('initializes an agent-authored canonical resume as a selectable family', () => {
+    const patch = initializeResumeFromPatch('Generated', { resumeDocument: { basics: { name: 'Grace Hopper' }, skills: [{ name: 'Compilers' }] } });
+    const family = patch.resumeFamily as ReturnType<typeof createResumeFamily>;
+    expect(family.revisions).toHaveLength(1);
+    expect(activeResumeRevision(family)).toMatchObject({ kind: 'original', title: 'Generated' });
+    expect(patch.markdown).toContain('# Grace Hopper');
+    expect(patch.resumeDocument).toBeUndefined();
+  });
+
+  it('retains JSON Resume extension fields and renders canonical sections', () => {
+    const document = resumeDocumentFromJson({
+      basics: { name: 'Ada Lovelace', label: 'Engineer', email: 'ada@example.test', xProfile: { handle: 'ada' } },
+      work: [{ id: 'work-1', name: 'Analytical Engines', position: 'Programmer', startDate: '1842', highlights: ['Published the first algorithm'], securityClearance: 'custom' }],
+      education: [{ institution: 'Self-directed', area: 'Mathematics' }],
+      skills: [{ name: 'Computing', keywords: ['Algorithms'] }],
+      customSection: [{ preserved: true }],
+    });
+    expect(document).not.toBeNull();
+    expect(document?.customSection).toEqual([{ preserved: true }]);
+    expect(document?.work?.[0]?.securityClearance).toBe('custom');
+    expect(renderResumeMarkdown(document!)).toContain('## Experience');
+    expect(renderResumeMarkdown(document!)).toContain('Published the first algorithm');
+  });
+
+  it('renders an empty canonical document without hanging or inventing content', () => {
+    expect(renderResumeMarkdown({})).toBe('');
+  });
+
+  it('regenerates rendered markdown after a structured edit', () => {
+    const family = createResumeFamily({
+      title: 'Ada',
+      markdown: '# Ada',
+      document: { basics: { name: 'Ada' }, skills: [{ name: 'Mathematics' }] },
+      idFactory: ids('original'),
+    });
+    const derived = deriveResume(family, 'Structured edit', { idFactory: ids('derived') });
+    const updated = updateActiveResume(derived, { document: { basics: { name: 'Ada' }, skills: [{ name: 'Computing', keywords: ['Algorithms'] }] } });
+    expect(activeResumeRevision(updated).markdown).toContain('**Computing**: Algorithms');
+    expect(activeResumeRevision(updated).structuredStale).toBe(false);
+    expect(originalResumeRevision(updated).document?.skills?.[0]?.name).toBe('Mathematics');
   });
 });

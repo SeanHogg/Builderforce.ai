@@ -1,6 +1,6 @@
 # PRD 18 — hired.video → Builderforce.ai port
 
-**Status:** Proposed · **Port audit:** 2026-08-11 · **Owner:** platform · **Created:** 2026-08-07
+**Status:** In progress · **Port audit:** 2026-08-11 · **Owner:** platform · **Created:** 2026-08-07
 **Companion to:** [PRD 19 — burnrateos.com consolidation](./19-prd-burnrateos-consolidation.md)
 **Goal:** absorb the whole of `C:\code\hired\hired.video` into Builderforce.ai so
 `hired.video` traffic can be redirected at `builderforce.ai` with nothing lost, and so
@@ -723,17 +723,17 @@ finishes the behavior against the acceptance gate here or records a product-appr
 | R-003 | Accept DOC/DOCX | Hired accepts `.doc`/`.docx` | Builderforce reads DOCX; legacy DOC is attachment-only | **PARTIAL** | DOC and DOCX both parse into the canonical résumé schema. |
 | R-004 | Accept image/photo scans | Hired accepts JPG/PNG and vision OCR | Canvas imports the image as an Image object | **MISSING** | OCR produces a reviewable structured résumé and keeps the scan. |
 | R-005 | Accept Markdown/TXT | Hired parses both | Résumé picker routes Markdown/TXT through `canvasFileImport` and stores the result in the résumé family | **PORTED** | Import recognizes résumé intent and creates a `resume`, not only `document`. |
-| R-006 | Accept JSON Resume without flattening | `parseJsonResumeFile` preserves structure | Résumé picker maps basics, work, education and skills into editable Markdown; lossless canonical JSON retention remains | **PARTIAL** | JSON Resume fields round-trip losslessly. |
+| R-006 | Accept JSON Resume without flattening | `parseJsonResumeFile` preserves structure | `resumeDocumentFromJson` deep-clones the complete document, retains unknown top-level/nested extension fields, and stores it on the immutable revision | **PORTED** | JSON Resume fields round-trip losslessly. |
 | R-007 | Validate file type and show an actionable error | Hired names accepted formats | Résumé picker restricts formats and gives a localized unreadable-file error; format-specific recovery copy remains | **PARTIAL** | Resume object gives localized, format-specific errors. |
 | R-008 | Show selected filename, size and type icon | Hired upload review card | Generic file objects show file metadata | **PARTIAL** | Resume import review shows this before mutation. |
 | R-009 | Show parse/upload progress | Hired progress bar | No résumé parse progress state | **MISSING** | Upload, extraction, OCR and structuring phases are visible and retryable. |
-| R-010 | Auto-name from embedded JSON title or filename | Hired does both | Generic imports use filename | **PARTIAL** | Structured résumé name wins, filename is fallback. |
+| R-010 | Auto-name from embedded JSON title or filename | Hired does both | Résumé import uses `basics.name` when present and falls back to the filename stem | **PORTED** | Structured résumé name wins, filename is fallback. |
 | R-011 | Choose public/private privacy at creation | Hired resume privacy | Canvas sharing is session-wide | **MISSING** | Résumé artifact privacy is independently persisted. |
 | R-012 | Mark first résumé as master automatically | Hired service promotes first upload | `createResumeFamily` makes the imported source both active and master | **PORTED** | First source is master; later imports do not silently replace it. |
 | R-013 | Import into an existing résumé with confirmation | Hired `targetResumeId` overwrite flow | Generic document editing mutates in place | **MISSING** | Confirmation snapshots current résumé, then imports into a new version. |
 | R-014 | Preserve a named pre-import version | Hired creates “Before résumé import” | Canvas has session snapshots, not résumé versions | **PARTIAL** | A résumé-domain version is created automatically before replacement. |
 | R-015 | Keep uploaded original immutable | Required product invariant | `updateActiveResume` rejects original mutation and the editor disables original editing/template changes | **PORTED** | Original source/revision cannot be overwritten or deleted while derivatives exist. |
-| R-016 | Ask Brain/Recruiter “create me a new résumé” | Hired resume editor tools | `resume` kind advertises `generate`; generic creative compose runs | **DECLARED** | Recruiter creates a structured derived résumé on the same Canvas. |
+| R-016 | Ask Brain/Recruiter “create me a new résumé” | Hired resume editor tools | `canvas_update_object` accepts canonical `resumeDocument` and automatically creates a protected derivative; dedicated Recruiter flow/evals remain | **PARTIAL** | Recruiter creates a structured derived résumé on the same Canvas. |
 | R-017 | Derive from original without replacing it | Hired parent/variation APIs | Canvas résumé family persists original, active and source revision IDs; new versions default to the original | **PORTED** | Derived résumé stores source résumé + exact source revision IDs. |
 | R-018 | Name and rename a derived résumé | Hired variation title | Canvas object title is editable | **PARTIAL** | Rename persists on the résumé artifact and its version list. |
 | R-019 | See Original and all derived résumés together | Hired master résumé groups | Canvas résumé header lists every family revision, with Original labeled and master marked | **PORTED** | Canvas resume header lists lineage with Original pinned first. |
@@ -749,11 +749,11 @@ finishes the behavior against the acceptance gate here or records a product-appr
 | R-029 | Watch/unwatch a résumé | Hired watch APIs | No résumé watch control | **MISSING** | Watch state and notifications port or are explicitly removed by product decision. |
 | R-030 | Merge one résumé into another | Hired analyze, preview, execute merge | Generic branch merge is object-level | **MISSING** | Field-level merge preview supports choose-source and undo. |
 | R-031 | Consolidate duplicate bullets | Hired consolidate API | No résumé-specific action | **MISSING** | Recruiter suggests, previews and applies bullet consolidation. |
-| R-032 | Parse and structure contact basics | Hired canonical resume schema | Imported docs remain Markdown | **MISSING** | Name, label, email, phone, location, URLs and summary are typed fields. |
-| R-033 | Edit work experience | Hired `SectionEditor` | Generic rich-text document editor only | **MISSING** | Add/edit/remove/reorder jobs, dates and highlights. |
-| R-034 | Edit education | Hired `SectionEditor` | Generic rich text only | **MISSING** | Add/edit/remove/reorder institutions, study, dates and score. |
+| R-032 | Parse and structure contact basics | Hired canonical resume schema | JSON Resume preserves typed basics; extracted documents seed name/summary heuristically and expose typed contact/location fields | **PARTIAL** | Name, label, email, phone, location, URLs and summary are typed fields. |
+| R-033 | Edit work experience | Hired `SectionEditor` | Canvas structured editor supports add/edit/remove/reorder for company, position, dates, work mode, description and highlights | **PORTED** | Add/edit/remove/reorder jobs, dates and highlights. |
+| R-034 | Edit education | Hired `SectionEditor` | Canvas structured editor supports add/edit/remove/reorder for institution, degree, area, dates, score and courses | **PORTED** | Add/edit/remove/reorder institutions, study, dates and score. |
 | R-035 | Edit volunteer experience | Hired renderer/section schema | None | **MISSING** | Structured volunteer entries render and export. |
-| R-036 | Edit skills | Hired renderer/section schema | None | **MISSING** | Structured skills can be grouped and reordered. |
+| R-036 | Edit skills | Hired renderer/section schema | Canvas structured editor supports named skill groups, levels, keywords, add/remove and ordering | **PORTED** | Structured skills can be grouped and reordered. |
 | R-037 | Edit languages | Hired renderer/section schema | None | **MISSING** | Language and fluency fields render and export. |
 | R-038 | Edit projects and media | Hired renderer supports project media | None | **MISSING** | Structured projects support URL, role, dates, highlights and media. |
 | R-039 | Edit awards, certificates and publications | Hired renderer/section schema | None | **MISSING** | Each section has structured CRUD and ordering. |
@@ -761,7 +761,7 @@ finishes the behavior against the acceptance gate here or records a product-appr
 | R-041 | Reorder sections | Hired sortable sections and document blocks | Generic object ordering only | **MISSING** | Drag and keyboard reorder persist per résumé/template. |
 | R-042 | Collapse/expand sections while editing | Hired collapse context | None | **MISSING** | Collapse is view preference and does not alter export. |
 | R-043 | Hide/show sections | Template descriptor `enabled` | None | **MISSING** | Visibility toggles persist without deleting content. |
-| R-044 | Inline edit and double-click text | Hired `DocumentStage` | `DocumentEditor` supports rich-text body editing | **PARTIAL** | Typed résumé fields and free text both edit in place. |
+| R-044 | Inline edit and double-click text | Hired `DocumentStage` | Canvas edit mode exposes typed basics/work/education/skills plus an advanced rich-text editor; remaining typed sections and double-click-on-preview remain | **PARTIAL** | Typed résumé fields and free text both edit in place. |
 | R-045 | AI rewrite selected content | Hired AI Rewrite action | Brain can propose generic object updates | **PARTIAL** | Selection-scoped rewrite previews a résumé-field patch. |
 | R-046 | AI create a hook/summary | Hired AI Hook action | Generic Brain prompt only | **PARTIAL** | Dedicated action targets summary/headline and is reversible. |
 | R-047 | ATS/job-tailor workflow | Hired match/tailor handlers | Not natively ported | **MISSING** | JD + source résumé returns scored, editable derivative with cited changes. |
@@ -837,7 +837,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-011 | Detach block to free position / return to flow | **MISSING** | Round-trip retains content and coordinates. |
 | RR-012 | Delete block with undo | **MISSING** | Canvas undo restores block and typed data. |
 | RR-013 | Add text, heading, divider and entity-section blocks | **MISSING** | Palette is entity-aware and prevents duplicate singleton sections. |
-| RR-014 | Empty-section state without fake content | **MISSING** | Empty sections remain editable and omit themselves from export when hidden. |
+| RR-014 | Empty-section state without fake content | **PARTIAL** | Empty sections remain editable and omit themselves from export when hidden. |
 | RR-015 | Apply template to live document | **PORTED** | Content survives every template switch. |
 | RR-016 | Set current template as résumé default | **MISSING** | Default persists on the résumé and opens everywhere. |
 | RR-017 | Template gallery thumbnails and selected/default states | **MISSING** | All 12 render real thumbnails with accessible selection. |

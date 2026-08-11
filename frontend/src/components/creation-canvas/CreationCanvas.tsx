@@ -92,7 +92,7 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
-import { preserveResumeSourceForPatch } from '@/lib/canvasResume';
+import { initializeResumeFromPatch, preserveResumeSourceForPatch } from '@/lib/canvasResume';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -3466,7 +3466,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
       const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, args.kind));
       if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
-      const authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
+      let authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
+      if (args.kind === 'resume') authored = initializeResumeFromPatch(typeof authored.title === 'string' ? authored.title : node.data.title, authored);
       if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
         return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
       }
@@ -3491,7 +3492,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }, {
     name: 'canvas_update_object',
-    description: 'Author or revise any supported field of an existing canvas object. Read the snapshot first to learn its kind and mutableFields.',
+    description: 'Author or revise any supported field of an existing canvas object. Read the snapshot first to learn its kind and mutableFields. For a resume, send the complete JSON Resume object in fields.resumeDocument when possible; the Canvas creates a derived revision and protects the uploaded original automatically.',
     parameters: { type: 'object', required: ['objectId', 'fields'], additionalProperties: false, properties: { objectId: { type: 'string' }, fields: { type: 'object', additionalProperties: true } } },
     mutates: true,
     run: (raw: unknown) => {

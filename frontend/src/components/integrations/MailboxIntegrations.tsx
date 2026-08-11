@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { mailboxApi, type MailboxConnection, type MailboxProviderInfo } from '@/lib/mailboxApi';
 
 export function MailboxIntegrations({ search = '', viewMode = 'card' }: { search?: string; viewMode?: 'card' | 'table' }) {
@@ -30,7 +31,7 @@ export function MailboxIntegrations({ search = '', viewMode = 'card' }: { search
               try { const { authUrl } = await mailboxApi.connect(provider.name, '/settings/integrations'); window.location.href = authUrl; }
               finally { setBusy(false); }
             }}>{accounts.length ? t('connectAnother') : t('connect')}</button>
-            {accounts.length > 0 && <a href="/inbox" style={{ border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', padding: '7px 11px', color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 650 }}>{t('openInbox')}</a>}
+            {accounts.length > 0 && <Link href="/inbox" style={{ border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', padding: '7px 11px', color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 650 }}>{t('openInbox')}</Link>}
           </div>
         </article>;
       })}

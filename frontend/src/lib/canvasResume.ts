@@ -44,6 +44,104 @@ export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
   { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious' },
 ] as const;
 
+export interface CanvasResumeLocation extends Record<string, unknown> {
+  address?: string; postalCode?: string; city?: string; countryCode?: string; region?: string;
+}
+export interface CanvasResumeBasics extends Record<string, unknown> {
+  name?: string; label?: string; image?: string; email?: string; phone?: string; url?: string; summary?: string; location?: CanvasResumeLocation | null;
+}
+export interface CanvasResumeWork extends Record<string, unknown> {
+  id?: string; name?: string; position?: string; url?: string; summary?: string; startDate?: string; endDate?: string;
+  locationType?: string; employmentType?: string; highlights?: string[];
+}
+export interface CanvasResumeEducation extends Record<string, unknown> {
+  id?: string; institution?: string; area?: string; studyType?: string; startDate?: string; endDate?: string; score?: string; url?: string; courses?: string[];
+}
+export interface CanvasResumeSkill extends Record<string, unknown> {
+  id?: string; name?: string; level?: string; keywords?: string[]; yearsOfExperience?: number;
+}
+export interface CanvasResumeDocument extends Record<string, unknown> {
+  basics?: CanvasResumeBasics;
+  work?: CanvasResumeWork[];
+  education?: CanvasResumeEducation[];
+  skills?: CanvasResumeSkill[];
+  volunteer?: Array<Record<string, unknown>>;
+  awards?: Array<Record<string, unknown>>;
+  certificates?: Array<Record<string, unknown>>;
+  publications?: Array<Record<string, unknown>>;
+  languages?: Array<Record<string, unknown>>;
+  interests?: Array<Record<string, unknown>>;
+  references?: Array<Record<string, unknown>>;
+  projects?: Array<Record<string, unknown>>;
+}
+
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const stringValue = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
+const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && !!item.trim()) : [];
+
+/** Retain the complete JSON Resume object, including extension fields Hired does not render. */
+export function resumeDocumentFromJson(value: unknown): CanvasResumeDocument | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? clone(value as CanvasResumeDocument) : null;
+}
+
+function dateRange(row: Record<string, unknown>): string {
+  const start = stringValue(row.startDate);
+  const end = stringValue(row.endDate);
+  return start ? `${start} – ${end || 'Present'}` : '';
+}
+
+/** Canonical JSON Resume → Markdown projection shared by preview, edit, and export. */
+export function renderResumeMarkdown(document: CanvasResumeDocument): string {
+  const lines: string[] = [];
+  const basics = document.basics ?? {};
+  const name = stringValue(basics.name);
+  if (name) lines.push(`# ${name}`);
+  if (stringValue(basics.label)) lines.push(`*${stringValue(basics.label)}*`);
+  const location = basics.location && typeof basics.location === 'object'
+    ? [basics.location.city, basics.location.region, basics.location.countryCode].map(stringValue).filter(Boolean).join(', ')
+    : '';
+  const contact = [basics.email, basics.phone, basics.url, location].map(stringValue).filter(Boolean);
+  if (contact.length) lines.push(contact.join(' · '));
+  if (stringValue(basics.summary)) lines.push('', '## Summary', stringValue(basics.summary));
+
+  const addEntries = (heading: string, rows: unknown, render: (row: Record<string, unknown>) => string[]) => {
+    if (!Array.isArray(rows) || !rows.length) return;
+    const rendered = rows.flatMap((row) => row && typeof row === 'object' && !Array.isArray(row) ? render(row as Record<string, unknown>) : []);
+    if (rendered.length) lines.push('', `## ${heading}`, ...rendered);
+  };
+  addEntries('Experience', document.work, (row) => {
+    const heading = [stringValue(row.position), stringValue(row.name)].filter(Boolean).join(' — ');
+    return [heading ? `### ${heading}` : '', dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.summary), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter((item, index, rows) => item || index === rows.length - 1);
+  });
+  addEntries('Education', document.education, (row) => {
+    const heading = [stringValue(row.institution), stringValue(row.studyType), stringValue(row.area)].filter(Boolean).join(' — ');
+    return [heading ? `### ${heading}` : '', dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.score) ? `Score: ${stringValue(row.score)}` : '', ...stringArray(row.courses).map((item) => `- ${item}`), ''].filter((item, index, rows) => item || index === rows.length - 1);
+  });
+  addEntries('Skills', document.skills, (row) => {
+    const keywords = stringArray(row.keywords);
+    const label = stringValue(row.name);
+    return [label && keywords.length ? `- **${label}**: ${keywords.join(', ')}` : label ? `- ${label}` : keywords.length ? `- ${keywords.join(', ')}` : ''].filter(Boolean);
+  });
+  addEntries('Projects', document.projects, (row) => [`### ${stringValue(row.name)}`, stringValue(row.description), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter(Boolean));
+  addEntries('Volunteer', document.volunteer, (row) => [`### ${[stringValue(row.position), stringValue(row.organization)].filter(Boolean).join(' — ')}`, dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.summary), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter(Boolean));
+  addEntries('Certifications', document.certificates, (row) => [`- ${[stringValue(row.name), stringValue(row.issuer), stringValue(row.date)].filter(Boolean).join(' — ')}`]);
+  addEntries('Awards', document.awards, (row) => [`- ${[stringValue(row.title), stringValue(row.awarder), stringValue(row.date)].filter(Boolean).join(' — ')}`, stringValue(row.summary)].filter(Boolean));
+  addEntries('Publications', document.publications, (row) => [`- ${[stringValue(row.name), stringValue(row.publisher), stringValue(row.releaseDate)].filter(Boolean).join(' — ')}`, stringValue(row.summary)].filter(Boolean));
+  addEntries('Languages', document.languages, (row) => [`- ${[stringValue(row.language), stringValue(row.fluency)].filter(Boolean).join(' — ')}`]);
+  while (lines.length && !lines.at(-1)?.trim()) lines.pop();
+  return lines.join('\n');
+}
+
+/** Best-effort structure for extracted PDF/Word/text while retaining its full Markdown. */
+export function resumeDocumentFromMarkdown(markdown: string): CanvasResumeDocument {
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  const name = stringValue(lines.find((line) => /^#\s+/.test(line))?.replace(/^#\s+/, ''));
+  const summaryStart = lines.findIndex((line) => /^##\s+summary\s*$/i.test(line));
+  const nextHeading = summaryStart >= 0 ? lines.findIndex((line, index) => index > summaryStart && /^##\s+/.test(line)) : -1;
+  const summary = summaryStart >= 0 ? lines.slice(summaryStart + 1, nextHeading >= 0 ? nextHeading : undefined).join('\n').trim() : '';
+  return { basics: { name, summary }, markdown };
+}
+
 export type ResumeRevisionKind = 'original' | 'derived';
 
 export interface CanvasResumeRevision {
@@ -51,6 +149,8 @@ export interface CanvasResumeRevision {
   kind: ResumeRevisionKind;
   title: string;
   markdown: string;
+  document?: CanvasResumeDocument;
+  structuredStale?: boolean;
   templateId: ResumeTemplateId;
   sourceRevisionId: string | null;
   createdAt: string;
@@ -67,7 +167,7 @@ export interface CanvasResumeFamily {
 
 const id = () => crypto.randomUUID();
 
-export function createResumeFamily(args: { title: string; markdown: string; now?: string; idFactory?: () => string }): CanvasResumeFamily {
+export function createResumeFamily(args: { title: string; markdown: string; document?: CanvasResumeDocument; now?: string; idFactory?: () => string }): CanvasResumeFamily {
   const now = args.now ?? new Date().toISOString();
   const revisionId = (args.idFactory ?? id)();
   const original: CanvasResumeRevision = {
@@ -75,6 +175,7 @@ export function createResumeFamily(args: { title: string; markdown: string; now?
     kind: 'original',
     title: args.title.trim(),
     markdown: args.markdown.trim(),
+    ...(args.document ? { document: clone(args.document), structuredStale: false } : {}),
     templateId: 'hired-default',
     sourceRevisionId: null,
     createdAt: now,
@@ -121,7 +222,7 @@ export function selectResumeRevision(family: CanvasResumeFamily, revisionId: str
 
 export function updateActiveResume(
   family: CanvasResumeFamily,
-  patch: Partial<Pick<CanvasResumeRevision, 'title' | 'markdown' | 'templateId'>>,
+  patch: Partial<Pick<CanvasResumeRevision, 'title' | 'markdown' | 'templateId' | 'document' | 'structuredStale'>>,
   now = new Date().toISOString(),
 ): CanvasResumeFamily {
   const active = activeResumeRevision(family);
@@ -129,7 +230,12 @@ export function updateActiveResume(
   return {
     ...family,
     revisions: family.revisions.map((revision) => revision.id === active.id
-      ? { ...revision, ...patch, updatedAt: now }
+      ? {
+        ...revision,
+        ...patch,
+        ...(patch.document ? { document: clone(patch.document), markdown: renderResumeMarkdown(patch.document), structuredStale: false } : {}),
+        updatedAt: now,
+      }
       : revision),
   };
 }
@@ -191,13 +297,35 @@ export function preserveResumeSourceForPatch(
 ): Partial<CreationNodeData> {
   if (patch.resumeFamily) return patch;
   const family = resumeFamilyFromNode(data);
-  const body = typeof patch.markdown === 'string' ? patch.markdown : typeof patch.content === 'string' ? patch.content : null;
+  const requestedDocument = resumeDocumentFromJson(patch.resumeDocument);
+  const body = requestedDocument ? renderResumeMarkdown(requestedDocument)
+    : typeof patch.markdown === 'string' ? patch.markdown
+      : typeof patch.content === 'string' ? patch.content : null;
   if (!family || body == null) return patch;
   const title = typeof patch.title === 'string' && patch.title.trim() ? patch.title : data.title;
   let next = deriveResume(family, title, { fromRevisionId: family.originalRevisionId, ...options });
   const requestedTemplate = RESUME_TEMPLATE_IDS.includes(patch.templateId as ResumeTemplateId)
     ? patch.templateId as ResumeTemplateId
     : activeResumeRevision(next).templateId;
-  next = updateActiveResume(next, { markdown: body, templateId: requestedTemplate }, options.now);
-  return { ...patch, ...resumeNodePatch(next) };
+  next = updateActiveResume(next, requestedDocument
+    ? { document: requestedDocument, templateId: requestedTemplate }
+    : { markdown: body, templateId: requestedTemplate, structuredStale: !!activeResumeRevision(next).document }, options.now);
+  const persistedPatch = { ...patch };
+  delete persistedPatch.resumeDocument;
+  return { ...persistedPatch, ...resumeNodePatch(next) };
+}
+
+/** Materialize a newly agent-authored resume into the same family shape uploads use. */
+export function initializeResumeFromPatch(title: string, patch: Partial<CreationNodeData>): Partial<CreationNodeData> {
+  const document = resumeDocumentFromJson(patch.resumeDocument);
+  const markdown = document ? renderResumeMarkdown(document)
+    : typeof patch.markdown === 'string' ? patch.markdown
+      : typeof patch.content === 'string' ? patch.content : '';
+  if (!markdown.trim()) return patch;
+  const persistedPatch = { ...patch };
+  delete persistedPatch.resumeDocument;
+  return {
+    ...persistedPatch,
+    ...resumeNodePatch(createResumeFamily({ title, markdown, ...(document ? { document } : {}) })),
+  };
 }

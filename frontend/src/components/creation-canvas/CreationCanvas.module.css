@@ -720,6 +720,28 @@
 .resumeCompare section { min-width:0; }
 .resumeCompare section > strong { display:block; margin-bottom:6px; font-size:12px; }
 .resumeCompare .resumePaper { min-height:380px; max-height:560px; padding:22px; font-size:11px; }
+.resumeEditStack { display:flex; flex-direction:column; gap:10px; }
+.resumeStructuredEditor { display:flex; flex-direction:column; gap:8px; max-height:680px; overflow:auto; padding-right:4px; }
+.resumeStructuredEditor details,
+.resumeRawEditor { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.resumeStructuredEditor summary,
+.resumeRawEditor > summary { cursor:pointer; padding:10px 12px; font-weight:750; }
+.resumeStructuredEditor fieldset { position:relative; margin:0 10px 10px; border:1px solid var(--border); border-radius:8px; padding:12px; }
+.resumeStructuredEditor legend { max-width:70%; overflow:hidden; padding:0 5px; font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.resumeFieldGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:9px; padding:0 10px 10px; }
+.resumeStructuredEditor fieldset .resumeFieldGrid { padding:0; }
+.resumeFieldGrid label { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.resumeFieldGrid label > span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeFieldGrid input,
+.resumeFieldGrid textarea { width:100%; min-height:34px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:inherit; padding:6px 8px; font:inherit; }
+.resumeFieldGrid textarea { min-height:72px; resize:vertical; }
+.resumeFieldWide { grid-column:1 / -1; }
+.resumeEntryActions { position:absolute; top:-13px; right:7px; display:flex; gap:3px; background:var(--surface); padding:2px; }
+.resumeEntryActions button { width:25px; height:25px; border:1px solid var(--border); border-radius:5px; background:var(--surface); color:inherit; cursor:pointer; }
+.resumeEntryActions button:disabled { opacity:.35; cursor:not-allowed; }
+.resumeAddEntry { margin:0 10px 10px; border:1px dashed var(--border); border-radius:6px; background:transparent; color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeRawEditor > .docEditor { border:0; border-top:1px solid var(--border); border-radius:0 0 8px 8px; }
+.resumeStaleWarning { margin:0; border-radius:7px; background:color-mix(in srgb, #d97706 12%, transparent); color:#92400e; padding:8px 10px; font-size:12px; }
 @media (max-width:800px) { .resumeCompare { grid-template-columns:1fr; } }
 .node_guidedTour { width:520px; }
 .tourDesign { display:grid; gap:9px; }

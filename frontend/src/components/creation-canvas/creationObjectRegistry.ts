@@ -228,7 +228,7 @@ const MUTABLE_FIELDS = {
   game: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   cad: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'cadState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
   model3d: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'modelState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
-  resume: ['content', 'markdown', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'fileName', 'mimeType', 'fileSize', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  resume: ['content', 'markdown', 'resumeDocument', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'fileName', 'mimeType', 'fileSize', 'mcpServer', 'mcpTool', 'mcpArguments'],
   template: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   document: ['content', 'markdown', 'sources'],
   slides: ['content', 'markdown', 'items', 'sources'],
@@ -379,7 +379,7 @@ const DEFAULT_CONTEXT_DEPTH_LIMIT = 3;
 const CONTEXT_DEPTH_LIMITS: Readonly<Partial<Record<string, number>>> = {
   course: 5,
   tour: 5,
-  resumeFamily: 4,
+  resumeFamily: 6,
 };
 
 function safeContextValue(
