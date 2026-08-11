@@ -445,6 +445,29 @@ describe('CreationCanvas', () => {
     expect(onOpenBuiltinAgent).toHaveBeenNthCalledWith(2, 'manager-card', 'diagnostics');
   });
 
+  it('opens other built-in agents in their native pages without inventing a diagnostics action', () => {
+    const onOpenBuiltinAgent = vi.fn();
+    render(<CreationNode
+      id="cfo-card"
+      type="creation"
+      data={{ kind: 'agent', title: 'CFO', agentSeat: 'CFO', agentDomain: 'finance' }}
+      selected={false}
+      dragging={false}
+      zIndex={0}
+      selectable
+      deletable
+      draggable
+      isConnectable
+      positionAbsoluteX={0}
+      positionAbsoluteY={0}
+      onOpenBuiltinAgent={onOpenBuiltinAgent}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute' }));
+    expect(screen.queryByRole('button', { name: 'Diagnostics' })).not.toBeInTheDocument();
+    expect(onOpenBuiltinAgent).toHaveBeenCalledWith('cfo-card', 'execute');
+  });
+
   it('updates the project widget rendering when its project view changes', () => {
     const props = {
       id: 'project-node', type: 'creation' as const, selected: false, dragging: false, zIndex: 0,

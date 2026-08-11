@@ -14607,7 +14607,7 @@
     "agentExisting": "Existing collaborator",
     "agentPrepareNew": "Prepare this new collaborator",
     "agentBuiltin": "Built-in collaborator",
-    "agentBuiltinHint": "{seat} is managed by BuilderForce. Open its native workspace to execute it or inspect diagnostics.",
+    "agentBuiltinHint": "{seat} is managed by BuilderForce. Open its native workspace to execute it and inspect its activity.",
     "agentExistingHint": "Its workforce configuration is loaded. Changes here update the same agent everywhere.",
     "agentPrepareHint": "Shape how this agent behaves, train it on connected knowledge, and give it a clear direction before inviting it into the conversation.",
     "agentStepPersonality": "1 · Personality",

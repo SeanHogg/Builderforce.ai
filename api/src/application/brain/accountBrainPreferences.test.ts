@@ -5,11 +5,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { UserId } from '../../domain/shared/types';
 
 const USER = 'user-1' as UserId;
+const TENANT = 7;
 
 describe('account Brain preferences', () => {
   it('returns safe account defaults when no row exists', async () => {
     const db = fakeDb([[]]);
-    await expect(getAccountBrainPreferences(db as unknown as Db, USER)).resolves.toEqual({
+    await expect(getAccountBrainPreferences(db as unknown as Db, TENANT, USER)).resolves.toEqual({
       effort: 'balanced', thinking: false, webBrowsing: false,
       modelSelection: { mode: 'auto' }, responseInstructions: '',
     });
@@ -30,13 +31,20 @@ describe('account Brain preferences', () => {
 
   it('upserts the authenticated account row', async () => {
     const db = fakeDb([[]]);
-    const saved = await setAccountBrainPreferences(db as unknown as Db, USER, {
+    const saved = await setAccountBrainPreferences(db as unknown as Db, TENANT, USER, {
       effort: 'quick', modelSelection: { mode: 'byo_pool' },
     });
     expect(saved.effort).toBe('quick');
     expect(db.calls).toHaveLength(1);
     const [call] = db.calls;
     expect(call).toMatchObject({ kind: 'insert', chain: ['values', 'onConflictDoUpdate'] });
-    expect(call?.payload).toMatchObject({ userId: USER, effort: 'quick', modelMode: 'byo_pool' });
+    expect(call?.payload).toMatchObject({
+      tenantId: TENANT,
+      scope: 'user',
+      scopeRef: USER,
+      feature: 'brain',
+      value: { effort: 'quick', modelSelection: { mode: 'byo_pool' } },
+      updatedBy: USER,
+    });
   });
 });

@@ -14606,7 +14606,7 @@
     "agentExisting": "已有协作者",
     "agentPrepareNew": "准备这位新协作者",
     "agentBuiltin": "内置协作者",
-    "agentBuiltinHint": "{seat} 由 BuilderForce 管理。打开其原生工作区以执行或查看诊断。",
+    "agentBuiltinHint": "{seat} 由 BuilderForce 管理。打开其原生工作区以执行并查看活动。",
     "agentExistingHint": "其工作团队配置已加载。在此处的更改会同步更新各处的同一智能体。",
     "agentPrepareHint": "先设定这个智能体的行为方式，用已连接的知识训练它，并给出明确方向，然后再邀请它加入对话。",
     "agentStepPersonality": "1 · 性格",

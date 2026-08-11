@@ -115,21 +115,6 @@ export const users = pgTable('users', {
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
 
-/** Person-level Brain defaults. Deliberately not tenant-scoped: a preference such
- * as concise answers or Thinking-on belongs to the account across every workspace. */
-export const userBrainPreferences = pgTable('user_brain_preferences', {
-  userId:               varchar('user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
-  effort:               varchar('effort', { length: 16 }).notNull().default('balanced'),
-  thinking:             boolean('thinking').notNull().default(false),
-  webBrowsing:          boolean('web_browsing').notNull().default(false),
-  modelMode:            varchar('model_mode', { length: 16 }).notNull().default('auto'),
-  modelId:              text('model_id'),
-  responseInstructions: text('response_instructions'),
-  createdAt:            timestamp('created_at').notNull().defaultNow(),
-  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
-});
-
-
 export const legalDocuments = pgTable('legal_documents', {
   id:           serial('id').primaryKey(),
   documentType: legalDocumentTypeEnum('document_type').notNull(),

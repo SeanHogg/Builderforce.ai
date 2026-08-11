@@ -14606,7 +14606,7 @@
     "agentExisting": "Vorhandener Mitarbeiter",
     "agentPrepareNew": "Diesen neuen Mitarbeiter vorbereiten",
     "agentBuiltin": "Integrierter Mitarbeiter",
-    "agentBuiltinHint": "{seat} wird von BuilderForce verwaltet. Öffnen Sie den nativen Arbeitsbereich, um ihn auszuführen oder die Diagnose zu prüfen.",
+    "agentBuiltinHint": "{seat} wird von BuilderForce verwaltet. Öffnen Sie den nativen Arbeitsbereich, um ihn auszuführen und seine Aktivität zu prüfen.",
     "agentExistingHint": "Seine Workforce-Konfiguration ist geladen. Änderungen hier aktualisieren denselben Agenten überall.",
     "agentPrepareHint": "Lege fest, wie sich dieser Agent verhält, trainiere ihn mit dem verbundenen Wissen und gib ihm eine klare Richtung, bevor du ihn in die Unterhaltung holst.",
     "agentStepPersonality": "1 · Persönlichkeit",

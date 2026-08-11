@@ -10,7 +10,7 @@ export interface AccountBrainPreferences {
 }
 
 const request = <T>(opts: Parameters<typeof apiRequest>[1] = {}): Promise<T> =>
-  apiRequest<T>('/api/account/brain-preferences', { ...opts, auth: 'web' });
+  apiRequest<T>('/api/account/brain-preferences', opts);
 
 export const accountBrainPreferencesApi = {
   get: (): Promise<{ preferences: AccountBrainPreferences }> => request(),

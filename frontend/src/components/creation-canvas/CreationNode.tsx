@@ -407,6 +407,7 @@ function AgentBody({ data, onOpen, onOpenBuiltin }: { data: CreationNodeData; on
   const autonomy = optionLabel(data.autonomy, { low: t('lowAutonomy'), medium: t('mediumAutonomy'), high: t('highAutonomy') }, t('mediumAutonomy'));
   const existing = typeof data.resourceId === 'string' && data.resourceId.startsWith('agent:');
   const builtin = typeof data.agentDomain === 'string' && typeof data.agentSeat === 'string';
+  const managerBuiltin = builtin && data.agentDomain === 'delivery' && data.agentSeat === 'Manager';
   const thinking = data.collaborationState === 'thinking' || data.testStatus === 'Running';
   const latestReply = textValue(data.collaborationReply, textValue(data.testResponse));
   return <>
@@ -421,7 +422,7 @@ function AgentBody({ data, onOpen, onOpenBuiltin }: { data: CreationNodeData; on
     <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span>{typeof data.testStatus === 'string' && data.testStatus && <span>{data.testStatus}</span>}</div>
     <div className={`${styles.nodeActionBar} nodrag nowheel`}>{builtin ? <>
       <button type="button" onClick={(event) => { event.stopPropagation(); onOpenBuiltin?.('execute'); }}>{t('executeBuiltin')}</button>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onOpenBuiltin?.('diagnostics'); }}>{t('builtinDiagnostics')}</button>
+      {managerBuiltin && <button type="button" onClick={(event) => { event.stopPropagation(); onOpenBuiltin?.('diagnostics'); }}>{t('builtinDiagnostics')}</button>}
     </> : <>
       <button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('knowledge'); }}>{t('addKnowledgeStep')}</button>
       <button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('test'); }}>{t('testAgentStep')}</button>

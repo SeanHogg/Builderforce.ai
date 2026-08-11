@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { userBrainPreferences } from '../../infrastructure/database/schema';
+import { settings } from '../../infrastructure/database/schema';
 import type { UserId } from '../../domain/shared/types';
 
 export const BRAIN_EFFORTS = ['quick', 'balanced', 'thorough'] as const;
@@ -24,44 +24,16 @@ export const DEFAULT_ACCOUNT_BRAIN_PREFERENCES: AccountBrainPreferences = {
   responseInstructions: '',
 };
 
-interface PreferenceRow {
-  effort: string;
-  thinking: boolean;
-  webBrowsing: boolean;
-  modelMode: string;
-  modelId: string | null;
-  responseInstructions: string | null;
-}
+const BRAIN_SETTINGS_FEATURE = 'brain';
 
-function fromRow(row: PreferenceRow | undefined): AccountBrainPreferences {
-  if (!row) return DEFAULT_ACCOUNT_BRAIN_PREFERENCES;
-  const effort = BRAIN_EFFORTS.includes(row.effort as AccountBrainEffort)
-    ? row.effort as AccountBrainEffort
-    : 'balanced';
-  const modelSelection = row.modelMode === 'model' && row.modelId
-    ? { mode: 'model' as const, model: row.modelId }
-    : row.modelMode === 'byo_pool'
-      ? { mode: 'byo_pool' as const }
-      : { mode: 'auto' as const };
-  return {
-    effort,
-    thinking: row.thinking,
-    webBrowsing: row.webBrowsing,
-    modelSelection,
-    responseInstructions: row.responseInstructions ?? '',
-  };
-}
-
-export async function getAccountBrainPreferences(db: Db, userId: UserId): Promise<AccountBrainPreferences> {
-  const [row] = await db.select({
-    effort: userBrainPreferences.effort,
-    thinking: userBrainPreferences.thinking,
-    webBrowsing: userBrainPreferences.webBrowsing,
-    modelMode: userBrainPreferences.modelMode,
-    modelId: userBrainPreferences.modelId,
-    responseInstructions: userBrainPreferences.responseInstructions,
-  }).from(userBrainPreferences).where(eq(userBrainPreferences.userId, userId)).limit(1);
-  return fromRow(row);
+export async function getAccountBrainPreferences(db: Db, tenantId: number, userId: UserId): Promise<AccountBrainPreferences> {
+  const [row] = await db.select({ value: settings.value }).from(settings).where(and(
+    eq(settings.tenantId, tenantId),
+    eq(settings.scope, 'user'),
+    eq(settings.scopeRef, userId),
+    eq(settings.feature, BRAIN_SETTINGS_FEATURE),
+  )).limit(1);
+  return row ? parseAccountBrainPreferences(row.value) : DEFAULT_ACCOUNT_BRAIN_PREFERENCES;
 }
 
 export function parseAccountBrainPreferences(input: unknown): AccountBrainPreferences {
@@ -85,28 +57,21 @@ export function parseAccountBrainPreferences(input: unknown): AccountBrainPrefer
   };
 }
 
-export async function setAccountBrainPreferences(db: Db, userId: UserId, input: unknown): Promise<AccountBrainPreferences> {
+export async function setAccountBrainPreferences(db: Db, tenantId: number, userId: UserId, input: unknown): Promise<AccountBrainPreferences> {
   const preferences = parseAccountBrainPreferences(input);
-  const modelMode = preferences.modelSelection.mode;
-  const modelId = modelMode === 'model' ? preferences.modelSelection.model : null;
-  await db.insert(userBrainPreferences).values({
-    userId,
-    effort: preferences.effort,
-    thinking: preferences.thinking,
-    webBrowsing: preferences.webBrowsing,
-    modelMode,
-    modelId,
-    responseInstructions: preferences.responseInstructions || null,
+  await db.insert(settings).values({
+    tenantId,
+    scope: 'user',
+    scopeRef: userId,
+    feature: BRAIN_SETTINGS_FEATURE,
+    value: preferences,
+    updatedBy: userId,
     updatedAt: new Date(),
   }).onConflictDoUpdate({
-    target: userBrainPreferences.userId,
+    target: [settings.tenantId, settings.scope, settings.scopeRef, settings.feature],
     set: {
-      effort: preferences.effort,
-      thinking: preferences.thinking,
-      webBrowsing: preferences.webBrowsing,
-      modelMode,
-      modelId,
-      responseInstructions: preferences.responseInstructions || null,
+      value: preferences,
+      updatedBy: userId,
       updatedAt: new Date(),
     },
   });

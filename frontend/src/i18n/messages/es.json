@@ -14606,7 +14606,7 @@
     "agentExisting": "Colaborador existente",
     "agentPrepareNew": "Prepara a este nuevo colaborador",
     "agentBuiltin": "Colaborador integrado",
-    "agentBuiltinHint": "BuilderForce gestiona {seat}. Abre su espacio nativo para ejecutarlo o revisar los diagnósticos.",
+    "agentBuiltinHint": "BuilderForce gestiona {seat}. Abre su espacio nativo para ejecutarlo y revisar su actividad.",
     "agentExistingHint": "Su configuración de equipo está cargada. Los cambios aquí actualizan el mismo agente en todas partes.",
     "agentPrepareHint": "Define cómo se comporta este agente, entrénalo con el conocimiento conectado y dale una dirección clara antes de invitarlo a la conversación.",
     "agentStepPersonality": "1 · Personalidad",

@@ -5639,6 +5639,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const isExistingAgent = kind === 'agent' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('agent:');
   const isBuiltinAgent = kind === 'agent' && typeof node.data.agentDomain === 'string' && typeof node.data.agentSeat === 'string';
+  const isBuiltinManager = isBuiltinAgent && node.data.agentDomain === 'delivery' && node.data.agentSeat === 'Manager';
   const connectedAgentKnowledge = kind === 'agent' ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : [];
   const connectedAgentEvaluation = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'evaluation' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
   const connectedAgentRelease = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'release' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
@@ -5723,7 +5724,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           </section>
           <div className={styles.agentWorkbench}>
             <button type="button" className={styles.fullButton} onClick={() => onOpenBuiltinAgent('execute')}>{t('node.executeBuiltin')}</button>
-            <button type="button" className={styles.secondaryFullButton} onClick={() => onOpenBuiltinAgent('diagnostics')}>{t('node.builtinDiagnostics')}</button>
+            {isBuiltinManager && <button type="button" className={styles.secondaryFullButton} onClick={() => onOpenBuiltinAgent('diagnostics')}>{t('node.builtinDiagnostics')}</button>}
           </div>
         </> : <>
         <section className={styles.agentSetupGuide} data-existing={isExistingAgent} aria-label={t('agentSetupProgress')}>
