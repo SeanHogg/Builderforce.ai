@@ -1,6 +1,6 @@
 # PRD 18 — hired.video → Builderforce.ai port
 
-**Status:** Proposed · **Owner:** platform · **Created:** 2026-08-07
+**Status:** Proposed · **Port audit:** 2026-08-11 · **Owner:** platform · **Created:** 2026-08-07
 **Companion to:** [PRD 19 — burnrateos.com consolidation](./19-prd-burnrateos-consolidation.md)
 **Goal:** absorb the whole of `C:\code\hired\hired.video` into Builderforce.ai so
 `hired.video` traffic can be redirected at `builderforce.ai` with nothing lost, and so
@@ -276,6 +276,14 @@ This is the smallest slice that makes the headline capability real.
 - Canvas `resume` object: generate → **edit in `DocumentStage`** → export PDF/DOCX via
   `canvasExports.ts` ([[canvas-document-editing-and-export]] — `richText.ts` /
   `printDocument.ts` / `canvasExports.ts` are the only implementations; do not add a second)
+
+**Non-destructive source invariant:** an uploaded résumé is an immutable source revision. “Create
+me a new résumé” creates a derived résumé with `source_resume_id` and `source_revision_id`; it
+never overwrites the uploaded source. The Canvas résumé header exposes **Original**, every named
+derived version, **Compare**, **Restore as new version**, **Make active**, and **Promote to master**.
+Canvas session history is useful recovery infrastructure but is not a substitute for this
+résumé-domain lineage: the user must be able to return to the original without knowing when a
+checkpoint was created or restoring unrelated Canvas objects.
 
 **Cut over:** reimplement `application/integrations/hiredVideo.ts` natively behind its
 existing exported signatures. `isHiredConfigured()` becomes `true` unconditionally; the
@@ -654,3 +662,541 @@ There is no functional area the port drops. Concretely:
 The four items in §6.6 are business decisions (partner contracts, SEO consolidation, database
 tier, store re-review), not missing functionality. hired.video ends as a redirect shell with
 no running product behind it.
+
+---
+
+## 8 · Studio → Canvas UI/UX parity audit (2026-08-11)
+
+This is the implementation-status register for the `/studio` port. Sections 0–7 describe the
+target; this section records what a user can actually reach in Builderforce today. A matching
+type, manifest entry, API client, or commented roadmap item does **not** count as ported.
+
+### 8.1 Audit method, scope and status vocabulary
+
+Source-of-truth surfaces inspected:
+
+- Hired shell and editor: `pages/studio/StudioLanding.tsx`, `StudioWizard.tsx`,
+  `v2/StudioEditorV2.tsx`, `components/studio/**`, `lib/studio/**`, and
+  `shared/media-kinds.ts`.
+- Hired résumé workflow: `ResumeUpload.tsx`, `resume-service.ts`,
+  `types/resume-template.ts`, `resume-renderer/**`, `resume-sections/**`, and the document
+  runtime under `components/studio/document/**`.
+- Builderforce destination: `CreationCanvas.tsx`, `CreationNode.tsx`, `DocumentEditor.tsx`,
+  `CanvasVideoEditor.tsx`, `creationObjectRegistry.ts`, `creationTemplates.ts`,
+  `canvasFileImport.ts`, `canvasExports.ts`, and the creation-session API/history service.
+
+| Status | Meaning |
+|---|---|
+| **PORTED** | User-reachable in the existing Canvas, persisted, and backed by a real implementation. |
+| **PARTIAL** | Some behavior exists, but Hired parity or the end-to-end user journey is incomplete. |
+| **DECLARED** | Kind/action/manifest exists, but the Hired editor/runtime is not mounted. |
+| **MISSING** | No Builderforce user-facing implementation was found. |
+| **REPLACE** | Hired behavior must use an existing Builderforce convention rather than be copied literally. |
+
+**Audit result:** the Studio port is **not complete**. Builderforce already has a stronger generic
+Canvas shell in several areas—Brain operations, session persistence, multiplayer presence,
+object locks, undo/redo, checkpoints, branches/merge, fullscreen, file library, and generic
+exports. It has a basic four-track video editor. The Hired résumé renderer, all 27 résumé-oriented
+template assets, structured résumé lifecycle, and most kind-specific Studio runtimes are not
+ported. The “every capability lands” statement in §7 is therefore a target-state confirmation,
+not a claim about current implementation.
+
+Numbered-row baseline (template-asset rows in §8.3 and catalog-family rows in §8.8 are additional):
+
+| PORTED | PARTIAL | DECLARED | MISSING | REPLACE | Total numbered checks |
+|---:|---:|---:|---:|---:|---:|
+| 31 | 71 | 17 | 185 | 10 | **314** |
+
+The source itself also contains explicit scaffolds and deferrals. Examples include document export
+still throwing from `export-facade.ts`, the `DocumentStage` note that two-column/sidebar editing is
+still to land, Phase-1 CAD scaffolding, and unwired Wav2Lip/OpenVoice providers. This register
+inventories the discoverable Studio UX and contracts because they are the port target, but a port
+must not blindly preserve a source placeholder. Where Hired is incomplete, Builderforce either
+finishes the behavior against the acceptance gate here or records a product-approved removal.
+
+### 8.2 Required résumé user journey — release blocker
+
+| ID | User-visible behavior | Hired evidence | Builderforce evidence / current result | Status | Done when |
+|---|---|---|---|---|---|
+| R-001 | Drop or choose a résumé file | `ResumeUpload.tsx` dropzone and picker | Canvas accepts file drops | **PARTIAL** | A résumé-specific empty state and picker exist inside the `resume` object. |
+| R-002 | Accept PDF | Hired parses PDF server-side | `canvasFileImport.ts` extracts PDF text | **PARTIAL** | Import produces structured résumé data and preserves the source file. |
+| R-003 | Accept DOC/DOCX | Hired accepts `.doc`/`.docx` | Builderforce reads DOCX; legacy DOC is attachment-only | **PARTIAL** | DOC and DOCX both parse into the canonical résumé schema. |
+| R-004 | Accept image/photo scans | Hired accepts JPG/PNG and vision OCR | Canvas imports the image as an Image object | **MISSING** | OCR produces a reviewable structured résumé and keeps the scan. |
+| R-005 | Accept Markdown/TXT | Hired parses both | Canvas creates a generic Document | **PARTIAL** | Import recognizes résumé intent and creates a `resume`, not only `document`. |
+| R-006 | Accept JSON Resume without flattening | `parseJsonResumeFile` preserves structure | JSON is not routed to a résumé schema | **MISSING** | JSON Resume fields round-trip losslessly. |
+| R-007 | Validate file type and show an actionable error | Hired names accepted formats | Generic import has file fallbacks | **PARTIAL** | Resume object gives localized, format-specific errors. |
+| R-008 | Show selected filename, size and type icon | Hired upload review card | Generic file objects show file metadata | **PARTIAL** | Resume import review shows this before mutation. |
+| R-009 | Show parse/upload progress | Hired progress bar | No résumé parse progress state | **MISSING** | Upload, extraction, OCR and structuring phases are visible and retryable. |
+| R-010 | Auto-name from embedded JSON title or filename | Hired does both | Generic imports use filename | **PARTIAL** | Structured résumé name wins, filename is fallback. |
+| R-011 | Choose public/private privacy at creation | Hired resume privacy | Canvas sharing is session-wide | **MISSING** | Résumé artifact privacy is independently persisted. |
+| R-012 | Mark first résumé as master automatically | Hired service promotes first upload | No native résumé/master model | **MISSING** | First source is master; later imports do not silently replace it. |
+| R-013 | Import into an existing résumé with confirmation | Hired `targetResumeId` overwrite flow | Generic document editing mutates in place | **MISSING** | Confirmation snapshots current résumé, then imports into a new version. |
+| R-014 | Preserve a named pre-import version | Hired creates “Before résumé import” | Canvas has session snapshots, not résumé versions | **PARTIAL** | A résumé-domain version is created automatically before replacement. |
+| R-015 | Keep uploaded original immutable | Required product invariant | Canvas snapshots can be restored, but source lineage is absent | **PARTIAL** | Original source/revision cannot be overwritten or deleted while derivatives exist. |
+| R-016 | Ask Brain/Recruiter “create me a new résumé” | Hired resume editor tools | `resume` kind advertises `generate`; generic creative compose runs | **DECLARED** | Recruiter creates a structured derived résumé on the same Canvas. |
+| R-017 | Derive from original without replacing it | Hired parent/variation APIs | Canvas can branch a whole session only | **MISSING** | Derived résumé stores source résumé + exact source revision IDs. |
+| R-018 | Name and rename a derived résumé | Hired variation title | Canvas object title is editable | **PARTIAL** | Rename persists on the résumé artifact and its version list. |
+| R-019 | See Original and all derived résumés together | Hired master résumé groups | No résumé family switcher | **MISSING** | Canvas resume header lists lineage with Original pinned first. |
+| R-020 | Switch back to Original in one action | Hired master/variant model | Possible only by finding/restoring a session revision | **MISSING** | “Original” switches the active rendition without changing other Canvas state. |
+| R-021 | Compare original vs generated résumé | Hired merge analysis/preview APIs | Generic branch merge compares Canvas objects, not résumé fields | **MISSING** | Side-by-side and field/bullet diff use the canonical résumé schema. |
+| R-022 | Restore an old résumé version without destroying head | Hired version restore | Canvas revision restore rewinds the whole graph | **PARTIAL** | Restore creates a new résumé head version and preserves both states. |
+| R-023 | Promote a variant to master | Hired `promoteVariantToMaster` | No résumé-domain operation | **MISSING** | Promotion is explicit, confirmed, atomic and audited. |
+| R-024 | Detach a variant from its parent | Hired `detachFromParent` | No résumé lineage model | **MISSING** | User can copy a variant into an independent résumé. |
+| R-025 | Clone a résumé | Hired `cloneResume` | Canvas duplicates generic objects | **PARTIAL** | Clone includes structured content, template and metadata with a new identity. |
+| R-026 | Archive/unarchive a résumé | Hired archive APIs | No artifact-level résumé archive | **MISSING** | Archive hides without deleting; family and versions remain recoverable. |
+| R-027 | Delete with lineage-aware confirmation | Hired delete/promote tests | Generic object delete has undo, but no lineage rules | **PARTIAL** | Deletion explains descendants and protects the last original/master. |
+| R-028 | Make a résumé active | Hired `setActiveResume` | Selection is transient Canvas state | **MISSING** | Active résumé persists per user/workspace and drives downstream applications. |
+| R-029 | Watch/unwatch a résumé | Hired watch APIs | No résumé watch control | **MISSING** | Watch state and notifications port or are explicitly removed by product decision. |
+| R-030 | Merge one résumé into another | Hired analyze, preview, execute merge | Generic branch merge is object-level | **MISSING** | Field-level merge preview supports choose-source and undo. |
+| R-031 | Consolidate duplicate bullets | Hired consolidate API | No résumé-specific action | **MISSING** | Recruiter suggests, previews and applies bullet consolidation. |
+| R-032 | Parse and structure contact basics | Hired canonical resume schema | Imported docs remain Markdown | **MISSING** | Name, label, email, phone, location, URLs and summary are typed fields. |
+| R-033 | Edit work experience | Hired `SectionEditor` | Generic rich-text document editor only | **MISSING** | Add/edit/remove/reorder jobs, dates and highlights. |
+| R-034 | Edit education | Hired `SectionEditor` | Generic rich text only | **MISSING** | Add/edit/remove/reorder institutions, study, dates and score. |
+| R-035 | Edit volunteer experience | Hired renderer/section schema | None | **MISSING** | Structured volunteer entries render and export. |
+| R-036 | Edit skills | Hired renderer/section schema | None | **MISSING** | Structured skills can be grouped and reordered. |
+| R-037 | Edit languages | Hired renderer/section schema | None | **MISSING** | Language and fluency fields render and export. |
+| R-038 | Edit projects and media | Hired renderer supports project media | None | **MISSING** | Structured projects support URL, role, dates, highlights and media. |
+| R-039 | Edit awards, certificates and publications | Hired renderer/section schema | None | **MISSING** | Each section has structured CRUD and ordering. |
+| R-040 | Edit interests and references | Hired renderer/section schema | None | **MISSING** | Each section has structured CRUD and privacy-safe export behavior. |
+| R-041 | Reorder sections | Hired sortable sections and document blocks | Generic object ordering only | **MISSING** | Drag and keyboard reorder persist per résumé/template. |
+| R-042 | Collapse/expand sections while editing | Hired collapse context | None | **MISSING** | Collapse is view preference and does not alter export. |
+| R-043 | Hide/show sections | Template descriptor `enabled` | None | **MISSING** | Visibility toggles persist without deleting content. |
+| R-044 | Inline edit and double-click text | Hired `DocumentStage` | `DocumentEditor` supports rich-text body editing | **PARTIAL** | Typed résumé fields and free text both edit in place. |
+| R-045 | AI rewrite selected content | Hired AI Rewrite action | Brain can propose generic object updates | **PARTIAL** | Selection-scoped rewrite previews a résumé-field patch. |
+| R-046 | AI create a hook/summary | Hired AI Hook action | Generic Brain prompt only | **PARTIAL** | Dedicated action targets summary/headline and is reversible. |
+| R-047 | ATS/job-tailor workflow | Hired match/tailor handlers | Not natively ported | **MISSING** | JD + source résumé returns scored, editable derivative with cited changes. |
+| R-048 | Export PDF | Hired WYSIWYG browser-print renderer | Resume advertises PDF; generic print path exists | **PARTIAL** | Export uses the exact selected résumé template and pagination. |
+| R-049 | Export DOCX | Hired service/export path | Builderforce offers DOCX from Markdown | **PARTIAL** | DOCX preserves résumé hierarchy, links, sections and selected design semantics. |
+| R-050 | Export HTML/Markdown/copy | Hired has export/download helpers | Builderforce exposes all four | **PORTED** | Keep existing Canvas implementation; feed it canonical résumé content. |
+| R-051 | Public share URL/slug | Hired public résumé and slug validation | Canvas shares sessions, not résumé public views | **MISSING** | Résumé-specific public view has stable slug, privacy and revocation. |
+| R-052 | Embedded résumé view | Hired embed endpoint | No résumé embed surface | **MISSING** | Tokenized embed uses the same renderer and privacy policy. |
+| R-053 | Review sessions, pins and comments | Hired review sidebar/annotation layer | Canvas collaboration exists, no résumé text anchors | **PARTIAL** | Comments anchor to résumé fields/text and survive edits. |
+| R-054 | Version history dialog | Hired entity version history | Canvas session history is user-reachable | **PARTIAL** | Dialog filters to the résumé and distinguishes source, AI, import and manual versions. |
+| R-055 | Autosave and visible save status | Hired server autosave indicator | Canvas autosaves and shows state | **PORTED** | Keep Canvas persistence; include structured résumé payload. |
+| R-056 | Offline/retry safety | Hired save pipeline | Canvas shows offline/reconnecting and retains local state | **PORTED** | Resume mutations use the same persistence queue. |
+
+### 8.3 Résumé template and renderer inventory
+
+Hired contains **12 document résumé designs** in `types/resume-template.ts`. Each descriptor
+controls document mode, theme, font, heading style, density, card style, title sizing, one/two
+columns, sidebar placement, hero/avatar/contact/summary/video visibility, section order, section
+layout, and optional media/highlights. Builderforce currently stores only a `templateId` string
+on a generic résumé card; it has none of these descriptors or the declarative renderer.
+
+| Template ID | Hired design behavior | Builderforce status |
+|---|---|---|
+| `hired-default` | Hired Purple hero; split layout; avatar, contacts, summary, video; career timeline | **MISSING** |
+| `payroll-iron-gray` | Finance; serif; compact two-column; skills/education/credentials sidebar | **MISSING** |
+| `risk-asphalt` | Consulting; sans; caps; two-column credential sidebar | **MISSING** |
+| `executive-taupe` | Executive; serif; spacious one-column divider layout | **MISSING** |
+| `intern-education-first` | New-grad; education first; projects/skills emphasis | **MISSING** |
+| `hospitality-amber` | Hospitality; warm amber; caps; one column | **MISSING** |
+| `creative-minimal` | Minimal slate; mono; spacious plain headings | **MISSING** |
+| `software-engineer-graphite` | Developer graphite; mono; two-column skills/projects sidebar | **MISSING** |
+| `healthcare-clinical-blue` | Clinical blue; compact two-column credentials sidebar | **MISSING** |
+| `sales-growth-emerald` | Sales; emerald; achievement-led caps headings | **MISSING** |
+| `actor-headshot-hero` | Headshot/video hero; credits first; special skills/dialects/representation | **MISSING** |
+| `director-filmography-serif` | Filmography/festivals/press first; spacious serif print design | **MISSING** |
+
+The separate Hired data bundle contains **15 video-résumé compositions**. All are absent from
+Builderforce; the generic `video` node and timeline do not load these scene/theme definitions.
+
+| Template asset | Intended résumé story | Builderforce status |
+|---|---|---|
+| `video-resume-professional` | General professional introduction, achievements, skills and close | **MISSING** |
+| `video-resume-minimal` | Minimal visual résumé | **MISSING** |
+| `video-resume-candidate-intro` | Candidate introduction | **MISSING** |
+| `video-resume-hook-led` | Hook-first pitch | **MISSING** |
+| `video-resume-story-led` | Narrative/story-first pitch | **MISSING** |
+| `video-resume-pivot-led` | Career-pivot narrative | **MISSING** |
+| `video-resume-gig-rapid-deploy` | Gig/rapid-availability pitch | **MISSING** |
+| `video-resume-campaign-staff` | Political/campaign staff pitch | **MISSING** |
+| `video-resume-government-clearance` | Government-cleared candidate | **MISSING** |
+| `video-resume-security-cleared` | Security-cleared candidate | **MISSING** |
+| `video-resume-law-enforcement` | Law-enforcement candidate | **MISSING** |
+| `video-resume-legal-bar` | Legal/bar-qualified candidate | **MISSING** |
+| `video-resume-medical-credentialed` | Medical/credentialed candidate | **MISSING** |
+| `video-resume-trade-licensed` | Licensed-trade candidate | **MISSING** |
+| `video-resume-beauty-portfolio` | Beauty/portfolio candidate | **MISSING** |
+
+Renderer parity is independently required; copying IDs is not completion.
+
+| ID | Renderer/editor capability | Current status | Acceptance evidence |
+|---|---|---|---|
+| RR-001 | One canonical renderer for edit preview, public view and PDF | **MISSING** | Snapshot tests prove identical descriptor/content input across all surfaces. |
+| RR-002 | Hero and print document modes | **MISSING** | Both modes render all 12 descriptors. |
+| RR-003 | Letter, Legal and A4 page sizes | **MISSING** | Preview and exported PDF dimensions match. |
+| RR-004 | Portrait and landscape orientation | **MISSING** | Toggle persists and export matches. |
+| RR-005 | One- and two-column/sidebar layouts | **MISSING** | Sidebar assignment is visible in preview and PDF. |
+| RR-006 | Page-break guides and page numbers | **MISSING** | True-size editor displays computed boundaries. |
+| RR-007 | Continuous and paged/spread view modes | **MISSING** | Toggle changes only editor presentation, not content. |
+| RR-008 | Zoom control bound to the document sheet | **MISSING** | Zoom persists as a view preference and never affects print dimensions. |
+| RR-009 | Move blocks up/down | **MISSING** | Buttons and keyboard action update persisted order. |
+| RR-010 | Drag blocks from palette and reorder in flow | **MISSING** | Drop indicator and keyboard alternative are tested. |
+| RR-011 | Detach block to free position / return to flow | **MISSING** | Round-trip retains content and coordinates. |
+| RR-012 | Delete block with undo | **MISSING** | Canvas undo restores block and typed data. |
+| RR-013 | Add text, heading, divider and entity-section blocks | **MISSING** | Palette is entity-aware and prevents duplicate singleton sections. |
+| RR-014 | Empty-section state without fake content | **MISSING** | Empty sections remain editable and omit themselves from export when hidden. |
+| RR-015 | Apply template to live document | **MISSING** | Content survives every template switch. |
+| RR-016 | Set current template as résumé default | **MISSING** | Default persists on the résumé and opens everywhere. |
+| RR-017 | Template gallery thumbnails and selected/default states | **MISSING** | All 12 render real thumbnails with accessible selection. |
+| RR-018 | Template JSON validation/version compatibility | **MISSING** | Invalid descriptors fail safely; v1.0–v1.2 fixtures migrate. |
+| RR-019 | Theme palette, font family, heading style and density | **MISSING** | Every descriptor field visibly affects preview and export. |
+| RR-020 | Avatar, contact buttons, summary and video hero controls | **MISSING** | Each flag is independently test-covered. |
+| RR-021 | Section layouts: timeline, grid, cards and list | **MISSING** | Canonical fixtures cover every layout. |
+| RR-022 | Date sorting and highlights/media flags | **MISSING** | Order and optional detail match renderer rules. |
+| RR-023 | Print/PDF from preview overlay | **PARTIAL** | Existing PDF action invokes the canonical résumé renderer, not Markdown print. |
+| RR-024 | Escape/close preview and responsive preview chrome | **MISSING** | Keyboard and 360px tests pass. |
+
+### 8.4 Studio landing, template discovery and project chrome
+
+| ID | Hired UI/UX feature | Builderforce mapping | Status |
+|---|---|---|---|
+| S-001 | One landing workspace for signed-in and anonymous visitors | Creation Canvas supports local and server sessions | **PORTED** |
+| S-002 | Create a real persisted draft before entering editor | Server Canvas sessions persist; guests use local state | **PORTED** |
+| S-003 | Anonymous work survives sign-in | `ResumeWorkBridge`/session adoption behavior | **PORTED** |
+| S-004 | New-project split button | Object palette + create actions | **REPLACE** |
+| S-005 | Guided creation wizard | Canvas prompt starters/templates exist; no media-kind Studio wizard | **PARTIAL** |
+| S-006 | Template catalog with thumbnails | Builderforce has 11 Canvas packs, not Hired catalog | **PARTIAL** |
+| S-007 | Filter templates by category | Canvas palette groups templates but lacks Hired filters | **PARTIAL** |
+| S-008 | Filter templates by media kind | No equivalent catalog filter | **MISSING** |
+| S-009 | Search templates | No equivalent in Canvas template picker | **MISSING** |
+| S-010 | Audience/profession template discovery | No Canvas equivalent | **MISSING** |
+| S-011 | Deep-link directly to template/content type/capture/subject | Canvas can deep-link to sessions; Studio seed params absent | **MISSING** |
+| S-012 | Owned/purchased/creator templates | Canvas server templates exist; commerce/ownership states differ | **PARTIAL** |
+| S-013 | First-party badge and creator attribution | No Hired template metadata UI | **MISSING** |
+| S-014 | Template preview/details/related templates | No Hired catalog detail flow | **MISSING** |
+| S-015 | Apply template with source résumé selection | No résumé template flow | **MISSING** |
+| S-016 | Recent projects grid | Canvas session list exists outside this runtime | **REPLACE** |
+| S-017 | Project thumbnail per runtime | Generic previews exist; Hired runtime thumbnails absent | **PARTIAL** |
+| S-018 | Media-kind badge | Canvas object labels kinds | **PORTED** |
+| S-019 | Project status and visibility chips | Canvas save/realtime state exists; artifact visibility absent | **PARTIAL** |
+| S-020 | Rename project inline | Canvas title is inline editable | **PORTED** |
+| S-021 | Clone project | Canvas can duplicate object/branch session | **REPLACE** |
+| S-022 | Delete project with confirmation | Canvas deletion/undo exists; session deletion is separate | **PARTIAL** |
+| S-023 | Project details sheet | Canvas inspector supplies object details | **REPLACE** |
+| S-024 | Workspace switcher | Builderforce workspace shell owns this | **REPLACE** |
+| S-025 | Autosave indicator | Canvas shows saved/offline/reconnecting state | **PORTED** |
+| S-026 | Collaborator presence bar | Canvas has avatars, typing, cursor/viewport follow | **PORTED** |
+| S-027 | Invite/share with roles | Canvas share menu supports invitations/roles | **PORTED** |
+| S-028 | Object edit locks | Canvas creation-session locks exist | **PORTED** |
+| S-029 | Public share link and editor link | Canvas share link exists; artifact public URLs vary | **PARTIAL** |
+| S-030 | Published-destination list and republish | No unified creative publication history | **MISSING** |
+| S-031 | Version-history dialog | Canvas history/checkpoints are user-reachable | **PORTED** |
+| S-032 | Named checkpoint | Canvas supports named checkpoints | **PORTED** |
+| S-033 | Branch and reviewed merge | Canvas supports both | **PORTED** |
+| S-034 | Undo/redo toolbar and shortcuts | Canvas supports both | **PORTED** |
+| S-035 | Copy/cut/paste/duplicate/delete shortcuts | Canvas supports selection clipboard/delete; parity varies by object | **PARTIAL** |
+| S-036 | Fullscreen/presentation mode | Canvas has fullscreen and present mode | **PORTED** |
+| S-037 | Light, dark and mobile layouts | Canvas has responsive/theme work; runtime-specific parity unverified | **PARTIAL** |
+| S-038 | Localized user-visible copy | Canvas uses next-intl, but some existing creation code remains hard-coded | **PARTIAL** |
+
+### 8.5 Shared editor chrome and direct-manipulation inventory
+
+| ID | Hired Studio control | Builderforce status |
+|---|---|---|
+| E-001 | Left tabs for Widgets, Design and Actions | — | **MISSING** |
+| E-002 | Collapsible/resizable left and right panels | — | **MISSING** |
+| E-003 | Runtime router by `mediaKind` | Kinds exist but most use a generic card | **DECLARED** |
+| E-004 | Scene/unit/page rail with select/add/duplicate/delete/reorder | Basic video timeline has clips, not Hired rails | **MISSING** |
+| E-005 | Central stage with runtime aspect ratio | Basic video preview only | **PARTIAL** |
+| E-006 | Select widget by click or layers panel | — | **MISSING** |
+| E-007 | Multi-selection/marquee | Canvas selects multiple top-level objects, not runtime widgets | **PARTIAL** |
+| E-008 | Drag, resize and rotate transform handles | Top-level Canvas drag/resize exists; runtime widget transform absent | **PARTIAL** |
+| E-009 | Position presets | — | **MISSING** |
+| E-010 | Layer panel with ordering and visibility | — | **MISSING** |
+| E-011 | Canvas/stage zoom control | Top-level Canvas zoom exists; runtime-stage zoom absent | **PARTIAL** |
+| E-012 | Safe-zone overlay preference | — | **MISSING** |
+| E-013 | Canvas background color/image | Basic video background color is stored, no UI parity | **PARTIAL** |
+| E-014 | Preview play/pause/restart/scrub | Basic video play/pause/scrub exists | **PARTIAL** |
+| E-015 | Preview overlay separate from editor chrome | — | **MISSING** |
+| E-016 | Keyboard actions suppressed while typing | Canvas handles shortcuts; parity needs focused tests | **PARTIAL** |
+| E-017 | Text widget | — | **MISSING** |
+| E-018 | Heading widget | — | **MISSING** |
+| E-019 | Rectangle and circle widgets | — | **MISSING** |
+| E-020 | Divider widget | — | **MISSING** |
+| E-021 | Image widget | Generic Image object exists, not a compositing widget | **DECLARED** |
+| E-022 | Video widget | Basic video sources/clips exist, not positioned widgets | **PARTIAL** |
+| E-023 | Webcam widget | Camera recording becomes a clip | **PARTIAL** |
+| E-024 | Chart widget | Canvas Chart object exists, not a Studio widget | **REPLACE** |
+| E-025 | Chips widget | — | **MISSING** |
+| E-026 | CTA widget with linked entity | — | **MISSING** |
+| E-027 | Speech-bubble widget | — | **MISSING** |
+| E-028 | Caption-box widget | — | **MISSING** |
+| E-029 | SFX-burst widget | — | **MISSING** |
+| E-030 | AI avatar/presenter widget | — | **MISSING** |
+| E-031 | Linked résumé/job/profile/company/article/video widgets | Canvas connections exist; inline Studio bodies absent | **PARTIAL** |
+| E-032 | Engagement asset widgets: form/chapter/thumbnail/review pin | — | **MISSING** |
+| E-033 | Widget X/Y/width/height/rotation inspector | Top-level object layout exists; widget inspector absent | **PARTIAL** |
+| E-034 | Container background/border/radius/width/padding | — | **MISSING** |
+| E-035 | Enter/exit motion preset, duration and easing | — | **MISSING** |
+| E-036 | Widget in/out timing | Clip timing exists; positioned widget timing absent | **PARTIAL** |
+| E-037 | Widget visual effects and filters | — | **MISSING** |
+| E-038 | Text font/size/weight/color/alignment/background | Document rich text has inline marks, not this inspector | **PARTIAL** |
+| E-039 | Image source/fit/alt text | Generic image metadata only | **PARTIAL** |
+| E-040 | Video source/chroma key/threshold/softness/spill | — | **MISSING** |
+| E-041 | Shape fill/stroke/width/corner radius | — | **MISSING** |
+| E-042 | Chart type/data/format/title/takeaway/series colors | Canvas Chart object covers some fields | **PARTIAL** |
+| E-043 | CTA text, URL, entity link and colors/fonts | — | **MISSING** |
+| E-044 | Avatar portrait/script/TTS/voice/speed | Voice object exists; avatar editor absent | **DECLARED** |
+| E-045 | Subject seed banner and link/unlink subject | — | **MISSING** |
+| E-046 | Drag/drop protocol for palette/media/linked assets | Top-level file/object drop exists; runtime protocol absent | **PARTIAL** |
+| E-047 | Brain edits same persisted artifact as pointer edits | Canvas proposed changes mutate canonical object data | **PORTED** |
+| E-048 | AI selection chip scopes generation to selection | Canvas Brain scopes to Canvas/selection/connected/frame | **REPLACE** |
+
+### 8.6 Recording, media, AI, engagement and advisory actions
+
+| ID | Hired action | Builderforce status |
+|---|---|---|
+| A-001 | Import image/video into source bin | Video imports visual media directly; no source bin | **PARTIAL** |
+| A-002 | Import audio into source bin | Audio imports directly to Music track | **PARTIAL** |
+| A-003 | Stock-media search/picker | — | **MISSING** |
+| A-004 | AI image generation and placement | Generic creative generation exists; placement in Studio stage absent | **PARTIAL** |
+| A-005 | AI headshot generation | — | **MISSING** |
+| A-006 | Screenshot capture → image widget | — | **MISSING** |
+| A-007 | Webcam recording | Basic Canvas video editor records camera | **PORTED** |
+| A-008 | Screen recording | Basic Canvas video editor records screen | **PORTED** |
+| A-009 | Screen + picture-in-picture recording | — | **MISSING** |
+| A-010 | Recording as overlay or new full-bleed scene | Capture becomes a clip; user cannot choose both modes | **PARTIAL** |
+| A-011 | Deep-link/shortcut opens recorder | — | **MISSING** |
+| A-012 | Voiceover record/upload/generate | Audio import exists; dedicated voiceover workflow absent | **PARTIAL** |
+| A-013 | Original/procedural music composer | — | **MISSING** |
+| A-014 | Music catalog | — | **MISSING** |
+| A-015 | Master/track/layer audio mixer and mute | Per-clip volume exists; mixer absent | **PARTIAL** |
+| A-016 | Audio ducking | — | **MISSING** |
+| A-017 | Generate/edit captions | — | **MISSING** |
+| A-018 | Caption styles/position and burn-in | — | **MISSING** |
+| A-019 | Chapter markers | — | **MISSING** |
+| A-020 | Multi-language dubbing | — | **MISSING** |
+| A-021 | Accessibility/WCAG advisory | — | **MISSING** |
+| A-022 | AI rewrite selected text | Generic Brain update only | **PARTIAL** |
+| A-023 | AI hook generation | Generic Brain prompt only | **PARTIAL** |
+| A-024 | Review comments pinned to playback time | — | **MISSING** |
+| A-025 | Video forms/lead capture | — | **MISSING** |
+| A-026 | Thumbnail generator/stamp asset | — | **MISSING** |
+| A-027 | Delivery coach | — | **MISSING** |
+| A-028 | Video analytics dashboard | — | **MISSING** |
+| A-029 | ATS package generator | — | **MISSING** |
+| A-030 | Async interview manager | — | **MISSING** |
+| A-031 | Custom banner generator | — | **MISSING** |
+| A-032 | Brand kits and remove-branding entitlement | — | **MISSING** |
+| A-033 | Voice clone manager | API voice-clone code exists; no Canvas UI | **PARTIAL** |
+| A-034 | Attach media to course lesson | Course object exists; Studio attach flow absent | **MISSING** |
+| A-035 | Page embed management | Generic website/embed capabilities differ | **MISSING** |
+
+### 8.7 Runtime-by-runtime parity
+
+#### Video, podcast and voice
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| V-001 | Visual, music, voiceover and SFX tracks | Four tracks exist | **PORTED** |
+| V-002 | Add image/video/audio files | Supported | **PORTED** |
+| V-003 | Clip start, length and trim-start | Supported | **PORTED** |
+| V-004 | Per-audio-clip volume | Supported | **PORTED** |
+| V-005 | Remove clip | Supported | **PORTED** |
+| V-006 | Live composited preview and scrubber | Basic composition supported | **PORTED** |
+| V-007 | NLE drag/reorder/ripple editing | Numeric fields only | **MISSING** |
+| V-008 | Split audio/video at playhead | — | **MISSING** |
+| V-009 | Multiple scenes and scene transitions | — | **MISSING** |
+| V-010 | Clip/window crop and positioned overlays | — | **MISSING** |
+| V-011 | Multicam/layout presets | — | **MISSING** |
+| V-012 | Motion presets and scene effects | — | **MISSING** |
+| V-013 | Video filters/chroma key | — | **MISSING** |
+| V-014 | Captions, chapters and teleprompter | — | **MISSING** |
+| V-015 | Video generation returns editable frames/clips | Generated frames become editable visual clips | **PORTED** |
+| V-016 | Export real composed video | Browser renderer exists | **PORTED** |
+| V-017 | H.264 MP4 | Canvas renderer output is implementation-dependent, not profile-selected | **PARTIAL** |
+| V-018 | H.265, ProRes, DNxHD and VP9 profiles | — | **MISSING** |
+| V-019 | Podcast MP3/M4A/Opus/WAV/video profiles | Podcast kind is a generic creative card | **DECLARED** |
+| V-020 | Voice MP3/WAV/Opus profiles | Voice is a waveform placeholder | **DECLARED** |
+| V-021 | YouTube publish | — | **MISSING** |
+| V-022 | LinkedIn publish | — | **MISSING** |
+| V-023 | Profile publish/public playback | — | **MISSING** |
+| V-024 | RSS/Apple Podcasts/Spotify destinations | — | **MISSING** |
+
+#### Image/drawing
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| I-001 | Raster stage with true document dimensions | — | **DECLARED** |
+| I-002 | Brush, eraser, fill, eyedropper and marquee tools | — | **MISSING** |
+| I-003 | Text, vector and raster layers | — | **MISSING** |
+| I-004 | Add/delete/select/rename/reorder layers | — | **MISSING** |
+| I-005 | Layer visibility, opacity and blend mode | — | **MISSING** |
+| I-006 | Layer filters and transforms | — | **MISSING** |
+| I-007 | Marquee delete/fill/inpaint | — | **MISSING** |
+| I-008 | AI generate/inpaint/outpaint selected area | Generic image generation only | **PARTIAL** |
+| I-009 | Recent colors and brush settings | — | **MISSING** |
+| I-010 | Floating layers and tool palette | — | **MISSING** |
+| I-011 | PSD import/export with layers | — | **MISSING** |
+| I-012 | Spill large layers to R2 | — | **MISSING** |
+| I-013 | Save flattened image to asset library | Generic file/deliverable library exists | **PARTIAL** |
+| I-014 | PNG/JPEG/WebP export | Generic creative output may produce image, no editor export profiles | **PARTIAL** |
+| I-015 | Profile gallery/asset library publish | — | **MISSING** |
+
+#### Animation
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| AN-001 | Frame stage and frames rail | — | **DECLARED** |
+| AN-002 | Add/duplicate/delete/reorder frames | — | **MISSING** |
+| AN-003 | Frame duration and loop playback | — | **MISSING** |
+| AN-004 | AI-generated frame insertion | Generic animation generation only | **PARTIAL** |
+| AN-005 | GIF, animated WebP and APNG export | — | **MISSING** |
+| AN-006 | Transparent MP4 export | — | **MISSING** |
+| AN-007 | Giphy, Tenor and hosted-CDN publish | — | **MISSING** |
+
+#### Games
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| G-001 | 2D playable game stage | Game card shows authored summary, not runtime | **DECLARED** |
+| G-002 | 3D world stage | — | **DECLARED** |
+| G-003 | Play/edit mode | — | **MISSING** |
+| G-004 | Level rail with add/duplicate/delete/reorder | — | **MISSING** |
+| G-005 | Sprite library/palette and asset cache | — | **MISSING** |
+| G-006 | Entity palette and 3D properties | — | **MISSING** |
+| G-007 | Physics/colliders | — | **MISSING** |
+| G-008 | Visual block vocabulary/interpreter | — | **MISSING** |
+| G-009 | Script editing and runtime | — | **MISSING** |
+| G-010 | Game AI-agent behaviors | — | **MISSING** |
+| G-011 | Challenges panel | — | **MISSING** |
+| G-012 | Multiplayer room/invite | Canvas collaboration exists, game room absent | **PARTIAL** |
+| G-013 | Roblox Luau export | — | **MISSING** |
+| G-014 | HTML5 ZIP and web-embed export | — | **MISSING** |
+| G-015 | itch.io/GitHub Pages publish | — | **MISSING** |
+
+#### Comics
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| C-001 | Comic page/panel authoring stage | — | **DECLARED** |
+| C-002 | Linear and interactive/branching comic state | — | **MISSING** |
+| C-003 | Speech bubble, caption and SFX widgets | — | **MISSING** |
+| C-004 | Page reader with branch choices | — | **MISSING** |
+| C-005 | AI comic/page builder | Generic creative generation only | **PARTIAL** |
+| C-006 | PNG strip export | — | **MISSING** |
+| C-007 | Paginated PDF export | Generic Comic PDF action exists, no comic renderer | **DECLARED** |
+| C-008 | CBZ export | — | **MISSING** |
+| C-009 | Motion comic MP4/GIF | — | **MISSING** |
+| C-010 | Reader/Webtoon/Tapas publish | — | **MISSING** |
+
+#### CAD and 3D
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| D-001 | 2D CAD stage | — | **DECLARED** |
+| D-002 | CAD layer panel | — | **MISSING** |
+| D-003 | Select/draw/edit vector entities | — | **MISSING** |
+| D-004 | Floor-plan/part/electrical/blueprint seeds | — | **MISSING** |
+| D-005 | SVG export | Generic CAD SVG action exists, no authored geometry | **DECLARED** |
+| D-006 | PDF/PNG export | Generic CAD PDF action exists, no authored geometry | **DECLARED** |
+| D-007 | DXF export | — | **MISSING** |
+| D-008 | 3D model stage with orbit controls | Canvas has a board-level 3D view, not CAD modeling | **PARTIAL** |
+| D-009 | Create/select/transform 3D entities | — | **MISSING** |
+| D-010 | Mechanical/massing/product 3D seeds | — | **MISSING** |
+| D-011 | STL/STEP/PNG export | — | **MISSING** |
+| D-012 | Gallery/asset-library publish | — | **MISSING** |
+
+### 8.8 Full Hired template-catalog inventory
+
+`components/studio/templates/catalog.tsx` contains 68 static definitions plus 12 generated comic
+genre entries; `templates-manifest.json` resolves the resulting **90 visible catalog entries**.
+Builderforce has no matching template IDs. The current `creative-studio` Canvas pack merely places
+generic kind cards and is therefore **DECLARED**, not template parity.
+
+| Family | Hired template IDs | Status |
+|---|---|---|
+| Documents | `resume-doc`, `job-doc`, `article-doc`, `blog-doc` | **MISSING** |
+| General/career video | `basic`, `profile`, `resume`, `personal-brand`, `skills-demo`, `code-walkthrough`, `design-portfolio`, `data-analysis` | **MISSING** |
+| Hiring/company video | `job-ad`, `company-promo`, `sizzle-reel`, `tool-promo`, `product-promo` | **MISSING** |
+| Learning video | `course-lesson-explainer`, `course-lesson-demo`, `course-lesson-walkthrough` | **MISSING** |
+| Film/casting | `self-tape`, `monologue`, `showreel`, `director-pitch`, `casting-call` | **MISSING** |
+| Podcast | `podcast-trailer`, `podcast-episode`, `podcast-interview` | **MISSING** |
+| Voice | `voice-audition-reel`, `voice-ivr-prompt`, `voice-audiobook-chapter` | **MISSING** |
+| Games | `game-3d-world`, `endless-runner`, `quiz-game`, `memory-match` | **MISSING** |
+| Drawing/image | `drawing-blank`, `drawing-social-square`, `drawing-og-card` | **MISSING** |
+| Animation | `animation-logo-loop`, `animation-spinner`, `animation-reaction`, `animation-explainer` | **MISSING** |
+| CAD | `cad-floor-plan`, `cad-part-drawing`, `cad-electrical-schematic`, `cad-blueprint` | **MISSING** |
+| CAD 3D | `cad3d-part`, `cad3d-massing`, `cad3d-product` | **MISSING** |
+| Display/social ads | `ad-iab-mpu-300x250`, `ad-iab-large-rect-336x280`, `ad-iab-leaderboard-728x90`, `ad-iab-half-page-300x600`, `ad-iab-skyscraper-160x600`, `ad-iab-billboard-970x250`, `ad-iab-mobile-banner-320x50`, `ad-iab-large-mobile-320x100`, `ad-og-link-card-1200x630`, `ad-social-reel-9x16`, `ad-meta-in-feed-4x5`, `ad-pinterest-pin-2x3`, `ad-youtube-bumper-6s`, `ad-outdoor-billboard-4x1` | **MISSING** |
+| Linear comics | `comic-hero`, `comic-noir`, `comic-scifi`, `comic-fantasy`, `comic-romance`, `comic-slice`, `comic-manga`, `comic-horror`, `comic-comedy`, `comic-retro80s`, `comic-webtoon`, `comic-adventure` | **MISSING** |
+| Interactive comics | `icomic-branching-pitch`, `icomic-choose-path`, `icomic-case-study` | **MISSING** |
+| Declarative résumé designs | The 12 IDs in §8.3 | **MISSING** |
+
+Every catalog entry is complete only when it has: localized name/description, real thumbnail,
+category and media-kind filters, preview/details, a seed that produces editable runtime state,
+template-application tests, and the expected export. A card that only stores the template ID fails
+this gate.
+
+### 8.9 Export, publish and lifecycle parity
+
+| ID | Feature | Builderforce status |
+|---|---|---|
+| X-001 | Primary Save persists draft without rendering | Canvas autosave provides equivalent behavior | **REPLACE** |
+| X-002 | Save-options menu derived from media kind | Generic object export list exists, not Hired capability registry | **PARTIAL** |
+| X-003 | Export creates a child rendition without replacing editable source | Canvas deliverables attach to object | **PORTED** |
+| X-004 | Download/result appears in Canvas Files library | Implemented | **PORTED** |
+| X-005 | Free/Pro output-profile gating | No Hired profile registry in Canvas | **MISSING** |
+| X-006 | Video profiles: H.264, H.265, ProRes, DNxHD, VP9 | Only generic video export | **PARTIAL** |
+| X-007 | Podcast profiles: MP3+chapters, M4A, Opus, WAV, video MP4 | — | **MISSING** |
+| X-008 | Voice profiles: MP3, WAV, Opus | — | **MISSING** |
+| X-009 | Animation profiles: GIF, WebP, APNG, transparent MP4 | — | **MISSING** |
+| X-010 | Game profiles: HTML5 ZIP, itch ZIP, web embed | — | **MISSING** |
+| X-011 | Comic profiles: PNG strip, PDF, CBZ, motion MP4/GIF | PDF action only, without renderer | **DECLARED** |
+| X-012 | Image profiles: PNG, JPEG, WebP, layered PSD | Generic generated image file only | **PARTIAL** |
+| X-013 | CAD profiles: SVG, PDF, DXF, PNG, STL, STEP | SVG/PDF actions declared only | **DECLARED** |
+| X-014 | CAD 3D profiles: STL, STEP, PNG | — | **MISSING** |
+| X-015 | Document profiles: PDF and PNG | PDF/DOCX/HTML/Markdown exist; template render/PNG absent | **PARTIAL** |
+| X-016 | Copy public share link | Canvas share link exists | **PORTED** |
+| X-017 | Copy editor link | Session URL provides equivalent | **REPLACE** |
+| X-018 | Publish history with view/republish | — | **MISSING** |
+| X-019 | YouTube, LinkedIn and profile destinations | — | **MISSING** |
+| X-020 | Podcast RSS/Apple/Spotify destinations | — | **MISSING** |
+| X-021 | Voice marketplace/profile audio destinations | — | **MISSING** |
+| X-022 | Animation Giphy/Tenor/CDN destinations | — | **MISSING** |
+| X-023 | Game itch.io/GitHub Pages/embed destinations | — | **MISSING** |
+| X-024 | Comic reader/Webtoon/Tapas destinations | — | **MISSING** |
+| X-025 | Image/CAD gallery and asset-library destinations | — | **MISSING** |
+| X-026 | Attach time-based output to a course | — | **MISSING** |
+| X-027 | Visibility private/unlisted/public | Session sharing exists; creative artifact visibility absent | **PARTIAL** |
+| X-028 | Brand watermark and remove-branding entitlement | — | **MISSING** |
+| X-029 | Project clone/delete/template lifecycle actions in one menu | Canvas has equivalent actions across menus | **REPLACE** |
+| X-030 | Export failure, progress, retry and cancellation states | Video shows busy/error; other runtimes absent | **PARTIAL** |
+
+### 8.10 Port order and acceptance gates
+
+The audit changes T4 from “move runtimes” into the following shippable gates. No slice may be
+marked complete from file presence alone.
+
+1. **Résumé source + lineage.** Add the native canonical résumé schema, upload/extraction/OCR,
+   immutable source revisions, derived variants, Original/Derived switcher, field diff, restore,
+   active/master/archive/delete rules, and Recruiter operations. Prove R-001–R-047.
+2. **Résumé renderer + 27 templates.** Port the 12 declarative document designs and 15
+   video-résumé compositions, using one canonical preview/public/export renderer. Prove §8.3 and
+   golden fixtures for every template.
+3. **Document Canvas runtime.** Mount `DocumentStage` behavior inside the selected Canvas résumé
+   object; do not open a Studio route or second editor. Prove RR-001–RR-024 at 360px, light/dark,
+   keyboard-only and all five locales.
+4. **Shared runtime shell.** Port editor tabs, rails, stage overlays, properties, layers, media,
+   action panels, keyboard map and capability-driven save menu. Prove §8.5–§8.6.
+5. **Time-based runtime.** Extend the existing `CanvasVideoEditor` rather than forking it; port
+   scenes/widgets/NLE/audio/captions/engagement and all video/podcast/voice profiles.
+6. **Static and interactive runtimes.** Port image/drawing, animation, games, comics, CAD and 3D
+   in that order, with each runtime's import/edit/preview/export loop intact.
+7. **Catalog and publishing.** Register all 90 Hired Studio entries in the canonical Builderforce
+   template service, then port destination adapters and publication history.
+
+Global completion gate:
+
+- Every row in §8 is **PORTED** or deliberately **REPLACE** with tested Builderforce-equivalent
+  behavior; no **MISSING**, **DECLARED** or **PARTIAL** row remains.
+- A user can upload a PDF résumé, generate two tailored derivatives, edit each, switch to the
+  immutable Original, compare them, restore an older derivative as a new head, and export the
+  selected 12-template design to PDF and DOCX after a reload.
+- AI and direct manipulation write the same object/revision; every export is a rendition child.
+- Template and capability registries have source-to-catalog localization tests for en/zh/es/fr/de.
+- Runtime bundles are dynamically loaded and meet the Canvas bundle/performance budget.
+- Focused unit, integration and Playwright tests cover each status row; the release checklist links
+  the test or product decision that changed it to **PORTED**/**REPLACE**.

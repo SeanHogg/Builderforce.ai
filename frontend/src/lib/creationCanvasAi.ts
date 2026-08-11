@@ -36,6 +36,13 @@ type CanvasAiOptions = {
     learn: (answer: string, prompt: string) => Promise<{ ok: boolean; queued?: number }>;
   };
   onTrace?: (event: BrainTraceEvent) => void;
+  /** Session diagnostics hook. Contains routing facts only; never prompt text,
+   * credentials, or provider response bodies. */
+  onCompletion?: (completion: CanvasAiCompletion) => void;
+  /** Models that already proved unable to execute a Canvas command in this
+   * session. An explicitly selected rejected model must not be invoked again. */
+  disabledModels?: readonly string[];
+  onModelDisabled?: (model: string) => void;
   /** Awaitable in-app approval. Mutating tenant actions are refused when this is
    * absent; the runner must never fall back to a browser-native prompt. */
   confirmAction?: (request: { name: string; args: unknown }) => Promise<boolean>;
@@ -61,6 +68,19 @@ type CanvasAiOptions = {
    *  it to file the ticket somewhere; absent, the model is told to ask for one. */
   projectId?: number | null;
 };
+
+export interface CanvasAiCompletion {
+  at: string;
+  iteration: number;
+  requestedModel: string | null;
+  resolvedModel: string | null;
+  resolvedVendor: string | null;
+  account: string | null;
+  routingMode: 'auto' | 'byo_pool';
+  toolsAdvertised: number;
+  toolCalls: string[];
+  finishReason: string | null;
+}
 
 /**
  * The MODE block for a canvas turn.
@@ -276,6 +296,12 @@ export class GuestAiUnavailableError extends Error {
 
 /** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
+  if (options.model && options.disabledModels?.includes(options.model)) {
+    throw new Error(`Model '${options.model}' is disabled for this session because it did not execute an earlier Canvas command.`);
+  }
+  if (!options.model && options.disabledModels?.length) {
+    throw new Error(`Automatic model routing is disabled for this session because it previously resolved to '${options.disabledModels[options.disabledModels.length - 1]}', which did not execute a Canvas command. Select a different model to continue.`);
+  }
   if (options.persistence === 'local' && !(await ensureGuestToken())) {
     throw new GuestAiUnavailableError();
   }
@@ -391,6 +417,17 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       routingMode: options.routingMode,
       metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
+    options.onCompletion?.({
+      at: new Date().toISOString(), iteration: turn + 1,
+      requestedModel: options.model ?? null,
+      resolvedModel: result.resolvedModel ?? null,
+      resolvedVendor: result.resolvedVendor ?? null,
+      account: result.account ?? null,
+      routingMode: options.routingMode ?? 'auto',
+      toolsAdvertised: availableActions.length,
+      toolCalls: result.toolCalls.map((call) => call.name),
+      finishReason: result.finishReason,
+    });
     if (!result.toolCalls.length) {
       if (!options.participant && !proposedCanvasMutation && !imperativeMutationRecoveryUsed
         && mutationRequested
@@ -405,6 +442,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         continue;
       }
       if (mutationRequested && !proposedCanvasMutation && imperativeMutationRecoveryUsed) {
+        if (result.resolvedModel) options.onModelDisabled?.(result.resolvedModel);
         finalText = '';
         break;
       }

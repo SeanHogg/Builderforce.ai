@@ -45,6 +45,17 @@ describe('streamChatCompletion transport injection', () => {
     expect(deltas.join('')).toBe('Hello world');
   });
 
+  it('returns the gateway-resolved model and vendor for session diagnostics', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(['data: [DONE]\n'], {
+      headers: { 'x-builderforce-model': 'provider/model-1', 'x-builderforce-vendor': 'provider' },
+    })));
+
+    const result = await streamChatCompletion({ messages: [], transport: baseTransport });
+
+    expect(result.resolvedModel).toBe('provider/model-1');
+    expect(result.resolvedVendor).toBe('provider');
+  });
+
   it('uses transport.defaultModel when no model is given', async () => {
     const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
     vi.stubGlobal('fetch', fetchMock);

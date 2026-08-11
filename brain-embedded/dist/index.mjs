@@ -246,6 +246,13 @@ async function streamChatCompletion(opts, handlers = {}) {
   }
   let streamModel = null;
   const resolvedModel = () => headerModel ?? streamModel ?? void 0;
+  let headerVendor = null;
+  try {
+    headerVendor = res.headers?.get?.("x-builderforce-vendor") || null;
+  } catch {
+    headerVendor = null;
+  }
+  const resolvedVendor = () => headerVendor ?? void 0;
   let headerAccount = null;
   try {
     headerAccount = res.headers?.get?.("x-builderforce-account") || null;
@@ -293,7 +300,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -311,7 +318,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
       }
       let parsed;
       try {
@@ -350,7 +357,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -2141,6 +2148,32 @@ function handleRouterCall(catalog, name, args) {
   return { dispatch: { name: target, args: a.args ?? {} } };
 }
 
+// src/turnOptimization.ts
+var MAX_ROUTING_QUERY_CHARS = 4e3;
+var ROUTING_USER_TURNS = 4;
+function textContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
+}
+function routingQueryForTurn(messages) {
+  const turns = messages.filter((message) => message.role === "user").map((message) => textContent(message.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
+  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
+}
+function turnOptimizationDirective() {
+  return [
+    "TURN OPERATING CONTRACT:",
+    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
+    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
+    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
+    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
+    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
+    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
+    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
+    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+  ].join("\n");
+}
+
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
@@ -2716,13 +2749,15 @@ ${extra}`;
   }
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, chatId)}`;
+${chatModeDirective(runMode, chatId)}
+
+${turnOptimizationDirective()}`;
   const readDedupe = /* @__PURE__ */ new Set();
   let announcementRecoveries = 0;
   let activeModel = model;
   const triedModels = [];
   let modelFailovers = 0;
-  const requestQuery = (req.userTurn !== void 0 ? latestUserText([{ role: "user", content: req.userTurn }]) : "") || latestUserText(convo) || "";
+  const requestQuery = routingQueryForTurn(convo);
   const promptNamedTools = toolNamesMentionedIn(systemPrompt);
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
@@ -3961,6 +3996,7 @@ export {
   resolveRecipient,
   resolveRunConfirm,
   routerToolSpecs,
+  routingQueryForTurn,
   startRun as runBrainLoop,
   savePendingPrompt,
   scopeToConsolidation,
@@ -3981,6 +4017,7 @@ export {
   toolNamesMentionedIn,
   toolSpecsFor,
   traceWithPersistedSteps,
+  turnOptimizationDirective,
   useBrainActions,
   useBrainChats,
   useBrainConfig,

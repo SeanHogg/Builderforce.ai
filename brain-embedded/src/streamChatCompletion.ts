@@ -207,6 +207,9 @@ export interface StreamChatResult {
    * record which LLM (or which `evermind/…` artifact) produced a turn.
    */
   resolvedModel?: string;
+  /** Provider/vendor that actually served the completion, reported independently
+   * from the model id so diagnostics never have to guess from naming conventions. */
+  resolvedVendor?: string;
   /**
    * Which account served this turn, from the gateway's `x-builderforce-account`
    * response header: `own` (the tenant's connected frontier account), `shared`
@@ -329,6 +332,9 @@ export async function streamChatCompletion(
   try { headerModel = res.headers?.get?.('x-builderforce-model') || null; } catch { headerModel = null; }
   let streamModel: string | null = null;
   const resolvedModel = (): string | undefined => headerModel ?? streamModel ?? undefined;
+  let headerVendor: string | null = null;
+  try { headerVendor = res.headers?.get?.('x-builderforce-vendor') || null; } catch { headerVendor = null; }
+  const resolvedVendor = (): string | undefined => headerVendor ?? undefined;
   // The account that served this turn (own / shared / shared_byo_unused) — set by
   // the gateway and readable cross-origin only when CORS-exposed (it is). Powers
   // the provenance chip; absent gracefully degrades to no chip.
@@ -388,7 +394,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
   }
 
   const decoder = new TextDecoder();
@@ -407,7 +413,7 @@ export async function streamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
       }
       let parsed: {
         model?: string;
@@ -472,7 +478,7 @@ export async function streamChatCompletion(
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

@@ -59,7 +59,7 @@ import {
   createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
 } from '@/lib/guestRoomApi';
-import { GuestAiUnavailableError, runCreationCanvasAi } from '@/lib/creationCanvasAi';
+import { GuestAiUnavailableError, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
@@ -634,6 +634,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * of observing the board would change what is being observed.
    */
   const journal = useRef(createCanvasJournal());
+  /** Effective inference facts accumulated by this mounted Creation Session.
+   * Kept out of render state: observing completions must not remount the board. */
+  const brainRuntime = useRef<{ completions: CanvasAiCompletion[]; disabledModels: string[] }>({
+    completions: [], disabledModels: [],
+  });
+  const recordBrainCompletion = useCallback((completion: CanvasAiCompletion) => {
+    brainRuntime.current.completions = [...brainRuntime.current.completions, completion].slice(-50);
+  }, []);
+  const disableBrainModel = useCallback((model: string) => {
+    if (!model || brainRuntime.current.disabledModels.includes(model)) return;
+    brainRuntime.current.disabledModels = [...brainRuntime.current.disabledModels, model];
+  }, []);
 
   const liveSession = useOptionalLiveSession();
   const [localPresentMode, setLocalPresentMode] = useState(initialPresent);
@@ -3663,6 +3675,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     try {
       const response = await runCreationCanvasAi({
         prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [],
+        disabledModels: brainRuntime.current.disabledModels,
+        onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
         ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
         routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
         participant: { ref: agent.data.resourceId || agent.id, name: agent.data.title, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
@@ -3688,7 +3702,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: t('noticeAgentTestStatusError', { reason: message }) } } : node));
       setNotice(message);
     }
-  }, [describeTurnError, edges, modelSelection, nodes, persistence, setEdges, setNodes, t]);
+  }, [describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, recordBrainCompletion, setEdges, setNodes, t]);
 
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
@@ -3795,6 +3809,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 guestTurnInput: request,
                 persistence, canvasActions, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
                 autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
+                disabledModels: brainRuntime.current.disabledModels,
+                onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
                 participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
                 conversation: groupConversation,
               });
@@ -3826,6 +3842,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
           routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
+          disabledModels: brainRuntime.current.disabledModels,
+          onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
           ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
             recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
             learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
@@ -3940,7 +3958,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
@@ -4924,6 +4942,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     undoDepth: undoStack.current.length,
     timeline: timeline.map((message) => ({ role: message.messageRole === 'assistant' ? 'Brain' : message.messageRole, body: message.body, createdAt: message.createdAt })),
     brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
+    brainRuntime: {
+      selection: modelSelection,
+      mode: sessionMode,
+      memoryEnabled,
+      autoApply: autoApplyRef.current,
+      runStartedAt: brainRunStartedAt == null ? null : new Date(brainRunStartedAt).toISOString(),
+      scope: resolvedScopeMode,
+      scopedObjectIds: [...scopedNodeIds],
+      availableTools: canvasActions.map((action) => action.name),
+      disabledModels: [...brainRuntime.current.disabledModels],
+      completions: [...brainRuntime.current.completions],
+    },
     trace: brainTrace.map((event) => ({
       ts: event.ts, category: event.category, label: event.label,
       ok: event.isError === true ? false : null,
@@ -4937,7 +4967,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // selection is why "I don't see that file anywhere on the canvas" could be
     // said about a file that was on the canvas.
     scopedObjectCount: scopedNodes.length,
-  }, await captureDiagnosticsContext()), [allMembers.length, brainTrace, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, scopedNodes.length, sessionId, sessionRole, thinking, timeline, title]);
+  }, await captureDiagnosticsContext()), [allMembers.length, brainRunStartedAt, brainTrace, canvasActions, edges.length, effectiveSelectedIds, memoryEnabled, modelSelection, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, scopedNodeIds, scopedNodes.length, sessionId, sessionMode, sessionRole, thinking, timeline, title]);
 
   /**
    * The diagnostics control does the whole job in one click: the report is on the

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -23,16 +23,16 @@ import { ProjectManagerVisual } from './marketing/ProjectManagerVisual';
  * All per-route copy lives in lib/routeMarketing.ts (single source of truth);
  * this component only renders it and decides its own section visibility.
  */
-export default function RouteMarketing({ pathname }: { pathname: string }) {
+function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: string | null }) {
   const t = useTranslations('routeMarketing');
-  const searchParams = useSearchParams();
   const m = getRouteMarketing(pathname);
-  const loginHref = signInHref(pathname);
   const isProjectsRoute = pathname === '/projects';
-  const conversionVariant = isProjectsRoute && searchParams.get('tab') === 'manager' ? 'manager' : isProjectsRoute ? 'projects' : null;
+  const conversionVariant = isProjectsRoute && tab === 'manager' ? 'manager' : isProjectsRoute ? 'projects' : null;
+  const loginHref = signInHref(conversionVariant === 'manager' ? `${pathname}?tab=manager` : pathname);
   const title = conversionVariant ? t(`${conversionVariant}.title`) : m.title;
   const description = conversionVariant ? t(`${conversionVariant}.description`) : m.description;
   const metaDesc = conversionVariant ? t(`${conversionVariant}.seoDescription`) : m.seoDescription ?? m.description;
+  const faq = conversionVariant === 'manager' ? undefined : m.faq;
 
   // Client-set <title>/description so each feature route has a unique, crawlable
   // head (these routes render client-side, so there is no server metadata
@@ -69,7 +69,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
           path: pathname,
           title,
           description: metaDesc,
-          faq: m.faq,
+          faq,
         })}
       />
 
@@ -159,11 +159,11 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         </div>
       </section>
 
-      {m.faq && m.faq.length > 0 && (
+      {faq && faq.length > 0 && (
         <section className="rm-faq">
           <div className="ui-eyebrow rm-inside-head">{t('faqHeading')}</div>
           <div className="rm-faq-list">
-            {m.faq.map((q) => (
+            {faq.map((q) => (
               <details
                 key={q.question}
                 className={surfaceClassName({ tone: 'raised', padding: 'none' }, 'rm-faq-item')}
@@ -299,5 +299,18 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         @media (max-width: 620px) { .rm-board { grid-template-columns: 1fr; } .rm-board-column { min-height: 0; } .rm-manager-grid { grid-template-columns: 1fr; } .rm-close { align-items: flex-start; flex-direction: column; } }
       `}</style>
     </div>
+  );
+}
+
+function RouteMarketingQuery({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  return <RouteMarketingContent pathname={pathname} tab={searchParams.get('tab')} />;
+}
+
+export default function RouteMarketing({ pathname }: { pathname: string }) {
+  return (
+    <Suspense fallback={<RouteMarketingContent pathname={pathname} tab={null} />}>
+      <RouteMarketingQuery pathname={pathname} />
+    </Suspense>
   );
 }

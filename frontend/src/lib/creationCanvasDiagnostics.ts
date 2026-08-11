@@ -69,6 +69,9 @@ export type CreationCanvasDiagnosticsInput = {
   undoDepth?: number | null;
   timeline: Array<{ role: string; body: string; createdAt: string }>;
   brain: { scope: string; thinking: boolean; proposedChangeCount: number; actionCount: number };
+  /** Effective, in-memory Brain variables for this Creation Session. This is a
+   * snapshot of what served the session, not a restatement of deployment defaults. */
+  brainRuntime?: Record<string, unknown>;
   trace?: CreationCanvasDiagnosticsTraceEvent[];
   /**
    * What the person and the agent actually DID, with durations. The report could
@@ -255,6 +258,9 @@ export function buildCreationCanvasDiagnosticsReport(
     line('timelineMessages', input.timeline.length),
     line('traceEvents', trace.length),
     '',
+    '-- Brain session snapshot --',
+    JSON.stringify(input.brainRuntime ?? {}, null, 2),
+    '',
     '-- Brain tool trace --',
     ...(traceRows.length
       ? windowRows(traceRows, { head: TRACE_HEAD, tail: TRACE_TAIL, note: (elided) => [`… ${elided} earlier trace events elided …`] })
@@ -274,8 +280,8 @@ export function buildCreationCanvasDiagnosticsReport(
     '',
     // Re-parseable payload; drops the transcript first when the budget is tight,
     // since it is the one block already rendered in full above.
-    ...jsonAppendix(text.length, { objects: input.objects, trace, actions, timeline: input.timeline }, {
-      compact: () => ({ objects: input.objects, trace, actions }),
+    ...jsonAppendix(text.length, { objects: input.objects, trace, actions, timeline: input.timeline, brainRuntime: input.brainRuntime ?? {} }, {
+      compact: () => ({ objects: input.objects, trace, actions, brainRuntime: input.brainRuntime ?? {} }),
       note: '(transcript omitted to stay within the paste budget — it is rendered above)',
     }),
   ].join('\n');

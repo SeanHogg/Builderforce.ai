@@ -22,13 +22,24 @@ function input(overrides: Partial<CreationCanvasDiagnosticsInput> = {}): Creatio
 
 describe('Creation Canvas diagnostics', () => {
   it('captures session, graph, Brain, and bounded conversation state', () => {
-    const report = buildCreationCanvasDiagnosticsReport(input(), CONTEXT);
+    const report = buildCreationCanvasDiagnosticsReport(input({
+      brainRuntime: {
+        selection: { mode: 'auto' },
+        mode: 'chat',
+        disabledModels: ['weak/model'],
+        completions: [{ resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', toolsAdvertised: 24, toolCalls: [] }],
+      },
+    }), CONTEXT);
 
     expect(report).toContain('# Creation Canvas diagnostics — Campaign');
     expect(report).toContain('revision: 7');
     expect(report).toContain('objectKinds: chat:1, website:1, workflow:1');
     expect(report).toContain('proposedChangesAwaitingReview: 2');
     expect(report).toContain('Evaluate the campaign');
+    expect(report).toContain('-- Brain session snapshot --');
+    expect(report).toContain('"resolvedModel": "weak/model"');
+    expect(report).toContain('"resolvedVendor": "weak-provider"');
+    expect(report).toContain('"disabledModels"');
   });
 
   // The regression this report exists to catch. A workflow card can say

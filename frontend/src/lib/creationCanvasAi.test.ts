@@ -103,6 +103,43 @@ describe('runCreationCanvasAi', () => {
     expect(mocks.streamChatCompletion.mock.calls[1][0].messages.some((message: { content: string }) => message.content.includes('prior response described or discussed'))).toBe(true);
   });
 
+  it('captures resolved model provenance and disables a model that twice refuses a Canvas command', async () => {
+    const completions: unknown[] = [];
+    const disabled = vi.fn();
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: 'I will create it.', toolCalls: [], resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: 'Tell me what to create.', toolCalls: [], resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', finishReason: 'stop' });
+
+    await runCreationCanvasAi({
+      prompt: 'Create a document on the canvas', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
+      onCompletion: (completion) => completions.push(completion),
+      onModelDisabled: disabled,
+    });
+
+    expect(completions).toMatchObject([
+      { iteration: 1, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolsAdvertised: 4, toolCalls: [] },
+      { iteration: 2, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolsAdvertised: 4, toolCalls: [] },
+    ]);
+    expect(disabled).toHaveBeenCalledWith('weak/model');
+  });
+
+  it('does not invoke an explicitly selected model disabled by this session', async () => {
+    await expect(runCreationCanvasAi({
+      prompt: 'Create a document', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+      model: 'weak/model', disabledModels: ['weak/model'],
+    })).rejects.toThrow("Model 'weak/model' is disabled for this session");
+    expect(mocks.streamChatCompletion).not.toHaveBeenCalled();
+  });
+
+  it('does not let automatic routing reuse a model disabled by this session', async () => {
+    await expect(runCreationCanvasAi({
+      prompt: 'Create a document', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+      disabledModels: ['weak/model'],
+    })).rejects.toThrow("Automatic model routing is disabled for this session");
+    expect(mocks.streamChatCompletion).not.toHaveBeenCalled();
+  });
+
   it('finishes the exact website-redesign request instead of exhausting the turn on encyclopedic search', async () => {
     const prompt = 'i have an existing website (https://burnrateos.com/) I want to improve it with a new website design. Research other websites that provide business tools and design a better UI/UX. Show me a comparisoin between the two designs. Provide step by step guidance to the new website.';
     const fetch = vi.fn(() => ({ ok: true, url: 'https://burnrateos.com/', title: 'BurnRateOS', text: 'AI C-Suite for founders' }));
