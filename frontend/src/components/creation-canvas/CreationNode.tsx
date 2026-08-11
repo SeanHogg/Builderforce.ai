@@ -401,24 +401,31 @@ function optionLabel(value: unknown, labels: Record<string, string>, fallback: s
   return typeof value === 'string' && labels[value] ? labels[value] : fallback;
 }
 
-function AgentBody({ data, onOpen }: { data: CreationNodeData; onOpen?: (focus: 'knowledge' | 'test') => void }) {
+function AgentBody({ data, onOpen, onOpenBuiltin }: { data: CreationNodeData; onOpen?: (focus: 'knowledge' | 'test') => void; onOpenBuiltin?: (intent: 'execute' | 'diagnostics') => void }) {
   const t = useTranslations('creationCanvas.node');
   const tools = Array.isArray(data.tools) ? data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const autonomy = optionLabel(data.autonomy, { low: t('lowAutonomy'), medium: t('mediumAutonomy'), high: t('highAutonomy') }, t('mediumAutonomy'));
   const existing = typeof data.resourceId === 'string' && data.resourceId.startsWith('agent:');
+  const builtin = typeof data.agentDomain === 'string' && typeof data.agentSeat === 'string';
   const thinking = data.collaborationState === 'thinking' || data.testStatus === 'Running';
   const latestReply = textValue(data.collaborationReply, textValue(data.testResponse));
   return <>
     <div className={styles.agentIdentity}>
       <Avatar name={data.title} kind="agent" size={34} />
-      <span><b>{existing ? t('configuredAgent') : t('newAgent')}</b><small>{textValue(data.role, data.status || t('online'))}</small></span>
+      <span><b>{existing || builtin ? t('configuredAgent') : t('newAgent')}</b><small>{textValue(data.role, data.status || t('online'))}</small></span>
       <em>{data.model === 'auto' || !data.model ? t('autoModel') : data.model}</em>
     </div>
     {thinking && <div className={styles.agentThinking} role="status"><i aria-hidden><Icon source="✦" size="1em" /></i><b>{data.testStatus === 'Running' ? t('testing') : t('thinking')}</b><span>{t('contributing')}</span></div>}
     {!thinking && latestReply && <div className={styles.agentLatestReply}><small>{t('latestResponse')}</small><p>{latestReply}</p></div>}
     {!latestReply && !thinking && <p>{textValue(data.personality, textValue(data.instructions, data.subtitle || ''))}</p>}
     <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span>{typeof data.testStatus === 'string' && data.testStatus && <span>{data.testStatus}</span>}</div>
-    <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('knowledge'); }}>{t('addKnowledgeStep')}</button><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('test'); }}>{t('testAgentStep')}</button></div>
+    <div className={`${styles.nodeActionBar} nodrag nowheel`}>{builtin ? <>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onOpenBuiltin?.('execute'); }}>{t('executeBuiltin')}</button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onOpenBuiltin?.('diagnostics'); }}>{t('builtinDiagnostics')}</button>
+    </> : <>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('knowledge'); }}>{t('addKnowledgeStep')}</button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('test'); }}>{t('testAgentStep')}</button>
+    </>}</div>
   </>;
 }
 
@@ -1771,6 +1778,7 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   canRun?: boolean;
   onRun?: (nodeId: string) => void;
   onOpenDetails?: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery') => void;
+  onOpenBuiltinAgent?: (nodeId: string, intent: 'execute' | 'diagnostics') => void;
   /** Direct edits made on the card itself — a spreadsheet cell, a renamed
    * column, a rewritten paragraph — written back through the same path the
    * inspector uses. Absent when the board is read-only or lock-blocked, so an
@@ -1819,7 +1827,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
   }, [authored]);
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData, onExport }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A game is played in its own body, so it needs the width a game needs.
@@ -1867,7 +1875,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'diagnostics' && (typeof data.toolId === 'string'
           ? <CanvasToolBody id={id} data={data} onEditData={onEditData} />
           : <DiagnosticsBody data={data} />)}
-        {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} />}
+        {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} onOpenBuiltin={(intent) => onOpenBuiltinAgent?.(id, intent)} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>{t('currentFocus')}</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <BrainObjectBody nodeId={id} data={data} />}
         {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}

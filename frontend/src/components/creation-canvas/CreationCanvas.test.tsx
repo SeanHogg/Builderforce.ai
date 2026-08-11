@@ -419,6 +419,32 @@ describe('CreationCanvas', () => {
     expect(onOpenDetails).toHaveBeenLastCalledWith('release-card', 'delivery');
   });
 
+  it('gives built-in agents native execution actions instead of custom-agent preparation', () => {
+    const onOpenBuiltinAgent = vi.fn();
+    render(<CreationNode
+      id="manager-card"
+      type="creation"
+      data={{ kind: 'agent', title: 'Manager', agentSeat: 'Manager', agentDomain: 'delivery' }}
+      selected={false}
+      dragging={false}
+      zIndex={0}
+      selectable
+      deletable
+      draggable
+      isConnectable
+      positionAbsoluteX={0}
+      positionAbsoluteY={0}
+      onOpenBuiltinAgent={onOpenBuiltinAgent}
+    />);
+
+    expect(screen.queryByRole('button', { name: '1 · Add knowledge' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '2 · Test agent' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Execute' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
+    expect(onOpenBuiltinAgent).toHaveBeenNthCalledWith(1, 'manager-card', 'execute');
+    expect(onOpenBuiltinAgent).toHaveBeenNthCalledWith(2, 'manager-card', 'diagnostics');
+  });
+
   it('updates the project widget rendering when its project view changes', () => {
     const props = {
       id: 'project-node', type: 'creation' as const, selected: false, dragging: false, zIndex: 0,

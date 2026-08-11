@@ -76,6 +76,7 @@ import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { appendCanvasVideoSource, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
@@ -141,6 +142,7 @@ import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { signInHref } from '@/lib/auth';
 import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
+import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 
 const Canvas3DView = dynamic(
   () => import('@/components/canvas/Canvas3DView')
@@ -533,6 +535,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
+  const router = useRouter();
   /**
    * A shipped pack's name and blurb are product copy, so they come from the
    * catalogs; the English in `creationTemplates.ts` is the source string and the
@@ -1990,6 +1993,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       subtitle: teammate.role ?? undefined,
       agentName: teammate.name,
       agentRef: teammate.ref,
+      ...(teammate.seat && teammate.domain ? {
+        agentSeat: teammate.seat,
+        agentDomain: teammate.domain,
+        builtinAgent: true,
+      } : {}),
     };
     if (!point) { addAtCenter('agent', data); }
     else {
@@ -4872,15 +4880,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const runWorkflowRef = useRef(runWorkflow);
   runWorkflowRef.current = runWorkflow;
   const runWorkflowFromNode = useCallback((nodeId: string) => { runWorkflowRef.current(nodeId); }, []);
+  const openBuiltinAgentSurface = useCallback((nodeId: string, intent: BuiltinAgentSurfaceIntent) => {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    const href = builtinAgentSurfaceHref(node?.data.agentDomain, node?.data.agentSeat, intent);
+    if (!href) return;
+    // Web navigation stays inside the app shell, where the destination opens as
+    // a side panel over this still-mounted canvas. The editor host owns its own
+    // navigation contract.
+    if (canvasSurface() === 'vscode') canvasNavigate(href);
+    else router.push(href);
+  }, [nodes, router]);
+  const openBuiltinAgentSurfaceRef = useRef(openBuiltinAgentSurface);
+  openBuiltinAgentSurfaceRef.current = openBuiltinAgentSurface;
+  const openBuiltinAgentSurfaceFromNode = useCallback((nodeId: string, intent: BuiltinAgentSurfaceIntent) => {
+    openBuiltinAgentSurfaceRef.current(nodeId, intent);
+  }, []);
   // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, runWorkflowFromNode, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, runWorkflowFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -5381,7 +5404,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -5551,7 +5574,7 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
@@ -5615,6 +5638,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const drawioTargets = nodes.filter((candidate) => candidate.id !== node.id && candidate.data.kind === 'diagram' && canvasDiagram(candidate.data)?.format === 'drawio');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const isExistingAgent = kind === 'agent' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('agent:');
+  const isBuiltinAgent = kind === 'agent' && typeof node.data.agentDomain === 'string' && typeof node.data.agentSeat === 'string';
   const connectedAgentKnowledge = kind === 'agent' ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : [];
   const connectedAgentEvaluation = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'evaluation' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
   const connectedAgentRelease = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'release' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
@@ -5692,6 +5716,16 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       <label>{t('name')}<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
       {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={t('evermindSetupStep', { step: node.data.pipelineStep })}><span>{t('evermindSetupOf5', { step: node.data.pipelineStep })}</span><strong>{node.data.pipelineStart === true ? t('startHere') : node.data.title}</strong><p>{String(node.data.pipelineInstruction || t('pipelineStageHint'))}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>{t('useFilePicker')}</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>{t('dataReadyNext')}</small>}</section>}
       {kind === 'agent' && <>
+        {isBuiltinAgent ? <>
+          <section className={styles.agentSetupGuide} data-existing="true" aria-label={t('agentSetupProgress')}>
+            <strong>{t('agentBuiltin')}</strong>
+            <p>{t('agentBuiltinHint', { seat: String(node.data.agentSeat) })}</p>
+          </section>
+          <div className={styles.agentWorkbench}>
+            <button type="button" className={styles.fullButton} onClick={() => onOpenBuiltinAgent('execute')}>{t('node.executeBuiltin')}</button>
+            <button type="button" className={styles.secondaryFullButton} onClick={() => onOpenBuiltinAgent('diagnostics')}>{t('node.builtinDiagnostics')}</button>
+          </div>
+        </> : <>
         <section className={styles.agentSetupGuide} data-existing={isExistingAgent} aria-label={t('agentSetupProgress')}>
           <strong>{isExistingAgent ? t('agentExisting') : t('agentPrepareNew')}</strong>
           <p>{isExistingAgent ? t('agentExistingHint') : t('agentPrepareHint')}</p>
@@ -5716,6 +5750,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{node.data.testResponse}</p></div>}
         </section>
         <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : t('createInviteAgent')}</button>
+        </>}
       </>}
       {kind === 'evaluation' && <section data-inspector-section="evaluation">
         <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || t('notRun'))}</strong><span>{typeof node.data.passRate === 'number' ? t('passRate', { rate: node.data.passRate }) : t('runTestForResult')}</span></div>

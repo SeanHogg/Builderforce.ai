@@ -16,7 +16,9 @@ import {
  * keeps a drop target from trusting whatever it was handed.
  */
 
-const payload: TeammatePayload = { kind: 'agent', ref: 'manager-t1', name: 'Ada', role: 'AI Manager' };
+const payload: TeammatePayload = {
+  kind: 'agent', ref: 'manager-t1', name: 'Ada', role: 'AI Manager', seat: 'Manager', domain: 'delivery',
+};
 
 describe('teammate payload', () => {
   it('round-trips through a drag', () => {
@@ -37,7 +39,7 @@ describe('teammate payload', () => {
     expect(parseTeammate('{"kind":"alien","ref":"x","name":"X"}')).toBeNull();
     // A missing role is legitimate — an invited human may have none.
     expect(parseTeammate('{"kind":"human","ref":"u1","name":"Sean"}')).toEqual({
-      kind: 'human', ref: 'u1', name: 'Sean', role: null,
+      kind: 'human', ref: 'u1', name: 'Sean', role: null, seat: null, domain: null,
     });
   });
 

@@ -55,6 +55,8 @@ const payloadOf = (member: TeamRosterMember): TeammatePayload => ({
   ref: member.id,
   name: member.name,
   role: member.role,
+  seat: member.seat,
+  domain: member.domain,
 });
 
 function TeammateChip({ member, locallyAvailable = false }: { member: TeamRosterMember; locallyAvailable?: boolean }) {

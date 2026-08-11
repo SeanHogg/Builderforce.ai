@@ -29,6 +29,10 @@ export interface TeammatePayload {
   name: string;
   /** Seat title or workspace role — what the seated object is labelled with. */
   role: string | null;
+  /** Built-in seats keep their stable product identity when they cross the
+   *  footer/canvas boundary. Custom agents and humans leave both fields null. */
+  seat: string | null;
+  domain: string | null;
 }
 
 export function serializeTeammate(payload: TeammatePayload): string {
@@ -43,7 +47,14 @@ export function parseTeammate(raw: string | null | undefined): TeammatePayload |
     const value = JSON.parse(raw) as Partial<TeammatePayload>;
     if (typeof value?.ref !== 'string' || typeof value?.name !== 'string') return null;
     if (value.kind !== 'human' && value.kind !== 'agent') return null;
-    return { kind: value.kind, ref: value.ref, name: value.name, role: typeof value.role === 'string' ? value.role : null };
+    return {
+      kind: value.kind,
+      ref: value.ref,
+      name: value.name,
+      role: typeof value.role === 'string' ? value.role : null,
+      seat: typeof value.seat === 'string' ? value.seat : null,
+      domain: typeof value.domain === 'string' ? value.domain : null,
+    };
   } catch {
     return null;
   }
