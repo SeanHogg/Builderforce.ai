@@ -639,13 +639,13 @@ export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVen
  * Coding-capable backstop chain — the reliability floor for a *coding* run,
  * dispatched on the credited key after the primary coding cascade fails.
  *
- * `GUARANTEED_BACKSTOP_MODEL` (gemini-2.5-flash-lite) is a cheap general model
- * chosen for low variance, NOT for code. Flooring a coding run onto a non-coder
- * means the run flails and gives up without writing code (observed in execution
- * #59), so the coding floor is *coders only* — no general backstop tail. If every
- * paid coder is also down the run surfaces `cascade_exhausted` rather than
- * silently degrading onto a non-coder, because an honest failure beats a coding
- * agent that loops on search and ships nothing.
+ * `GUARANTEED_BACKSTOP_MODEL` (Muse Glimmer 30B) is a general agentic model,
+ * but it is not part of the curated coding pool. Flooring a coding run onto a
+ * non-coder means the run flails and gives up without writing code (observed in
+ * execution #59), so the coding floor is *coders only* — no general backstop
+ * tail. If every paid coder is also down the run surfaces `cascade_exhausted`
+ * rather than silently degrading onto a non-coder, because an honest failure
+ * beats a coding agent that loops on search and ships nothing.
  */
 export const CODING_BACKSTOP_MODELS: readonly string[] = CODING_PREMIUM_FALLBACK_MODELS;
 

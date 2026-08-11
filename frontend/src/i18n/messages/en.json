@@ -16071,7 +16071,47 @@
     "seeHowItWorks": "See how it works",
     "whatYouGet": "What you get with Builderforce.ai",
     "faqHeading": "Frequently asked questions",
-    "relatedReading": "Related reading"
+    "relatedReading": "Related reading",
+    "projects": {
+      "eyebrow": "Projects powered by agents",
+      "title": "Turn plans into work that moves",
+      "description": "Give people and AI agents one delivery workspace—from project context and priorities to assigned tasks, approvals, and measurable progress.",
+      "seoDescription": "Plan projects, coordinate people and AI agents, and move accountable work through board, table, calendar, and Gantt views in Builderforce.ai.",
+      "primaryCta": "Create your first project",
+      "secondaryCta": "Sign in",
+      "proof": ["Free workspace", "No credit card", "Human approvals built in"],
+      "closingEyebrow": "Start with real work",
+      "closingTitle": "Your next project can already have a team.",
+      "closingBody": "Create the workspace, shape the plan, and assign the first task to a person or agent in minutes.",
+      "closingCta": "Create a project free",
+      "visual": {
+        "aria": "Example project board showing planned, active, and completed agent work",
+        "title": "Launch workspace",
+        "planned": "Planned", "progress": "In progress", "done": "Done",
+        "plannedKicker": "Research", "plannedTask": "Validate customer problem", "plannedOwner": "Maya · Product",
+        "progressKicker": "Agent running", "progressTask": "Build onboarding prototype", "progressOwner": "Builder agent",
+        "doneKicker": "Approved", "doneTask": "Define launch metrics", "doneOwner": "Rene · Growth"
+      }
+    },
+    "manager": {
+      "eyebrow": "Accountable AI project leadership",
+      "title": "Meet the AI Manager that keeps delivery moving",
+      "description": "It prioritizes the backlog, spots stalled work, coordinates agents, and explains every decision—inside the project where your team already works.",
+      "seoDescription": "The Builderforce.ai AI Manager prioritizes project backlogs, identifies delivery risks, coordinates agents, and records explainable decisions. Authentication is required.",
+      "authRequired": "Authentication required · Manager uses your tenant, projects, and permissions",
+      "primaryCta": "Sign in to open Manager",
+      "secondaryCta": "Create a free workspace",
+      "proof": ["Explainable decisions", "Approval-aware autonomy", "Live execution details"],
+      "closingEyebrow": "Put the backlog in motion",
+      "closingTitle": "Give every project an accountable operating rhythm.",
+      "closingBody": "Sign in to see Manager work against your real tenant context, project policies, team capacity, and delivery history.",
+      "closingCta": "Sign in to Manager",
+      "visual": {
+        "aria": "Example AI Manager dashboard showing delivery health, prioritized work, risks, and recent decisions",
+        "title": "AI Manager", "live": "Active", "deliveryHealth": "Delivery health", "healthChange": "+8 this week",
+        "prioritized": "Prioritized", "risks": "Risks flagged", "decisions": "Decisions", "decisionTitle": "Backlog reordered", "decisionBody": "Moved onboarding fix ahead of campaign work", "now": "Now"
+      }
+    }
   },
   "burnrateMarketing": {
     "shared": {

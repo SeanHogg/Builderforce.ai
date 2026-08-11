@@ -16070,7 +16070,15 @@
     "seeHowItWorks": "So funktioniert es",
     "whatYouGet": "Das bietet Ihnen Builderforce.ai",
     "faqHeading": "Häufig gestellte Fragen",
-    "relatedReading": "Weiterführende Artikel"
+    "relatedReading": "Weiterführende Artikel",
+    "projects": {
+      "eyebrow": "Projekte mit Agenten-Power", "title": "Aus Plänen wird Arbeit, die vorankommt", "description": "Bringen Sie Menschen und KI-Agenten in einem Arbeitsbereich zusammen – von Kontext und Prioritäten bis zu Aufgaben, Freigaben und messbarem Fortschritt.", "seoDescription": "Planen Sie Projekte, koordinieren Sie Menschen und KI-Agenten und steuern Sie Arbeit in Board-, Tabellen-, Kalender- und Gantt-Ansichten in Builderforce.ai.", "primaryCta": "Erstes Projekt erstellen", "secondaryCta": "Anmelden", "proof": ["Kostenloser Arbeitsbereich", "Keine Kreditkarte", "Menschliche Freigaben integriert"], "closingEyebrow": "Mit echter Arbeit starten", "closingTitle": "Ihr nächstes Projekt kann schon ein Team haben.", "closingBody": "Erstellen Sie den Arbeitsbereich, strukturieren Sie den Plan und weisen Sie die erste Aufgabe in Minuten einem Menschen oder Agenten zu.", "closingCta": "Projekt kostenlos erstellen",
+      "visual": { "aria": "Beispielprojekt mit geplanter, aktiver und abgeschlossener Agentenarbeit", "title": "Launch-Arbeitsbereich", "planned": "Geplant", "progress": "In Arbeit", "done": "Erledigt", "plannedKicker": "Recherche", "plannedTask": "Kundenproblem validieren", "plannedOwner": "Maya · Produkt", "progressKicker": "Agent aktiv", "progressTask": "Onboarding-Prototyp bauen", "progressOwner": "Builder-Agent", "doneKicker": "Freigegeben", "doneTask": "Launch-Kennzahlen definieren", "doneOwner": "Rene · Wachstum" }
+    },
+    "manager": {
+      "eyebrow": "Verantwortliche KI-Projektleitung", "title": "Der AI Manager, der Ihre Lieferung voranbringt", "description": "Er priorisiert den Backlog, erkennt blockierte Arbeit, koordiniert Agenten und erklärt jede Entscheidung direkt im Projekt Ihres Teams.", "seoDescription": "Der AI Manager von Builderforce.ai priorisiert Backlogs, erkennt Risiken, koordiniert Agenten und protokolliert nachvollziehbare Entscheidungen. Anmeldung erforderlich.", "authRequired": "Anmeldung erforderlich · Manager nutzt Ihren Mandanten, Ihre Projekte und Berechtigungen", "primaryCta": "Anmelden und Manager öffnen", "secondaryCta": "Kostenlosen Arbeitsbereich erstellen", "proof": ["Nachvollziehbare Entscheidungen", "Freigabegesteuerte Autonomie", "Live-Ausführungsdetails"], "closingEyebrow": "Backlog in Bewegung bringen", "closingTitle": "Geben Sie jedem Projekt einen verantwortlichen Arbeitsrhythmus.", "closingBody": "Melden Sie sich an, damit Manager mit Ihrem echten Mandantenkontext, Regeln, Kapazitäten und Lieferverlauf arbeitet.", "closingCta": "Bei Manager anmelden",
+      "visual": { "aria": "Beispiel-Dashboard des AI Managers mit Lieferstatus, Prioritäten, Risiken und Entscheidungen", "title": "AI Manager", "live": "Aktiv", "deliveryHealth": "Lieferstatus", "healthChange": "+8 diese Woche", "prioritized": "Priorisiert", "risks": "Risiken markiert", "decisions": "Entscheidungen", "decisionTitle": "Backlog neu geordnet", "decisionBody": "Onboarding-Fix vor Kampagnenarbeit verschoben", "now": "Jetzt" }
+    }
   },
   "burnrateMarketing": {
     "shared": {

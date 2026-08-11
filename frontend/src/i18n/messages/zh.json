@@ -16070,7 +16070,15 @@
     "seeHowItWorks": "了解运作方式",
     "whatYouGet": "Builderforce.ai 为你提供什么",
     "faqHeading": "常见问题",
-    "relatedReading": "相关阅读"
+    "relatedReading": "相关阅读",
+    "projects": {
+      "eyebrow": "智能体驱动的项目", "title": "让计划真正转化为进展", "description": "让成员与 AI 智能体在同一交付空间协作，从项目背景和优先级，到任务分配、审批与可衡量的进展。", "seoDescription": "在 Builderforce.ai 中规划项目、协调成员与 AI 智能体，并通过看板、表格、日历和甘特图推进可追责的工作。", "primaryCta": "创建第一个项目", "secondaryCta": "登录", "proof": ["免费工作区", "无需信用卡", "内置人工审批"], "closingEyebrow": "从真实工作开始", "closingTitle": "你的下一个项目现在就能拥有团队。", "closingBody": "只需几分钟即可创建工作区、制定计划，并将第一个任务分配给成员或智能体。", "closingCta": "免费创建项目",
+      "visual": { "aria": "展示计划中、进行中和已完成智能体工作的项目看板示例", "title": "发布工作区", "planned": "计划中", "progress": "进行中", "done": "已完成", "plannedKicker": "调研", "plannedTask": "验证客户问题", "plannedOwner": "Maya · 产品", "progressKicker": "智能体运行中", "progressTask": "构建新手引导原型", "progressOwner": "Builder 智能体", "doneKicker": "已批准", "doneTask": "定义发布指标", "doneOwner": "Rene · 增长" }
+    },
+    "manager": {
+      "eyebrow": "可追责的 AI 项目管理", "title": "认识持续推动交付的 AI Manager", "description": "它会确定待办优先级、发现停滞工作、协调智能体并解释每个决定，一切都在团队现有项目中完成。", "seoDescription": "Builderforce.ai AI Manager 可确定项目待办优先级、识别交付风险、协调智能体并记录可解释的决定。需要身份验证。", "authRequired": "需要身份验证 · Manager 会使用你的租户、项目和权限", "primaryCta": "登录并打开 Manager", "secondaryCta": "创建免费工作区", "proof": ["可解释的决定", "审批感知的自主性", "实时执行详情"], "closingEyebrow": "让待办事项开始流动", "closingTitle": "为每个项目建立可追责的运营节奏。", "closingBody": "登录后，Manager 将依据真实租户背景、项目策略、团队容量和交付历史开展工作。", "closingCta": "登录 Manager",
+      "visual": { "aria": "展示交付健康度、优先事项、风险和近期决定的 AI Manager 仪表板示例", "title": "AI Manager", "live": "运行中", "deliveryHealth": "交付健康度", "healthChange": "本周 +8", "prioritized": "已排序", "risks": "已标记风险", "decisions": "决定", "decisionTitle": "待办已重新排序", "decisionBody": "将新手引导修复提前至营销活动之前", "now": "刚刚" }
+    }
   },
   "burnrateMarketing": {
     "shared": {

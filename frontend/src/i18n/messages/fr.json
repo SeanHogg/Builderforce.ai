@@ -16070,7 +16070,15 @@
     "seeHowItWorks": "Voir comment ça marche",
     "whatYouGet": "Ce que vous obtenez avec Builderforce.ai",
     "faqHeading": "Questions fréquentes",
-    "relatedReading": "Lectures associées"
+    "relatedReading": "Lectures associées",
+    "projects": {
+      "eyebrow": "Des projets propulsés par des agents", "title": "Transformez les plans en travail qui avance", "description": "Réunissez personnes et agents IA dans un espace de livraison unique, du contexte et des priorités jusqu’aux tâches, validations et progrès mesurables.", "seoDescription": "Planifiez vos projets, coordonnez personnes et agents IA et suivez le travail dans les vues tableau, liste, calendrier et Gantt de Builderforce.ai.", "primaryCta": "Créer votre premier projet", "secondaryCta": "Se connecter", "proof": ["Espace gratuit", "Sans carte bancaire", "Validations humaines intégrées"], "closingEyebrow": "Commencez par du travail réel", "closingTitle": "Votre prochain projet peut déjà avoir une équipe.", "closingBody": "Créez l’espace, structurez le plan et attribuez la première tâche à une personne ou à un agent en quelques minutes.", "closingCta": "Créer un projet gratuitement",
+      "visual": { "aria": "Exemple de tableau de projet montrant le travail planifié, actif et terminé", "title": "Espace de lancement", "planned": "Planifié", "progress": "En cours", "done": "Terminé", "plannedKicker": "Recherche", "plannedTask": "Valider le problème client", "plannedOwner": "Maya · Produit", "progressKicker": "Agent actif", "progressTask": "Créer le prototype d’intégration", "progressOwner": "Agent Builder", "doneKicker": "Validé", "doneTask": "Définir les indicateurs de lancement", "doneOwner": "Rene · Croissance" }
+    },
+    "manager": {
+      "eyebrow": "Pilotage de projet IA responsable", "title": "Découvrez l’AI Manager qui fait avancer la livraison", "description": "Il priorise le backlog, repère le travail bloqué, coordonne les agents et explique chaque décision dans le projet où votre équipe travaille déjà.", "seoDescription": "L’AI Manager de Builderforce.ai priorise les backlogs, détecte les risques, coordonne les agents et consigne des décisions explicables. Authentification requise.", "authRequired": "Authentification requise · Manager utilise votre espace, vos projets et vos autorisations", "primaryCta": "Se connecter pour ouvrir Manager", "secondaryCta": "Créer un espace gratuit", "proof": ["Décisions explicables", "Autonomie avec validations", "Détails d’exécution en direct"], "closingEyebrow": "Mettez le backlog en mouvement", "closingTitle": "Donnez à chaque projet un rythme opérationnel responsable.", "closingBody": "Connectez-vous pour voir Manager agir avec le contexte réel de votre espace, vos règles, capacités et historique de livraison.", "closingCta": "Se connecter à Manager",
+      "visual": { "aria": "Exemple de tableau de bord AI Manager avec santé de livraison, priorités, risques et décisions", "title": "AI Manager", "live": "Actif", "deliveryHealth": "Santé de livraison", "healthChange": "+8 cette semaine", "prioritized": "Priorisés", "risks": "Risques signalés", "decisions": "Décisions", "decisionTitle": "Backlog réordonné", "decisionBody": "Correctif d’intégration placé avant la campagne", "now": "Maintenant" }
+    }
   },
   "burnrateMarketing": {
     "shared": {
