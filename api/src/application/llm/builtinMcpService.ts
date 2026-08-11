@@ -57,6 +57,7 @@ import { fetchWebDocumentCached } from '../web/webFetch';
 import { geocodeBatch, MAX_BATCH } from '../web/geocode';
 import { resolveWebSearchBacking } from '../runtime/webSearchCredential';
 import { normalizeSearchQuery, searchWeb } from '../runtime/cloudWeb';
+import { buildInternetSearch } from '../webSearch/factory';
 import { encryptCredentials } from '../integrations/credentialCrypto';
 import { MigrationService, type ImportMode } from '../migration/MigrationService';
 import { createMigrationStore } from '../migration/migrationStore';
@@ -2855,6 +2856,15 @@ const CATALOG: BuiltinTool[] = [
   //       source across steps). The browser Brain can't fetch cross-origin URLs (CORS), so
   //       the gateway does it here. ----
   { tool: 'web.fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (ctx, a) => fetchWebDocumentCached(ctx.env, str(a.url)) },
+  {
+    tool: 'web.open_page', mutates: false,
+    description: 'Open the full cleaned content of a web-search result. Reads the owned crawled corpus first, preserving its publication/crawl metadata and citation URL; if the page is not indexed yet, safely fetches the public URL with redirect, SSRF, timeout, and size controls.',
+    parameters: obj({ url: { ...S, description: 'Absolute result URL to open.' } }, ['url']),
+    run: async (ctx, a) => {
+      const url = str(a.url); const indexed = await buildInternetSearch(ctx.db).search.open(ctx.tenantId, url);
+      return indexed ?? fetchWebDocumentCached(ctx.env, url);
+    },
+  },
 
   // ---- Web search — the ENTRY POINT to research. `web.fetch` can only read a URL the
   //       model was already given; without search, "research X and collect the data"
@@ -2868,11 +2878,18 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'web.search', mutates: false,
     description: 'Search the public web and return ranked results ({ title, url, snippet }) plus `coverage` and `attribution`. Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory. When `coverage` is "encyclopedic" the index is narrower than a full web engine: still cite what you found, and note that connecting a Tavily, Exa, or Linkup key under Settings → Integrations (or pointing the deployment at a self-hosted SearXNG instance) widens it to the open web.',
-    parameters: obj({ query: { ...S, description: 'What to search for, phrased as a search engine query.' } }, ['query']),
+    parameters: obj({ query: { ...S, description: 'What to search for, phrased as a search engine query.' }, max_results: N, freshness: S, language: S, domains: { type: 'array', items: S } }, ['query']),
     run: async (ctx, a) => {
       const query = normalizeSearchQuery(str(a.query));
       if (!query) return { ok: false, error: 'A search query is required.' };
       if (!ctx.env) return { ok: false, error: 'Web search is unavailable on this surface.' };
+      const local = await buildInternetSearch(ctx.db).search.search(ctx.tenantId, {
+        query, limit: a.max_results != null ? num(a.max_results) : 10,
+        freshness: a.freshness != null ? str(a.freshness) : undefined,
+        language: a.language != null ? str(a.language) : undefined,
+        domains: Array.isArray(a.domains) ? a.domains.map((value) => str(value)).filter(Boolean) : undefined,
+      });
+      if (local.results.length) return { ok: true, ...local, attribution: 'Builderforce owned web index' };
       const backing = await resolveWebSearchBacking(ctx.env, ctx.db, ctx.tenantId);
       return searchWeb(ctx.env, { ...backing, meter: { db: ctx.db, tenantId: ctx.tenantId } }, query);
     },

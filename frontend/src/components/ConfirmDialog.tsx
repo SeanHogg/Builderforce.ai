@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
+import { Button, Surface } from '@/components/ui';
+import styles from './ConfirmDialog.module.css';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -38,6 +40,8 @@ export function ConfirmDialog({
   destructive = true,
 }: ConfirmDialogProps) {
   const t = useTranslations('common');
+  const titleId = useId();
+  const messageId = useId();
 
   // ESC cancels; Enter confirms — parity with the native prompt's keyboard UX.
   useEffect(() => {
@@ -52,75 +56,31 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  const accent = destructive ? 'var(--coral-bright)' : 'var(--accent)';
   const body = (
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby={title ? titleId : undefined}
+      aria-describedby={messageId}
       className="modal-overlay"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0,0,0,0.5)',
-        padding: 16,
-      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div
-        style={{
-          maxWidth: 480,
-          width: '100%',
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          padding: 24,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <Surface tone="raised" padding="lg" className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         {title && (
-          <h2 style={{ margin: '0 0 8px', fontSize: 'var(--font-size-card-title)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h2>
+          <h2 id={titleId} className={styles.title}>{title}</h2>
         )}
-        <p style={{ margin: 0, fontSize: 'var(--font-size-small)', lineHeight: 1.5, color: 'var(--text-primary)' }}>{message}</p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onCancel(); }}
-            style={{
-              padding: '8px 14px',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-base)',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-            }}
-          >
+        <p id={messageId} className={styles.message}>{message}</p>
+        <div className={styles.actions}>
+          <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onCancel(); }}>
             {cancelLabel ?? t('cancel')}
-          </button>
-          <button
-            type="button"
-            autoFocus
-            onClick={(e) => { e.stopPropagation(); onConfirm(); }}
-            style={{
-              padding: '8px 14px',
-              border: `1px solid ${accent}`,
-              borderRadius: 'var(--radius-md)',
-              background: accent,
-              color: 'var(--text-on-accent)',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
+          </Button>
+          <Button type="button" variant={destructive ? 'danger' : 'primary'} autoFocus onClick={(e) => { e.stopPropagation(); onConfirm(); }}>
             {confirmLabel ?? t('delete')}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Surface>
     </div>
   );
 

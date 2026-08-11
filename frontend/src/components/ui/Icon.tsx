@@ -6,8 +6,8 @@ export type IconName =
   | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'copy' | 'document' | 'edit' | 'external-link'
   | 'download' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
   | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
-  | 'monitor' | 'pause' | 'people' | 'person' | 'play' | 'plus' | 'project' | 'quality' | 'search'
-  | 'settings' | 'shield' | 'sparkles' | 'target' | 'template' | 'tools' | 'trash'
+  | 'monitor' | 'more-horizontal' | 'pause' | 'people' | 'person' | 'pin' | 'play' | 'plus' | 'project' | 'quality' | 'search'
+  | 'settings' | 'shield' | 'sparkles' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
   | 'video' | 'volume' | 'warning' | 'workflow' | 'workspace';
 
 /**
@@ -59,6 +59,7 @@ const LEGACY_ICON: Record<string, IconName> = {
 };
 
 const PATHS: Record<IconName, ReactNode> = {
+  archive: <><rect x="3" y="5" width="18" height="4" rx="1"/><path d="M5 9v11h14V9M9 13h6"/></>,
   attachment: <path d="m8.5 12.5 6-6a3 3 0 0 1 4.2 4.2l-8 8a5 5 0 0 1-7.1-7.1l8-8a2 2 0 0 1 2.8 2.8l-8 8"/>,
   activity: <><path d="M3 12h4l2-6 4 12 2-6h6"/></>,
   admin: <><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></>,
@@ -103,9 +104,11 @@ const PATHS: Record<IconName, ReactNode> = {
   mic: <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></>,
   mobile: <><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></>,
   monitor: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 22h8M12 18v4"/></>,
+  'more-horizontal': <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></>,
   pause: <><path d="M9 5v14M15 5v14"/></>,
   people: <><path d="M16 20v-1.8a3.7 3.7 0 0 0-3.7-3.7H7.7A3.7 3.7 0 0 0 4 18.2V20"/><circle cx="10" cy="8" r="3.2"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.2M20 20v-1.8a3.7 3.7 0 0 0-2.8-3.6"/></>,
   person: <><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></>,
+  pin: <><path d="m9 3 6 6M7 8l9 9M14 4l6 6-4 2-4 4-2 4-6-6 4-2 4-4 2-4ZM8 16l-5 5"/></>,
   play: <path d="m8 5 11 7-11 7V5Z"/>,
   plus: <path d="M12 5v14M5 12h14"/>,
   project: <><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8 4v16M8 9h12M8 14h12"/></>,

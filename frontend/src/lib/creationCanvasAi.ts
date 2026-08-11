@@ -43,6 +43,9 @@ type CanvasAiOptions = {
    * session. An explicitly selected rejected model must not be invoked again. */
   disabledModels?: readonly string[];
   onModelDisabled?: (model: string) => void;
+  /** Fired when a command-stalled model is replaced by a model that already
+   * demonstrated tool calling earlier in the same turn. */
+  onModelFallback?: (model: string) => void;
   /** Awaitable in-app approval. Mutating tenant actions are refused when this is
    * absent; the runner must never fall back to a browser-native prompt. */
   confirmAction?: (request: { name: string; args: unknown }) => Promise<boolean>;
@@ -386,6 +389,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let authoringDirectiveIssued = false;
   let narrowSearches = 0;
   let lastToolError = '';
+  let activeModel = options.model;
+  let activeModelStrict = options.modelStrict;
+  const toolCallingModels: string[] = [];
+  const commandFailedModels = new Set(options.disabledModels ?? []);
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
   const hasTabularData = snapshotHasTabularRows(options.canvasSnapshot);
   // An informational question is allowed to mention documents, reports, charts,
@@ -418,14 +425,14 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       tool_choice: 'auto',
       maxTokens: CANVAS_RESPONSE_TOKENS,
       reasoning: { level: 'low' },
-      model: options.model,
-      modelStrict: options.modelStrict,
+      model: activeModel,
+      modelStrict: activeModelStrict,
       routingMode: options.routingMode,
       metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
     options.onCompletion?.({
       at: new Date().toISOString(), iteration: turn + 1,
-      requestedModel: options.model ?? null,
+      requestedModel: activeModel ?? null,
       resolvedModel: result.resolvedModel ?? null,
       resolvedVendor: result.resolvedVendor ?? null,
       account: result.account ?? null,
@@ -434,6 +441,18 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       toolCalls: result.toolCalls.map((call) => call.name),
       finishReason: result.finishReason,
     });
+    if (result.toolCalls.length && result.resolvedModel && !toolCallingModels.includes(result.resolvedModel)) {
+      toolCallingModels.push(result.resolvedModel);
+    }
+    // A bounded tool loop is one logical agent turn. Keep its continuations on
+    // the model that began it instead of asking Auto to reroute every tool result
+    // independently (which previously moved research from MiniMax to Gemini just
+    // before the required Canvas write). This is a preference, not a strict pin:
+    // the gateway may still substitute when the provider becomes unavailable.
+    if (!activeModel && result.resolvedModel) {
+      activeModel = result.resolvedModel;
+      activeModelStrict = false;
+    }
     if (!result.toolCalls.length) {
       if (!options.participant && !proposedCanvasMutation && !imperativeMutationRecoveryUsed
         && mutationRequested
@@ -448,7 +467,23 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         continue;
       }
       if (mutationRequested && !proposedCanvasMutation && imperativeMutationRecoveryUsed) {
-        if (result.resolvedModel) options.onModelDisabled?.(result.resolvedModel);
+        if (result.resolvedModel) {
+          commandFailedModels.add(result.resolvedModel);
+          options.onModelDisabled?.(result.resolvedModel);
+        }
+        const fallback = [...toolCallingModels].reverse().find((model) => !commandFailedModels.has(model));
+        if (fallback && (fallback !== activeModel || activeModelStrict !== true)) {
+          activeModel = fallback;
+          activeModelStrict = true;
+          imperativeMutationRecoveryUsed = false;
+          options.onModelFallback?.(fallback);
+          messages.push({
+            role: 'system',
+            content: `The prior model did not execute the Canvas command after a retry and has been disabled for this session. Continue on ${fallback}, which already emitted valid tool calls in this turn. Stop researching and use canvas_add_object or canvas_update_object now to complete the user's requested artifact.`,
+          });
+          finalText = '';
+          continue;
+        }
         finalText = '';
         break;
       }

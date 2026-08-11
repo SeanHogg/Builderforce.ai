@@ -140,6 +140,38 @@ describe('runCreationCanvasAi', () => {
     expect(mocks.streamChatCompletion).not.toHaveBeenCalled();
   });
 
+  it('hands a stalled Canvas command back to a model that already demonstrated tool calling', async () => {
+    const add = vi.fn(() => ({ ok: true, proposed: true }));
+    const search = vi.fn(() => ({ ok: true, results: [] }));
+    const disabled = vi.fn();
+    const fallback = vi.fn();
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: '', resolvedModel: 'minimaxai/minimax-m3', toolCalls: [{ id: 's1', name: 'builtin_web_search', args: '{"query":"site"}' }], finishReason: 'tool_calls' })
+      .mockResolvedValueOnce({ text: '', resolvedModel: 'minimaxai/minimax-m3', toolCalls: [{ id: 's2', name: 'builtin_web_search', args: '{"query":"seo"}' }], finishReason: 'tool_calls' })
+      .mockResolvedValueOnce({ text: 'I will create the guide.', resolvedModel: 'googleai/gemini-2.5-flash', toolCalls: [], finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: 'I still need to create it.', resolvedModel: 'googleai/gemini-2.5-flash', toolCalls: [], finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: '', resolvedModel: 'minimaxai/minimax-m3', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"document","title":"SEO guide","fields":{"content":"Improve titles and visual hierarchy."}}' }], finishReason: 'tool_calls' })
+      .mockResolvedValueOnce({ text: 'I created the SEO and visual-improvement guide.', resolvedModel: 'minimaxai/minimax-m3', toolCalls: [], finishReason: 'stop' });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Improve my website and provide an SEO and visual appeal guide.',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [
+        { name: 'builtin_web_search', description: 'Search', parameters: { type: 'object' }, run: search },
+        { name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: add },
+      ],
+      onModelDisabled: disabled,
+      onModelFallback: fallback,
+    });
+
+    expect(disabled).toHaveBeenCalledWith('googleai/gemini-2.5-flash');
+    expect(fallback).toHaveBeenCalledWith('minimaxai/minimax-m3');
+    expect(mocks.streamChatCompletion.mock.calls[1][0]).toMatchObject({ model: 'minimaxai/minimax-m3', modelStrict: false });
+    expect(mocks.streamChatCompletion.mock.calls[4][0]).toMatchObject({ model: 'minimaxai/minimax-m3', modelStrict: true });
+    expect(add).toHaveBeenCalledOnce();
+    expect(answer).toContain('created the SEO');
+  });
+
   it('finishes the exact website-redesign request instead of exhausting the turn on encyclopedic search', async () => {
     const prompt = 'i have an existing website (https://burnrateos.com/) I want to improve it with a new website design. Research other websites that provide business tools and design a better UI/UX. Show me a comparisoin between the two designs. Provide step by step guidance to the new website.';
     const fetch = vi.fn(() => ({ ok: true, url: 'https://burnrateos.com/', title: 'BurnRateOS', text: 'AI C-Suite for founders' }));

@@ -3817,6 +3817,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
                 disabledModels: brainRuntime.current.disabledModels,
                 onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
+                onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
                 participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
                 conversation: groupConversation,
               });
@@ -3850,6 +3851,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
           disabledModels: brainRuntime.current.disabledModels,
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
+          onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
           ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
             recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
             learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),

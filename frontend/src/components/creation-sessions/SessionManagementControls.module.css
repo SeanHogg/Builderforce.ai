@@ -1,0 +1,114 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  width: var(--control-sm);
+  padding-inline: 0;
+}
+
+.menu {
+  position: fixed;
+  z-index: 10001;
+  width: 188px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--panel-drawer-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.menuItem {
+  width: 100%;
+  min-height: var(--control-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: var(--surface-interactive-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.menuItem:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.menuItem:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.danger {
+  color: var(--danger-text);
+}
+
+.dialog {
+  width: min(440px, calc(100vw - var(--space-6)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-lg);
+}
+
+.dialogHeader h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-card-title);
+}
+
+.dialogHeader p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.select {
+  width: 100%;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--font-size-small);
+}
+
+@media (pointer: coarse) {
+  .trigger,
+  .menuItem {
+    min-height: var(--control-lg);
+  }
+}

@@ -205,6 +205,7 @@ import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignme
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
+import { createWebSearchRoutes } from './presentation/routes/webSearchRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -757,6 +758,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/eval',            createEvalRoutes(db));
   app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
+  // Owned web corpus: crawl/frontier/index administration plus authenticated search.
+  app.route('/api/search',    createWebSearchRoutes(db));
   // Order matters: the team-memory mesh lives at the static /api/teams/memory and
   // MUST be registered before the Workforce Teams CRUD, whose GET /:id would
   // otherwise match "memory" as an id and shadow it (Hono runs the first-
