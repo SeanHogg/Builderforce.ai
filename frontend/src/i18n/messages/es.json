@@ -7119,6 +7119,7 @@
         "pptx": "Descargar PowerPoint",
         "csv": "Descargar CSV",
         "working": "Preparando…",
+        "downloaded": "Descargado",
         "failed": "Error al exportar",
         "untitled": "Sin título"
       },
@@ -7131,6 +7132,8 @@
     "messageActions": {
       "copy": "Copiar",
       "copied": "¡Copiado!",
+      "downloadMarkdown": "Descargar Markdown",
+      "downloaded": "Descargado",
       "goodResponse": "Buena respuesta",
       "badResponse": "Mala respuesta",
       "thumbsUp": "Me gusta",

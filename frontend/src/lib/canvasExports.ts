@@ -66,7 +66,8 @@ const EXPORT_ACTIONS: Partial<Record<CreationObjectKind, readonly CanvasExportAc
   spreadsheet: ['xlsx', 'csv'],
   table: ['xlsx', 'csv'],
   dataset: ['xlsx', 'csv'],
-  chat: ['markdown', 'copy'],
+  // A Brain card is a doorway into its conversation, not the transcript itself.
+  // Transcript actions live on each assistant reply, where their scope is clear.
   code: ['markdown', 'copy'],
   dashboard: ['json'],
   chart: ['json'],

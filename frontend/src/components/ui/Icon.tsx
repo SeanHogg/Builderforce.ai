@@ -3,7 +3,7 @@ import { isValidElement, type ReactNode, type SVGProps } from 'react';
 export type IconName =
   | 'activity' | 'admin' | 'alert' | 'apps' | 'arrow-up-right' | 'automation'
   | 'attachment' | 'billing' | 'brain' | 'briefcase' | 'calendar' | 'camera' | 'canvas'
-  | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'document' | 'edit' | 'external-link'
+  | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'copy' | 'document' | 'edit' | 'external-link'
   | 'download' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
   | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
   | 'monitor' | 'pause' | 'people' | 'person' | 'play' | 'plus' | 'project' | 'quality' | 'search'
@@ -79,6 +79,7 @@ const PATHS: Record<IconName, ReactNode> = {
   clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></>,
   close: <path d="m6 6 12 12M18 6 6 18"/>,
   code: <><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></>,
+  copy: <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
   document: <><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></>,
   download: <><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 20h16"/></>,
   edit: <><path d="m14.5 5.5 4 4L8 20H4v-4L14.5 5.5ZM12.5 7.5l4 4"/></>,

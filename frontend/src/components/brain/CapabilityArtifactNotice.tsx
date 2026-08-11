@@ -13,8 +13,10 @@
  * is not a failed one).
  */
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getBrainCapability, replyHasArtifact } from '@/lib/brain';
+import { Icon } from '@/components/ui/Icon';
 
 export interface CapabilityArtifactNoticeProps {
   capability?: string | null;
@@ -36,6 +38,7 @@ export function CapabilityArtifactNotice({
   onRetry,
 }: CapabilityArtifactNoticeProps) {
   const t = useTranslations('brain.capabilities');
+  const [retried, setRetried] = useState(false);
   const def = getBrainCapability(capability);
   if (!def || streaming || !isLatest) return null;
   if (replyHasArtifact(capability, content)) return null;
@@ -63,7 +66,13 @@ export function CapabilityArtifactNotice({
       {onRetry && (
         <button
           type="button"
-          onClick={() => onRetry(t('missing.retryPrompt', { capability: label }))}
+          onClick={() => {
+            setRetried(true);
+            onRetry(t('missing.retryPrompt', { capability: label }));
+          }}
+          disabled={retried}
+          data-state={retried ? 'complete' : 'idle'}
+          aria-label={t('missing.retry')}
           style={{
             flex: '0 0 auto',
             padding: '4px 10px',
@@ -73,10 +82,10 @@ export function CapabilityArtifactNotice({
             border: '1px solid currentColor',
             background: 'transparent',
             color: 'inherit',
-            cursor: 'pointer',
+            cursor: retried ? 'default' : 'pointer',
           }}
         >
-          {t('missing.retry')}
+          {retried ? <Icon name="check" size={15} /> : t('missing.retry')}
         </button>
       )}
     </div>

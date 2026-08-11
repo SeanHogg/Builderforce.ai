@@ -25,3 +25,4 @@ export * from './schema/people';
 export * from './schema/investor';
 export * from './schema/revenue';
 export * from './schema/support';
+export * from './schema/search';

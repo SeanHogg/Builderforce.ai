@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import { ChatProjectActions } from './ChatProjectActions';
 import { BrainMessageExport } from './brain/BrainMessageExport';
+import { downloadText } from '@/lib/download';
+import { exportFilenameStem } from '@/lib/brain/messageExport';
 
 export interface ChatMessageActionsProps {
   onCopy: () => void;
@@ -42,10 +45,33 @@ export function ChatMessageActions({
   chatTitle,
 }: ChatMessageActionsProps) {
   const t = useTranslations('brain.messageActions');
+  const [downloaded, setDownloaded] = useState(false);
+  const downloadMarkdown = () => {
+    const stem = exportFilenameStem(chatTitle?.trim() || 'brain-response', 'brain-response');
+    downloadText(assistantContent, `${stem}.md`, 'text/markdown');
+    setDownloaded(true);
+  };
   return (
     <>
-      <button type="button" className="bs-action-btn" onClick={onCopy} title={t('copy')}>
-        {copied && <Icon name="check" size={14} />} {copied ? t('copied') : t('copy')}
+      <button
+        type="button"
+        className="bs-action-btn bs-action-btn--icon"
+        onClick={downloadMarkdown}
+        title={downloaded ? t('downloaded') : t('downloadMarkdown')}
+        aria-label={downloaded ? t('downloaded') : t('downloadMarkdown')}
+        data-state={downloaded ? 'complete' : 'idle'}
+      >
+        <Icon name={downloaded ? 'document' : 'download'} size={15} />
+      </button>
+      <button
+        type="button"
+        className="bs-action-btn bs-action-btn--icon"
+        onClick={onCopy}
+        title={copied ? t('copied') : t('copy')}
+        aria-label={copied ? t('copied') : t('copy')}
+        data-state={copied ? 'complete' : 'idle'}
+      >
+        <Icon name={copied ? 'check' : 'copy'} size={15} />
       </button>
       {onFeedback != null && (
         <>
@@ -55,6 +81,8 @@ export function ChatMessageActions({
             onClick={() => onFeedback('up')}
             title={t('goodResponse')}
             aria-label={t('thumbsUp')}
+            aria-pressed={feedback === 'up'}
+            data-state={feedback === 'up' ? 'complete' : 'idle'}
           >
             
             <Icon source="👍" size="1em" />
@@ -65,6 +93,8 @@ export function ChatMessageActions({
             onClick={() => onFeedback('down')}
             title={t('badResponse')}
             aria-label={t('thumbsDown')}
+            aria-pressed={feedback === 'down'}
+            data-state={feedback === 'down' ? 'complete' : 'idle'}
           >
             
             <Icon source="👎" size="1em" />

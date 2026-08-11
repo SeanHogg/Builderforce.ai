@@ -7119,6 +7119,7 @@
         "pptx": "PowerPoint herunterladen",
         "csv": "CSV herunterladen",
         "working": "Wird vorbereitet…",
+        "downloaded": "Heruntergeladen",
         "failed": "Export fehlgeschlagen",
         "untitled": "Ohne Titel"
       },
@@ -7131,6 +7132,8 @@
     "messageActions": {
       "copy": "Kopieren",
       "copied": "Kopiert!",
+      "downloadMarkdown": "Markdown herunterladen",
+      "downloaded": "Heruntergeladen",
       "goodResponse": "Gute Antwort",
       "badResponse": "Schlechte Antwort",
       "thumbsUp": "Daumen hoch",

@@ -312,6 +312,10 @@ describe('every artifact leaves the board in its own native format', () => {
     expect(exportFormats({ kind: 'agent', title: 'Researcher' })).toEqual([]);
   });
 
+  it('keeps transcript actions in the chat, not on the Brain canvas object', () => {
+    expect(exportFormats({ kind: 'chat', title: 'Brain', content: '# Answer' })).toEqual([]);
+  });
+
   it('drops a format the object cannot currently fill', () => {
     // A sheet with no rows yet has no columns to write, so Excel and CSV are
     // absent rather than present-and-failing.

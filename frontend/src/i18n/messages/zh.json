@@ -7119,6 +7119,7 @@
         "pptx": "下载 PowerPoint",
         "csv": "下载 CSV",
         "working": "准备中……",
+        "downloaded": "已下载",
         "failed": "导出失败",
         "untitled": "未命名"
       },
@@ -7131,6 +7132,8 @@
     "messageActions": {
       "copy": "复制",
       "copied": "已复制！",
+      "downloadMarkdown": "下载 Markdown",
+      "downloaded": "已下载",
       "goodResponse": "回答很好",
       "badResponse": "回答不佳",
       "thumbsUp": "点赞",

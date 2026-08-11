@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getBrainCapability, extractCsv, exportFilenameStem } from '@/lib/brain';
 import { exportDocx, exportPptx, exportCsv } from '@/lib/exportApi';
+import { Icon } from '@/components/ui/Icon';
 
 export interface BrainMessageExportProps {
   /** The chat's capability id (null = no capability picked). */
@@ -28,6 +29,7 @@ export function BrainMessageExport({ capability, content, title }: BrainMessageE
   const t = useTranslations('brain.capabilities');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [downloaded, setDownloaded] = useState(false);
 
   const format = getBrainCapability(capability)?.exportFormat;
   if (!format) return null;
@@ -40,11 +42,13 @@ export function BrainMessageExport({ capability, content, title }: BrainMessageE
   const run = async () => {
     setBusy(true);
     setError('');
+    setDownloaded(false);
     try {
       const name = title?.trim() || t('export.untitled');
       if (format === 'csv') exportCsv(csv as string, `${exportFilenameStem(name, 'export')}.csv`);
       else if (format === 'docx') await exportDocx(content, name);
       else await exportPptx(content, name);
+      setDownloaded(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('export.failed'));
     } finally {
@@ -55,13 +59,14 @@ export function BrainMessageExport({ capability, content, title }: BrainMessageE
   return (
     <button
       type="button"
-      className="bs-action-btn"
+      className="bs-action-btn bs-action-btn--icon"
       onClick={() => { void run(); }}
       disabled={busy}
-      title={error || label}
-      aria-label={label}
+      title={error || (downloaded ? t('export.downloaded') : label)}
+      aria-label={error || (downloaded ? t('export.downloaded') : label)}
+      data-state={error ? 'error' : downloaded ? 'complete' : busy ? 'working' : 'idle'}
     >
-      {busy ? t('export.working') : error ? `${t('export.failed')}` : `${label}`}
+      <Icon name={busy ? 'clock' : error ? 'warning' : downloaded ? 'document' : 'download'} size={15} />
     </button>
   );
 }
