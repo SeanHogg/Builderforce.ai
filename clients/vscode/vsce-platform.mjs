@@ -16,9 +16,14 @@ const os = process.platform === "win32"
 const architecture = process.arch === "arm64" ? "arm64" : "x64";
 const target = `${os}-${architecture}`;
 const vsceCli = createRequire(import.meta.url).resolve("@vscode/vsce/vsce");
+const forwardedArgs = process.argv.slice(3);
+if (operation === "package" && !forwardedArgs.some((arg) => arg === "--out" || arg === "-o")) {
+  const manifest = createRequire(import.meta.url)("./package.json");
+  forwardedArgs.push("--out", `${manifest.name}-${manifest.version}.vsix`);
+}
 const result = spawnSync(
   process.execPath,
-  [vsceCli, operation, "--no-dependencies", "--target", target, ...process.argv.slice(3)],
+  [vsceCli, operation, "--no-dependencies", "--target", target, ...forwardedArgs],
   { stdio: "inherit" },
 );
 

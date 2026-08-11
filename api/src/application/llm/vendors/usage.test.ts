@@ -94,3 +94,24 @@ describe('openRouter catalog — Anthropic models', () => {
     expect(haiku!.tier).toBe('STANDARD');
   });
 });
+
+describe('openRouter catalog — live free frontier order', () => {
+  const freeIds = openRouterModule.catalog
+    .filter((model) => model.tier === 'FREE')
+    .map((model) => model.id);
+
+  it('leads with the strongest live free general models', () => {
+    expect(freeIds.slice(0, 3)).toEqual([
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'google/gemma-4-26b-a4b-it:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+    ]);
+  });
+
+  it('does not route retired free endpoints', () => {
+    expect(freeIds).not.toContain('qwen/qwen3-coder:free');
+    expect(freeIds).not.toContain('minimax/minimax-m2.5:free');
+    expect(freeIds).not.toContain('poolside/laguna-m.1:free');
+    expect(freeIds).not.toContain('meta-llama/llama-3.3-70b-instruct:free');
+  });
+});

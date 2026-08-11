@@ -27,37 +27,22 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 // module is chat-completions only.
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  // ── FREE tier — drive builderforceLLM (free plan) and prefix the Pro fallback chain
-  { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                 brand: 'Google'    },
-  { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', label: 'Gemma 4 26B (Free)',                 brand: 'Google'    },
-  { id: 'openrouter/elephant-alpha',                 tier: 'FREE', label: 'OpenRouter Elephant Alpha (Free)',   brand: 'OpenRouter' },
-  { id: 'nousresearch/hermes-3-llama-3.1-405b:free', tier: 'FREE', label: 'Hermes 3 (Llama 405B, Free)',        brand: 'NousResearch' },
-  { id: 'openai/gpt-oss-120b:free',                  tier: 'FREE', label: 'GPT-OSS 120B (Free)',                brand: 'OpenAI'    },
-  { id: 'meta-llama/llama-3.3-70b-instruct:free',    tier: 'FREE', label: 'Llama 3.3 70B (Free)',               brand: 'Meta'      },
-  { id: 'meta-llama/llama-3.2-3b-instruct:free',     tier: 'FREE', label: 'Llama 3.2 3B (Free)',                brand: 'Meta'      },
-  { id: 'z-ai/glm-4.5-air:free',                     tier: 'FREE', label: 'GLM 4.5 Air (Free)',                 brand: 'Z.AI'      },
-  { id: 'qwen/qwen3-next-80b-a3b-instruct:free',     tier: 'FREE', label: 'Qwen 3 Next 80B (Free)',             brand: 'Qwen'      },
-  { id: 'nvidia/nemotron-nano-9b-v2:free',           tier: 'FREE', label: 'Nemotron Nano 9B (Free)',            brand: 'NVIDIA'    },
-  { id: 'nvidia/nemotron-nano-12b-v2-vl:free',       tier: 'FREE', label: 'Nemotron Nano 12B v2 VL (Free)',     brand: 'NVIDIA'    },
-  { id: 'nvidia/nemotron-3-nano-30b-a3b:free',       tier: 'FREE', label: 'Nemotron 3 Nano 30B (Free)',         brand: 'NVIDIA'    },
+  // ── FREE tier — live zero-priced OpenRouter chat endpoints, strongest first.
+  // Verified against GET /api/v1/models on 2026-08-11. Free availability is
+  // volatile, so keep this list current rather than retaining retired slugs.
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA'     },
+  { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google'     },
+  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'     },
+  { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside'   },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
-  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'    },
-  { id: 'qwen/qwen3-coder:free',                     tier: 'FREE', label: 'Qwen 3 Coder (Free)',                brand: 'Qwen'      },
-  { id: 'inclusionai/ring-2.6-1t:free',              tier: 'FREE', label: 'Ring 2.6 1T (Free)',                 brand: 'InclusionAI' },
-  { id: 'baidu/cobuddy:free',                        tier: 'FREE', label: 'CoBuddy (Free)',                     brand: 'Baidu'     },
-  { id: 'baidu/qianfan-ocr-fast:free',               tier: 'FREE', label: 'Qianfan OCR Fast (Free)',            brand: 'Baidu'     },
-  { id: 'poolside/laguna-xs.2:free',                 tier: 'FREE', label: 'Laguna XS.2 (Free)',                 brand: 'Poolside'  },
-  { id: 'poolside/laguna-m.1:free',                  tier: 'FREE', label: 'Laguna M.1 (Free)',                  brand: 'Poolside'  },
-  { id: 'minimax/minimax-m2.5:free',                 tier: 'FREE', label: 'MiniMax M2.5 (Free)',                brand: 'MiniMax'   },
-  { id: 'liquid/lfm-2.5-1.2b-thinking:free',         tier: 'FREE', label: 'LFM 2.5 1.2B Thinking (Free)',       brand: 'Liquid'    },
-  { id: 'liquid/lfm-2.5-1.2b-instruct:free',         tier: 'FREE', label: 'LFM 2.5 1.2B Instruct (Free)',       brand: 'Liquid'    },
-  { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', tier: 'FREE', label: 'Dolphin Mistral 24B Venice (Free)', brand: 'CognitiveComputations' },
-  { id: 'openrouter/owl-alpha',                      tier: 'FREE', label: 'OpenRouter Owl Alpha (Free)',          brand: 'OpenRouter' },
-  { id: 'arcee-ai/trinity-large-thinking:free',      tier: 'FREE', label: 'Arcee Trinity Large Thinking (Free)',  brand: 'Arcee'     },
-  { id: 'openai/gpt-oss-20b:free',                   tier: 'FREE', label: 'GPT-OSS 20B (Free)',                   brand: 'OpenAI'    },
-  // Strong FREE agentic coders (verified live on OpenRouter /models, tool-capable).
-  { id: 'nex-agi/nex-n2-pro:free',                   tier: 'FREE', label: 'Nex-N2-Pro (Free · agentic)',         brand: 'Nex AGI'   },
-  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',        brand: 'NVIDIA'    },
+  { id: 'openai/gpt-oss-20b:free',                   tier: 'FREE', label: 'GPT-OSS 20B (Free)',                  brand: 'OpenAI'     },
+  { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                  brand: 'Google'     },
+  { id: 'poolside/laguna-xs-2.1:free',               tier: 'FREE', label: 'Laguna XS 2.1 (Free)',                brand: 'Poolside'   },
+  { id: 'cohere/north-mini-code:free',               tier: 'FREE', label: 'North Mini Code (Free)',              brand: 'Cohere'     },
+  { id: 'nvidia/nemotron-3-nano-30b-a3b:free',       tier: 'FREE', label: 'Nemotron 3 Nano 30B (Free)',         brand: 'NVIDIA'     },
+  { id: 'nvidia/nemotron-nano-12b-v2-vl:free',       tier: 'FREE', label: 'Nemotron Nano 12B v2 VL (Free)',     brand: 'NVIDIA'     },
+  { id: 'nvidia/nemotron-nano-9b-v2:free',           tier: 'FREE', label: 'Nemotron Nano 9B v2 (Free)',         brand: 'NVIDIA'     },
+  { id: 'inclusionai/ling-3.0-tiny:free',            tier: 'FREE', label: 'Ling 3.0 Tiny (Free)',                brand: 'InclusionAI' },
 
   // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.

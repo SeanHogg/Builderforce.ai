@@ -139,16 +139,15 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // Sourced from NVIDIA NIM (`minimaxai/minimax-m3`), where M3 has a FREE endpoint.
   // This needs
   // NVIDIA_API_KEY bound on the gateway; if it's unbound the NIM default no-key-
-  // skips at dispatch and the run fails over to the OpenRouter `:free` tail below,
-  // so M2.5:free sits immediately after as the always-reachable failover.
+  // skips at dispatch and the run fails over to the current OpenRouter `:free`
+  // frontier tail below.
   'minimaxai/minimax-m3',                     // current free agentic coder (NVIDIA NIM) — standardized default
-  'minimax/minimax-m2.5:free',                // prior-gen MiniMax (OpenRouter free) — always-reachable failover
-  'nex-agi/nex-n2-pro:free',                  // agentic MoE (Qwen3.5 arch), tool use
   'nvidia/nemotron-3-ultra-550b-a55b:free',   // Programming #6, 1M context
-  'openrouter/owl-alpha',                     // agentic, Claude Code-compatible
-  'poolside/laguna-m.1:free',                 // flagship coding-agent model
-  'qwen/qwen3-coder:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'poolside/laguna-s-2.1:free',               // current flagship coding-agent model
+  'cohere/north-mini-code:free',              // code-specialized, 256K context
+  'nvidia/nemotron-3-super-120b-a12b:free',   // agentic reasoning fallback
+  'google/gemma-4-26b-a4b-it:free',           // multimodal tools + structured output
+  'openai/gpt-oss-20b:free',                  // compact tool-capable reliability tail
   // DIRECT-ANTHROPIC reliability floor (NVIDIA-of-last-resort). Served by the
   // `anthropic` vendor on the operator's CLAUDE_API_KEY — a vendor-diverse path
   // independent of OpenRouter. These are `autoRoute: false`, so they never enter a
@@ -581,7 +580,10 @@ export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
  * closes that hole: Builderforce funds this one cheap call (~$0.0001) as the
  * reliability floor so a saturated free pool never surfaces a hard failure.
  */
-export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
+// Credited OpenRouter safety net after the zero-priced pool is exhausted.
+// Muse Glimmer is intentionally NOT in a FREE catalog tier: the live endpoint
+// costs $0.35/M input and $1.50/M output, so it must remain paid-overflow only.
+export const GUARANTEED_BACKSTOP_MODEL = 'meta/muse-glimmer-30b';
 
 /**
  * Cheapest reliable paid coder — the head of the coding reliability floor and the

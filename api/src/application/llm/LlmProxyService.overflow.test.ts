@@ -22,6 +22,7 @@ describe('isPaidOverflowModel', () => {
 
   it('flags the reliability backstop models (general + coding)', () => {
     expect(isPaidOverflowModel(GUARANTEED_BACKSTOP_MODEL)).toBe(true);
+    expect(GUARANTEED_BACKSTOP_MODEL).toBe('meta/muse-glimmer-30b');
     expect(isPaidOverflowModel('deepseek/deepseek-v4-flash')).toBe(true);
   });
 
