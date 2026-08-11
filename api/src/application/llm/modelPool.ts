@@ -673,7 +673,7 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
  * usage row resolved to one of these is "overflow spend" — metered against a
  * per-tenant daily $ cap so a Free tenant in a tight retry loop can't run up
  * arbitrary spend on our keys (the cap is enforced in the gateway route; see
- * `paid_overflow_daily_cap`).
+ * `paid_overflow_daily_cap`).sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss
  *
  * By-id detection is deliberately conservative here: the *stronger* coding-floor
  * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-5`) are Pro plan-pool
