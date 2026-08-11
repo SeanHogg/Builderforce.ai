@@ -113,6 +113,7 @@ import { createTeamRosterService } from './application/kernel/TeamRoster';
 import { createEntityService } from './application/domains/EntityService';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
+import { createAccountBrainPreferenceRoutes } from './presentation/routes/accountBrainPreferenceRoutes';
 import { createReleaseNoteRoutes } from './presentation/routes/releaseNoteRoutes';
 import { runReleaseDigest } from './application/email/releaseDigest';
 import { createFreelancerMessagingRoutes } from './presentation/routes/freelancerMessagingRoutes';
@@ -512,6 +513,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Email language + consent. The /unsubscribe leg is intentionally PUBLIC (no
   // session) — it is the CAN-SPAM opt-out link carried in every lifecycle mail.
   app.route('/api/email-preferences', createEmailPreferenceRoutes(db));
+  app.route('/api/account/brain-preferences', createAccountBrainPreferenceRoutes(db));
   // Platform release notes — public published changelog (footer "What's new"
   // panel) + superadmin authoring + manual weekly-digest trigger.
   app.route('/api/release-notes', createReleaseNoteRoutes(db));

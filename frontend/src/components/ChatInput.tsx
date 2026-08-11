@@ -521,8 +521,10 @@ export function ChatInput({
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file && onAttach) void onAttach(file);
+      const files = Array.from(e.target.files ?? []);
+      if (onAttach) void (async () => {
+        for (const file of files) await onAttach(file);
+      })();
       e.target.value = '';
     },
     [onAttach]
@@ -556,10 +558,9 @@ export function ChatInput({
       const files = e.dataTransfer?.files;
       if (!files || files.length === 0) return;
       e.preventDefault();
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.type.startsWith('image/')) void onAttach(file);
-      }
+      void (async () => {
+        for (let i = 0; i < files.length; i++) await onAttach(files[i]);
+      })();
     },
     [onAttach]
   );
@@ -649,6 +650,7 @@ export function ChatInput({
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json,.docx,.rtf,.xlsx,.pptx"
               onChange={handleFileChange}
               style={{ display: 'none' }}

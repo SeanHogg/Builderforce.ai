@@ -24,6 +24,8 @@ import {
   classifyModelFunding,
   getMcpToolStatus,
   nextFallbackModel,
+  effortProfile,
+  reasoningForRun,
   type BrainTraceEvent,
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -91,6 +93,7 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { nextSeedPromptStep } from '@/lib/brain/seedPrompt';
 import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
 import { fetchLimbicBlock } from '@/lib/personalityApi';
+import { accountBrainPreferencesApi } from '@/lib/accountBrainPreferencesApi';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
@@ -286,6 +289,34 @@ export function BrainPanel({
   const [thinking, setThinking] = useState(false);
   const [webBrowsing, setWebBrowsing] = useState(false);
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
+  const [responseInstructions, setResponseInstructions] = useState('');
+  const [accountPreferencesReady, setAccountPreferencesReady] = useState(false);
+  // Account preferences use the person-level credential and therefore follow the
+  // user across tenants, projects, chats, browsers and devices. Workspace roles do
+  // not gate a human's authority over their own defaults.
+  useEffect(() => {
+    let live = true;
+    accountBrainPreferencesApi.get()
+      .then(({ preferences }) => {
+        if (!live) return;
+        setEffort(preferences.effort);
+        setThinking(preferences.thinking);
+        setWebBrowsing(preferences.webBrowsing);
+        setModelSelection(preferences.modelSelection);
+        setResponseInstructions(preferences.responseInstructions);
+      })
+      .catch(() => { /* signed-out/embed surfaces keep safe defaults */ })
+      .finally(() => { if (live) setAccountPreferencesReady(true); });
+    return () => { live = false; };
+  }, []);
+  useEffect(() => {
+    if (!accountPreferencesReady) return;
+    const timer = window.setTimeout(() => {
+      void accountBrainPreferencesApi.update({ effort, thinking, webBrowsing, modelSelection, responseInstructions })
+        .catch(() => { /* the global API error surface reports save failures */ });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [accountPreferencesReady, effort, thinking, webBrowsing, modelSelection, responseInstructions]);
   // "Add context" from a connected repo: when the active chat's project has one
   // or more repositories, the composer's + menu offers a repo file picker whose
   // selection is attached as context. Same repo the agent clones from, so it
@@ -474,6 +505,7 @@ export function BrainPanel({
     if (extraSystem) parts.push(extraSystem);
     if (capabilityPrompt) parts.push(capabilityPrompt);
     if (personalityBlock) parts.push(personalityBlock);
+    if (responseInstructions) parts.push(`ACCOUNT RESPONSE PREFERENCES:\n${responseInstructions}`);
     if (ctxProjectId != null) {
       const name = projects.find((p) => p.id === ctxProjectId)?.name;
       parts.push(`The current project is ${name ? `"${name}" ` : ''}(projectId ${ctxProjectId}). When the user asks to create, list, or operate on tasks, specs, or other project-scoped items without naming a project, use projectId ${ctxProjectId} by default. To take them to the result, call navigate_to — do not write out absolute URLs.`);
@@ -486,7 +518,7 @@ export function BrainPanel({
     const composer = buildComposerDirectives({ effort, thinking, web: webBrowsing });
     if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
-  }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
+  }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, thinking, webBrowsing, personalityBlock, responseInstructions]);
 
   // Per-turn limbic affect (VS Code webview parity). The static personality tone
   // above (`ambientSystem` ← personalityBlock) sets the user's baseline voice;
@@ -579,6 +611,8 @@ export function BrainPanel({
     modelStrict: modelSelection.mode === 'model',
     routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
     pickFallbackModel: modelSelection.mode === 'model' ? undefined : pickFallbackModel,
+    maxTokens: effortProfile(effort).maxTokens,
+    reasoning: reasoningForRun({ effort, thinking }),
     toolSpecs,
     runTool,
     needsConfirm,

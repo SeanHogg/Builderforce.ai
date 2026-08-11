@@ -45,6 +45,7 @@ import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
 import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
+import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 import {
   shouldRecoverStalledTurn,
   isExhaustedStall,
@@ -1312,7 +1313,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // the VS Code webview Brain, mirroring the server-side @agent reply loop
   // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
   // that has not adopted the mode yet keeps the behaviour it shipped with.
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId)}`;
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId)}\n\n${turnOptimizationDirective()}`;
 
   // Read-only tool calls whose (name+args) exactly repeat within a run return a
   // "already returned above" stub instead of re-fetching + re-injecting the full
@@ -1336,10 +1337,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   let modelFailovers = 0;
   // The user's ACTUAL request for this run, resolved once. Every turn's tool
   // selection scores against this and nothing else — see the `query` note below.
-  const requestQuery =
-    (req.userTurn !== undefined ? latestUserText([{ role: 'user', content: req.userTurn }]) : '')
-    || latestUserText(convo)
-    || '';
+  const requestQuery = routingQueryForTurn(convo);
   // Tool names the resolved system prompt tells the model to call. Always advertised.
   const promptNamedTools = toolNamesMentionedIn(systemPrompt);
 

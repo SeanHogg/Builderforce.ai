@@ -254,6 +254,7 @@ export { getLastResolvedModel, setLastResolvedModel } from './lastResolvedModel'
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome, EvermindLearnTarget } from './types';
+export { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state

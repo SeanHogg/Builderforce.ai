@@ -34,6 +34,23 @@ function renderComposer(props: Partial<React.ComponentProps<typeof ChatInput>> =
 const trigger = () => screen.getByRole('button', { name: /chatInput\.options/ });
 
 describe('ChatInput `/` options menu', () => {
+  it('accepts a batch of original files instead of making the user trim or convert them', async () => {
+    const onAttach = vi.fn().mockResolvedValue(undefined);
+    renderComposer({ onAttach });
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input?.multiple).toBe(true);
+
+    const files = [
+      new File(['report'], 'report.pdf', { type: 'application/pdf' }),
+      new File(['data'], 'data.csv', { type: 'text/csv' }),
+    ];
+    fireEvent.change(input!, { target: { files } });
+
+    await vi.waitFor(() => expect(onAttach).toHaveBeenCalledTimes(2));
+    expect(onAttach).toHaveBeenNthCalledWith(1, files[0]);
+    expect(onAttach).toHaveBeenNthCalledWith(2, files[1]);
+  });
+
   it('is the only model affordance in the composer, and names the model in use on its trigger', () => {
     renderComposer({ modelSelection: { mode: 'model', model: 'plan/sonnet' } });
 
