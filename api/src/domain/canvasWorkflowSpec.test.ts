@@ -8,6 +8,16 @@ const CATALOG = connectorActionIndex([
 ]);
 
 describe('compileCanvasWorkflowSteps', () => {
+  it('preserves an authored social publishing schedule on the trigger node', () => {
+    const { definition, issues } = compileCanvasWorkflowSteps([
+      { title: 'Weekday cadence', kind: 'trigger', triggerType: 'schedule', cron: '0 9 * * 1-5', timezone: 'America/New_York' },
+      { title: 'Publish', connector: 'x-social', action: 'create_post', input: { text: 'Hello' } },
+    ], { catalog: new Map([['x-social', new Set(['create_post'])]]) });
+
+    expect(issues).toEqual([]);
+    expect(definition.nodes[0]).toMatchObject({ kind: 'trigger', config: { triggerType: 'schedule', cron: '0 9 * * 1-5', timezone: 'America/New_York' } });
+  });
+
   it('lowers authored integration steps into a runnable connector chain', () => {
     const { definition, issues, compiledCount } = compileCanvasWorkflowSteps([
       { title: 'Text the customer', connector: 'twilio', action: 'send_sms', input: { To: '+15550001111', From: '+15550002222', Body: 'Hi' } },

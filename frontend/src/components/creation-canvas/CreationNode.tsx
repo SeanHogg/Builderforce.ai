@@ -42,6 +42,7 @@ import type { ToolResult } from '@/lib/tools';
 import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websiteWysiwyg';
 import { CanvasVideoEditor } from './CanvasVideoEditor';
+import { CanvasResumeEditor } from './CanvasResumeEditor';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -150,7 +151,7 @@ function GuidedTourBody({ data }: { data: CreationNodeData }) {
 // `game` is deliberately absent: a game is the one creative kind whose artifact
 // can be USED in place, so it gets a body that plays it rather than a tile that
 // describes it. See GameBody.
-const CREATIVE_STUDIO_KINDS = new Set(['image', 'animation', 'podcast', 'comic', 'cad', 'model3d', 'resume', 'template']);
+const CREATIVE_STUDIO_KINDS = new Set(['image', 'animation', 'podcast', 'comic', 'cad', 'model3d', 'template']);
 
 /** Product name — never translated, so it stays out of the message catalogs. */
 const EVERMIND_BRAND = 'Evermind';
@@ -1832,13 +1833,13 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A game is played in its own body, so it needs the width a game needs.
-    'game'].includes(data.kind) || WEB_PAGE_KINDS.has(data.kind);
+    'game', 'resume'].includes(data.kind) || WEB_PAGE_KINDS.has(data.kind);
   // Every kind with a body of its own. A kind missing from here renders its own
   // body AND the generic fallback underneath it — which is what all nine
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game','resume', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1890,6 +1891,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}
         {data.kind === 'video' && <CanvasVideoEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
+        {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
         {data.kind === 'game' && <GameBody data={data} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}

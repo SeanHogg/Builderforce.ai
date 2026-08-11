@@ -92,6 +92,7 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
+import { preserveResumeSourceForPatch } from '@/lib/canvasResume';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -3498,8 +3499,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { objectId?: string; fields?: unknown };
       const target = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
       if (!args.objectId || !target) return { error: 'Object not found' };
-      const patch = sanitizeCreationObjectPatch(target.data.kind, args.fields);
+      let patch = sanitizeCreationObjectPatch(target.data.kind, args.fields);
       if (!Object.keys(patch).length) return { error: `No supported fields supplied. Mutable fields: ${creationObjectDefinition(target.data.kind).mutableFields.join(', ')}` };
+      if (target.data.kind === 'resume') {
+        const protectedPatch = preserveResumeSourceForPatch(target.data, patch);
+        patch = { ...protectedPatch, ...(protectedPatch.resumeFamily ? { status: t('resumeEditor.statusDerived') } : {}) };
+      }
       if (target.data.kind === 'website' || target.data.kind === 'prototype') {
         const problem = authoredWebsiteProblem({ ...target.data, ...patch });
         if (problem) return { error: `${problem} Update this object with its complete WYSIWYG page structure.` };

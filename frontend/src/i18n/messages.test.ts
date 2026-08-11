@@ -8,6 +8,7 @@ import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES } from '@/lib/builderforceApi';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
+import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
 import {
   FOOTER_COLUMNS,
   LEARN_COLUMNS,
@@ -25,6 +26,7 @@ import {
   destTitleKey,
 } from '@/lib/navGroups';
 import { FAMILIES, FAMILY_IDS } from '@/lib/marketplaceFamilies';
+import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 
 import { listWidgets } from '@/lib/widgets/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
@@ -134,6 +136,22 @@ describe('message catalogs', () => {
     const missing = CREATION_OBJECT_REGISTRY
       .map(({ kind }) => kind)
       .filter((kind) => t(`creationCanvas.object.${kind}` as never) === `creationCanvas.object.${kind}`);
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every resume template', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = RESUME_TEMPLATES.filter(({ labelKey }) => {
+      const key = `creationCanvas.resumeEditor.${labelKey}`;
+      return t(key as never) === key;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every creation canvas template', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = CREATION_TEMPLATES.flatMap(({ id }) => ['name', 'description'].map((field) => `creationCanvas.template.${id}.${field}`))
+      .filter((key) => t(key as never) === key);
     expect(missing).toEqual([]);
   });
 

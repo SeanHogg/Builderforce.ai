@@ -673,6 +673,54 @@
 .featureGrid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }.featureGrid span { display:flex; align-items:center; gap:5px; padding:7px 5px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fbfdff; font-size:7px; }.featureGrid b { width:17px; height:17px; display:grid; place-items:center; flex:none; border-radius:var(--radius-sm); color:var(--text-on-accent); background:var(--canvas-accent); font-size:8px; }
 .node_project,.node_mockup,.node_task { width:290px; }.node_roadmap,.node_featureSummary { width:500px; }
 .node_image,.node_animation,.node_podcast,.node_comic,.node_game,.node_cad,.node_model3d,.node_resume,.node_template { width:360px; }
+.node_resume { width:700px; }
+
+.resumeEmpty,
+.resumeStudio { display:flex; flex-direction:column; gap:10px; }
+.resumeEmpty { align-items:flex-start; padding:22px; border:1px dashed var(--border); border-radius:12px; background:var(--surface-subtle); }
+.resumeEmpty p { margin:0; color:var(--text-muted); }
+.resumeEmpty button,
+.resumeSourceBar button,
+.resumeVersionCreator button,
+.resumeControls button { border:1px solid var(--border); border-radius:7px; background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeEmpty button:disabled,
+.resumeSourceBar button:disabled,
+.resumeVersionCreator button:disabled,
+.resumeControls button:disabled { cursor:not-allowed; opacity:.48; }
+.resumeError { color:var(--danger, #b91c1c) !important; }
+.resumeSourceBar,
+.resumeVersionCreator,
+.resumeControls { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; }
+.resumeSourceBar label,
+.resumeControls label { display:flex; flex-direction:column; gap:4px; min-width:180px; }
+.resumeSourceBar label span,
+.resumeControls label span { color:var(--text-muted); font-size:11px; font-weight:700; text-transform:uppercase; }
+.resumeSourceBar select,
+.resumeControls select,
+.resumeVersionCreator input { min-height:34px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:inherit; padding:6px 9px; }
+.resumeSourceBar select { min-width:230px; }
+.resumeVersionCreator input { flex:1; min-width:190px; }
+.resumeImmutable { align-self:center; border-radius:99px; background:color-mix(in srgb, var(--resume-accent, #7c3aed) 12%, transparent); color:var(--text-muted); font-size:11px; font-weight:700; padding:5px 8px; }
+.resumeImmutable[data-original] { color:#7c3aed; }
+.resumeControls { justify-content:space-between; border-top:1px solid var(--border); padding-top:10px; }
+.resumeControls [role="tablist"] { display:flex; gap:4px; }
+.resumeControls [role="tab"][aria-selected="true"] { border-color:#7c3aed; background:color-mix(in srgb, #7c3aed 12%, var(--surface)); color:#6d28d9; }
+.resumePaper { --resume-accent:#7c3aed; --resume-paper:#fff; --resume-ink:#172033; min-height:520px; max-height:700px; overflow:auto; border:1px solid color-mix(in srgb, var(--resume-accent) 28%, #d1d5db); border-top:6px solid var(--resume-accent); border-radius:3px; background:var(--resume-paper); color:var(--resume-ink); padding:34px 40px; box-shadow:0 8px 24px rgb(15 23 42 / 10%); line-height:1.45; }
+.resumePaper[data-font="serif"] { font-family:Georgia, 'Times New Roman', serif; }
+.resumePaper[data-font="mono"] { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; }
+.resumePaper[data-density="compact"] { padding:25px 30px; font-size:12px; line-height:1.32; }
+.resumePaper[data-density="spacious"] { padding:45px 50px; line-height:1.65; }
+.resumePaper[data-columns="2"] > ul { columns:2; column-gap:30px; }
+.resumePaper h1 { margin:0 0 4px; color:var(--resume-accent); font-size:30px; }
+.resumePaper h2 { margin:22px 0 8px; border-bottom:1px solid color-mix(in srgb, var(--resume-accent) 35%, transparent); color:var(--resume-accent); font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+.resumePaper h3 { margin:14px 0 3px; font-size:14px; }
+.resumePaper p,
+.resumePaper ul { margin:6px 0; }
+.resumeCompare { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.resumeCompare section { min-width:0; }
+.resumeCompare section > strong { display:block; margin-bottom:6px; font-size:12px; }
+.resumeCompare .resumePaper { min-height:380px; max-height:560px; padding:22px; font-size:11px; }
+@media (max-width:800px) { .resumeCompare { grid-template-columns:1fr; } }
 .node_guidedTour { width:520px; }
 .tourDesign { display:grid; gap:9px; }
 .tourPreview { position:relative; min-height:230px; overflow:hidden; display:grid; place-items:center; padding:24px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:linear-gradient(135deg,var(--canvas-panel-muted),var(--canvas-widget-surface)); }

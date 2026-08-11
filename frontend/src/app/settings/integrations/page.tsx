@@ -6,6 +6,7 @@ import PageContainer from '@/components/PageContainer';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
+import { MailboxIntegrations } from '@/components/integrations/MailboxIntegrations';
 import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
 import { ApiKeysContent } from '@/components/settings/ApiKeysContent';
 import { getStoredTenant } from '@/lib/auth';
@@ -68,7 +69,7 @@ export default function SettingsIntegrationsPage() {
 
       {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
       {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} /></section>}
-      {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><IntegrationsGallery search={search} viewMode={viewMode} /></section>}
+      {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><MailboxIntegrations search={search} viewMode={viewMode} /><IntegrationsGallery search={search} viewMode={viewMode} /></section>}
       {isOwner && show('developer') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.developer')}</h2><ApiKeysContent embedded showProviderKeys={false} search={search} externalViewMode={viewMode} /></section>}
     </PageContainer>
   );

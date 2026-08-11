@@ -200,6 +200,13 @@ export function buildCreationCanvasDiagnosticsReport(
     scope: input.brain.scope,
     scopedObjectCount,
   });
+  const runtime = asRecord(input.brainRuntime);
+  const completions = Array.isArray(runtime.completions) ? runtime.completions : [];
+  const truncated = completions.map(asRecord).filter((completion) => str(completion.finishReason) === 'length');
+  if (truncated.length) {
+    const last = truncated[truncated.length - 1]!;
+    gaps.push(`Brain output hit the model length limit on ${truncated.length} completion(s); the last truncated completion used ${str(last.resolvedModel) || '(unknown model)'}. Its answer or requested tool sequence may be incomplete.`);
+  }
   const timings = summarizeTimings(actions);
   const timingRows = timings.map((row) => `  ${row.label} · n=${row.count}${row.pending ? ` · pending=${row.pending}` : ''}${row.failed ? ` · FAILED=${row.failed}` : ''} · p50=${row.p50Ms == null ? 'n/a' : `${row.p50Ms}ms`} · max=${row.maxMs == null ? 'n/a' : `${row.maxMs}ms`}`);
   const actionRows = actions.map((action) => `[${action.at}] ${action.kind}/${action.label}${action.durationMs == null ? ' (never completed)' : ` ${action.durationMs}ms`}${action.ok === false ? ' FAILED' : ''}${action.detail ? ` — ${capText(action.detail, 200)}` : ''}`);

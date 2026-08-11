@@ -147,3 +147,27 @@ export const mailboxConnections = pgTable('mailbox_connections', {
   index('idx_mailbox_connections_tenant').on(t.tenantId, t.status),
 ]);
 
+/**
+ * Workspace-owned automation applied to messages read through a connected
+ * mailbox. These are deliberately provider-neutral: a Gmail label rule and an
+ * Exchange inbox rule have incompatible contracts, while the product promise is
+ * that the same Builderforce agent can triage either mailbox.
+ */
+export const mailboxAutomationRules = pgTable('mailbox_automation_rules', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  connectionId: integer('connection_id').notNull().references(() => mailboxConnections.id, { onDelete: 'cascade' }),
+  name:         varchar('name', { length: 255 }).notNull(),
+  enabled:      boolean('enabled').notNull().default(true),
+  fromContains: varchar('from_contains', { length: 320 }).notNull().default(''),
+  subjectContains: varchar('subject_contains', { length: 500 }).notNull().default(''),
+  agentRef:     varchar('agent_ref', { length: 128 }),
+  /** 'draft' | 'approval' | 'automatic' */
+  responseMode: varchar('response_mode', { length: 16 }).notNull().default('draft'),
+  instructions: text('instructions').notNull().default(''),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_mailbox_automation_rules_connection').on(t.tenantId, t.connectionId, t.enabled),
+]);
+

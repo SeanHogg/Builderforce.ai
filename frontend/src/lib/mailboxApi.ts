@@ -74,6 +74,24 @@ export interface MailboxFilter {
   limit?: number;
 }
 
+export type MailboxResponseMode = 'draft' | 'approval' | 'automatic';
+
+export interface MailboxAutomationRule {
+  id: number;
+  connectionId: number;
+  name: string;
+  enabled: boolean;
+  fromContains: string;
+  subjectContains: string;
+  agentRef: string | null;
+  responseMode: MailboxResponseMode;
+  instructions: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MailboxAutomationRuleInput = Pick<MailboxAutomationRule, 'name' | 'enabled' | 'fromContains' | 'subjectContains' | 'agentRef' | 'responseMode' | 'instructions'>;
+
 const MAILBOX = '/api/mailbox';
 
 /** Serialize a filter into the query string the server's ONE parser reads.
@@ -148,6 +166,27 @@ export const mailboxApi = {
 
   getMessage: (connectionId: number, messageId: string): Promise<MailboxMessage> =>
     apiRequest(`${MAILBOX}/connections/${connectionId}/messages/${encodeURIComponent(messageId)}`),
+
+  send: (connectionId: number, message: { to: string; subject: string; html: string; replyTo?: string }): Promise<{ sent: true; id: string; accountEmail: string }> =>
+    apiRequest(`${MAILBOX}/connections/${connectionId}/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(message),
+    }),
+
+  listRules: (connectionId: number): Promise<{ rules: MailboxAutomationRule[] }> =>
+    apiRequest(`${MAILBOX}/connections/${connectionId}/rules`),
+
+  createRule: (connectionId: number, rule: MailboxAutomationRuleInput): Promise<MailboxAutomationRule> =>
+    apiRequest(`${MAILBOX}/connections/${connectionId}/rules`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rule),
+    }),
+
+  updateRule: (ruleId: number, patch: Partial<MailboxAutomationRuleInput>): Promise<MailboxAutomationRule> =>
+    apiRequest(`${MAILBOX}/rules/${ruleId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    }),
+
+  deleteRule: (ruleId: number): Promise<void> =>
+    apiRequest(`${MAILBOX}/rules/${ruleId}`, { method: 'DELETE' }),
 };
 
 /**

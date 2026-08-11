@@ -218,6 +218,11 @@ export const NAV_GROUPS: NavGroup[] = [
     seat: 'CMO', stage: 'run', rung: RUNG.WORKSPACE,
     match: ['/growth'],
   },
+  {
+    id: 'inbox', labelKey: 'group.inbox', icon: '✉', href: '/inbox',
+    seat: 'CMO', stage: 'run', rung: RUNG.WORKSPACE,
+    match: ['/inbox'],
+  },
   // ── RUN — the business seats ─────────────────────────────────────────────
   // Each resolves to the kernel domain surface PRD 20 built (`/seat/<domain>`),
   // under its PRODUCT name with the seat as a trailing chip: "you are going to

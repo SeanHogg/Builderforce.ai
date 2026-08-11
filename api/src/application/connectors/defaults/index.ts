@@ -17,6 +17,7 @@ import { BUSINESS_CONNECTORS } from './business';
 import { PRODUCTIVITY_CONNECTORS } from './productivity';
 import { DEVTOOLS_CONNECTORS } from './devtools';
 import { GENERIC_CONNECTORS } from './generic';
+import { SOCIAL_CONNECTORS } from './social';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
@@ -25,6 +26,7 @@ const ALL: readonly ConnectorManifest[] = [
   ...PRODUCTIVITY_CONNECTORS,
   ...DEVTOOLS_CONNECTORS,
   ...GENERIC_CONNECTORS,
+  ...SOCIAL_CONNECTORS,
 ];
 
 /** Built-in manifests, keyed for O(1) resolution. */

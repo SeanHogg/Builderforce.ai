@@ -37,8 +37,17 @@ import {
   readMailboxMessage,
   saveMailboxConnection,
   setMailboxSending,
+  sendFromMailbox,
   toTriageMessages,
 } from '../../application/mailbox/mailboxService';
+import {
+  createMailboxAutomationRule,
+  deleteMailboxAutomationRule,
+  listMailboxAutomationRules,
+  MAILBOX_RESPONSE_MODES,
+  updateMailboxAutomationRule,
+  type MailboxAutomationRuleInput,
+} from '../../application/mailbox/mailboxAutomationService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 /** Where the connect flow sends the browser back to when it is not told. */
@@ -211,6 +220,62 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     );
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.message);
+  });
+
+  // POST /connections/:id/send — individual correspondence from the webmail
+  // composer. Campaign sends remain on /api/growth and retain their suppression
+  // and unsubscribe ledger.
+  r.post('/connections/:id/send', manager, async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const body = await c.req.json<{ to?: string; subject?: string; html?: string; replyTo?: string }>()
+      .catch(() => ({} as { to?: string; subject?: string; html?: string; replyTo?: string }));
+    if (!body.to?.trim() || !body.subject?.trim() || !body.html?.trim()) {
+      return c.json({ error: 'to, subject, and html are required.' }, 400);
+    }
+    const result = await sendFromMailbox(db, c.env as Env, c.get('tenantId') as number, id, {
+      to: body.to.trim(), subject: body.subject.trim(), html: body.html, replyTo: body.replyTo?.trim() || undefined,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ sent: true, id: result.id, accountEmail: result.accountEmail });
+  });
+
+  r.get('/connections/:id/rules', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    return c.json({ rules: await listMailboxAutomationRules(db, c.get('tenantId') as number, id) });
+  });
+
+  r.post('/connections/:id/rules', manager, async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const body = await c.req.json<MailboxAutomationRuleInput>().catch(() => ({} as MailboxAutomationRuleInput));
+    if (!body.name?.trim()) return c.json({ error: 'Rule name is required.' }, 400);
+    if (body.responseMode && !MAILBOX_RESPONSE_MODES.includes(body.responseMode)) {
+      return c.json({ error: 'Invalid response mode.' }, 400);
+    }
+    const rule = await createMailboxAutomationRule(db, c.get('tenantId') as number, id, body);
+    return rule ? c.json(rule, 201) : c.json({ error: 'Mailbox connection not found.' }, 404);
+  });
+
+  r.patch('/rules/:ruleId', manager, async (c) => {
+    const ruleId = Number(c.req.param('ruleId'));
+    if (!Number.isInteger(ruleId)) return c.json({ error: 'Invalid rule id.' }, 400);
+    const body = await c.req.json<Partial<MailboxAutomationRuleInput>>()
+      .catch(() => ({} as Partial<MailboxAutomationRuleInput>));
+    if (body.responseMode && !MAILBOX_RESPONSE_MODES.includes(body.responseMode)) {
+      return c.json({ error: 'Invalid response mode.' }, 400);
+    }
+    const rule = await updateMailboxAutomationRule(db, c.get('tenantId') as number, ruleId, body);
+    return rule ? c.json(rule) : c.json({ error: 'Rule not found.' }, 404);
+  });
+
+  r.delete('/rules/:ruleId', manager, async (c) => {
+    const ruleId = Number(c.req.param('ruleId'));
+    if (!Number.isInteger(ruleId)) return c.json({ error: 'Invalid rule id.' }, 400);
+    return (await deleteMailboxAutomationRule(db, c.get('tenantId') as number, ruleId))
+      ? c.body(null, 204)
+      : c.json({ error: 'Rule not found.' }, 404);
   });
 
   return r;

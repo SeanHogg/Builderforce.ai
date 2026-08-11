@@ -63,6 +63,19 @@ describe('built-in connector catalog', () => {
       for (const a of m.actions) expect(a.description.length, `${m.key}.${a.key}`).toBeGreaterThan(3);
     }
   });
+
+  it('ships social listening, publishing, insights, and owned-media destinations', () => {
+    const byKey = new Map(BUILTIN_CONNECTOR_LIST.map((manifest) => [manifest.key, manifest]));
+    expect([...byKey.keys()]).toEqual(expect.arrayContaining([
+      'x-social', 'linkedin-social', 'facebook-pages', 'instagram-business', 'tiktok-social', 'website-publisher',
+    ]));
+    expect(byKey.get('x-social')?.actions.map((action) => action.key)).toEqual(expect.arrayContaining(['create_post', 'search_recent']));
+    expect(byKey.get('instagram-business')?.actions.map((action) => action.key)).toEqual(expect.arrayContaining(['publish_media', 'get_media_insights', 'hashtag_top_media']));
+    expect(byKey.get('website-publisher')?.actions.map((action) => action.key)).toContain('publish_content');
+    for (const key of ['x-social', 'linkedin-social', 'facebook-pages', 'instagram-business', 'tiktok-social', 'website-publisher']) {
+      expect(byKey.get(key)?.actions.some((action) => !action.mutates && (action.required ?? []).length === 0), `${key} has a safe one-click connection test`).toBe(true);
+    }
+  });
 });
 
 describe('parseConnectorManifest', () => {

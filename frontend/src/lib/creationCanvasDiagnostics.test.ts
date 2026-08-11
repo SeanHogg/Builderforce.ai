@@ -116,6 +116,16 @@ describe('Creation Canvas diagnostics', () => {
     expect(report).toContain('undoDepth: 4');
   });
 
+  it('flags a model completion truncated by its output limit', () => {
+    const report = buildCreationCanvasDiagnosticsReport(input({
+      brainRuntime: { completions: [{ resolvedModel: 'minimaxai/minimax-m3', finishReason: 'length' }] },
+    }), CONTEXT);
+
+    expect(report).toContain('Brain output hit the model length limit');
+    expect(report).toContain('minimaxai/minimax-m3');
+    expect(report).toContain('answer or requested tool sequence may be incomplete');
+  });
+
   it('survives a trace or object payload that cannot be summarized', () => {
     expect(() => buildCreationCanvasDiagnosticsReport(input({
       objects: [{ id: 'x', data: { kind: 'workflow', title: 'X', steps: [null, 'bare string step', 42] } }],

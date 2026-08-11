@@ -59,6 +59,43 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
     ], connections: [{ source: 0, target: 1, label: 'publishes' }, { source: 1, target: 2, label: 'measures' }],
   },
   {
+    id: 'social-growth-campaign', name: 'Social growth command center', category: 'Marketplace template',
+    description: 'Analyze cross-platform trends, turn the evidence into a campaign, and schedule publishing across social and owned media.',
+    objects: [
+      {
+        kind: 'workflow', title: 'Cross-platform social listening', x: 0, y: 0,
+        data: { status: 'Connect social accounts', approvalMode: 'required', steps: [
+          { title: 'Search recent X conversation', connector: 'x-social', action: 'search_recent', input: { query: '{{campaign.topic}} -is:retweet', max_results: 100, 'tweet.fields': 'created_at,public_metrics,lang,author_id' } },
+          { title: 'Find Instagram hashtag', connector: 'instagram-business', action: 'search_hashtag', input: { q: '{{campaign.hashtag}}', user_id: '{{connections.instagram.userId}}' } },
+          { title: 'Read Instagram top media', connector: 'instagram-business', action: 'hashtag_top_media', input: { hashtag_id: '{{steps.s2.data.0.id}}', user_id: '{{connections.instagram.userId}}', fields: 'id,caption,media_type,permalink,like_count,comments_count' } },
+          { title: 'Read TikTok creator performance', connector: 'tiktok-social', action: 'list_videos', input: { fields: 'id,title,create_time,share_url,view_count,like_count,comment_count,share_count', max_count: 20 } },
+          { title: 'Synthesize cross-platform trends', prompt: 'Compare themes, velocity, engagement and audience signals across the connector results. Return ranked trends plus chartLabels, chartValues, sources and a concise recommendation.' },
+        ] },
+      },
+      { kind: 'chart', title: 'Top social trends', x: 560, y: 0, data: { status: 'Run listening workflow', chartTitle: 'Cross-platform trend momentum', xAxisLabel: 'Trend', yAxisLabel: 'Momentum score', chartLabels: ['Trend 1', 'Trend 2', 'Trend 3'], chartValues: [0, 0, 0], sources: [] } },
+      { kind: 'dashboard', title: 'Social performance summary', x: 1120, y: 0, data: { status: 'Awaiting connected data', dateRange: 'Last 7 days', kpis: [{ label: 'Reach', value: '—', trend: '—' }, { label: 'Engagement', value: '—', trend: '—' }, { label: 'Adoption', value: '—', trend: '—' }] } },
+      { kind: 'document', title: 'Adoption campaign brief', x: 0, y: 430, data: { status: 'CMO draft', markdown: '# Adoption campaign\n\n## Evidence\nConnect and run the social listening workflow.\n\n## Audience and message\n\n## Channel plan\n\n## Adoption goal and measurement\n' } },
+      {
+        kind: 'workflow', title: 'Scheduled social publishing', x: 560, y: 430,
+        data: { status: 'Review before activation', approvalMode: 'required', steps: [
+          { title: 'Weekday campaign cadence', kind: 'trigger', triggerType: 'schedule', cron: '0 9 * * 1-5', timezone: 'America/New_York' },
+          { title: 'Write channel variants', prompt: 'Use the connected adoption campaign brief and latest trend evidence to write platform-native variants. Preserve the campaign claim, CTA and tracking URL; do not invent evidence.' },
+          { title: 'Publish on X', connector: 'x-social', action: 'create_post', input: { text: '{{steps.s2.x}}' } },
+          { title: 'Publish on LinkedIn', connector: 'linkedin-social', action: 'create_post', input: { author: '{{campaign.linkedinAuthor}}', commentary: '{{steps.s2.linkedin}}', visibility: 'PUBLIC', lifecycleState: 'PUBLISHED' } },
+          { title: 'Publish on Facebook', connector: 'facebook-pages', action: 'create_post', input: { page_id: '{{campaign.facebookPageId}}', message: '{{steps.s2.facebook}}', link: '{{campaign.url}}' } },
+          { title: 'Publish to website', connector: 'website-publisher', action: 'publish_content', input: { content: { campaignId: '{{campaign.id}}', title: '{{steps.s2.website.title}}', body: '{{steps.s2.website.body}}', status: 'published' }, idempotency_key: '{{run.id}}-website' } },
+        ] },
+      },
+      { kind: 'website', title: 'Campaign landing page', x: 1120, y: 430, data: { status: 'Draft', websiteHeadline: 'Turn attention into adoption', websiteBody: 'Shape the landing page around the campaign evidence and one measurable adoption action.', websiteCta: 'Get started' } },
+      { kind: 'agent', title: 'CMO', x: 560, y: 800, data: { role: 'CMO', focus: 'Cross-platform trends, campaign strategy, adoption and measured iteration', status: 'Ready' } },
+    ],
+    connections: [
+      { source: 0, target: 1, label: 'trend evidence' }, { source: 1, target: 2, label: 'summarizes' },
+      { source: 1, target: 3, label: 'grounds' }, { source: 3, target: 4, label: 'drives' },
+      { source: 4, target: 5, label: 'publishes' }, { source: 6, target: 3, label: 'owns' },
+    ],
+  },
+  {
     id: 'product-discovery', name: 'Product discovery', category: 'Marketplace template',
     description: 'Synthesize customer evidence, prioritize features, and expand concepts into mockups.',
     objects: [

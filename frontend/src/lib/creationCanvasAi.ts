@@ -240,10 +240,10 @@ const FABRICATED_DATA = /\b(?:placeholder|sample|example|illustrative|dummy|mock
  * occasionally narrates a finished table or chart without calling a tool, which
  * previously reached the user as a success message beside an unchanged canvas.
  */
-function unverifiedCreationClaim(text: string, mutated: boolean, hasTabularData: boolean): string | null {
+function unverifiedCreationClaim(text: string, mutated: boolean, hasTabularData: boolean, enforceCreationClaim = true): string | null {
   const answer = text.trim();
   if (!answer) return null;
-  if (!mutated && CREATION_CLAIM.test(answer) && CREATED_ARTIFACT.test(answer)) {
+  if (enforceCreationClaim && !mutated && CREATION_CLAIM.test(answer) && CREATED_ARTIFACT.test(answer)) {
     return `I described a canvas change but did not actually make one, so nothing was created. ${hasTabularData ? 'Ask me again and I will query the dataset on this canvas and build the artifact from its real values.' : 'Tell me which object to create and I will build it on the canvas.'}`;
   }
   if (hasTabularData && FABRICATED_DATA.test(answer)) {
@@ -388,7 +388,13 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let lastToolError = '';
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
   const hasTabularData = snapshotHasTabularRows(options.canvasSnapshot);
-  const verified = (answer: string): string => unverifiedCreationClaim(answer, proposedCanvasMutation, hasTabularData) ?? answer;
+  // An informational question is allowed to mention documents, reports, charts,
+  // and other artifact nouns. Running the mutation-claim detector on every answer
+  // turned ordinary replies such as "here is the standard document format" into
+  // "I described a canvas change but did not make one." Only enforce this contract
+  // when the user's request actually asked Canvas to create or update something.
+  const verified = (answer: string): string =>
+    unverifiedCreationClaim(answer, proposedCanvasMutation, hasTabularData, mutationRequested) ?? answer;
   const requestedPages = requestedPagesForTurn(options);
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;

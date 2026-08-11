@@ -55,6 +55,8 @@ export interface CanvasWorkflowStep {
   expression?: string;
   /** Trigger step (only meaningful as the first step). */
   triggerType?: string;
+  cron?: string;
+  timezone?: string;
   [key: string]: unknown;
 }
 
@@ -143,7 +145,11 @@ function configForKind(kind: WorkflowNodeKind, step: CanvasWorkflowStep): Record
     case 'transform':
       return { expression: text(step.expression) };
     case 'trigger':
-      return { triggerType: text(step.triggerType) || 'manual' };
+      return {
+        triggerType: text(step.triggerType) || 'manual',
+        ...(text(step.cron) ? { cron: text(step.cron) } : {}),
+        ...(text(step.timezone) ? { timezone: text(step.timezone) } : {}),
+      };
     default:
       // Kinds with no canvas-authorable shape yet pass their authored fields
       // through untouched rather than being silently emptied.

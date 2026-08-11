@@ -228,7 +228,7 @@ const MUTABLE_FIELDS = {
   game: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   cad: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'cadState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
   model3d: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'modelState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
-  resume: ['content', 'markdown', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  resume: ['content', 'markdown', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'fileName', 'mimeType', 'fileSize', 'mcpServer', 'mcpTool', 'mcpArguments'],
   template: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   document: ['content', 'markdown', 'sources'],
   slides: ['content', 'markdown', 'items', 'sources'],
@@ -312,7 +312,7 @@ const CONTEXT_FIELDS = [
   'modality', 'template', 'ideProjectId', 'storageProjectId', 'fileCount', 'previewUrl',
   'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
   'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',
-  'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'pages', 'units', 'mcpServer', 'mcpTool',
+  'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'pages', 'units', 'mcpServer', 'mcpTool', 'resumeFamily',
   'diagramFormat',
   // A framed page is opaque to everything else on the board; the title and text
   // the panel read off it are what let Brain reason about the page a user is
@@ -360,6 +360,7 @@ const CONTEXT_ARRAY_LIMITS: Readonly<Partial<Record<string, number>>> = {
   // Enough for Brain to name what is on the map and answer "which one is highest"
   // without carrying every coordinate of a 500-point plot into the prompt.
   mapPoints: 12,
+  resumeFamily: 10,
 };
 const DEFAULT_CONTEXT_DEPTH_LIMIT = 3;
 /**
@@ -378,6 +379,7 @@ const DEFAULT_CONTEXT_DEPTH_LIMIT = 3;
 const CONTEXT_DEPTH_LIMITS: Readonly<Partial<Record<string, number>>> = {
   course: 5,
   tour: 5,
+  resumeFamily: 4,
 };
 
 function safeContextValue(

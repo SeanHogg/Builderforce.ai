@@ -240,6 +240,20 @@ describe('runCreationCanvasAi', () => {
     expect(mocks.streamChatCompletion).toHaveBeenCalledOnce();
   });
 
+  it('does not rewrite an informational answer merely because it names an artifact', async () => {
+    const answerText = 'CommonMark is a standardized document format; Atom or RSS exposes blog updates across platforms.';
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: answerText, toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'What is a standard cross-platform headless blog format?',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
+    });
+
+    expect(answer).toBe(answerText);
+    expect(mocks.streamChatCompletion).toHaveBeenCalledOnce();
+  });
+
   it('runs an invited Canvas agent under its own identity and instructions', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'I recommend validating demand before expanding scope.', toolCalls: [] });
 
