@@ -40,7 +40,49 @@ export const RESERVED_SUBDOMAINS: ReadonlySet<string> = new Set([
   'status', 'health', 'dashboard', 'portal', 'auth', 'login', 'account', 'billing',
   'support', 'help', 'blog', 'dev', 'staging', 'test', 'preview', 'internal',
   'builderforce', 'gateway', 'llm', 'brain', 'ide', 'studio', 'workforce',
+  // `worker.builderforce.ai` is the builderforce-worker Custom Domain. It was
+  // NOT reserved, so a user could claim `worker` as a published-site subdomain
+  // and shadow a platform hostname — the wildcard route delivers that Host here,
+  // and an unreserved label is served straight from R2.
+  'worker',
 ]);
+
+/**
+ * Reserved labels that another Worker owns but the greedy `*.builderforce.ai/*`
+ * route still delivers to THIS one.
+ *
+ * A Workers Custom Domain does not reliably beat a wildcard zone route: with both
+ * configured, `www.builderforce.ai` arrived at the API worker, returned null from
+ * `subdomainFromHost` (correctly — it is reserved), fell through to API routing and
+ * answered `{"error":"Not found"}` as JSON. The "fall through to normal routing"
+ * the comment below describes can only reach THIS worker's routers; it cannot hand
+ * the request back to builderforce-frontend.
+ *
+ * Redirecting to the canonical apex is both the fix and the behaviour `www` should
+ * always have had.
+ */
+const CANONICAL_APEX_ALIASES: ReadonlySet<string> = new Set(['www']);
+
+/**
+ * A 301/308 to the canonical apex when the request arrived on a host this worker
+ * does not serve, or null to continue normal routing.
+ *
+ * GET/HEAD get 301 (cacheable, the conventional canonical-host redirect); anything
+ * else gets 308 so the method and body survive — a 301 would silently turn a POST
+ * into a GET.
+ */
+export function canonicalApexRedirect(request: Request): Response | null {
+  const host = (request.headers.get('host') ?? '').split(':')[0]?.toLowerCase() ?? '';
+  if (!host.endsWith(`.${HOSTING_APEX}`)) return null;
+  const label = host.slice(0, host.length - HOSTING_APEX.length - 1);
+  if (!CANONICAL_APEX_ALIASES.has(label)) return null;
+
+  const url = new URL(request.url);
+  url.hostname = HOSTING_APEX;
+  url.port = '';
+  const status = request.method === 'GET' || request.method === 'HEAD' ? 301 : 308;
+  return new Response(null, { status, headers: { Location: url.toString() } });
+}
 
 /** DNS label rule: 1–63 chars, lowercase alnum + hyphen, no leading/trailing hyphen. */
 const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { subdomainFromHost, normalizeSubdomain, resolveSiteForHost, HOSTING_APEX } from './siteHosting';
+import { subdomainFromHost, normalizeSubdomain, resolveSiteForHost, HOSTING_APEX, canonicalApexRedirect } from './siteHosting';
 import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { fakeDb } from '../../../test/fakeDb';
@@ -36,6 +36,42 @@ describe('subdomainFromHost', () => {
     // fall through to normal routing rather than be looked up + 404'd as a site.
     for (const reserved of ['api', 'app', 'www', 'admin', 'gateway', 'ide', 'apps']) {
       expect(subdomainFromHost(`${reserved}.builderforce.ai`)).toBeNull();
+    }
+  });
+
+  it('reserves every hostname bound to a platform Worker Custom Domain', () => {
+    // `worker.builderforce.ai` (builderforce-worker) was claimable as a user site
+    // — the wildcard route delivers that Host here and an unreserved label is
+    // served straight from R2, shadowing the platform hostname.
+    for (const platform of ['api', 'www', 'worker']) {
+      expect(subdomainFromHost(`${platform}.builderforce.ai`)).toBeNull();
+      expect(normalizeSubdomain(platform)).toBeNull();
+    }
+  });
+});
+
+describe('canonicalApexRedirect', () => {
+  const req = (url: string, method = 'GET') =>
+    new Request(url, { method, headers: { host: new URL(url).host } });
+
+  it('301s www to the apex, preserving path and query', () => {
+    const res = canonicalApexRedirect(req('https://www.builderforce.ai/pricing?plan=pro'));
+    expect(res?.status).toBe(301);
+    expect(res?.headers.get('location')).toBe('https://builderforce.ai/pricing?plan=pro');
+  });
+
+  it('uses 308 for non-GET so the method and body survive', () => {
+    // A 301 would silently downgrade a POST to a GET and drop the body.
+    const res = canonicalApexRedirect(req('https://www.builderforce.ai/api/x', 'POST'));
+    expect(res?.status).toBe(308);
+  });
+
+  it('leaves hosts this worker actually serves alone', () => {
+    for (const host of ['https://api.builderforce.ai/health',
+                        'https://builderforce.ai/',
+                        'https://someones-site.builderforce.ai/',
+                        'https://example.com/']) {
+      expect(canonicalApexRedirect(req(host))).toBeNull();
     }
   });
 });

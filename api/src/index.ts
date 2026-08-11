@@ -152,6 +152,7 @@ import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRo
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
+import { canonicalApexRedirect } from './application/ide/siteHosting';
 import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
 import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRoutes } from './presentation/routes/campaignRoutes';
 import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
@@ -349,6 +350,17 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.use('*', async (c, next) => {
     const res = await maybeHandlePreviewIngress(c.env, c.req.raw);
     if (res) return res;
+    return next();
+  });
+
+  // Canonical-host redirect. The greedy `*.builderforce.ai/*` route delivers
+  // hostnames owned by OTHER workers to this one — a Custom Domain does not
+  // reliably beat a wildcard zone route — so `www.builderforce.ai` landed here
+  // and 404'd as JSON instead of serving the frontend. Runs before site hosting
+  // so a reserved alias never reaches an R2 lookup. See canonicalApexRedirect.
+  app.use('*', async (c, next) => {
+    const redirect = canonicalApexRedirect(c.req.raw);
+    if (redirect) return redirect;
     return next();
   });
 
