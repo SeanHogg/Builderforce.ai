@@ -16,6 +16,7 @@ import { getStoredGuestToken } from './guestChatApi';
 import { ensureGuestToken } from './guestRoomApi';
 
 export type OfficeFormat = 'docx' | 'pptx' | 'xlsx';
+export interface DocxTheme { accent?: string; font?: 'sans' | 'serif' | 'mono'; density?: 'compact' | 'comfortable' | 'spacious'; columns?: 1 | 2 }
 
 /**
  * The renderer could not be reached FOR THIS CALLER — no credential at all, or a
@@ -60,7 +61,7 @@ async function exportOffice(format: OfficeFormat, body: Record<string, unknown>)
 }
 
 /** Render markdown as a Word document and download it. */
-export const exportDocx = (markdown: string, title: string) => exportOffice('docx', { markdown, title });
+export const exportDocx = (markdown: string, title: string, theme?: DocxTheme) => exportOffice('docx', { markdown, title, ...(theme ? { theme } : {}) });
 
 /** Render markdown slides (one `##` per slide) as a PowerPoint deck and download it. */
 export const exportPptx = (markdown: string, title: string) => exportOffice('pptx', { markdown, title });

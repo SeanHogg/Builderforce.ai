@@ -1,9 +1,7 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { CreationNodeData } from './types';
 import { DocumentEditor } from './DocumentEditor';
 import { ResumeStructuredEditor } from './ResumeStructuredEditor';
@@ -28,6 +26,7 @@ import {
   type CanvasResumeDocument,
   type ResumeTemplateId,
 } from '@/lib/canvasResume';
+import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision } from '@/lib/canvasResumeRenderer';
 
 type ResumeView = 'edit' | 'preview' | 'compare';
 
@@ -85,11 +84,8 @@ export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; o
   const active = activeResumeRevision(family);
   const original = originalResumeRevision(family);
   const template = RESUME_TEMPLATES.find((item) => item.id === active.templateId) ?? RESUME_TEMPLATES[0];
-  const previewStyle = {
-    '--resume-accent': template.accent,
-    '--resume-paper': template.paper,
-    '--resume-ink': template.ink,
-  } as CSSProperties;
+  const rendered = renderCanvasResumeRevision(active);
+  const originalRendered = renderCanvasResumeRevision(original);
   const createVersion = () => {
     const next = deriveResume(family, newTitle || t('untitledVersion'), { fromRevisionId: family.originalRevisionId });
     setNewTitle('');
@@ -123,10 +119,11 @@ export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; o
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
       {active.structuredStale && <p role="status" className={styles.resumeStaleWarning}>{t('structuredStale')}</p>}
     </div>}
-    {view === 'preview' && <article className={styles.resumePaper} data-mode={template.mode} data-font={template.font} data-density={template.density} data-columns={template.columns} style={previewStyle}><ReactMarkdown remarkPlugins={[remarkGfm]}>{active.markdown}</ReactMarkdown></article>}
+    {view === 'preview' && <div className={styles.resumePreviewViewport}><style>{RESUME_DOCUMENT_STYLES}</style><div dangerouslySetInnerHTML={{ __html: rendered.html }} /></div>}
     {view === 'compare' && <div className={styles.resumeCompare}>
-      <section><strong>{t('original')}</strong><article className={styles.resumePaper}><ReactMarkdown remarkPlugins={[remarkGfm]}>{original.markdown}</ReactMarkdown></article></section>
-      <section><strong>{t('selectedVersion')}</strong><article className={styles.resumePaper} data-font={template.font} data-density={template.density} style={previewStyle}><ReactMarkdown remarkPlugins={[remarkGfm]}>{active.markdown}</ReactMarkdown></article></section>
+      <style>{RESUME_DOCUMENT_STYLES}</style>
+      <section><strong>{t('original')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: originalRendered.html }} /></section>
+      <section><strong>{t('selectedVersion')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: rendered.html }} /></section>
     </div>}
   </div>;
 }

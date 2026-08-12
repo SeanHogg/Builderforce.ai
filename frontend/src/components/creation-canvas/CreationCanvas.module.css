@@ -716,10 +716,14 @@
 .resumePaper h3 { margin:14px 0 3px; font-size:14px; }
 .resumePaper p,
 .resumePaper ul { margin:6px 0; }
+.resumePreviewViewport { max-height:700px; overflow:auto; border:1px solid var(--border); border-radius:4px; background:#e5e7eb; }
+.resumePreviewViewport :global(.canvasResumeDocument) { box-shadow:0 8px 24px rgb(15 23 42 / 12%); }
 .resumeCompare { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .resumeCompare section { min-width:0; }
 .resumeCompare section > strong { display:block; margin-bottom:6px; font-size:12px; }
 .resumeCompare .resumePaper { min-height:380px; max-height:560px; padding:22px; font-size:11px; }
+.resumeCompareViewport { max-height:560px; overflow:auto; border:1px solid var(--border); background:#e5e7eb; }
+.resumeCompareViewport :global(.canvasResumeDocument) { min-height:160mm; padding:8mm; font-size:8pt; }
 .resumeEditStack { display:flex; flex-direction:column; gap:10px; }
 .resumeStructuredEditor { display:flex; flex-direction:column; gap:8px; max-height:680px; overflow:auto; padding-right:4px; }
 .resumeStructuredEditor details,

@@ -25,7 +25,7 @@ import type { Env, HonoEnv } from '../../env';
 import { consumeGuestAllowance } from '../../application/guest/guestDailyCounter';
 import { guestIdentityFromRequest } from '../../application/guest/guestToken';
 import { GUEST_EXPORT_LIMITS } from '../../domain/tenant/PlanLimits';
-import { markdownToDocx } from '../../application/office/docxWriter';
+import { markdownToDocx, type DocxTheme } from '../../application/office/docxWriter';
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
 import { slugify } from '../../domain/shared/strings';
@@ -37,7 +37,7 @@ const XLSX_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.she
 /** Cap the payload so one chat message can't turn into an unbounded render. */
 const MAX_MARKDOWN_CHARS = 200_000;
 
-interface ExportBody { markdown?: string; title?: string }
+interface ExportBody { markdown?: string; title?: string; theme?: unknown }
 interface SheetBody { columns?: unknown; rows?: unknown; title?: string }
 
 /** Validate + normalize the shared request body (markdown + a filename-safe title). */
@@ -47,6 +47,17 @@ function readBody(body: ExportBody): { error: string } | { markdown: string; tit
   if (markdown.length > MAX_MARKDOWN_CHARS) return { error: 'markdown too large' };
   const title = (body.title ?? '').trim().slice(0, 200);
   return { markdown, title, name: slugify(title || 'export', { maxLen: 60, fallback: 'export' }) };
+}
+
+function readDocxTheme(value: unknown): DocxTheme {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const row = value as Record<string, unknown>;
+  return {
+    ...(typeof row.accent === 'string' && /^#?[0-9a-f]{6}$/i.test(row.accent) ? { accent: row.accent } : {}),
+    ...(row.font === 'sans' || row.font === 'serif' || row.font === 'mono' ? { font: row.font } : {}),
+    ...(row.density === 'compact' || row.density === 'comfortable' || row.density === 'spacious' ? { density: row.density } : {}),
+    ...(row.columns === 1 || row.columns === 2 ? { columns: row.columns } : {}),
+  };
 }
 
 /** A cell the writer can represent. Anything else — an object, an array left in
@@ -123,9 +134,10 @@ export function createExportRoutes(): Hono<HonoEnv> {
   router.use('*', exportAccess);
 
   router.post('/docx', async (c) => {
-    const parsed = readBody(await c.req.json<ExportBody>());
+    const body = await c.req.json<ExportBody>();
+    const parsed = readBody(body);
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
-    const bytes = markdownToDocx(parsed.markdown, parsed.title || undefined);
+    const bytes = markdownToDocx(parsed.markdown, parsed.title || undefined, readDocxTheme(body.theme));
     return fileResponse(bytes, `${parsed.name}.docx`, DOCX_CT);
   });
 

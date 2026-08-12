@@ -37,7 +37,7 @@ export class PostgresWebSearchStore implements WebSearchStore {
       FROM candidate WHERE f.id = candidate.id RETURNING f.*
     `);
     const raw = result.rows[0] as Record<string, unknown> | undefined; if (!raw) return null;
-    const [source] = await this.db.select().from(webSearchSources).where(eq(webSearchSources.id, String(raw.source_id))).limit(1);
+    const [source] = await this.db.select().from(webSearchSources).where(and(eq(webSearchSources.tenantId, tenantId), eq(webSearchSources.id, String(raw.source_id)))).limit(1);
     if (!source) return null;
     return { id: Number(raw.id), tenantId, source: sourceRow(source), url: String(raw.url), normalizedUrl: String(raw.normalized_url), domain: String(raw.domain), depth: Number(raw.depth), attempts: Number(raw.attempts) };
   }
@@ -126,7 +126,7 @@ export class PostgresWebSearchStore implements WebSearchStore {
       const [frontier] = await this.db.select({ id: webSearchFrontier.id }).from(webSearchFrontier).where(and(eq(webSearchFrontier.tenantId, tenantId), eq(webSearchFrontier.normalizedUrl, seedUrl))).limit(1);
       if (!frontier) continue;
       await this.db.insert(webSearchRequestUrls).values({ tenantId, requestId: request.id, frontierId: frontier.id }).onConflictDoUpdate({ target: [webSearchRequestUrls.tenantId, webSearchRequestUrls.requestId, webSearchRequestUrls.frontierId], set: { status: 'queued' } });
-      await this.db.update(webSearchFrontier).set({ sourceId: source.id, status: 'queued', nextFetchAt: new Date(), lastError: null }).where(eq(webSearchFrontier.id, frontier.id));
+      await this.db.update(webSearchFrontier).set({ sourceId: source.id, status: 'queued', nextFetchAt: new Date(), lastError: null }).where(and(eq(webSearchFrontier.tenantId, tenantId), eq(webSearchFrontier.id, frontier.id)));
       queuedUrls++;
     }
     return { id: request.id, status: queuedUrls ? 'crawling' : 'discovering', queuedUrls };

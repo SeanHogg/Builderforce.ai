@@ -93,6 +93,7 @@ import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
 import { initializeResumeFromPatch, preserveResumeSourceForPatch } from '@/lib/canvasResume';
+import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -4612,7 +4613,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       let degraded = false;
 
       if (action === 'markdown') downloadText(markdown, fileName, 'text/markdown');
-      if (action === 'html') downloadText(markdownHtmlDocument(target.data.title, markdown), fileName, 'text/html');
+      if (action === 'html') {
+        const renderedResume = target.data.kind === 'resume' ? renderedCanvasResume(target.data) : null;
+        downloadText(renderedResume ? resumeHtmlFile(target.data.title, renderedResume) : markdownHtmlDocument(target.data.title, markdown), fileName, 'text/html');
+      }
       if (action === 'csv') {
         const sheet = artifactSheet(target.data);
         if (!sheet) throw new Error(t('noTabularRows'));
@@ -4633,7 +4637,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const sheet = action === 'xlsx' ? artifactSheet(target.data) : null;
         if (action === 'xlsx' && !sheet) throw new Error(t('noTabularRows'));
         try {
-          if (action === 'docx') await exportDocx(markdown, target.data.title);
+          if (action === 'docx') {
+            const renderedResume = target.data.kind === 'resume' ? renderedCanvasResume(target.data) : null;
+            await exportDocx(markdown, target.data.title, renderedResume ? {
+              accent: renderedResume.template.accent,
+              font: renderedResume.template.font,
+              density: renderedResume.template.density,
+              columns: renderedResume.template.columns,
+            } : undefined);
+          }
           if (action === 'pptx') await exportPptx(markdown, target.data.title);
           if (action === 'xlsx') await exportXlsx(sheet!.columns, sheet!.rows, target.data.title);
         } catch (error) {

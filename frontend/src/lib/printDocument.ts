@@ -17,6 +17,7 @@ import { escapeHtml, markdownToHtml } from './richText';
 import { canvasDiagram, canvasObjectMarkdown, canvasSlides, type CanvasSlide } from './canvasDocuments';
 import { creativePreviewImageUrl } from './creationDeliverables';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
+import { RESUME_DOCUMENT_STYLES, renderedCanvasResume } from './canvasResumeRenderer';
 
 /**
  * The printed page.
@@ -173,6 +174,10 @@ export function printSvgDrawing(title: string, svg: string): boolean {
  */
 export function printCanvasObject(data: CreationNodeData, svg: string | null): boolean {
   if (data.kind === 'slides') return printSlideDeck(data.title, canvasSlides(data));
+  if (data.kind === 'resume') {
+    const rendered = renderedCanvasResume(data);
+    if (rendered) return printHtmlDocument(data.title, rendered.html, `@page { size: A4; margin: 0; }${RESUME_DOCUMENT_STYLES}`);
+  }
   if (svg) return printSvgDrawing(data.title, svg);
   // A strip, a panel, a rendered frame — a picture prints as the picture, at the
   // size the page allows, rather than as the markdown brief that produced it.
