@@ -157,7 +157,7 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     setBusy(t('publishingYouTube')); setProblem(null);
     try {
       const published = await youtubeApi.publish({ connectionId: youtubeConnectionId, storageKey: data.renderedVideoStorageKey as string, title: youtubeTitle, description: youtubeDescription, privacyStatus: youtubePrivacy, mimeType: data.renderedVideoMimeType as string });
-      commit(timeline, sources, { youtubeVideoId: published.videoId, youtubeUrl: published.url, youtubePrivacyStatus: published.privacyStatus, status: t('publishedYouTube') });
+      commit(timeline, sources, { youtubeVideoId: published.videoId, youtubeUrl: published.url, youtubePrivacyStatus: published.privacyStatus, status: t('uploadedYouTube') });
     } catch { setProblem(t('youtubePublishFailed')); } finally { setBusy(null); }
   };
 
@@ -188,8 +188,8 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     {problem && <p role="alert" className={styles.status}>{problem}</p>}
     {busy && <p role="status" className={styles.status}>{busy}{busy === t('rendering') ? ` · ${Math.round(renderProgress * 100)}%` : ''}</p>}
 
-    {data.renderedVideoStorageKey && <section className={styles.publish} aria-label={t('youtubePublishing')}>
-      <header><strong>{t('youtubePublishing')}</strong><span>{data.youtubeUrl ? t('publishedYouTube') : t('readyToPublish')}</span></header>
+    {typeof data.renderedVideoStorageKey === 'string' && !!data.renderedVideoStorageKey && <section className={styles.publish} aria-label={t('youtubePublishing')}>
+      <header><strong>{t('youtubePublishing')}</strong><span>{data.youtubeUrl ? t('uploadedYouTube') : t('readyToPublish')}</span></header>
       {!youtubeConfigured && <p>{t('youtubeDeploymentMissing')}</p>}
       {youtubeConfigured && !youtubeConnections.length && <button type="button" disabled={!!busy} onClick={() => void connectYouTube()}>{t('connectYouTube')}</button>}
       {youtubeConnections.length > 0 && <>

@@ -73,7 +73,7 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   entity(webSearchFrontier, { readOnly: true }),
   entity(webSearchRobots, { readOnly: true, global: true }),
   entity(webSearchDocuments, { readOnly: true }),
-  entity(webSearchTerms, { readOnly: true }),
+  entity(webSearchTerms, { readOnly: true, order: 'term' }),
   entity(webSearchRequests, { readOnly: true }),
-  entity(webSearchRequestUrls, { readOnly: true }),
+  entity(webSearchRequestUrls, { readOnly: true, order: 'frontier_id' }),
 ]);

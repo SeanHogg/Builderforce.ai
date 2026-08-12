@@ -122,7 +122,7 @@ describe('reflection', () => {
     const tenantless = ENTITY_CATALOG.filter((e) => !e.tenantKey);
     expect(tenantless.length).toBeGreaterThan(0);
     const readable = tenantless.filter((e) => e.readable).map((e) => e.name).sort();
-    expect(readable).toEqual(['cities', 'countries', 'stage_lookup']);
+    expect(readable).toEqual(['cities', 'countries', 'stage_lookup', 'web_search_robots']);
   });
 
   it('never exposes a column that names a secret', () => {

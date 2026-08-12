@@ -5,6 +5,11 @@ import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { canvasFiles } from '@/lib/canvasDocuments';
 import type { CreationNodeData } from './types';
 
+const youtube = vi.hoisted(() => ({
+  connections: vi.fn(), connectUrl: vi.fn(), publish: vi.fn(), disconnect: vi.fn(),
+}));
+vi.mock('@/lib/youtubeApi', () => ({ youtubeApi: youtube }));
+
 /**
  * The regression these cover: a researched document, a generated deck, and a
  * Draw.io diagram all rendered as one line of grey placeholder text, and there
@@ -168,6 +173,14 @@ describe('video objects are authored on the Canvas', () => {
     const start = screen.getByRole('spinbutton', { name: 'Start' });
     fireEvent.change(start, { target: { value: '1.5' } });
     expect(onEditData).toHaveBeenCalledWith('object-1', expect.objectContaining({ videoTimeline: expect.objectContaining({ clips: [expect.objectContaining({ startSeconds: 1.5 })] }) }));
+  });
+
+  it('loads authenticated YouTube publishing after a durable render exists', async () => {
+    youtube.connections.mockResolvedValue({ configured: true, connections: [{ id: 7, accountEmail: 'creator@example.com', displayName: 'Demo channel', status: 'connected', lastError: null }] });
+    renderNode({ ...video, renderedVideoStorageKey: '1/user/demo.webm', renderedVideoMimeType: 'video/webm' });
+    expect(await screen.findByRole('region', { name: 'Publish to YouTube' })).toBeTruthy();
+    expect(await screen.findByRole('option', { name: 'Demo channel' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Publish to YouTube' })).toBeTruthy();
   });
 });
 

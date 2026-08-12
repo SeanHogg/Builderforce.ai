@@ -138,6 +138,8 @@ export type EntitySpec = {
   global?: boolean;
   /** Stated only when it must override the reflected pick. */
   title?: string;
+  /** Deterministic ordering for composite-key tables with no timestamp. */
+  order?: string;
 };
 
 export type EntityDef = {
@@ -253,7 +255,7 @@ export function defineDomainEntities(
       primaryKey,
       tenantKey,
       titleKey,
-      orderKey: pick(ORDER_CANDIDATES) ?? primaryKey,
+      orderKey: spec.order ? (byPhysical.get(spec.order) ?? null) : (pick(ORDER_CANDIDATES) ?? primaryKey),
       archiveKey: pick(ARCHIVE_CANDIDATES),
       /**
        * Writable needs all three, and the last two are not editorial:

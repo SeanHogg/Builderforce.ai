@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -708,7 +708,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     promptResizeRef.current = null;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }, []);
-  const handlePromptResizeKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+  const handlePromptResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 32 : 16;
     if (event.key === 'ArrowUp') setPromptHeight((height) => clampPromptHeight(height + step));
     else if (event.key === 'ArrowDown') setPromptHeight((height) => clampPromptHeight(height - step));

@@ -88,8 +88,8 @@ export async function publishCanvasVideoToYouTube(db: Db, env: Env, tenantId: nu
   const uploadUrl = initiated.headers.get('Location');
   if (!initiated.ok || !uploadUrl) throw new Error(`YouTube upload could not start (${initiated.status}).`);
   const uploaded = await fetch(uploadUrl, { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': input.mimeType, 'Content-Length': String(object.size) }, body: object.body });
-  const result = await uploaded.json().catch(() => ({})) as { id?: string; error?: { message?: string } };
+  const result = await uploaded.json().catch(() => ({})) as { id?: string; status?: { privacyStatus?: string }; error?: { message?: string } };
   if (!uploaded.ok || !result.id) throw new Error(result.error?.message || `YouTube upload failed (${uploaded.status}).`);
   await db.update(credentials).set({ lastUsedAt: new Date(), updatedAt: new Date() }).where(and(eq(credentials.connectionId, input.connectionId), eq(credentials.tenantId, tenantId)));
-  return { videoId: result.id, url: `https://youtu.be/${result.id}`, privacyStatus: input.privacyStatus };
+  return { videoId: result.id, url: `https://youtu.be/${result.id}`, privacyStatus: result.status?.privacyStatus ?? input.privacyStatus };
 }
