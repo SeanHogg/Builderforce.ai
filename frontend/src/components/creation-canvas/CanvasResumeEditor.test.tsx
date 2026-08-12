@@ -43,10 +43,45 @@ describe('CanvasResumeEditor', () => {
     const onEdit = vi.fn();
     render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
-    fireEvent.click(screen.getByText('Projects'));
+    fireEvent.click(screen.getAllByText('Projects').find((element) => element.tagName === 'SUMMARY')!);
     fireEvent.click(screen.getByRole('button', { name: 'Add project' }));
     const patch = onEdit.mock.calls.at(-1)?.[0] as { resumeFamily: CanvasResumeFamily };
     expect(activeResumeRevision(patch.resumeFamily).document?.projects).toHaveLength(1);
     expect(activeResumeRevision(patch.resumeFamily).document?.customExtension).toEqual({ retained: true });
+  });
+
+  it('hides a section without deleting its canonical content', () => {
+    const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' }, skills: [{ name: 'Algorithms' }] }, idFactory: () => 'original' });
+    const family = deriveResume(original, 'Layout', { idFactory: () => 'derived' });
+    const onEdit = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
+    fireEvent.click(screen.getByText('Section order and visibility'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Skills' }));
+    const patch = onEdit.mock.calls.at(-1)?.[0] as { resumeFamily: CanvasResumeFamily; markdown: string };
+    expect(activeResumeRevision(patch.resumeFamily).document?.skills?.[0]?.name).toBe('Algorithms');
+    expect(activeResumeRevision(patch.resumeFamily).document?.builderforceLayout?.hiddenSections).toContain('skills');
+    expect(patch.markdown).not.toContain('## Skills');
+  });
+
+  it('scores a job description and sends a canonical, non-destructive Recruiter request', () => {
+    const original = createResumeFamily({
+      title: 'Uploaded',
+      markdown: '# Ada',
+      document: { basics: { name: 'Ada', summary: 'Software engineer' }, skills: [{ name: 'TypeScript', keywords: ['React'] }] },
+      idFactory: () => 'original',
+    });
+    const family = deriveResume(original, 'Product version', { idFactory: () => 'derived' });
+    const onTailor = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onTailor={onTailor} />);
+
+    fireEvent.click(screen.getByText('Tailor for a job'));
+    fireEvent.change(screen.getByLabelText('Job description'), { target: { value: 'Seeking a TypeScript software engineer with React, Kubernetes, mentoring, and distributed systems experience.' } });
+    expect(screen.getByText(/ATS keyword coverage:/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Recruiter to tailor' }));
+
+    expect(onTailor).toHaveBeenCalledOnce();
+    expect(onTailor.mock.calls[0]?.[0]).toContain('COMPLETE tailored JSON Resume document');
+    expect(onTailor.mock.calls[0]?.[0]).toContain('"name": "Ada"');
   });
 });

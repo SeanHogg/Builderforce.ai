@@ -401,9 +401,12 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       if (body.status === 'approved' && mailboxExecutionId != null) {
         const sent = await sendMailboxAutomationExecution(env as Env, db, tenantId, mailboxExecutionId);
         if (!sent.ok) {
+          await db.update(approvals).set({ status: 'pending', reviewNote: sent.error, updatedAt: new Date() })
+            .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
           reportCaughtError(new Error(sent.error), {
             source: 'presentation/routes/approvalRoutes.ts', operation: 'sendApprovedMailboxReply',
           });
+          return c.json({ error: sent.error }, 409);
         }
       } else if (body.status === 'rejected') {
         await rejectMailboxAutomationApproval(db, tenantId, id);

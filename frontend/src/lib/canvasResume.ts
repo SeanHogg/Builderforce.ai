@@ -184,6 +184,9 @@ export interface CanvasResumeRevision {
 
 export interface CanvasResumeFamily {
   version: 1;
+  privacy: 'public' | 'recruiter_only' | 'connections' | 'private' | 'draft';
+  archivedAt: string | null;
+  watched: boolean;
   originalRevisionId: string;
   activeRevisionId: string;
   masterRevisionId: string;
@@ -206,7 +209,7 @@ export function createResumeFamily(args: { title: string; markdown: string; docu
     createdAt: now,
     updatedAt: now,
   };
-  return { version: 1, originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
+  return { version: 1, privacy: 'private', archivedAt: null, watched: false, originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
 }
 
 export function activeResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {
@@ -280,6 +283,25 @@ export function promoteResumeToMaster(family: CanvasResumeFamily, revisionId: st
     : family;
 }
 
+export function updateResumeFamilySettings(
+  family: CanvasResumeFamily,
+  patch: Partial<Pick<CanvasResumeFamily, 'privacy' | 'archivedAt' | 'watched'>>,
+): CanvasResumeFamily {
+  return { ...family, ...patch };
+}
+
+/** The source and current master are protected; only ordinary derived revisions can be removed. */
+export function deleteResumeRevision(family: CanvasResumeFamily, revisionId: string): CanvasResumeFamily {
+  if (revisionId === family.originalRevisionId || revisionId === family.masterRevisionId) return family;
+  if (!family.revisions.some((revision) => revision.id === revisionId)) return family;
+  const revisions = family.revisions.filter((revision) => revision.id !== revisionId);
+  return {
+    ...family,
+    revisions,
+    activeRevisionId: family.activeRevisionId === revisionId ? family.masterRevisionId : family.activeRevisionId,
+  };
+}
+
 export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily | null {
   const value = data.resumeFamily;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -296,7 +318,12 @@ export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily
   if (!revisions.length || !revisions.some((revision) => revision.id === family.originalRevisionId)) return null;
   const activeRevisionId = revisions.some((revision) => revision.id === family.activeRevisionId) ? family.activeRevisionId : family.originalRevisionId;
   const masterRevisionId = revisions.some((revision) => revision.id === family.masterRevisionId) ? family.masterRevisionId : family.originalRevisionId;
-  return { version: 1, originalRevisionId: family.originalRevisionId, activeRevisionId, masterRevisionId, revisions };
+  const privacy = ['public', 'recruiter_only', 'connections', 'private', 'draft'].includes(String(family.privacy))
+    ? family.privacy as CanvasResumeFamily['privacy'] : 'private';
+  return {
+    version: 1, privacy, archivedAt: typeof family.archivedAt === 'string' ? family.archivedAt : null,
+    watched: family.watched === true, originalRevisionId: family.originalRevisionId, activeRevisionId, masterRevisionId, revisions,
+  };
 }
 
 export function resumeNodePatch(family: CanvasResumeFamily): Partial<CreationNodeData> {

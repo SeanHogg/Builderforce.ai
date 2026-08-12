@@ -245,8 +245,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'frequent',
     description: 'Evaluate unread connected-mailbox messages against AI response rules.',
     dispatches: true,
-    run: async ({ env }) => {
-      const result = await runMailboxAutomationSweep(env, buildDatabase(env));
+    run: async ({ env, budget }) => {
+      const result = await runMailboxAutomationSweep(env, buildDatabase(env), undefined, budget);
       return result.matched > 0 || result.failed > 0
         ? `rules=${result.rules} matched=${result.matched} drafted=${result.drafted} approvals=${result.approvals} sent=${result.sent} failed=${result.failed}`
         : null;

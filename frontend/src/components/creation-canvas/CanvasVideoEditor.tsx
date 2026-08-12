@@ -17,6 +17,7 @@ import type { CreationNodeData } from './types';
 import { storeCanvasMedia } from '@/lib/canvasMediaStore';
 import { useCanvasMediaCapture } from '@/hooks/useCanvasMediaCapture';
 import { renderCanvasVideo } from '@/lib/canvasVideoRender';
+import { youtubeApi, type YouTubeConnection } from '@/lib/youtubeApi';
 import styles from './CanvasVideoEditor.module.css';
 
 const TRACKS: readonly CanvasVideoTrackKind[] = ['visual', 'music', 'voiceover', 'sfx'];
@@ -55,8 +56,23 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
   const [busy, setBusy] = useState<string | null>(null);
   const [renderProgress, setRenderProgress] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
+  const [youtubeConnections, setYoutubeConnections] = useState<YouTubeConnection[]>([]);
+  const [youtubeConfigured, setYoutubeConfigured] = useState(true);
+  const [youtubeConnectionId, setYoutubeConnectionId] = useState<number | null>(null);
+  const [youtubeTitle, setYoutubeTitle] = useState(data.title);
+  const [youtubeDescription, setYoutubeDescription] = useState('');
+  const [youtubePrivacy, setYoutubePrivacy] = useState<'private' | 'unlisted' | 'public'>('unlisted');
   const capture = useCanvasMediaCapture();
   const editable = !!onEdit;
+
+  useEffect(() => {
+    if (!data.renderedVideoStorageKey) return;
+    void youtubeApi.connections().then((result) => {
+      setYoutubeConfigured(result.configured);
+      setYoutubeConnections(result.connections);
+      setYoutubeConnectionId((current) => current ?? result.connections.find((item) => item.status === 'connected')?.id ?? null);
+    }).catch(() => setProblem(t('youtubeConnectionsFailed')));
+  }, [data.renderedVideoStorageKey, t]);
 
   useEffect(() => {
     if (!playing) return;
@@ -128,6 +144,23 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     }
   };
 
+  const connectYouTube = async () => {
+    setBusy(t('connectingYouTube')); setProblem(null);
+    try {
+      const { authUrl } = await youtubeApi.connectUrl(`${window.location.pathname}${window.location.search}`);
+      window.location.assign(authUrl);
+    } catch { setProblem(t('youtubeConnectFailed')); setBusy(null); }
+  };
+
+  const publishYouTube = async () => {
+    if (!youtubeConnectionId || !data.renderedVideoStorageKey || !data.renderedVideoMimeType) return;
+    setBusy(t('publishingYouTube')); setProblem(null);
+    try {
+      const published = await youtubeApi.publish({ connectionId: youtubeConnectionId, storageKey: data.renderedVideoStorageKey as string, title: youtubeTitle, description: youtubeDescription, privacyStatus: youtubePrivacy, mimeType: data.renderedVideoMimeType as string });
+      commit(timeline, sources, { youtubeVideoId: published.videoId, youtubeUrl: published.url, youtubePrivacyStatus: published.privacyStatus, status: t('publishedYouTube') });
+    } catch { setProblem(t('youtubePublishFailed')); } finally { setBusy(null); }
+  };
+
   const activeClips = timeline.clips.filter((clip) => playhead >= clip.startSeconds && playhead < clip.startSeconds + clip.durationSeconds);
   return <div className={`${styles.editor} nodrag nowheel`} onClick={stop}>
     <div className={styles.preview} style={{ backgroundColor: timeline.backgroundColor }}>
@@ -154,6 +187,20 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     {capture.error && capture.error !== 'cancelled' && <p role="alert" className={styles.status}>{t(capture.error === 'unsupported' ? 'captureUnsupported' : 'captureFailed')}</p>}
     {problem && <p role="alert" className={styles.status}>{problem}</p>}
     {busy && <p role="status" className={styles.status}>{busy}{busy === t('rendering') ? ` · ${Math.round(renderProgress * 100)}%` : ''}</p>}
+
+    {data.renderedVideoStorageKey && <section className={styles.publish} aria-label={t('youtubePublishing')}>
+      <header><strong>{t('youtubePublishing')}</strong><span>{data.youtubeUrl ? t('publishedYouTube') : t('readyToPublish')}</span></header>
+      {!youtubeConfigured && <p>{t('youtubeDeploymentMissing')}</p>}
+      {youtubeConfigured && !youtubeConnections.length && <button type="button" disabled={!!busy} onClick={() => void connectYouTube()}>{t('connectYouTube')}</button>}
+      {youtubeConnections.length > 0 && <>
+        <label>{t('youtubeAccount')}<select value={youtubeConnectionId ?? ''} onChange={(event) => setYoutubeConnectionId(Number(event.target.value))}>{youtubeConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName || connection.accountEmail}</option>)}</select></label>
+        <label>{t('youtubeTitle')}<input value={youtubeTitle} maxLength={100} onChange={(event) => setYoutubeTitle(event.target.value)} /></label>
+        <label>{t('youtubeDescription')}<textarea value={youtubeDescription} maxLength={5000} onChange={(event) => setYoutubeDescription(event.target.value)} /></label>
+        <label>{t('youtubeVisibility')}<select value={youtubePrivacy} onChange={(event) => setYoutubePrivacy(event.target.value as typeof youtubePrivacy)}><option value="private">{t('visibilityPrivate')}</option><option value="unlisted">{t('visibilityUnlisted')}</option><option value="public">{t('visibilityPublic')}</option></select></label>
+        <button type="button" disabled={!!busy || !youtubeTitle.trim()} onClick={() => void publishYouTube()}>{t('publishYouTube')}</button>
+      </>}
+      {typeof data.youtubeUrl === 'string' && <a href={data.youtubeUrl} target="_blank" rel="noreferrer">{t('viewOnYouTube')}</a>}
+    </section>}
 
     <div className={styles.timeline} role="region" aria-label={t('timeline')}>
       {TRACKS.map((track) => <section key={track}>

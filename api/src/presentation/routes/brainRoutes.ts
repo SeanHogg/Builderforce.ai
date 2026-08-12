@@ -733,9 +733,11 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const file = formData.get('file') as File | null;
     if (!file) return c.json({ error: 'No file provided' }, 400);
 
-    // Size limit: 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      return c.json({ error: 'File too large (max 10MB)' }, 400);
+    // Video renders are intentionally larger than ordinary Brain attachments.
+    // Keep one tenant-scoped R2 path, with a bounded demo-friendly ceiling.
+    const maxBytes = file.type.startsWith('video/') ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      return c.json({ error: `File too large (max ${maxBytes / 1024 / 1024}MB)` }, 400);
     }
 
     // Allowed MIME types
@@ -744,6 +746,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       'application/pdf',
       'text/plain', 'text/markdown', 'text/csv',
       'application/json',
+      'video/webm', 'video/mp4',
       // Office OpenXML — deck templates (.pptx) to fill, plus .docx/.xlsx.
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

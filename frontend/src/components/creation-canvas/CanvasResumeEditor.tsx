@@ -11,6 +11,7 @@ import {
   RESUME_TEMPLATES,
   activeResumeRevision,
   createResumeFamily,
+  deleteResumeRevision,
   deriveResume,
   originalResumeRevision,
   promoteResumeToMaster,
@@ -22,15 +23,18 @@ import {
   resumeNodePatch,
   selectResumeRevision,
   updateActiveResume,
+  updateResumeFamilySettings,
   type CanvasResumeFamily,
   type CanvasResumeDocument,
   type ResumeTemplateId,
 } from '@/lib/canvasResume';
 import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision } from '@/lib/canvasResumeRenderer';
+import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
+import { analyzeResumeAgainstJob, resumeTailorPrompt } from '@/lib/canvasResumeAts';
 
 type ResumeView = 'edit' | 'preview' | 'compare';
 
-export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
+export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void }) {
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;
@@ -39,6 +43,8 @@ export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; o
   const [view, setView] = useState<ResumeView>('preview');
   const [newTitle, setNewTitle] = useState('');
   const [error, setError] = useState('');
+  const [mergeSections, setMergeSections] = useState<ResumeDiffSection[]>([]);
+  const [jobDescription, setJobDescription] = useState('');
 
   const commit = (next: CanvasResumeFamily) => onEdit?.({
     ...resumeNodePatch(next),
@@ -86,6 +92,8 @@ export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; o
   const template = RESUME_TEMPLATES.find((item) => item.id === active.templateId) ?? RESUME_TEMPLATES[0];
   const rendered = renderCanvasResumeRevision(active);
   const originalRendered = renderCanvasResumeRevision(original);
+  const differences = original.document && active.document ? compareResumeDocuments(original.document, active.document).filter((difference) => difference.changed) : [];
+  const ats = active.document && jobDescription.trim() ? analyzeResumeAgainstJob(active.document, jobDescription) : null;
   const createVersion = () => {
     const next = deriveResume(family, newTitle || t('untitledVersion'), { fromRevisionId: family.originalRevisionId });
     setNewTitle('');
@@ -100,11 +108,17 @@ export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; o
       </select></label>
       <span className={styles.resumeImmutable} data-original={active.kind === 'original' || undefined}>{active.kind === 'original' ? t('immutableOriginal') : t('editableVersion')}</span>
       <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => commit(promoteResumeToMaster(family, active.id))}>{t('makeMaster')}</button>
+      <label><span>{t('privacy')}</span><select value={family.privacy} disabled={!onEdit} onChange={(event) => commit(updateResumeFamilySettings(family, { privacy: event.target.value as CanvasResumeFamily['privacy'] }))}>
+        {(['private', 'recruiter_only', 'connections', 'public', 'draft'] as const).map((privacy) => <option key={privacy} value={privacy}>{t(`privacy_${privacy}`)}</option>)}
+      </select></label>
+      <button type="button" disabled={!onEdit} onClick={() => commit(updateResumeFamilySettings(family, { archivedAt: family.archivedAt ? null : new Date().toISOString() }))}>{family.archivedAt ? t('unarchive') : t('archive')}</button>
+      <button type="button" disabled={!onEdit} aria-pressed={family.watched} onClick={() => commit(updateResumeFamilySettings(family, { watched: !family.watched }))}>{family.watched ? t('unwatch') : t('watch')}</button>
     </div>
     <div className={styles.resumeVersionCreator}>
       <input value={newTitle} placeholder={t('versionNamePlaceholder')} aria-label={t('versionName')} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createVersion(); }} />
       <button type="button" disabled={!onEdit} onClick={createVersion}>{t('createFromOriginal')}</button>
       {active.kind === 'derived' && <button type="button" disabled={!onEdit} onClick={() => commit(restoreResumeAsNew(family, active.id, t('restoredVersion', { title: active.title })))}>{t('restoreAsNew')}</button>}
+      {active.kind === 'derived' && <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => commit(deleteResumeRevision(family, active.id))}>{t('deleteVersion')}</button>}
     </div>
     <div className={styles.resumeControls}>
       <div role="tablist" aria-label={t('viewMode')}>
@@ -114,16 +128,45 @@ export function CanvasResumeEditor({ data, onEdit }: { data: CreationNodeData; o
         {RESUME_TEMPLATES.map((item) => <option key={item.id} value={item.id}>{t(item.labelKey)}</option>)}
       </select></label>
     </div>
+    <details className={styles.resumeAtsPanel}>
+      <summary>{t('tailorForJob')}</summary>
+      <label><span>{t('jobDescription')}</span><textarea value={jobDescription} placeholder={t('jobDescriptionPlaceholder')} onChange={(event) => setJobDescription(event.target.value)} /></label>
+      {ats && <div className={styles.resumeAtsResults}>
+        <strong>{t('atsScore', { score: ats.score })}</strong>
+        <div><span>{t('matchedKeywords')}</span>{ats.matchedKeywords.slice(0, 20).map((keyword) => <i key={keyword} data-match>{keyword}</i>)}</div>
+        <div><span>{t('missingKeywords')}</span>{ats.missingKeywords.slice(0, 20).map((keyword) => <i key={keyword}>{keyword}</i>)}</div>
+      </div>}
+      <button type="button" disabled={!onTailor || !active.document || jobDescription.trim().length < 40} onClick={() => {
+        if (!active.document || !ats) return;
+        onTailor?.(resumeTailorPrompt(active, jobDescription, ats));
+      }}>{t('askRecruiterToTailor')}</button>
+    </details>
     {view === 'edit' && active.kind === 'derived' && <div className={styles.resumeEditStack}>
       {active.document && <ResumeStructuredEditor document={active.document} onChange={(document) => commit(updateActiveResume(family, { document }))} />}
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
       {active.structuredStale && <p role="status" className={styles.resumeStaleWarning}>{t('structuredStale')}</p>}
     </div>}
     {view === 'preview' && <div className={styles.resumePreviewViewport}><style>{RESUME_DOCUMENT_STYLES}</style><div dangerouslySetInnerHTML={{ __html: rendered.html }} /></div>}
-    {view === 'compare' && <div className={styles.resumeCompare}>
-      <style>{RESUME_DOCUMENT_STYLES}</style>
-      <section><strong>{t('original')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: originalRendered.html }} /></section>
-      <section><strong>{t('selectedVersion')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: rendered.html }} /></section>
+    {view === 'compare' && <div className={styles.resumeCompareShell}>
+      {active.id !== original.id && <aside className={styles.resumeDiffSummary}>
+        <strong>{t('changesFromOriginal', { count: differences.length })}</strong>
+        {differences.length ? differences.map((difference) => <label key={difference.section}>
+          <input type="checkbox" checked={mergeSections.includes(difference.section)} onChange={() => setMergeSections((current) => current.includes(difference.section) ? current.filter((section) => section !== difference.section) : [...current, difference.section])} />
+          <span>{t(`diff_${difference.section}`)} <small>{t('entryChange', { source: difference.sourceCount, target: difference.targetCount })}</small></span>
+        </label>) : <p>{t('noStructuredChanges')}</p>}
+        <button type="button" disabled={!onEdit || !mergeSections.length || !original.document || !active.document} onClick={() => {
+          if (!original.document || !active.document) return;
+          const merged = mergeResumeAsNewVersion(family, original, active, new Set(mergeSections), t('mergedVersion', { title: active.title }));
+          setMergeSections([]);
+          setView('edit');
+          commit(merged);
+        }}>{t('mergeOriginalSections', { count: mergeSections.length })}</button>
+      </aside>}
+      <div className={styles.resumeCompare}>
+        <style>{RESUME_DOCUMENT_STYLES}</style>
+        <section><strong>{t('original')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: originalRendered.html }} /></section>
+        <section><strong>{t('selectedVersion')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: rendered.html }} /></section>
+      </div>
     </div>}
   </div>;
 }

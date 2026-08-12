@@ -1,10 +1,10 @@
 /** Persisted, provider-neutral inbox automation rules and their governed runner. */
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, lt } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { DbHandle as Db } from '../shared/dbHandle';
 import {
   approvals,
-  mailboxAutomationExecutions,
+  mailboxAutomationReplies,
   mailboxAutomationRules,
   mailboxConnections,
 } from '../../infrastructure/database/schema';
@@ -14,7 +14,8 @@ import { completeForTenant } from '../llm/tenantProxy';
 import { readProxyChoice } from '../llm/LlmProxyService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
-import { readMailbox, sendFromMailbox, setMailboxMessageRead } from './mailboxService';
+import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
+import { getMailboxConnection, readMailbox, sendFromMailbox, setMailboxMessageRead } from './mailboxService';
 import type { MailboxMessage } from './mailboxProviders';
 
 export const MAILBOX_RESPONSE_MODES = ['draft', 'approval', 'automatic'] as const;
@@ -49,6 +50,7 @@ export async function createMailboxAutomationRule(
   db: Db, tenantId: number, connectionId: number, input: MailboxAutomationRuleInput,
 ) {
   if (!(await ownsConnection(db, tenantId, connectionId))) return null;
+  if (!input.agentRef?.trim()) throw new Error('An AI agent is required.');
   const [row] = await db.insert(mailboxAutomationRules).values({
     tenantId,
     connectionId,
@@ -90,10 +92,10 @@ export async function deleteMailboxAutomationRule(db: Db, tenantId: number, rule
 }
 
 export async function listMailboxAutomationExecutions(db: Db, tenantId: number, connectionId?: number) {
-  return db.select().from(mailboxAutomationExecutions).where(connectionId == null
-    ? eq(mailboxAutomationExecutions.tenantId, tenantId)
-    : and(eq(mailboxAutomationExecutions.tenantId, tenantId), eq(mailboxAutomationExecutions.connectionId, connectionId)))
-    .orderBy(desc(mailboxAutomationExecutions.createdAt)).limit(100);
+  return db.select().from(mailboxAutomationReplies).where(connectionId == null
+    ? eq(mailboxAutomationReplies.tenantId, tenantId)
+    : and(eq(mailboxAutomationReplies.tenantId, tenantId), eq(mailboxAutomationReplies.connectionId, connectionId)))
+    .orderBy(desc(mailboxAutomationReplies.createdAt)).limit(100);
 }
 
 function matches(rule: typeof mailboxAutomationRules.$inferSelect, message: MailboxMessage): boolean {
@@ -143,18 +145,20 @@ async function generateAgentReply(
 async function claimMessage(
   db: Db, rule: typeof mailboxAutomationRules.$inferSelect, message: MailboxMessage,
 ) {
-  const [row] = await db.insert(mailboxAutomationExecutions).values({
+  const [row] = await db.insert(mailboxAutomationReplies).values({
     tenantId: rule.tenantId, connectionId: rule.connectionId, ruleId: rule.id,
     messageId: message.id, sender: message.from.slice(0, 500), subject: message.subject.slice(0, 500),
   }).onConflictDoNothing({
-    target: [mailboxAutomationExecutions.tenantId, mailboxAutomationExecutions.connectionId, mailboxAutomationExecutions.messageId],
+    target: [mailboxAutomationReplies.tenantId, mailboxAutomationReplies.connectionId, mailboxAutomationReplies.messageId],
   }).returning();
   return row ?? null;
 }
 
-async function updateExecution(db: Db, id: number, patch: Partial<typeof mailboxAutomationExecutions.$inferInsert>) {
-  await db.update(mailboxAutomationExecutions).set({ ...patch, updatedAt: new Date() })
-    .where(eq(mailboxAutomationExecutions.id, id));
+async function updateExecution(
+  db: Db, tenantId: number, id: number, patch: Partial<typeof mailboxAutomationReplies.$inferInsert>,
+) {
+  await db.update(mailboxAutomationReplies).set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(mailboxAutomationReplies.tenantId, tenantId), eq(mailboxAutomationReplies.id, id)));
 }
 
 export interface MailboxAutomationSweepResult {
@@ -168,8 +172,13 @@ export interface MailboxAutomationSweepResult {
 
 /** Evaluate unread mail once. The unique execution key makes cron retries safe. */
 export async function runMailboxAutomationSweep(
-  env: Env, db: Db, onlyTenantId?: number,
+  env: Env, db: Db, onlyTenantId?: number, dispatchBudget: TickDispatchBudget = createTickDispatchBudget(),
 ): Promise<MailboxAutomationSweepResult> {
+  await db.delete(mailboxAutomationReplies).where(and(
+    eq(mailboxAutomationReplies.status, 'processing'),
+    lt(mailboxAutomationReplies.updatedAt, new Date(Date.now() - 30 * 60 * 1000)),
+    ...(onlyTenantId == null ? [] : [eq(mailboxAutomationReplies.tenantId, onlyTenantId)]),
+  ));
   const rules = await db.select().from(mailboxAutomationRules).where(onlyTenantId == null
     ? eq(mailboxAutomationRules.enabled, true)
     : and(eq(mailboxAutomationRules.enabled, true), eq(mailboxAutomationRules.tenantId, onlyTenantId)))
@@ -188,13 +197,14 @@ export async function runMailboxAutomationSweep(
     for (const message of inbox.messages) {
       for (const rule of connectionRules) {
         if (!matches(rule, message)) continue;
+        if (!dispatchBudget.tryReserve(rule.tenantId)) continue;
         const execution = await claimMessage(db, rule, message);
-        if (!execution) continue;
+        if (!execution) { dispatchBudget.release(rule.tenantId); continue; }
         summary.matched += 1;
         try {
           const draftText = await generateAgentReply(env, rule.tenantId, rule, message);
           if (rule.responseMode === 'draft') {
-            await updateExecution(db, execution.id, { status: 'draft', draftText });
+            await updateExecution(db, rule.tenantId, execution.id, { status: 'draft', draftText });
             summary.drafted += 1;
             continue;
           }
@@ -206,7 +216,7 @@ export async function runMailboxAutomationSweep(
               requestedBy: `agent:${rule.agentRef}`, cloudAgentRef: rule.agentRef,
               metadata: JSON.stringify({ mailboxAutomationExecutionId: execution.id }),
             });
-            await updateExecution(db, execution.id, { status: 'pending_approval', draftText, approvalId });
+            await updateExecution(db, rule.tenantId, execution.id, { status: 'pending_approval', draftText, approvalId });
             await notifyApprovalRequested(env, db, {
               tenantId: rule.tenantId, approvalId, kind: 'approval', actionType: 'mailbox.reply',
               description: `Review AI reply to ${addressOf(message.from)} — ${message.subject || '(no subject)'}`,
@@ -214,17 +224,13 @@ export async function runMailboxAutomationSweep(
             summary.approvals += 1;
             continue;
           }
-          const sent = await sendFromMailbox(db, env, rule.tenantId, rule.connectionId, {
-            to: addressOf(message.from), subject: replySubject(message.subject),
-            text: draftText, html: htmlFromText(draftText),
-          });
+          await updateExecution(db, rule.tenantId, execution.id, { draftText });
+          const sent = await sendMailboxAutomationExecution(env, db, rule.tenantId, execution.id);
           if (!sent.ok) throw new Error(sent.error);
-          await updateExecution(db, execution.id, { status: 'sent', draftText, providerSentId: sent.id });
-          await setMailboxMessageRead(db, env, rule.tenantId, rule.connectionId, message.id, true).catch(() => undefined);
           summary.sent += 1;
         } catch (error) {
           const detail = error instanceof Error ? error.message : 'Mailbox automation failed.';
-          await updateExecution(db, execution.id, { status: 'failed', error: detail.slice(0, 4000) });
+          await updateExecution(db, rule.tenantId, execution.id, { status: 'failed', error: detail.slice(0, 4000) });
           reportCaughtError(error, { source: 'application/mailbox/mailboxAutomationService.ts', operation: 'runMailboxAutomationSweep' });
           summary.failed += 1;
         }
@@ -244,26 +250,29 @@ export async function runMailboxAutomationSweep(
 export async function sendMailboxAutomationExecution(
   env: Env, db: Db, tenantId: number, executionId: number,
 ): Promise<{ ok: true; sentId: string } | { ok: false; error: string }> {
-  const [execution] = await db.select().from(mailboxAutomationExecutions).where(and(
-    eq(mailboxAutomationExecutions.id, executionId), eq(mailboxAutomationExecutions.tenantId, tenantId),
+  const [execution] = await db.select().from(mailboxAutomationReplies).where(and(
+    eq(mailboxAutomationReplies.id, executionId), eq(mailboxAutomationReplies.tenantId, tenantId),
   )).limit(1);
   if (!execution?.draftText) return { ok: false, error: 'Reply draft not found.' };
   if (execution.status === 'sent') return { ok: true, sentId: execution.providerSentId ?? '' };
+  const connection = await getMailboxConnection(db, tenantId, execution.connectionId);
+  if (!connection || connection.status !== 'connected') return { ok: false, error: 'This mailbox needs to be reconnected.' };
+  if (!connection.allowSending) return { ok: false, error: 'Sending is disabled for this mailbox.' };
   const sent = await sendFromMailbox(db, env, tenantId, execution.connectionId, {
     to: addressOf(execution.sender), subject: replySubject(execution.subject),
     text: execution.draftText, html: htmlFromText(execution.draftText),
   });
   if (!sent.ok) {
-    await updateExecution(db, execution.id, { status: 'failed', error: sent.error });
+    await updateExecution(db, tenantId, execution.id, { status: 'failed', error: sent.error });
     return { ok: false, error: sent.error };
   }
-  await updateExecution(db, execution.id, { status: 'sent', providerSentId: sent.id, error: null });
+  await updateExecution(db, tenantId, execution.id, { status: 'sent', providerSentId: sent.id, error: null });
   await setMailboxMessageRead(db, env, tenantId, execution.connectionId, execution.messageId, true).catch(() => undefined);
   return { ok: true, sentId: sent.id };
 }
 
 export async function rejectMailboxAutomationApproval(db: Db, tenantId: number, approvalId: string): Promise<void> {
-  await db.update(mailboxAutomationExecutions).set({ status: 'rejected', updatedAt: new Date() }).where(and(
-    eq(mailboxAutomationExecutions.tenantId, tenantId), eq(mailboxAutomationExecutions.approvalId, approvalId),
+  await db.update(mailboxAutomationReplies).set({ status: 'rejected', updatedAt: new Date() }).where(and(
+    eq(mailboxAutomationReplies.tenantId, tenantId), eq(mailboxAutomationReplies.approvalId, approvalId),
   ));
 }

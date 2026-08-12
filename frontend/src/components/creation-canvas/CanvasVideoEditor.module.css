@@ -11,6 +11,12 @@
 .captureBar input[type='file'] { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
 .captureBar .recording { border-color: var(--danger-border); color: var(--danger-text); }
 .status { margin: 0; color: var(--canvas-muted); font-size: 10px; }
+.publish { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--canvas-line); border-radius: var(--radius-md); background: var(--canvas-hover); }
+.publish header, .publish p { grid-column: 1 / -1; display: flex; justify-content: space-between; margin: 0; }
+.publish label { display: grid; gap: var(--space-1); color: var(--canvas-muted); font-size: 10px; }
+.publish textarea { min-height: 4.5rem; resize: vertical; }
+.publish input, .publish textarea, .publish select { width: 100%; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; }
+.publish button, .publish a { justify-self: start; min-height: 2rem; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; text-decoration: none; cursor: pointer; }
 .timeline { display: grid; gap: var(--space-1); overflow-x: auto; }
 .timeline section { display: grid; grid-template-columns: 6.5rem minmax(26rem, 1fr); min-height: 3.25rem; border-block-start: 1px solid var(--canvas-line); }
 .timeline section > header { display: flex; justify-content: space-between; align-items: center; padding: var(--space-2); color: var(--canvas-muted); }

@@ -3,6 +3,7 @@ import {
   activeResumeRevision,
   createResumeFamily,
   deriveResume,
+  deleteResumeRevision,
   initializeResumeFromPatch,
   originalResumeRevision,
   promoteResumeToMaster,
@@ -12,6 +13,7 @@ import {
   resumeDocumentFromJson,
   selectResumeRevision,
   updateActiveResume,
+  updateResumeFamilySettings,
 } from './canvasResume';
 
 const ids = (...values: string[]) => {
@@ -42,6 +44,23 @@ describe('Canvas resume lineage', () => {
     expect(promoted.masterRevisionId).toBe('restored');
     expect(activeResumeRevision(promoted)).toMatchObject({ title: 'Restored original', sourceRevisionId: 'original' });
     expect(promoted.revisions).toHaveLength(3);
+  });
+
+  it('persists privacy, archive, and watch settings on the family', () => {
+    const family = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
+    const updated = updateResumeFamilySettings(family, { privacy: 'recruiter_only', archivedAt: '2026-08-11T04:00:00Z', watched: true });
+    expect(updated).toMatchObject({ privacy: 'recruiter_only', archivedAt: '2026-08-11T04:00:00Z', watched: true });
+    expect(family).toMatchObject({ privacy: 'private', archivedAt: null, watched: false });
+  });
+
+  it('protects original and master while deleting an ordinary derived version', () => {
+    const original = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
+    const first = deriveResume(original, 'First', { idFactory: ids('first') });
+    const second = deriveResume(first, 'Second', { idFactory: ids('second') });
+    expect(deleteResumeRevision(second, 'original')).toEqual(second);
+    const deleted = deleteResumeRevision(second, 'second');
+    expect(deleted.revisions.map((revision) => revision.id)).toEqual(['original', 'first']);
+    expect(deleted.activeRevisionId).toBe('original');
   });
 
   it('turns an agent content rewrite into a derivative patch', () => {
@@ -102,6 +121,19 @@ describe('Canvas resume lineage', () => {
 
   it('renders an empty canonical document without hanging or inventing content', () => {
     expect(renderResumeMarkdown({})).toBe('');
+  });
+
+  it('honors section visibility and ordering without deleting structured content', () => {
+    const document = {
+      basics: { name: 'Ada', summary: 'Hidden summary' },
+      work: [{ position: 'Engineer', name: 'Engines' }],
+      skills: [{ name: 'Algorithms' }],
+      builderforceLayout: { sectionOrder: ['skills', 'work'], hiddenSections: ['summary'] },
+    };
+    const markdown = renderResumeMarkdown(document);
+    expect(markdown).not.toContain('Hidden summary');
+    expect(markdown.indexOf('## Skills')).toBeLessThan(markdown.indexOf('## Experience'));
+    expect(document.basics.summary).toBe('Hidden summary');
   });
 
   it('regenerates rendered markdown after a structured edit', () => {

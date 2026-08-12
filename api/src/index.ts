@@ -158,6 +158,7 @@ import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
 import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRoutes } from './presentation/routes/campaignRoutes';
 import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
 import { createDriveRoutes }        from './presentation/routes/driveRoutes';
+import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
@@ -677,6 +678,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // and the identity a campaign can send from.
   app.route('/api/mailbox',  createMailboxRoutes(db));
   app.route('/api/drive',    createDriveRoutes(db));
+  app.route('/api/youtube',  createYouTubeRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));

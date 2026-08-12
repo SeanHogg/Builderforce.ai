@@ -4929,6 +4929,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
     void exportRef.current(nodeId, action).then(setNotice);
   }, []);
+  const evaluateCanvasRef = useRef(evaluateCanvas);
+  evaluateCanvasRef.current = evaluateCanvas;
+  const tailorResumeFromNode = useCallback((nodeId: string, request: string) => {
+    setSelectedId(nodeId);
+    setSelectedIds([nodeId]);
+    setScopeMode('selection');
+    // Selection/scope are React state. Start the turn after that state commits so
+    // the Recruiter receives the intended résumé, not the previous canvas scope.
+    window.setTimeout(() => evaluateCanvasRef.current(`Target Canvas resume object ID: ${nodeId}\n\n${request}`), 0);
+  }, []);
   /**
    * The same treatment for `runWorkflow`, which needed it just as badly and was
    * missed.
@@ -4964,11 +4974,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, runWorkflowFromNode, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether

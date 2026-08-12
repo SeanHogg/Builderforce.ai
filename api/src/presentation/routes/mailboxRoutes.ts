@@ -268,6 +268,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
     const body = await c.req.json<MailboxAutomationRuleInput>().catch(() => ({} as MailboxAutomationRuleInput));
     if (!body.name?.trim()) return c.json({ error: 'Rule name is required.' }, 400);
+    if (!body.agentRef?.trim()) return c.json({ error: 'An AI agent is required.' }, 400);
     if (body.responseMode && !MAILBOX_RESPONSE_MODES.includes(body.responseMode)) {
       return c.json({ error: 'Invalid response mode.' }, 400);
     }

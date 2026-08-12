@@ -171,8 +171,8 @@ export const mailboxAutomationRules = pgTable('mailbox_automation_rules', {
   index('idx_mailbox_automation_rules_connection').on(t.tenantId, t.connectionId, t.enabled),
 ]);
 
-/** One idempotent evaluation of one provider message against one rule. */
-export const mailboxAutomationExecutions = pgTable('mailbox_automation_executions', {
+/** Provider-neutral lifecycle of the reply produced for one matched message. */
+export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   connectionId: integer('connection_id').notNull().references(() => mailboxConnections.id, { onDelete: 'cascade' }),
@@ -188,7 +188,7 @@ export const mailboxAutomationExecutions = pgTable('mailbox_automation_execution
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_mailbox_automation_execution_message').on(t.tenantId, t.connectionId, t.messageId),
-  index('idx_mailbox_automation_executions_tenant').on(t.tenantId, t.createdAt),
+  uniqueIndex('uq_mailbox_automation_reply_message').on(t.tenantId, t.connectionId, t.messageId),
+  index('idx_mailbox_automation_replies_tenant').on(t.tenantId, t.createdAt),
 ]);
 

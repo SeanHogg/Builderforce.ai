@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS mailbox_automation_rules (
 CREATE INDEX IF NOT EXISTS idx_mailbox_automation_rules_connection
   ON mailbox_automation_rules(tenant_id, connection_id, enabled);
 
-CREATE TABLE IF NOT EXISTS mailbox_automation_executions (
+CREATE TABLE IF NOT EXISTS mailbox_automation_replies (
   id                 SERIAL PRIMARY KEY,
   tenant_id          INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   connection_id      INTEGER NOT NULL REFERENCES mailbox_connections(id) ON DELETE CASCADE,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS mailbox_automation_executions (
   updated_at         TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mailbox_automation_execution_message
-  ON mailbox_automation_executions(tenant_id, connection_id, message_id);
-CREATE INDEX IF NOT EXISTS idx_mailbox_automation_executions_tenant
-  ON mailbox_automation_executions(tenant_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mailbox_automation_reply_message
+  ON mailbox_automation_replies(tenant_id, connection_id, message_id);
+CREATE INDEX IF NOT EXISTS idx_mailbox_automation_replies_tenant
+  ON mailbox_automation_replies(tenant_id, created_at DESC);

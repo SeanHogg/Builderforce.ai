@@ -719,6 +719,27 @@
 .resumePreviewViewport { max-height:700px; overflow:auto; border:1px solid var(--border); border-radius:4px; background:#e5e7eb; }
 .resumePreviewViewport :global(.canvasResumeDocument) { box-shadow:0 8px 24px rgb(15 23 42 / 12%); }
 .resumeCompare { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.resumeCompareShell { display:flex; flex-direction:column; gap:10px; }
+.resumeDiffSummary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border:1px solid var(--border); border-radius:8px; padding:9px; }
+.resumeDiffSummary > strong { width:100%; }
+.resumeDiffSummary label { display:flex; align-items:center; gap:5px; border:1px solid var(--border); border-radius:99px; padding:4px 7px; font-size:11px; }
+.resumeDiffSummary label small { color:var(--text-muted); }
+.resumeDiffSummary p { margin:0; color:var(--text-muted); font-size:12px; }
+.resumeDiffSummary button { margin-left:auto; border:1px solid #7c3aed; border-radius:7px; background:#7c3aed; color:#fff; padding:7px 10px; cursor:pointer; }
+.resumeDiffSummary button:disabled { cursor:not-allowed; opacity:.45; }
+.resumeAtsPanel { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.resumeAtsPanel summary { cursor:pointer; padding:10px 12px; font-weight:750; }
+.resumeAtsPanel > label { display:flex; flex-direction:column; gap:5px; padding:0 10px 10px; }
+.resumeAtsPanel > label span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeAtsPanel textarea { min-height:130px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:inherit; padding:8px; resize:vertical; font:inherit; }
+.resumeAtsPanel > button { margin:0 10px 10px; border:1px solid #7c3aed; border-radius:7px; background:#7c3aed; color:#fff; padding:8px 11px; cursor:pointer; }
+.resumeAtsPanel > button:disabled { cursor:not-allowed; opacity:.45; }
+.resumeAtsResults { display:grid; gap:7px; padding:0 10px 10px; }
+.resumeAtsResults > strong { color:#7c3aed; font-size:18px; }
+.resumeAtsResults > div { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.resumeAtsResults > div > span { width:100%; color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeAtsResults i { border-radius:99px; background:color-mix(in srgb, #dc2626 12%, transparent); color:#b91c1c; padding:3px 6px; font-size:10px; font-style:normal; }
+.resumeAtsResults i[data-match] { background:color-mix(in srgb, #059669 12%, transparent); color:#047857; }
 .resumeCompare section { min-width:0; }
 .resumeCompare section > strong { display:block; margin-bottom:6px; font-size:12px; }
 .resumeCompare .resumePaper { min-height:380px; max-height:560px; padding:22px; font-size:11px; }

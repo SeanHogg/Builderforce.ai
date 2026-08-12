@@ -1788,6 +1788,7 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onEditData?: (nodeId: string, patch: Partial<CreationNodeData>) => void;
   /** Take the object away as a file, from the card that holds it. */
   onExport?: (nodeId: string, action: CanvasExportAction) => void;
+  onResumeTailor?: (nodeId: string, prompt: string) => void;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -1829,7 +1830,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
   }, [authored]);
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A game is played in its own body, so it needs the width a game needs.
@@ -1891,7 +1892,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}
         {data.kind === 'video' && <CanvasVideoEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
-        {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
+        {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} {...(onResumeTailor ? { onTailor: (prompt) => onResumeTailor(id, prompt) } : {})} />}
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
         {data.kind === 'game' && <GameBody data={data} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}
