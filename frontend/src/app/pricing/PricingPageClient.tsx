@@ -278,10 +278,10 @@ export default function PricingPageClient() {
             <div className={styles.accountCard}>
               <div className={styles.accountCardBody}>
                 <div className={styles.accountCardTitle}>{t('enabledModulesTitle', { count: selectedModuleLabels.length })}</div>
-                <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>{t('enabledModulesDescription')}</p>
+                <p style={{ margin: '6px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('enabledModulesDescription')}</p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
                   {selectedModuleLabels.map((label) => (
-                    <span key={label} style={{ padding: '4px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontSize: 11 }}>{label}</span>
+                    <span key={label} style={{ padding: '4px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontSize: 'var(--font-size-eyebrow)' }}>{label}</span>
                   ))}
                 </div>
               </div>

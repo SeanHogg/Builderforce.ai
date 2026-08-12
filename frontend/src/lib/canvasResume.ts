@@ -18,6 +18,7 @@ export const RESUME_TEMPLATE_IDS = [
 export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
 export type ResumePageSize = 'letter' | 'legal' | 'a4';
 export type ResumeOrientation = 'portrait' | 'landscape';
+export type ResumePreviewMode = 'continuous' | 'paged' | 'spread';
 export type ResumeHeadingStyle = 'underlined' | 'divider' | 'caps' | 'plain';
 export type ResumeSectionLayout = 'timeline' | 'cards' | 'grid' | 'list' | 'compact';
 export type ResumeSortOrder = 'date_desc' | 'date_asc' | 'manual';
@@ -39,6 +40,7 @@ export interface ResumeTemplateDefinition {
   sidebar: ResumeSectionId[];
   hero?: { enabled: boolean; layout: ResumeHeroLayout; showAvatar: boolean; showContactButtons: boolean; showSummary: boolean; showVideo: boolean };
   sections?: Partial<Record<ResumeSectionId, ResumeSectionRule>>;
+  enabledSections?: ResumeSectionId[];
 }
 
 const PRINT_HERO = { enabled: true, layout: 'compact', showAvatar: false, showContactButtons: true, showSummary: true, showVideo: false } as const;
@@ -62,7 +64,7 @@ export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
   { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Film directing', sidebar: [] },
 ] as const;
 
-export function normalizedResumeTemplate(template: ResumeTemplateDefinition): ResumeTemplateDefinition & { hero: NonNullable<ResumeTemplateDefinition['hero']>; sections: NonNullable<ResumeTemplateDefinition['sections']> } {
+export function normalizedResumeTemplate(template: ResumeTemplateDefinition): ResumeTemplateDefinition & { hero: NonNullable<ResumeTemplateDefinition['hero']>; sections: NonNullable<ResumeTemplateDefinition['sections']>; enabledSections: ResumeSectionId[] } {
   const hero = template.hero ?? (template.mode === 'hero'
     ? { enabled: true, layout: 'split' as const, showAvatar: true, showContactButtons: true, showSummary: true, showVideo: true }
     : { ...PRINT_HERO });
@@ -72,7 +74,13 @@ export function normalizedResumeTemplate(template: ResumeTemplateDefinition): Re
   }
   if (template.id === 'actor-headshot-hero') sections.projects = { layout: 'list', showHighlights: true, showMedia: true, sortBy: 'date_desc' };
   if (template.id === 'director-filmography-serif') sections.projects = { layout: 'list', showHighlights: true, showMedia: true, sortBy: 'date_desc' };
-  return { ...template, hero, sections };
+  const presetSections: Partial<Record<ResumeTemplateId, ResumeSectionId[]>> = {
+    'intern-education-first': ['summary', 'education', 'work', 'projects', 'skills', 'volunteer', 'awards', 'languages', 'interests'],
+    'actor-headshot-hero': ['summary', 'projects', 'skills', 'languages', 'education', 'awards', 'references'],
+    'director-filmography-serif': ['summary', 'projects', 'awards', 'publications', 'work', 'education', 'skills', 'references'],
+  };
+  const enabledSections = template.enabledSections ?? presetSections[template.id] ?? [...RESUME_SECTION_ORDER];
+  return { ...template, hero, sections, enabledSections: hero.showSummary ? enabledSections : enabledSections.filter((id) => id !== 'summary') };
 }
 
 type ResumeTemplateDescriptorInput = Partial<ResumeTemplateDefinition> & { version?: unknown; documentMode?: unknown; layout?: unknown; theme?: unknown; hero?: unknown; sections?: unknown };
@@ -92,10 +100,12 @@ export function resumeTemplateFromDescriptor(value: unknown): ResumeTemplateDefi
   const density = ['compact', 'comfortable', 'spacious'].includes(String(theme.density)) ? theme.density as ResumeTemplateDefinition['density'] : stock.density;
   const headingStyle = ['underlined', 'divider', 'caps', 'plain'].includes(String(theme.headingStyle)) ? theme.headingStyle as ResumeHeadingStyle : stock.headingStyle;
   const sectionRules: NonNullable<ResumeTemplateDefinition['sections']> = {};
+  const enabledSections: ResumeSectionId[] = [];
   if (Array.isArray(raw.sections)) for (const item of raw.sections) {
     if (!item || typeof item !== 'object' || (item as Record<string, unknown>).kind === 'component') continue;
     const section = item as Record<string, unknown>; const key = String(section.key) as ResumeSectionId;
     if (!RESUME_SECTION_ORDER.includes(key) || section.enabled === false || !['timeline', 'cards', 'grid', 'list', 'compact'].includes(String(section.layout))) continue;
+    enabledSections.push(key);
     sectionRules[key] = { layout: section.layout as ResumeSectionLayout,
       ...([1, 2, 3, 4].includes(Number(section.columns)) ? { columns: Number(section.columns) as 1 | 2 | 3 | 4 } : {}),
       ...(typeof section.showHighlights === 'boolean' ? { showHighlights: section.showHighlights } : {}), ...(typeof section.showMedia === 'boolean' ? { showMedia: section.showMedia } : {}),
@@ -108,6 +118,7 @@ export function resumeTemplateFromDescriptor(value: unknown): ResumeTemplateDefi
     sidebar: Array.isArray(layout.sidebar) ? layout.sidebar.filter((item): item is ResumeSectionId => typeof item === 'string' && RESUME_SECTION_ORDER.includes(item as ResumeSectionId)) : stock.sidebar,
     hero: { enabled: boolean('enabled', fallbackHero.enabled), layout: ['split', 'stacked', 'compact'].includes(String(heroRaw.layout)) ? heroRaw.layout as ResumeHeroLayout : fallbackHero.layout, showAvatar: boolean('showAvatar', fallbackHero.showAvatar), showContactButtons: boolean('showContactButtons', fallbackHero.showContactButtons), showSummary: boolean('showSummary', fallbackHero.showSummary), showVideo: boolean('showVideo', fallbackHero.showVideo) },
     sections: Object.keys(sectionRules).length ? sectionRules : normalizedResumeTemplate(stock).sections,
+    enabledSections: enabledSections.length ? ['summary', ...enabledSections] : normalizedResumeTemplate(stock).enabledSections,
   };
 }
 
@@ -259,6 +270,7 @@ export interface CanvasResumeFamily {
   watched: boolean;
   defaultTemplateId: ResumeTemplateId;
   viewZoom: number;
+  previewMode: ResumePreviewMode;
   originalRevisionId: string;
   activeRevisionId: string;
   masterRevisionId: string;
@@ -284,7 +296,7 @@ export function createResumeFamily(args: { title: string; markdown: string; docu
     createdAt: now,
     updatedAt: now,
   };
-  return { version: 1, privacy: 'private', archivedAt: null, watched: false, defaultTemplateId: 'hired-default', viewZoom: 75, originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
+  return { version: 1, privacy: 'private', archivedAt: null, watched: false, defaultTemplateId: 'hired-default', viewZoom: 75, previewMode: 'continuous', originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
 }
 
 export function activeResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {
@@ -370,7 +382,7 @@ export function promoteResumeToMaster(family: CanvasResumeFamily, revisionId: st
 
 export function updateResumeFamilySettings(
   family: CanvasResumeFamily,
-  patch: Partial<Pick<CanvasResumeFamily, 'privacy' | 'archivedAt' | 'watched' | 'defaultTemplateId' | 'viewZoom'>>,
+  patch: Partial<Pick<CanvasResumeFamily, 'privacy' | 'archivedAt' | 'watched' | 'defaultTemplateId' | 'viewZoom' | 'previewMode'>>,
 ): CanvasResumeFamily {
   return { ...family, ...patch };
 }
@@ -402,7 +414,7 @@ export function detachResumeRevision(
   };
   return {
     version: 1, privacy: 'private', archivedAt: null, watched: false,
-    defaultTemplateId: source.templateId, viewZoom: family.viewZoom,
+    defaultTemplateId: source.templateId, viewZoom: family.viewZoom, previewMode: family.previewMode,
     originalRevisionId: originalId, activeRevisionId: originalId, masterRevisionId: originalId, revisions: [original],
   };
 }
@@ -433,6 +445,7 @@ export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily
     watched: family.watched === true,
     defaultTemplateId: RESUME_TEMPLATE_IDS.includes(family.defaultTemplateId as ResumeTemplateId) ? family.defaultTemplateId as ResumeTemplateId : 'hired-default',
     viewZoom: typeof family.viewZoom === 'number' && family.viewZoom >= 40 && family.viewZoom <= 125 ? family.viewZoom : 75,
+    previewMode: ['continuous', 'paged', 'spread'].includes(String(family.previewMode)) ? family.previewMode as ResumePreviewMode : 'continuous',
     originalRevisionId: family.originalRevisionId, activeRevisionId, masterRevisionId, revisions,
   };
 }

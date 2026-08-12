@@ -38,7 +38,7 @@ function TypeBadge({ type }: { type: CartItem['type'] }) {
         display: 'inline-block',
         padding: '1px 7px',
         borderRadius: 'var(--radius-sm)',
-        fontSize: 10,
+        fontSize: 'var(--font-size-field-label)',
         fontWeight: 700,
         letterSpacing: '0.05em',
         textTransform: 'uppercase',
@@ -208,9 +208,9 @@ export default function ShoppingCart() {
               <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
-            <span style={{ fontWeight: 700, fontSize: 16 }}>{t('title')}</span>
+            <span style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)' }}>{t('title')}</span>
             {count > 0 && (
-              <span style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>
+              <span style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 'var(--font-size-small)', fontWeight: 700 }}>
                 {count}
               </span>
             )}
@@ -235,11 +235,11 @@ export default function ShoppingCart() {
                 <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
               </svg>
-              <p style={{ fontSize: 14 }}>{t('empty')}</p>
+              <p style={{ fontSize: 'var(--font-size-body)' }}>{t('empty')}</p>
               <Link
                 href="/marketplace"
                 onClick={closeCart}
-                style={{ display: 'inline-block', marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text)', padding: '8px 16px', fontSize: 13, textDecoration: 'none' }}
+                style={{ display: 'inline-block', marginTop: 12, background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text)', padding: '8px 16px', fontSize: 'var(--font-size-small)', textDecoration: 'none' }}
               >
                 {t('browse')}
               </Link>
@@ -259,17 +259,17 @@ export default function ShoppingCart() {
                     border: '1px solid var(--border)',
                   }}
                 >
-                  <div style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: 'center' }}>
+                  <div style={{ fontSize: 'var(--font-size-page-title)', flexShrink: 0, width: 40, textAlign: 'center' }}>
                     <Icon source={item.emoji ?? (item.type === 'skill' ? 'settings' : item.type === 'persona' ? 'brain' : item.type === 'agent' ? 'person' : 'document')} size={18} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-small)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                       <TypeBadge type={item.type} />
                     </div>
-                    <div style={{ fontSize: 13, color: item.price === 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: item.price === 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
                       {formatPrice(item, locale, t('free'), t('use'))}
-                      {item.setupFee != null && <div style={{ fontSize: 11, fontWeight: 400 }}>{t('plusActivation', { price: item.setupFee })}</div>}
+                      {item.setupFee != null && <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 400 }}>{t('plusActivation', { price: item.setupFee })}</div>}
                     </div>
                   </div>
                   <button
@@ -287,13 +287,13 @@ export default function ShoppingCart() {
             </ul>
           )}
 
-          {checkoutSuccess && <p role="status" style={{ color: 'var(--success-text)', fontSize: 13 }}>{checkoutSuccess}</p>}
+          {checkoutSuccess && <p role="status" style={{ color: 'var(--success-text)', fontSize: 'var(--font-size-small)' }}>{checkoutSuccess}</p>}
           {isAuthenticated && purchases.length > 0 && (
             <section style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }} aria-labelledby="cart-purchase-history">
-              <h2 id="cart-purchase-history" style={{ margin: '0 0 10px', fontSize: 14 }}>{t('purchaseHistory')}</h2>
+              <h2 id="cart-purchase-history" style={{ margin: '0 0 10px', fontSize: 'var(--font-size-body)' }}>{t('purchaseHistory')}</h2>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {purchases.slice(0, 20).map((purchase) => (
-                  <li key={purchase.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+                  <li key={purchase.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                     <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{purchase.artifactSlug}</span>
                     <span style={{ flexShrink: 0 }}>{purchase.priceCents === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(purchase.priceCents / 100)}</span>
                   </li>
@@ -306,11 +306,11 @@ export default function ShoppingCart() {
         {/* Footer */}
         {items.length > 0 && (
           <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 15, fontWeight: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 'var(--font-size-body)', fontWeight: 700 }}>
               <span>{t('dueToday')}</span>
               <span>{subtotal + setupTotal === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(subtotal + setupTotal)}</span>
             </div>
-            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}><span>{subscriptionItem?.billingCycle === 'yearly' ? t('renewsYearly') : t('renewsMonthly')}</span><span>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(recurringTotal)}</span></div>}
+            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}><span>{subscriptionItem?.billingCycle === 'yearly' ? t('renewsYearly') : t('renewsMonthly')}</span><span>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(recurringTotal)}</span></div>}
 
             {isAuthenticated ? (
               <>
@@ -326,25 +326,25 @@ export default function ShoppingCart() {
                     background: 'linear-gradient(135deg, var(--indigo-bright), var(--purple-bright))',
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
-                    fontSize: 15,
+                    fontSize: 'var(--font-size-body)',
                     cursor: 'pointer',
                     marginBottom: 8,
                   }}
                 >
                   {checkingOut ? t('redirecting') : t('checkout')}
                 </button>
-                {checkoutError && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 12 }}>{checkoutError}</p>}
+                {checkoutError && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)' }}>{checkoutError}</p>}
                 <button
                   type="button"
                   onClick={clearCart}
-                  style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}
+                  style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', cursor: 'pointer', padding: '4px 0' }}
                 >
                   {t('clear')}
                 </button>
               </>
             ) : (
               <div style={{ textAlign: 'center' }}>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 12 }}>
                   {t('signInPrompt')}
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -359,7 +359,7 @@ export default function ShoppingCart() {
                       background: 'linear-gradient(135deg, var(--indigo-bright), var(--purple-bright))',
                       color: 'var(--text-on-accent)',
                       fontWeight: 600,
-                      fontSize: 13,
+                      fontSize: 'var(--font-size-small)',
                       textDecoration: 'none',
                     }}
                   >
@@ -376,7 +376,7 @@ export default function ShoppingCart() {
                       border: '1px solid var(--border)',
                       color: 'var(--text)',
                       fontWeight: 600,
-                      fontSize: 13,
+                      fontSize: 'var(--font-size-small)',
                       textDecoration: 'none',
                     }}
                   >

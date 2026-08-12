@@ -787,17 +787,17 @@ fields and print-parity work stay explicitly partial below.
 | Template ID | Hired design behavior | Builderforce status |
 |---|---|---|
 | `hired-default` | Hired Purple hero; split layout; avatar, contacts, summary, video; career timeline | **PARTIAL** — ID, hero mode, purple palette, font/density and live selection render; split hero entities remain |
-| `payroll-iron-gray` | Finance; serif; compact two-column; skills/education/credentials sidebar | **PARTIAL** — ID, serif/compact/two-column palette render; section assignment remains |
-| `risk-asphalt` | Consulting; sans; caps; two-column credential sidebar | **PARTIAL** — ID, sans/two-column palette render; credential sidebar semantics remain |
-| `executive-taupe` | Executive; serif; spacious one-column divider layout | **PARTIAL** — ID, serif/spacious/taupe presentation render; descriptor-perfect dividers remain |
-| `intern-education-first` | New-grad; education first; projects/skills emphasis | **PARTIAL** — ID and visual presentation render; canonical section ordering remains |
-| `hospitality-amber` | Hospitality; warm amber; caps; one column | **PARTIAL** — ID, amber palette and one-column presentation render; heading descriptor remains |
-| `creative-minimal` | Minimal slate; mono; spacious plain headings | **PARTIAL** — ID, mono/spacious presentation render; exact heading rules remain |
-| `software-engineer-graphite` | Developer graphite; mono; two-column skills/projects sidebar | **PARTIAL** — ID, mono/two-column presentation render; skills/project routing remains |
-| `healthcare-clinical-blue` | Clinical blue; compact two-column credentials sidebar | **PARTIAL** — ID, clinical palette/compact/two-column presentation render; credentials routing remains |
-| `sales-growth-emerald` | Sales; emerald; achievement-led caps headings | **PARTIAL** — ID, emerald palette and presentation render; achievement ordering remains |
+| `payroll-iron-gray` | Finance; serif; compact two-column; skills/education/credentials sidebar | **PORTED** — Canonical descriptor styling and sidebar section routing render in Canvas, preview, HTML and PDF. |
+| `risk-asphalt` | Consulting; sans; caps; two-column credential sidebar | **PORTED** — Canonical descriptor styling and credential sidebar routing render in Canvas, preview, HTML and PDF. |
+| `executive-taupe` | Executive; serif; spacious one-column divider layout | **PORTED** — Serif, spacious density, one-column layout and divider headings use the shared renderer. |
+| `intern-education-first` | New-grad; education first; projects/skills emphasis | **PORTED** — Descriptor-enabled sections, education-first ordering and two-column skill grids are enforced by the shared renderer. |
+| `hospitality-amber` | Hospitality; warm amber; caps; one column | **PORTED** — Palette, caps headings and one-column descriptor render through the shared pipeline. |
+| `creative-minimal` | Minimal slate; mono; spacious plain headings | **PORTED** — Mono, spacious density and plain headings render through the shared pipeline. |
+| `software-engineer-graphite` | Developer graphite; mono; two-column skills/projects sidebar | **PORTED** — Skills/projects/credentials route to the descriptor sidebar with mono styling. |
+| `healthcare-clinical-blue` | Clinical blue; compact two-column credentials sidebar | **PORTED** — Credentials/skills/education/languages route to the compact clinical sidebar. |
+| `sales-growth-emerald` | Sales; emerald; achievement-led caps headings | **PORTED** — Emerald palette, caps headings and one-column descriptor render through the shared pipeline. |
 | `actor-headshot-hero` | Headshot/video hero; credits first; special skills/dialects/representation | **PARTIAL** — ID and hero presentation render; headshot/video and canonical credits remain |
-| `director-filmography-serif` | Filmography/festivals/press first; spacious serif print design | **PARTIAL** — ID, serif/spacious print presentation render; filmography ordering remains |
+| `director-filmography-serif` | Filmography/festivals/press first; spacious serif print design | **PARTIAL** — Enabled-section filtering and filmography/festival/press ordering are ported; item media projection remains. |
 
 The separate Hired data bundle contains **15 video-résumé compositions**. All are absent from
 Builderforce; the generic `video` node and timeline do not load these scene/theme definitions.
@@ -829,8 +829,8 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-003 | Letter, Legal and A4 page sizes | **PORTED** | Revision persists the size; true-size preview, standalone HTML and PDF `@page` use it. |
 | RR-004 | Portrait and landscape orientation | **PORTED** | Revision persists orientation; preview dimensions and PDF `@page` match. |
 | RR-005 | One- and two-column/sidebar layouts | **PORTED** | Canonical renderer routes each descriptor's complete named sections into main/sidebar across preview, HTML and PDF. |
-| RR-006 | Page-break guides and page numbers | **MISSING** | True-size editor displays computed boundaries. |
-| RR-007 | Continuous and paged/spread view modes | **MISSING** | Toggle changes only editor presentation, not content. |
+| RR-006 | Page-break guides and page numbers | **PARTIAL** — True-size preview paints persisted page-height boundaries in paged/spread modes; computed page-number labels remain. | True-size editor displays computed boundaries. |
+| RR-007 | Continuous and paged/spread view modes | **PARTIAL** — Localized persisted toggles change preview presentation without mutating résumé content; true facing-page flow remains. | Toggle changes only editor presentation, not content. |
 | RR-008 | Zoom control bound to the document sheet | **PORTED** | Family persists 40–125% preview zoom; print dimensions remain physical page dimensions. |
 | RR-009 | Move blocks up/down | **MISSING** | Buttons and keyboard action update persisted order. |
 | RR-010 | Drag blocks from palette and reorder in flow | **MISSING** | Drop indicator and keyboard alternative are tested. |
@@ -847,7 +847,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-021 | Section layouts: timeline, grid, cards and list | **PORTED** | Canonical renderer consumes normalized per-section descriptor rules, including compact/grid columns, rather than a second template-ID switch. |
 | RR-022 | Date sorting and highlights/media flags | **PARTIAL** | Canonical output now carries validated `sortBy`, `showHighlights` and `showMedia` per section; structured entry sort/media rendering remains. |
 | RR-023 | Print/PDF from preview overlay | **PORTED** | Existing PDF action invokes the canonical résumé renderer, not Markdown print. |
-| RR-024 | Escape/close preview and responsive preview chrome | **MISSING** | Keyboard and 360px tests pass. |
+| RR-024 | Escape/close preview and responsive preview chrome | **PARTIAL** — Preview has a localized close control, Escape behavior and a 480px chrome breakpoint; an explicit 360px browser test remains. | Keyboard and 360px tests pass. |
 
 ### 8.4 Studio landing, template discovery and project chrome
 

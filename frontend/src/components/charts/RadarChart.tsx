@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Reusable radar / spider chart — the diagnostic's "profile at a glance" primitive
  * (no charting lib; hand-rolled SVG like DonutChart/GaugeChart). Plots N axes on a

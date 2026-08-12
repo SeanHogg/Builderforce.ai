@@ -150,4 +150,15 @@ describe('CanvasResumeEditor', () => {
     expect(onTailor.mock.calls[0]?.[0]).toContain('COMPLETE tailored JSON Resume document');
     expect(onTailor.mock.calls[0]?.[0]).toContain('"name": "Ada"');
   });
+
+  it('persists page presentation mode and closes preview with Escape', () => {
+    const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', idFactory: () => 'original' });
+    const family = deriveResume(original, 'Editable', { idFactory: () => 'derived' });
+    const onEdit = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Paged' }));
+    expect((onEdit.mock.calls.at(-1)?.[0]?.resumeFamily as CanvasResumeFamily).previewMode).toBe('paged');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('tab', { name: 'Edit' }).getAttribute('aria-selected')).toBe('true');
+  });
 });

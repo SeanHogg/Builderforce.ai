@@ -58,11 +58,11 @@ export default function NavigationFeaturesSettings() {
     <section style={{ background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>{t('title')}</h2>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-muted)', maxWidth: 640 }}>{t('description')}</p>
+          <h2 style={{ margin: 0, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{t('title')}</h2>
+          <p style={{ margin: '6px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', maxWidth: 640 }}>{t('description')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
             {t('selectedCount', { selected: selected.length, total: modules.length })}
           </span>
           <button type="button" className="btn-ghost" onClick={() => setSelected([...RECOMMENDED])}>{t('recommended')}</button>
@@ -86,29 +86,29 @@ export default function NavigationFeaturesSettings() {
               }}
             >
               <input type="checkbox" checked={checked} onChange={() => select(id)} aria-label={tn(group.labelKey)} style={{ marginTop: 3 }} />
-              <span style={{ fontSize: 18, lineHeight: 1.2 }}><NavIcon name={id} /></span>
+              <span style={{ fontSize: 'var(--font-size-lede)', lineHeight: 1.2 }}><NavIcon name={id} /></span>
               <span>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{tn(group.labelKey)}</span>
-                <span style={{ display: 'block', marginTop: 4, fontSize: 11, lineHeight: 1.45, color: 'var(--text-muted)' }}>{t(`descriptions.${id}`)}</span>
+                <span style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{tn(group.labelKey)}</span>
+                <span style={{ display: 'block', marginTop: 4, fontSize: 'var(--font-size-eyebrow)', lineHeight: 1.45, color: 'var(--text-muted)' }}>{t(`descriptions.${id}`)}</span>
               </span>
             </label>
           );
         })}
       </div>
-      {notice && <p role="status" style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{notice}</p>}
+      {notice && <p role="status" style={{ margin: '14px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{notice}</p>}
 
       {consumption && (
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{t('usageTitle')}</h3>
-              <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+              <h3 style={{ margin: 0, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>{t('usageTitle')}</h3>
+              <p style={{ margin: '5px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                 {t('usageDescription', { plan: tp(consumption.plan.effective) })}
               </p>
             </div>
             <Link
               href={`/pricing?features=${selected.join(',')}`}
-              style={{ fontSize: 12, fontWeight: 700, color: 'var(--coral-bright)', textDecoration: 'none' }}
+              style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--coral-bright)', textDecoration: 'none' }}
             >
               {t('comparePlans')} →
             </Link>

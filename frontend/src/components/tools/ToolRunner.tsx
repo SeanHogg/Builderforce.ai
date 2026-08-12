@@ -36,15 +36,15 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
-  padding: '9px 12px', fontSize: 14, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
+  padding: '9px 12px', fontSize: 'var(--font-size-body)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', width: '100%',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '10px 20px', fontSize: 14, fontWeight: 700, borderRadius: 'var(--radius-lg)', border: 'none',
+  padding: '10px 20px', fontSize: 'var(--font-size-body)', fontWeight: 700, borderRadius: 'var(--radius-lg)', border: 'none',
   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', cursor: 'pointer', textDecoration: 'none',
 };
 const btnSubtle: React.CSSProperties = {
-  padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)',
+  padding: '9px 16px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)',
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 

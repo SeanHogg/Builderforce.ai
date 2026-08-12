@@ -86,7 +86,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .title {

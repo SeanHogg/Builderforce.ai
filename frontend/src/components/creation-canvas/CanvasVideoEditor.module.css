@@ -2,18 +2,18 @@
 .preview { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--canvas-line); border-radius: var(--radius-md); display: grid; place-items: center; }
 .preview > img, .preview > video { position: absolute; width: 100%; height: 100%; object-fit: contain; }
 .preview > audio { display: none; }
-.preview > span { color: var(--canvas-muted); font-size: 10px; }
+.preview > span { color: var(--canvas-muted); font-size: var(--font-size-field-label); }
 .transport { position: absolute; inset: auto var(--space-2) var(--space-2); z-index: 2; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-md); background: color-mix(in srgb, var(--canvas-panel) 88%, transparent); backdrop-filter: blur(10px); }
 .transport button, .captureBar button, .captureBar label { min-height: 2rem; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); padding: 0 var(--space-2); font: inherit; cursor: pointer; }
-.transport time { font-variant-numeric: tabular-nums; font-size: 10px; white-space: nowrap; }
+.transport time { font-variant-numeric: tabular-nums; font-size: var(--font-size-field-label); white-space: nowrap; }
 .captureBar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .captureBar label { display: inline-flex; align-items: center; }
 .captureBar input[type='file'] { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
 .captureBar .recording { border-color: var(--danger-border); color: var(--danger-text); }
-.status { margin: 0; color: var(--canvas-muted); font-size: 10px; }
+.status { margin: 0; color: var(--canvas-muted); font-size: var(--font-size-field-label); }
 .publish { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--canvas-line); border-radius: var(--radius-md); background: var(--canvas-hover); }
 .publish header, .publish p { grid-column: 1 / -1; display: flex; justify-content: space-between; margin: 0; }
-.publish label { display: grid; gap: var(--space-1); color: var(--canvas-muted); font-size: 10px; }
+.publish label { display: grid; gap: var(--space-1); color: var(--canvas-muted); font-size: var(--font-size-field-label); }
 .publish textarea { min-height: 4.5rem; resize: vertical; }
 .publish input, .publish textarea, .publish select { width: 100%; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; }
 .publish button, .publish a { justify-self: start; min-height: 2rem; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; text-decoration: none; cursor: pointer; }
@@ -23,10 +23,10 @@
 .timeline section > div { display: flex; align-items: stretch; gap: var(--space-1); padding: var(--space-1); background: var(--canvas-hover); }
 .clip { position: relative; display: grid; grid-template-columns: minmax(7rem, 1fr) repeat(3, 4.5rem) auto; align-items: end; gap: var(--space-1); min-width: 25rem; padding: var(--space-2); border: 1px solid var(--canvas-accent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--canvas-accent) 12%, var(--canvas-panel)); }
 .clip b { align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clip label { display: grid; gap: 2px; color: var(--canvas-muted); font-size: 10px; }
+.clip label { display: grid; gap: 2px; color: var(--canvas-muted); font-size: var(--font-size-field-label); }
 .clip input[type='number'] { width: 100%; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); }
 .clip button { align-self: center; border: 0; background: transparent; color: var(--canvas-muted); cursor: pointer; }
-.emptyTrack { align-self: center; color: var(--canvas-muted); font-size: 10px; padding-inline: var(--space-2); }
+.emptyTrack { align-self: center; color: var(--canvas-muted); font-size: var(--font-size-field-label); padding-inline: var(--space-2); }
 @container (max-width: 700px) {
   .editor { min-width: 18rem; }
   .timeline section { grid-template-columns: 5rem minmax(20rem, 1fr); }

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Read-only star rating with an optional count. Shared across the talent card,
  * profile detail, and hires review UI so ratings render identically everywhere.

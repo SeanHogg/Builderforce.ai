@@ -34,6 +34,7 @@ export function projectPublicResumeFamily(value: unknown): Record<string, unknow
     watched: false,
     defaultTemplateId: family.defaultTemplateId,
     viewZoom: family.viewZoom,
+    previewMode: family.previewMode,
     originalRevisionId: selected.id,
     activeRevisionId: selected.id,
     masterRevisionId: selected.id,

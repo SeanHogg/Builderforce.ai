@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import { DocumentEditor } from './DocumentEditor';
@@ -75,6 +75,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const [sharing, setSharing] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importStage, setImportStage] = useState<ImportStage>('review');
+  const [excludedBulletSuggestions, setExcludedBulletSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!sharesOpen || !shareActions) return;
@@ -82,6 +83,17 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     shareActions.list().then((rows) => { if (live) setShares(rows); }).catch(() => {});
     return () => { live = false; };
   }, [shareActions, sharesOpen]);
+
+  useEffect(() => {
+    if (view !== 'preview') return;
+    const closePreview = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const current = family ? activeResumeRevision(family) : null;
+      setView(current?.kind === 'derived' ? 'edit' : 'compare');
+    };
+    window.addEventListener('keydown', closePreview);
+    return () => window.removeEventListener('keydown', closePreview);
+  }, [family, view]);
 
   const commit = (next: CanvasResumeFamily) => onEdit?.({
     ...resumeNodePatch(next),
@@ -156,6 +168,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const differences = original.document && active.document ? compareResumeDocuments(original.document, active.document).filter((difference) => difference.changed) : [];
   const ats = active.document && jobDescription.trim() ? analyzeResumeAgainstJob(active.document, jobDescription) : null;
   const bulletSuggestions = active.document ? suggestResumeBulletConsolidation(active.document) : [];
+  const selectedBulletSuggestions = bulletSuggestions.filter((suggestion) => !excludedBulletSuggestions.includes(suggestion.id));
   const page = resumePageDimensions(active.pageSize, active.orientation);
   const changePresentation = (patch: Parameters<typeof updateActiveResumePresentation>[1]) => commit(updateActiveResumePresentation(family, patch));
   const createVersion = () => {
@@ -218,6 +231,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         {(['portrait', 'landscape'] as const).map((orientation) => <option key={orientation} value={orientation}>{t(`orientation_${orientation}`)}</option>)}
       </select></label>
       <label><span>{t('zoom', { zoom: family.viewZoom })}</span><input aria-label={t('zoomControl')} type="range" min="40" max="125" step="5" value={family.viewZoom} disabled={!onEdit} onChange={(event) => commit(updateResumeFamilySettings(family, { viewZoom: Number(event.target.value) }))} /></label>
+      <div className={styles.resumePageModes} role="group" aria-label={t('pageViewMode')}>{(['continuous', 'paged', 'spread'] as const).map((mode) => <button key={mode} type="button" aria-pressed={family.previewMode === mode} disabled={!onEdit} onClick={() => commit(updateResumeFamilySettings(family, { previewMode: mode }))}>{t(`pageView_${mode}`)}</button>)}</div>
     </div>
     {galleryOpen && <section className={styles.resumeTemplateGallery} aria-label={t('templateGallery')}>
       {RESUME_TEMPLATES.map((item) => {
@@ -245,18 +259,19 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     </details>
     <details className={styles.resumeAtsPanel}>
       <summary>{t('consolidateBullets')}</summary>
-      {bulletSuggestions.length ? <div className={styles.resumeBulletSuggestions}>{bulletSuggestions.map((suggestion) => <article key={suggestion.id}><strong>{suggestion.bullet}</strong><small>{t('duplicateBulletsFound', { count: suggestion.duplicates.length })}</small>{suggestion.duplicates.map((duplicate) => <del key={duplicate}>{duplicate}</del>)}</article>)}</div> : <p className={styles.resumeEmptyAnalysis}>{t('noDuplicateBullets')}</p>}
-      <button type="button" disabled={!onEdit || active.kind === 'original' || !active.document || !bulletSuggestions.length} onClick={() => {
+      {bulletSuggestions.length ? <div className={styles.resumeBulletSuggestions}>{bulletSuggestions.map((suggestion) => <article key={suggestion.id}><label><input type="checkbox" checked={!excludedBulletSuggestions.includes(suggestion.id)} onChange={() => setExcludedBulletSuggestions((current) => current.includes(suggestion.id) ? current.filter((id) => id !== suggestion.id) : [...current, suggestion.id])} /><strong>{suggestion.bullet}</strong></label><small>{t('duplicateBulletsFound', { count: suggestion.duplicates.length })}</small>{suggestion.duplicates.map((duplicate, index) => <del key={`${suggestion.id}-${index}`}>{duplicate}</del>)}</article>)}</div> : <p className={styles.resumeEmptyAnalysis}>{t('noDuplicateBullets')}</p>}
+      <button type="button" disabled={!onEdit || active.kind === 'original' || !active.document || !selectedBulletSuggestions.length} onClick={() => {
         if (!active.document) return;
-        commit(updateActiveResume(family, { document: applyResumeBulletConsolidation(active.document, bulletSuggestions) }));
-      }}>{t('applyConsolidation', { count: bulletSuggestions.length })}</button>
+        commit(updateActiveResume(family, { document: applyResumeBulletConsolidation(active.document, selectedBulletSuggestions) }));
+        setExcludedBulletSuggestions([]);
+      }}>{t('applyConsolidation', { count: selectedBulletSuggestions.length })}</button>
     </details>
     {view === 'edit' && active.kind === 'derived' && <div className={styles.resumeEditStack}>
       {active.document && <ResumeStructuredEditor document={active.document} onChange={(document) => commit(updateActiveResume(family, { document }))} />}
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
       {active.structuredStale && <p role="status" className={styles.resumeStaleWarning}>{t('structuredStale')}</p>}
     </div>}
-    {view === 'preview' && <div className={styles.resumePreviewViewport}><style>{RESUME_DOCUMENT_STYLES}</style><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * family.viewZoom / 100}mm`, minHeight: `${page.height * family.viewZoom / 100}mm` }}><div style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${family.viewZoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: rendered.html }} /></div></div>}
+    {view === 'preview' && <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={() => setView(active.kind === 'derived' ? 'edit' : 'compare')} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={family.previewMode}><style>{RESUME_DOCUMENT_STYLES}</style><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * family.viewZoom / 100}mm`, minHeight: `${page.height * family.viewZoom / 100}mm`, '--resume-page-height': `${page.height * family.viewZoom / 100}mm` } as CSSProperties}><div style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${family.viewZoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: rendered.html }} /></div></div></div>}
     {view === 'compare' && <div className={styles.resumeCompareShell}>
       {active.id !== original.id && <aside className={styles.resumeDiffSummary}>
         <strong>{t('changesFromOriginal', { count: differences.length })}</strong>

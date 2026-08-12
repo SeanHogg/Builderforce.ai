@@ -1,10 +1,10 @@
 .page { width: min(1180px, 100%); margin: 0 auto; padding: clamp(28px, 5vw, 72px) 20px; }
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: clamp(24px, 5vw, 64px); align-items: center; }
-.hero h1 { margin: 8px 0 16px; font-size: clamp(42px, 7vw, 76px); line-height: .98; }
+.hero h1 { margin: 8px 0 16px; font-size: var(--font-size-hero); line-height: .98; }
 .hero > div:first-child > p:last-child { max-width: 650px; color: var(--text-secondary); font-size: var(--font-size-lede); }
 .eyebrow { color: var(--coral-bright); font-size: var(--font-size-eyebrow); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .offer { display: flex; flex-direction: column; gap: 14px; padding: 28px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--bg-elevated); }
-.offer strong { font-size: 30px; }
+.offer strong { font-size: var(--font-size-section); }
 .offer p { margin: 0; color: var(--text-muted); }
 .offer button, .offer a { padding: 12px 18px; border: 0; border-radius: var(--radius-md); background: var(--coral-bright); color: var(--text-on-accent); font-weight: 700; text-align: center; text-decoration: none; cursor: pointer; }
 .details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 56px; }

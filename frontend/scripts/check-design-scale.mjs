@@ -63,7 +63,14 @@ const srcDir = resolve(here, '../src');
 const BASELINE = {
   /** Not a budget any more — see COLOUR_EXEMPT. Every literal outside it fails. */
   literalHexFiles: 0,
-  offScaleRadii: 6,
+  /**
+   * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
+   * literal, so there is no scale step to name. Came down from 6 when the résumé
+   * editor landed on the board: `CreationCanvas.module.css` had accumulated 22
+   * unsnapped corners (7px, 9px, 99px, 3/4/5px — the right SIZES never named), all
+   * now on `--radius-sm/md/full`, and three `999px` pills became `--radius-full`.
+   */
+  offScaleRadii: 1,
   /**
    * Literal font sizes, i.e. a size typed as a number instead of named as a
    * role. This is the third ratchet and it exists because §2.3 spent this
@@ -76,8 +83,14 @@ const BASELINE = {
    * Baselined AFTER the public-surface migration (1,494 → 457 on the marketing
    * tree, of which 378 are the board's own stylesheet). The rest of the app is
    * the sweep this number now drives, exactly as 2,087 → 9 drove the radii.
+   *
+   * 3,929 → 3,869: the surfaces that had landed since the last baseline named their
+   * roles instead of typing a number — `EmbeddedCapabilities`, `RouteMarketing`,
+   * `ShoppingCart`, `ToolRunner`, `NavigationFeaturesSettings`,
+   * `StakeholderAlignmentPanel`, `RecommendationsLens`, `CanvasVideoEditor`, and the
+   * pricing / dashboard / phone modules.
    */
-  offScaleFontSizes: 3929,
+  offScaleFontSizes: 3869,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
@@ -156,6 +169,11 @@ const COLOUR_EXEMPT = [
   /^lib\/creativeGeometry\.ts$/,
   /^lib\/qrCode\.ts$/,
   /^components\/builder\/QrCode\.tsx$/,
+  // A résumé is PAPER. This composes the standalone `<!doctype html>` document that
+  // is printed, exported to PDF and served into a third-party embed, so none of our
+  // tokens are declared where it renders — and its page must stay white with black
+  // ink whether or not the person who exported it had dark mode on.
+  /^lib\/canvasResumeRenderer\.ts$/,
   // The RFP proposal is one of those documents; these two hold its palette and
   // the iframe it previews in.
   /^components\/rfp\/RfpContent\.tsx$/,
@@ -179,6 +197,11 @@ const COLOUR_EXEMPT = [
   // control that picks it (`<input type="color">`) accepts only `#rrggbb`.
   /^components\/creation-canvas\/authoredColors\.ts$/,
   /^components\/canvas\/canvasModel\.ts$/,
+  // The résumé TEMPLATE CATALOG. Every entry's `accent`/`paper`/`ink` is the
+  // document's own palette — persisted onto the résumé, editable by its author, and
+  // rendered into an exported PDF. "Executive taupe" is taupe because the template is
+  // taupe; it does not become something else when the viewer picks dark mode.
+  /^lib\/canvasResume\.ts$/,
 
   // ---- Consumers that never read a stylesheet ---------------------------
   // xterm renders to its own canvas from a plain JS theme object.
@@ -242,6 +265,9 @@ const FONT_SIZE_EXEMPT = [
   /^components\/blog\/BlogCover\.tsx$/,
   /^components\/builder\/DevicePreview\.tsx$/,
   /^components\/Terminal\.tsx$/,
+  // The résumé document's own type — see COLOUR_EXEMPT. Its sizes are print
+  // measurements inside a standalone HTML document, not roles in this product's ramp.
+  /^lib\/canvasResumeRenderer\.ts$/,
 ];
 
 /**
@@ -262,6 +288,10 @@ const RADIUS_EXEMPT = [
   // and leaving it there had broken the scaffold's card and button corners.
   /^lib\/vanillaDefaults\.ts$/,
   /^lib\/printDocument\.ts$/,
+  // The résumé document again — its corners are stated in `mm`, because the sheet it
+  // is laid out on is measured in millimetres. A `px` scale is not the right unit and
+  // `var(--radius-sm)` resolves to nothing where this HTML is opened.
+  /^lib\/canvasResumeRenderer\.ts$/,
 ];
 
 function collect(dir, out = []) {

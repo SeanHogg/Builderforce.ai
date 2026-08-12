@@ -80,14 +80,16 @@ function structuredTemplateHtml(markdown: string, template: ResumeTemplateDefini
     return (ai < 0 ? Number.MAX_SAFE_INTEGER : ai) - (bi < 0 ? Number.MAX_SAFE_INTEGER : bi);
   });
   const descriptor = normalizedResumeTemplate(template);
+  const enabled = new Set<string>(descriptor.enabledSections);
+  const visibleSections = sections.filter((section) => enabled.has(section.id));
   const wrap = (section: RenderedSection) => {
     const rule = descriptor.sections[section.id as keyof typeof descriptor.sections];
     return `<section data-section="${section.id}" data-layout="${rule?.layout ?? 'list'}" data-sort="${rule?.sortBy ?? 'manual'}" data-highlights="${rule?.showHighlights !== false}" data-media="${rule?.showMedia === true}" style="--section-columns:${rule?.columns ?? 2}">${section.html}</section>`;
   };
-  if (template.columns === 1) return `${intro}<div class="canvasResumeMain">${sections.map(wrap).join('')}</div>`;
+  if (template.columns === 1) return `${intro}<div class="canvasResumeMain">${visibleSections.map(wrap).join('')}</div>`;
   const sidebarIds = new Set<string>(template.sidebar);
-  const sidebar = sections.filter((section) => sidebarIds.has(section.id));
-  const main = sections.filter((section) => !sidebarIds.has(section.id));
+  const sidebar = visibleSections.filter((section) => sidebarIds.has(section.id));
+  const main = visibleSections.filter((section) => !sidebarIds.has(section.id));
   return `${intro}<div class="canvasResumeColumns"><main>${main.map(wrap).join('')}</main><aside>${sidebar.map(wrap).join('')}</aside></div>`;
 }
 

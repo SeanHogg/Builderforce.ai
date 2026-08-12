@@ -99,11 +99,11 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
     <section style={card} aria-labelledby="stakeholder-alignment-title">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h3 id="stakeholder-alignment-title" style={{ fontSize: 15, margin: 0 }}>Stakeholder alignment</h3>
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Agree priorities, collect sign-off, and surface conflicts before delivery drifts.</p>
+          <h3 id="stakeholder-alignment-title" style={{ fontSize: 'var(--font-size-body)', margin: 0 }}>Stakeholder alignment</h3>
+          <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>Agree priorities, collect sign-off, and surface conflicts before delivery drifts.</p>
         </div>
         {dashboard ? (
-          <div style={{ display: 'flex', gap: 10, fontSize: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, fontSize: 'var(--font-size-small)', flexWrap: 'wrap' }}>
             <span>{dashboard.approved} approved</span><span>{dashboard.pending} pending</span>
             <span style={{ color: dashboard.overdue ? 'var(--error)' : 'var(--text-muted)' }}>{dashboard.overdue} overdue</span>
             <span style={{ color: dashboard.activeConflicts ? 'var(--warning)' : 'var(--text-muted)' }}>{dashboard.activeConflicts} conflicts</span>
@@ -111,15 +111,15 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
         ) : null}
       </div>
 
-      {error ? <div role="alert" style={{ marginTop: 10, color: 'var(--error)', fontSize: 12 }}>{error}</div> : null}
-      {dashboard?.digest ? <p style={{ margin: '12px 0', fontSize: 12, color: 'var(--text-secondary)' }}>{dashboard.digest}</p> : null}
+      {error ? <div role="alert" style={{ marginTop: 10, color: 'var(--error)', fontSize: 'var(--font-size-small)' }}>{error}</div> : null}
+      {dashboard?.digest ? <p style={{ margin: '12px 0', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{dashboard.digest}</p> : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginTop: 14 }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>Stakeholder map</div>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', marginBottom: 8 }}>Stakeholder map</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {stakeholders.length === 0 ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No stakeholders configured.</span> : stakeholders.map((stakeholder) => (
-              <div key={stakeholder.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            {stakeholders.length === 0 ? <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>No stakeholders configured.</span> : stakeholders.map((stakeholder) => (
+              <div key={stakeholder.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-small)' }}>
                 <span style={{ flex: 1 }}><strong>{stakeholder.displayName}</strong> · {stakeholder.role === 'required_approver' ? 'Approver' : 'Informed'}{stakeholder.teamScope ? ` · ${stakeholder.teamScope}` : ''}</span>
                 <button type="button" disabled={busy} aria-label={`Remove ${stakeholder.displayName}`} onClick={() => void removeStakeholder(stakeholder.id)} style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
               </div>
@@ -137,10 +137,10 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
         </div>
 
         <div>
-          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8 }}>Alignment health</div>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', marginBottom: 8 }}>Alignment health</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {QUESTIONS.map((question) => (
-              <label key={question.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 12 }}>
+              <label key={question.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 'var(--font-size-small)' }}>
                 <span>{question.label}</span>
                 <select value={answers[question.key]} onChange={(event) => setAnswers((current) => ({ ...current, [question.key]: event.target.value as StakeholderAnswer }))} style={{ ...input, minWidth: 92, flex: 0 }}>
                   <option value="yes">Yes</option><option value="no">No</option><option value="unknown">Unknown</option>

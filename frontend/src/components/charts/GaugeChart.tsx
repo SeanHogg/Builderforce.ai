@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Reusable speedometer / gauge — the project's "score on a dial" primitive (no
  * charting lib; hand-rolled SVG like DonutChart). A 180° arc from min→max with a
