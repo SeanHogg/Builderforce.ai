@@ -147,6 +147,23 @@ export interface ChatCompletionRequest {
   /** Explicit interactive routing choice. Absent preserves legacy BYO-first,
    * fail-closed behavior for existing SDK and autonomous callers. */
   routingMode?: 'auto' | 'byo_pool';
+  /**
+   * Models the CALLER has already proved unusable for this piece of work, to be
+   * routed around. A soft de-selection, not a ban: they are removed from the
+   * candidate chain only while something else remains, because an empty chain is a
+   * worse outcome than retrying a weak model.
+   *
+   * The case this exists for: an agentic caller advertises tools, the auto-selected
+   * model answers in prose without calling any, and the caller retries. With no way
+   * to say "not that one", every retry re-selects the same model and the caller's only
+   * remaining move is to refuse to run — which is exactly what bricked a Canvas session
+   * on 2026-08-12, where the free pool's one auto model would not emit a tool call and
+   * the surface then told a free-plan visitor to "select a different model" they had no
+   * ability to select.
+   *
+   * Gateway-only: listed in STANDARD_BODY_FIELDS so it is stripped before vendor dispatch.
+   */
+  excludeModels?: string[];
   /** OPTIONAL vendor-neutral reasoning intent (the VS Code chat "Thinking" toggle).
    *  Omitted entirely when the toggle is off. The level names are `AgentThinkLevel`
    *  members, so `reasoningCapability` maps them to the CORRECT vendor param for the
@@ -824,7 +841,10 @@ export class LlmProxyService {
     // Pass seedHead as the cascade HEAD so a deliberately-seeded connected-BYO flagship
     // (or explicit pin) leads verbatim — otherwise a PREMIUM/ULTRA seed falls behind the
     // free pool and the connected account is tried last (or never). See composeFreeCappedCascade.
-    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint, seedHead);
+    const candidates = applyExcludedModels(
+      this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint, seedHead),
+      body.excludeModels,
+    );
     if (candidates.length === 0) {
       if (this.byoStrict) {
         // Nothing composed — but "every connected model is COOLED" is not the same as
@@ -2088,6 +2108,28 @@ export interface PickCloudModelOptions {
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
  *  estimate error, when checking whether a context window fits. */
 const CONTEXT_FIT_HEADROOM = 1.25;
+
+/**
+ * Route AROUND models the caller has already proved unusable for this work.
+ *
+ * A soft de-selection with one hard rule: never return an empty chain. "The only
+ * model I have left is one that just disappointed me" is still strictly better than
+ * "I refuse to run" — which is the failure this exists to prevent, where a free-plan
+ * Canvas session disabled its one auto-selected model and then told the visitor to
+ * select a different one they had no ability to select.
+ *
+ * Pure + unit-testable.
+ */
+export function applyExcludedModels(candidates: string[], exclude: unknown): string[] {
+  const excluded = new Set(
+    (Array.isArray(exclude) ? exclude : [])
+      .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+      .map((m) => canonicalModelId(m)),
+  );
+  if (excluded.size === 0) return candidates;
+  const kept = candidates.filter((model) => !excluded.has(canonicalModelId(model)));
+  return kept.length > 0 ? kept : candidates;
+}
 
 /**
  * Rough token estimate for a chat request (~4 chars/token over the serialized

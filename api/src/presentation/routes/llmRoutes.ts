@@ -1132,6 +1132,13 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   restrictGuestTools(body);
   delete bodyAny.model;         // let the FREE pool pick its cheapest cascade
   delete bodyAny.modelStrict;
+  // `excludeModels` DELIBERATELY survives. A guest cannot pin a model — the two
+  // deletes above are what make that true — so this is the only way an anonymous
+  // caller can say "that one just failed to execute my tools, give me another".
+  // Stripping it here would leave a guest permanently stuck on whichever model
+  // leads the free pool, which is exactly how a Canvas session bricked itself on
+  // 2026-08-12. `applyExcludedModels` never empties the chain, so the cheapest
+  // cascade is still guaranteed to produce a candidate.
   if (typeof body.max_tokens !== 'number' || body.max_tokens > GUEST_CHAT_LIMITS.maxTokensPerRequest) {
     body.max_tokens = GUEST_CHAT_LIMITS.maxTokensPerRequest;
   }

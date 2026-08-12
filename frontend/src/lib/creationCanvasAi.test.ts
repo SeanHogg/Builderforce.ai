@@ -103,7 +103,7 @@ describe('runCreationCanvasAi', () => {
     expect(mocks.streamChatCompletion.mock.calls[1][0].messages.some((message: { content: string }) => message.content.includes('prior response described or discussed'))).toBe(true);
   });
 
-  it('captures resolved model provenance and disables a model that twice refuses a Canvas command', async () => {
+  it('captures resolved model provenance for every iteration, and retires nothing it cannot replace', async () => {
     const completions: unknown[] = [];
     const disabled = vi.fn();
     mocks.streamChatCompletion
@@ -121,7 +121,11 @@ describe('runCreationCanvasAi', () => {
       { iteration: 1, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolsAdvertised: 4, toolCalls: [] },
       { iteration: 2, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolsAdvertised: 4, toolCalls: [] },
     ]);
-    expect(disabled).toHaveBeenCalledWith('weak/model');
+    // `weak/model` refused twice, but it was the ONLY model this turn ever reached, so
+    // retiring it would leave the session with nothing to route to — see the
+    // "does not disable the only model available" case. Retirement requires a
+    // replacement, which the tool-calling-fallback test covers.
+    expect(disabled).not.toHaveBeenCalled();
   });
 
   it('does not invoke an explicitly selected model disabled by this session', async () => {
@@ -132,12 +136,46 @@ describe('runCreationCanvasAi', () => {
     expect(mocks.streamChatCompletion).not.toHaveBeenCalled();
   });
 
-  it('does not let automatic routing reuse a model disabled by this session', async () => {
+  /**
+   * The session-bricking regression. Auto-routing used to REFUSE to run once it had
+   * landed on a model that would not execute a command, advising the user to "select a
+   * different model" — advice a free-plan visitor cannot act on, and which the guest
+   * gateway makes impossible anyway (it deletes any pin). Every later turn then died in
+   * ~30ms without reaching a model (measured 2026-08-12, ui 2026.7.212).
+   */
+  it('routes AROUND a previously-failed model instead of refusing to run', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Here is the plan.', toolCalls: [], resolvedModel: 'other/model', finishReason: 'stop' });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'What should I know about SEO?', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+      disabledModels: ['weak/model'],
+    });
+
+    expect(answer).toBe('Here is the plan.');
+    expect(mocks.streamChatCompletion.mock.calls[0][0].excludeModels).toEqual(['weak/model']);
+  });
+
+  it('still refuses an EXPLICIT pin the user can change themselves', async () => {
     await expect(runCreationCanvasAi({
       prompt: 'Create a document', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
-      disabledModels: ['weak/model'],
-    })).rejects.toThrow("Automatic model routing is disabled for this session");
+      model: 'weak/model', modelStrict: true, disabledModels: ['weak/model'],
+    })).rejects.toThrow("Model 'weak/model' is disabled for this session");
     expect(mocks.streamChatCompletion).not.toHaveBeenCalled();
+  });
+
+  it('does not disable the only model available — that ends the session, it does not protect it', async () => {
+    const disabled = vi.fn();
+    mocks.streamChatCompletion.mockResolvedValue({ text: 'I will create it.', toolCalls: [], resolvedModel: 'only/model', finishReason: 'stop' });
+
+    await runCreationCanvasAi({
+      prompt: 'Create a campaign plan on the canvas', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
+      onModelDisabled: disabled,
+    });
+
+    // No proven alternative existed, so nothing is recorded against the model and the
+    // NEXT turn still has a route.
+    expect(disabled).not.toHaveBeenCalled();
   });
 
   it('hands a stalled Canvas command back to a model that already demonstrated tool calling', async () => {

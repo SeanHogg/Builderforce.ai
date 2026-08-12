@@ -13701,6 +13701,7 @@
       "allProfessions": "Alle Berufe",
       "scenes": "Szenen",
       "storyboard": "Storyboard"
+      ,"copySuffix": "Kopie","sceneTitle": "Titel der Szene {number}","transition": "Übergang","transition_cut": "Schnitt","transition_fade": "Blende","transition_slide": "Schieben","transition_zoom": "Zoom","moveSceneEarlier": "{title} nach vorne","moveSceneLater": "{title} nach hinten","duplicateScene": "{title} duplizieren","deleteScene": "{title} löschen"
     },
     "comparison": {
       "promptTitle": "Gemeinsamer Vergleichsprompt",

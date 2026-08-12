@@ -303,6 +303,7 @@ const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
   'modelStrict', // strict-pin flag — gateway-only; controls failover behaviour
   'strict',      // public SDK alias for modelStrict — gateway-only; stripped here
   'routingMode', // interactive auto vs ordered-BYO-pool choice — gateway-only
+  'excludeModels', // caller-proved-unusable models to route around — gateway-only (see ChatCompletionRequest)
   '_builderforce', // gateway-internal passthrough envelope (per-call vendorTimeoutMs override); consumed in dispatch(), never sent upstream
   'reasoning',   // vendor-neutral client reasoning intent ({ level }); consumed in dispatch() via
                  // reasoningCapability and translated to the per-family vendor param. Listed here so

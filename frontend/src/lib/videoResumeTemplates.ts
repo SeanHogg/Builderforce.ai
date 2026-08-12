@@ -1,4 +1,4 @@
-export type VideoResumeScene = { id: string; duration: number; title: string; subtitle?: string; items?: string[] };
+export type VideoResumeScene = { id: string; duration: number; title: string; subtitle?: string; items?: string[]; transition?: 'cut' | 'fade' | 'slide' | 'zoom' };
 export type VideoResumeTemplate = { id: string; label: string; profession: string; duration: number; colors: [string, string, string, string]; scenes: VideoResumeScene[] };
 
 const standardScenes = (open: string, credentials: string, recent: string, bring: string, ask: string): VideoResumeScene[] => [

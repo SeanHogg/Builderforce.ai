@@ -29,6 +29,54 @@
  *    emitted anyway, so a relapse never compounds across turns.
  */
 
+/**
+ * Longest speaker label a model would plausibly echo. Bounded so this can never eat
+ * the opening of a real sentence that happens to contain a colon
+ * ("Step 1: install the CLI" is content, not a label).
+ */
+const MAX_SPEAKER_LABEL_CHARS = 40;
+const LEADING_SPEAKER_LABEL = /^[ \t]*([\p{L}\p{N} .'’&-]{1,40}):[ \t]+(?=\S)/u;
+
+/**
+ * Text the RUNTIME writes when a turn produces no answer.
+ *
+ * These sentences are ours, never a model's. They are excluded from the conversation
+ * wherever they appear — including sessions saved BEFORE they were correctly recorded
+ * as `system` + `error: true`, which is the only way an already-poisoned transcript
+ * recovers. A session that had collected three of them was feeding the next turn three
+ * worked examples of giving up, and a free model duly gave up (2026-08-12).
+ *
+ * Prefix-matched, because two of the three carry a tool error or a model id after the
+ * colon. Kept in ONE place so a new notice cannot be added without quarantining it —
+ * `creationCanvasAi` asserts against this list in its tests.
+ */
+export const RUNTIME_NOTICE_PREFIXES: readonly string[] = [
+  "I couldn't prepare any canvas changes from that request.",
+  "I couldn't prepare the requested canvas changes:",
+  'Automatic model routing is disabled for this session',
+  "Model '",
+];
+
+/**
+ * True when this message body is a runtime notice rather than something anyone said.
+ *
+ * Leading `Name:` labels are peeled first, because the notices that need quarantining
+ * most are the ones a model already copied back with a speaker prefix — `Brain: Brain:
+ * I couldn't prepare…` is the same notice, twice relabelled, and matching only the bare
+ * form would let exactly the poisoned message through. Peeling is safe here: a known
+ * notice prefix must still match afterwards, so ordinary prose is untouched.
+ */
+export function isRuntimeNotice(body: string): boolean {
+  let text = body.trim();
+  for (let pass = 0; pass < 8; pass += 1) {
+    if (RUNTIME_NOTICE_PREFIXES.some((prefix) => text.startsWith(prefix))) return true;
+    const match = LEADING_SPEAKER_LABEL.exec(text);
+    if (!match) return false;
+    text = text.slice(match[0].length);
+  }
+  return false;
+}
+
 /** The shape this module needs from a canvas timeline message. */
 export interface CanvasTranscriptMessage {
   messageRole: 'user' | 'assistant' | 'system';
@@ -60,6 +108,10 @@ export function canvasTranscriptForModel(
     if (message.metadata?.error === true) return [];
     const body = message.body.trim();
     if (!body) return [];
+    // The same exclusion by CONTENT, for transcripts saved before these were recorded
+    // as errors. Without it an already-poisoned session can never recover: it re-sends
+    // its own failure notices as example assistant turns on every subsequent request.
+    if (isRuntimeNotice(body)) return [];
     const author = message.metadata?.authoredBy;
     // Only a named specialist agent needs a label: several agents share the single
     // `assistant` role, so without one the model cannot tell them apart. The human
@@ -68,14 +120,6 @@ export function canvasTranscriptForModel(
     return [{ role: message.messageRole, content }];
   });
 }
-
-/**
- * Longest speaker label a model would plausibly echo. Bounded so this can never eat
- * the opening of a real sentence that happens to contain a colon
- * ("Step 1: install the CLI" is content, not a label).
- */
-const MAX_SPEAKER_LABEL_CHARS = 40;
-const LEADING_SPEAKER_LABEL = /^[ \t]*([\p{L}\p{N} .'’&-]{1,40}):[ \t]+(?=\S)/u;
 
 /**
  * Remove speaker labels the model copied onto the front of its own answer.

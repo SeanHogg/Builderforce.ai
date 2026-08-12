@@ -13701,6 +13701,7 @@
       "allProfessions": "Toutes les professions",
       "scenes": "scènes",
       "storyboard": "Storyboard"
+      ,"copySuffix": "copie","sceneTitle": "Titre de la scène {number}","transition": "Transition","transition_cut": "Coupe","transition_fade": "Fondu","transition_slide": "Glissement","transition_zoom": "Zoom","moveSceneEarlier": "Avancer {title}","moveSceneLater": "Reculer {title}","duplicateScene": "Dupliquer {title}","deleteScene": "Supprimer {title}"
     },
     "comparison": {
       "promptTitle": "Prompt de comparaison partagé",

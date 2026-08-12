@@ -13701,6 +13701,7 @@
       "allProfessions": "所有职业",
       "scenes": "场景",
       "storyboard": "分镜"
+      ,"copySuffix": "副本","sceneTitle": "场景 {number} 标题","transition": "转场","transition_cut": "切换","transition_fade": "淡化","transition_slide": "滑动","transition_zoom": "缩放","moveSceneEarlier": "将 {title} 前移","moveSceneLater": "将 {title} 后移","duplicateScene": "复制 {title}","deleteScene": "删除 {title}"
     },
     "comparison": {
       "promptTitle": "共享比较提示词",

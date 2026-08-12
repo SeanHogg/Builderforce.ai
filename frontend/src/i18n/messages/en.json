@@ -13702,6 +13702,7 @@
       "allProfessions": "All professions",
       "scenes": "scenes",
       "storyboard": "Storyboard"
+      ,"copySuffix": "copy","sceneTitle": "Scene {number} title","transition": "Transition","transition_cut": "Cut","transition_fade": "Fade","transition_slide": "Slide","transition_zoom": "Zoom","moveSceneEarlier": "Move {title} earlier","moveSceneLater": "Move {title} later","duplicateScene": "Duplicate {title}","deleteScene": "Delete {title}"
     },
     "comparison": {
       "promptTitle": "Shared comparison prompt",

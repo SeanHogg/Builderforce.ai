@@ -27,6 +27,24 @@ describe('canvasTranscriptForModel', () => {
     ])).toEqual([{ role: 'assistant', content: 'CFO: Margins are thin.' }]);
   });
 
+  /**
+   * A session saved BEFORE these were recorded as errors carries them as ordinary
+   * assistant turns. Without content-matching, such a transcript can never recover — it
+   * re-sends its own giving-up as an example answer on every request, which is exactly
+   * what kept the reported session failing after the error-flag fix shipped.
+   */
+  it('drops a runtime notice stored as an assistant turn by an older build', () => {
+    expect(canvasTranscriptForModel([
+      message({ messageRole: 'user', body: 'connect my email' }),
+      message({ messageRole: 'assistant', body: "Brain: I couldn't prepare any canvas changes from that request.", metadata: { authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' } } }),
+      message({ messageRole: 'assistant', body: "Automatic model routing is disabled for this session because it previously resolved to 'minimaxai/minimax-m3'." }),
+      message({ messageRole: 'assistant', body: 'I added the campaign plan.' }),
+    ])).toEqual([
+      { role: 'user', content: 'connect my email' },
+      { role: 'assistant', content: 'I added the campaign plan.' },
+    ]);
+  });
+
   it('drops runtime failure notices so a failed turn cannot become the next turn\'s template', () => {
     expect(canvasTranscriptForModel([
       message({ messageRole: 'user', body: 'connect my email' }),

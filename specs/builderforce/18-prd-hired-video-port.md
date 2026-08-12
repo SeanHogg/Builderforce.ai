@@ -899,7 +899,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | E-001 | Left tabs for Widgets, Design and Actions | — | **MISSING** |
 | E-002 | Collapsible/resizable left and right panels | — | **MISSING** |
 | E-003 | Runtime router by `mediaKind` | Kinds exist but most use a generic card | **DECLARED** |
-| E-004 | Scene/unit/page rail with select/add/duplicate/delete/reorder | Basic video timeline has clips, not Hired rails | **MISSING** |
+| E-004 | Scene/unit/page rail with select/add/duplicate/delete/reorder | Video-résumé storyboard rail exposes editable scene titles/durations/transitions plus accessible duplicate/delete/reorder actions; other runtimes remain | **PARTIAL** |
 | E-005 | Central stage with runtime aspect ratio | Basic video preview only | **PARTIAL** |
 | E-006 | Select widget by click or layers panel | — | **MISSING** |
 | E-007 | Multi-selection/marquee | Canvas selects multiple top-level objects, not runtime widgets | **PARTIAL** |
@@ -999,7 +999,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | V-006 | Live composited preview and scrubber | Basic composition supported | **PORTED** |
 | V-007 | NLE drag/reorder/ripple editing | Canvas video tracks expose accessible earlier/later actions that reorder inside a track and ripple persisted start times; direct pointer drag remains | **PARTIAL** |
 | V-008 | Split audio/video at playhead | Canvas split action divides the active source window at the absolute playhead, preserving source/track/volume and advancing the right clip trim offset | **PORTED** |
-| V-009 | Multiple scenes and scene transitions | — | **MISSING** |
+| V-009 | Multiple scenes and scene transitions | Persisted storyboard supports multiple scenes, editable timing/title, duplication/deletion/reorder and cut/fade/slide/zoom transition selection | **PORTED** |
 | V-010 | Clip/window crop and positioned overlays | — | **MISSING** |
 | V-011 | Multicam/layout presets | — | **MISSING** |
 | V-012 | Motion presets and scene effects | — | **MISSING** |
@@ -1011,7 +1011,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | V-018 | H.265, ProRes, DNxHD and VP9 profiles | — | **MISSING** |
 | V-019 | Podcast MP3/M4A/Opus/WAV/video profiles | Podcast kind is a generic creative card | **DECLARED** |
 | V-020 | Voice MP3/WAV/Opus profiles | Voice is a waveform placeholder | **DECLARED** |
-| V-021 | YouTube publish | — | **MISSING** |
+| V-021 | YouTube publish | Rendered Canvas video loads authenticated YouTube connections, supports title/description/privacy, OAuth connection, upload, persisted video ID/URL and linked playback | **PORTED** |
 | V-022 | LinkedIn publish | — | **MISSING** |
 | V-023 | Profile publish/public playback | — | **MISSING** |
 | V-024 | RSS/Apple Podcasts/Spotify destinations | — | **MISSING** |

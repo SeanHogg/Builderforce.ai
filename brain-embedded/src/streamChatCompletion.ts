@@ -142,6 +142,17 @@ export interface StreamChatOptions {
   /** `auto` lets the gateway choose across every entitled route; `byo_pool`
    * constrains the turn to the tenant's ordered connected-account cascade. */
   routingMode?: 'auto' | 'byo_pool';
+  /**
+   * Models the caller has already proved unusable for this piece of work — emitted
+   * as the body's `excludeModels` so the gateway routes AROUND them.
+   *
+   * A hint, never a veto: the gateway drops them from the cascade only while another
+   * candidate remains, so this can never turn "a weak answer" into "no answer". Only
+   * meaningful alongside auto-routing; with an explicit {@link StreamChatOptions.model}
+   * the caller has already made the choice. Omitted when empty, so a request without
+   * one stays byte-identical to a pre-feature request.
+   */
+  excludeModels?: string[];
   temperature?: number;
   maxTokens?: number;
   /**
@@ -294,6 +305,7 @@ export async function streamChatCompletion(
   if (model) body.model = model;
   if (model && opts.modelStrict) body.strict = true;
   if (opts.routingMode) body.routingMode = opts.routingMode;
+  if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';

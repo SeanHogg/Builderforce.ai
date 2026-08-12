@@ -325,9 +325,19 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   if (options.model && options.disabledModels?.includes(options.model)) {
     throw new Error(`Model '${options.model}' is disabled for this session because it did not execute an earlier Canvas command.`);
   }
-  if (!options.model && options.disabledModels?.length) {
-    throw new Error(`Automatic model routing is disabled for this session because it previously resolved to '${options.disabledModels[options.disabledModels.length - 1]}', which did not execute a Canvas command. Select a different model to continue.`);
-  }
+  // AUTOMATIC ROUTING IS NEVER REFUSED.
+  //
+  // This used to throw when auto-select had previously landed on a model that would
+  // not execute a command, telling the user to "select a different model". On the free
+  // plan there IS no model picker, and on a guest board the gateway deletes any pin the
+  // client sends — so the advice named an action the user could not take, and every
+  // later turn died in 30ms without reaching a model at all. One weak turn permanently
+  // ended the session (measured 2026-08-12, ui 2026.7.212).
+  //
+  // The list is a ROUTING HINT now, not a veto: it rides the request as `excludeModels`,
+  // which the gateway honours only while another candidate remains. Worst case the same
+  // model answers again — strictly better than refusing to answer at all.
+  const excludeModels = options.model ? [] : (options.disabledModels ?? []);
   if (options.persistence === 'local' && !(await ensureGuestToken())) {
     throw new GuestAiUnavailableError();
   }
@@ -448,12 +458,23 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    * Returns false when no proven model is left, which is the caller's signal to stop.
    */
   const switchToProvenModel = (failedModel: string | null | undefined, directive: string): boolean => {
+    const alreadyFailed = failedModel ? new Set([...commandFailedModels, failedModel]) : commandFailedModels;
+    const fallback = [...toolCallingModels].reverse().find((model) => !alreadyFailed.has(model));
+    if (!fallback || (fallback === activeModel && activeModelStrict === true)) {
+      // NOTHING TO SWITCH TO. Do NOT record the failure in that case: the record's
+      // only purpose is to route around the model on a later turn, and a session that
+      // has no alternative gains nothing from it while paying the full price — the
+      // list is session-scoped, so one weak turn used to end the session outright.
+      // Release the pin instead, so the next iteration asks the gateway to choose
+      // again rather than re-pinning the model that just failed.
+      activeModel = options.model;
+      activeModelStrict = options.modelStrict;
+      return false;
+    }
     if (failedModel) {
       commandFailedModels.add(failedModel);
       options.onModelDisabled?.(failedModel);
     }
-    const fallback = [...toolCallingModels].reverse().find((model) => !commandFailedModels.has(model));
-    if (!fallback || (fallback === activeModel && activeModelStrict === true)) return false;
     activeModel = fallback;
     activeModelStrict = true;
     imperativeMutationRecoveryUsed = false;
@@ -497,6 +518,13 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       model: activeModel,
       modelStrict: activeModelStrict,
       routingMode: options.routingMode,
+      // Models this session (or this turn) already proved will not execute a Canvas
+      // command. Only meaningful while UNPINNED — with a pin the caller has made the
+      // choice — and the gateway ignores it rather than emptying the cascade, so this
+      // can steer routing without ever refusing to answer.
+      ...(!activeModel && (excludeModels.length || commandFailedModels.size)
+        ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
+        : {}),
       metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
     options.onCompletion?.({
