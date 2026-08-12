@@ -1,3 +1,70 @@
+## RESOLVED 2026-08-12 - The Canvas advertised 24 tools, the gateway allowed 12, and the model answered by copying its own transcript
+
+Reported as "the Canvas is not executing the LLM executions". Three turns on the public landing
+canvas (ui 2026.7.210 / api 2026.7.235), 27 tools advertised, **zero tool calls**, every turn
+answering "I couldn't prepare any canvas changes from that request." Four independent defects, each
+of which alone produced a plausible-looking failure.
+
+**1 - Guest tool drift: 24 advertised, 12 dispatched.** The browser decides what to advertise; the
+gateway (`api/application/guest/guestCanvasTools`) independently re-filters for an anonymous visitor.
+Two hand-maintained lists had drifted apart. `canvas_add_inbox` - the tool for the user's literal
+request, "connect my email" - was advertised and then deleted before dispatch, so the model planned
+around a capability the request never carried. Five stripped tools were guest-SAFE and simply missing
+from the allowlist, among them `canvas_read_object`, which the canvas system prompt names and orders
+the model to call. Both sides now read ONE contract
+(`packages/creation-canvas-contract/src/canvasTools.ts`): 17 guest-safe, 7 account-required. The
+client filters what it ADVERTISES from it, the gateway filters what it ACCEPTS from it (still the
+security boundary - the client is never trusted), and `api/scripts/check-canvas-tool-contract.mjs`
+fails the build if a canvas tool is classified in neither set. Wired into `api npm test`.
+
+**2 - The transcript taught the model to parrot itself.** Every timeline message was flattened for
+the model with its author's display name prefixed into the content (`You: ...`, `Brain: ...`). The
+`user` and `assistant` ROLES already carry that fact, so the label was pure redundancy - and a free
+model handed a transcript whose every assistant line began `Brain:` learned that an answer IS that
+format. The measured reply was 15 completion tokens: the *previous* reply, verbatim, with `Brain: `
+in front. Stored and relabelled, the next turn produced `Brain: Brain: ...` - the compounding prefix
+is the signature. `frontend/src/lib/canvasTranscript.ts` now labels ONLY a named specialist agent
+(the one case the `assistant` role cannot disambiguate), and `stripSpeakerLabel` removes a copied
+label from the answer so a relapse cannot compound.
+
+**3 - A runtime failure notice was stored as an assistant turn.** "I couldn't prepare any canvas
+changes from that request." is written by the runtime, not said by Brain. Appending it to the
+transcript put a worked example of failing into the context of every later turn - and taught it to
+Evermind, since it cleared the 40-character learning threshold. `runCreationCanvasAi` now reports
+`onUnanswered`, the canvas records those turns as `system` + `error: true`, and
+`canvasTranscriptForModel` excludes error messages entirely. The failure paths no longer route
+through `finish()`, so a notice is never learned.
+
+**4 - Nothing retried a degenerate answer, and the intent classifier missed the request.** The
+no-tool-call recovery only armed when `requestsCanvasMutation` matched, and its clause-boundary
+regex could not see the verb in "I **want to** connect my email and **run** a marketing campaign" -
+so the turn ended after ONE model round with no retry. Two fixes: the classifier now recognises
+desire framing (`I want to`, `can you`, `let's`, `help me` + an action verb, still verb-anchored so
+"I want a coffee" stays conversation), and a new degenerate-answer guard fires on an empty OR echoed
+reply regardless of intent - retry once, then disable the model and continue on one that already
+emitted valid tool calls this turn. The two give-up paths now share `switchToProvenModel` instead of
+duplicating the disable/fallback ladder.
+
+**Plus: an anonymous canvas is told what it cannot do.** The system prompt describes the whole
+product, including tenant-only tools. A guest board now carries a block naming what needs an account
+and requiring BOTH halves of the answer - say it needs a free account, AND build the part that can be
+built now. "Connect my email and run a campaign" produces the campaign plan, not a bare refusal.
+
+**Found and fixed in the same pass (unrelated red build state).** `CreationCanvas.tsx` imported
+neither `resumeFamilyFromNode` nor `activeResumeRevision` while calling both - the frontend did not
+typecheck at HEAD. `useComposerSpace.test.tsx` asserted synchronously after a resize that is now
+delivered on an animation frame. `creationObjectRegistry.test.ts` matched a one-element array against
+a two-revision resume family (`toMatchObject` compares array LENGTH), asserting the opposite of its
+intent. `newsletterApi.ts` used a raw `fetch`, the only site failing `check:api-transport`. Inbox's
+`.shell` sized itself from `--app-header-height`, a token declared nowhere, so only its 58px fallback
+ever rendered - now the canonical `--shell-topbar-height`.
+
+Tests: 277 creation-canvas + 35 canvas-AI/transcript + 8 guest-tool, all green; `check-prompt-tools`,
+`check-canvas-tools`, `check-roadmap`, `check-api-transport`, `check-destinations`,
+`check-edge-runtime` green; both packages typecheck.
+
+---
+
 ## RESOLVED 2026-08-10 - /dashboard is a page in the panel, not a board inside a drawer
 
 `/dashboard` built `WorkspaceCanvasPanel[]` with absolute x/y coordinates and rendered a React Flow

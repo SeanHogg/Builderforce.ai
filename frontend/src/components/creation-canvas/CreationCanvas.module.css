@@ -683,6 +683,14 @@
 .resumeSharePanel button { border:1px solid var(--border); border-radius:7px; background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
 .resumeSharePanel ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .resumeSharePanel li { display:flex; justify-content:space-between; gap:10px; align-items:center; color:var(--text-muted); font-size:11px; }
+.resumeImportReview { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+.resumeImportReview > div { display:grid; gap:4px; min-width:0; }
+.resumeImportReview > div:last-child { display:flex; flex-wrap:wrap; gap:6px; }
+.resumeImportReview strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.resumeImportReview small { color:var(--text-muted); font-size:10px; }
+.resumeImportReview progress { width:100%; accent-color:#7c3aed; }
+.resumeImportReview button { border:1px solid var(--border); border-radius:7px; padding:7px 9px; background:var(--surface); color:inherit; cursor:pointer; }
+.resumeFileIcon { display:grid; place-items:center; width:42px; height:42px; border-radius:8px; background:rgba(124,58,237,.12); color:#7c3aed; font-size:9px; font-weight:850; }
 .resumeEmpty { align-items:flex-start; padding:22px; border:1px dashed var(--border); border-radius:12px; background:var(--surface-subtle); }
 .resumeEmpty p { margin:0; color:var(--text-muted); }
 .resumeEmpty button,
@@ -755,6 +763,10 @@
 .resumeAtsPanel textarea { min-height:130px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:inherit; padding:8px; resize:vertical; font:inherit; }
 .resumeAtsPanel > button { margin:0 10px 10px; border:1px solid #7c3aed; border-radius:7px; background:#7c3aed; color:#fff; padding:8px 11px; cursor:pointer; }
 .resumeAtsPanel > button:disabled { cursor:not-allowed; opacity:.45; }
+.resumeBulletSuggestions { display:grid; gap:7px; padding:0 10px 10px; }
+.resumeBulletSuggestions article { display:grid; gap:3px; padding:8px; border:1px solid var(--border); border-radius:7px; }
+.resumeBulletSuggestions small,.resumeBulletSuggestions del,.resumeEmptyAnalysis { color:var(--text-muted); font-size:10px; }
+.resumeEmptyAnalysis { margin:0; padding:0 10px 10px; }
 .resumeAtsResults { display:grid; gap:7px; padding:0 10px 10px; }
 .resumeAtsResults > strong { color:#7c3aed; font-size:18px; }
 .resumeAtsResults > div { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }

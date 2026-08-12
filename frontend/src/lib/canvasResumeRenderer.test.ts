@@ -34,4 +34,14 @@ describe('canonical Canvas resume renderer', () => {
     const orderedHtml = renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(ordered) })!.html;
     expect(orderedHtml.indexOf('data-section="education"')).toBeLessThan(orderedHtml.indexOf('data-section="work"'));
   });
+
+  it('carries Hired hero and section descriptor flags into canonical output', () => {
+    const family = createResumeFamily({ title: 'Ada', markdown: '# Ada\n\n## Projects\n\n### Film\n\n- Director', idFactory: () => 'source' });
+    const selected = { ...family, revisions: family.revisions.map((revision) => ({ ...revision, templateId: 'actor-headshot-hero' as const })) };
+    const html = renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(selected) })!.html;
+    expect(html).toContain('data-show-avatar="true"');
+    expect(html).toContain('data-show-video="true"');
+    expect(html).toContain('data-section="projects" data-layout="list"');
+    expect(html).toContain('data-media="true"');
+  });
 });

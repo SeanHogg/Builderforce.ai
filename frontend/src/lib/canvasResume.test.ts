@@ -12,6 +12,7 @@ import {
   restoreResumeAsNew,
   renderResumeMarkdown,
   resumeDocumentFromJson,
+  resumeTemplateFromDescriptor,
   selectResumeRevision,
   updateActiveResume,
   updateActiveResumePresentation,
@@ -24,6 +25,17 @@ const ids = (...values: string[]) => {
 };
 
 describe('Canvas resume lineage', () => {
+  it('validates and migrates Hired v1.0-v1.2 template descriptors', () => {
+    const descriptor = resumeTemplateFromDescriptor({
+      id: 'actor-headshot-hero', name: 'Actor', version: '1.2', documentMode: 'hero',
+      theme: { fontFamily: 'serif', headingStyle: 'caps', density: 'compact' },
+      layout: { columns: 1 }, hero: { enabled: true, layout: 'stacked', showAvatar: true, showContactButtons: false, showSummary: true, showVideo: false },
+      sections: [{ key: 'projects', enabled: true, layout: 'cards', columns: 2, showHighlights: true, showMedia: true, sortBy: 'date_desc' }],
+    });
+    expect(descriptor).toMatchObject({ id: 'actor-headshot-hero', mode: 'hero', hero: { layout: 'stacked', showContactButtons: false }, sections: { projects: { layout: 'cards', columns: 2, showMedia: true } } });
+    expect(resumeTemplateFromDescriptor({ id: 'actor-headshot-hero', version: '9.0' })).toBeNull();
+    expect(resumeTemplateFromDescriptor({ id: 'unknown', version: '1.2' })).toBeNull();
+  });
   it('keeps the uploaded original immutable while a derivative changes', () => {
     const original = createResumeFamily({ title: 'Uploaded.pdf', markdown: '# Original', now: '2026-08-11T00:00:00Z', idFactory: ids('original') });
     const derived = deriveResume(original, 'Product résumé', { now: '2026-08-11T01:00:00Z', idFactory: ids('derived') });

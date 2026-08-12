@@ -7,6 +7,7 @@ import { DocumentEditor } from './DocumentEditor';
 import { ResumeStructuredEditor } from './ResumeStructuredEditor';
 import styles from './CreationCanvas.module.css';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
+import { importResumeSource } from '@/lib/resumeImportApi';
 import {
   RESUME_TEMPLATES,
   activeResumeRevision,
@@ -35,9 +36,25 @@ import {
 import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
 import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
 import { analyzeResumeAgainstJob, resumeTailorPrompt } from '@/lib/canvasResumeAts';
+import { applyResumeBulletConsolidation, suggestResumeBulletConsolidation } from '@/lib/canvasResumeConsolidate';
 import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
 type ResumeView = 'edit' | 'preview' | 'compare';
+type ImportStage = 'review' | 'uploading' | 'extracting' | 'ocr' | 'structuring' | 'ready';
+
+function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: ImportStage; onImport: () => void; onCancel: () => void }) {
+  const t = useTranslations('creationCanvas.resumeEditor');
+  const busy = stage !== 'review' && stage !== 'ready';
+  const progress = stage === 'uploading' ? 25 : stage === 'extracting' ? 50 : stage === 'ocr' || stage === 'structuring' ? 80 : stage === 'ready' ? 100 : 0;
+  const extension = file.name.split('.').pop()?.toUpperCase() || t('fileTypeUnknown');
+  return <section className={styles.resumeImportReview} aria-live="polite">
+    <span className={styles.resumeFileIcon} aria-hidden>{extension.slice(0, 4)}</span>
+    <div><strong>{file.name}</strong><small>{extension} · {Math.max(1, Math.ceil(file.size / 1024)).toLocaleString()} KB</small>
+      {busy && <><progress max="100" value={progress} /><small>{t(`importStage_${stage}`)}</small></>}
+    </div>
+    <div><button type="button" disabled={busy} onClick={onImport}>{t('confirmImport')}</button><button type="button" disabled={busy} onClick={onCancel}>{t('cancelImport')}</button></div>
+  </section>;
+}
 
 type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
 
@@ -56,6 +73,8 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const [sharesOpen, setSharesOpen] = useState(false);
   const [shares, setShares] = useState<CanvasResumeShare[]>([]);
   const [sharing, setSharing] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [importStage, setImportStage] = useState<ImportStage>('review');
 
   useEffect(() => {
     if (!sharesOpen || !shareActions) return;
@@ -68,47 +87,64 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     ...resumeNodePatch(next),
     status: activeResumeRevision(next).kind === 'original' ? t('statusOriginal') : t('statusDerived'),
   });
-  const importResume = async (event: ChangeEvent<HTMLInputElement>) => {
+  const chooseResume = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !onEdit) return;
+    setPendingFile(file);
+    setImportStage('review');
     setError('');
+  };
+  const importResume = async () => {
+    const file = pendingFile;
+    if (!file || !onEdit) return;
     try {
-      let markdown: string | null = null;
-      let document: CanvasResumeDocument | null = null;
-      if (/\.json$/i.test(file.name)) {
-        document = resumeDocumentFromJson(JSON.parse(await file.text()));
-        markdown = document ? renderResumeMarkdown(document) : null;
-      } else {
+      setImportStage('uploading');
+      let extractedText = '';
+      if (!/\.(png|jpe?g|webp|doc|json)$/i.test(file.name)) {
+        setImportStage('extracting');
         const imported = await importCanvasFile(file, translateImport);
         const first = imported.objects[0]?.data;
         const body = first?.markdown ?? first?.content;
-        markdown = typeof body === 'string' && body.trim() ? body : null;
-        if (markdown) document = resumeDocumentFromMarkdown(markdown);
+        extractedText = typeof body === 'string' ? body.trim() : '';
       }
-      if (!markdown) { setError(t('importUnreadable')); return; }
+      const needsOcr = !extractedText && /\.(pdf|doc|docx|png|jpe?g|webp)$/i.test(file.name);
+      setImportStage(needsOcr ? 'ocr' : 'structuring');
+      const parsed = await importResumeSource(file, extractedText);
+      const document = resumeDocumentFromJson(parsed.document);
+      const markdown = document ? renderResumeMarkdown(document) : '';
+      if (!document || !markdown.trim()) throw new Error('invalid structured resume');
       const embeddedName = typeof document?.basics?.name === 'string' ? document.basics.name.trim() : '';
       const title = embeddedName || file.name.replace(/\.[^.]+$/, '');
+      const sourceFile = { key: parsed.sourceFileKey, name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size };
       if (family) {
-        if (!window.confirm(t('confirmImportVersion', { file: file.name, title: activeResumeRevision(family).title }))) return;
         let next = deriveResume(family, t('importedVersion', { title }), { fromRevisionId: family.activeRevisionId });
         next = updateActiveResume(next, document ? { document } : { markdown, structuredStale: !!activeResumeRevision(next).document });
+        next = { ...next, revisions: next.revisions.map((revision) => revision.id === next.activeRevisionId ? { ...revision, sourceFile } : revision) };
         onEdit({ ...resumeNodePatch(next), fileName: file.name, mimeType: file.type, fileSize: file.size, status: t('statusDerived') });
       } else {
-        onEdit({ ...resumeNodePatch(createResumeFamily({ title, markdown, ...(document ? { document } : {}) })), fileName: file.name, mimeType: file.type, fileSize: file.size, status: t('statusOriginal') });
+        onEdit({ ...resumeNodePatch(createResumeFamily({ title, markdown, document, sourceFile })), fileName: file.name, mimeType: file.type, fileSize: file.size, status: t('statusOriginal') });
       }
+      setImportStage('ready');
+      setPendingFile(null);
       setView('preview');
     } catch {
-      setError(t('importUnreadable'));
+      const errorKey = /\.pdf$/i.test(file.name) ? 'importErrorPdf'
+        : /\.docx?$/i.test(file.name) ? 'importErrorWord'
+          : /\.(png|jpe?g|webp)$/i.test(file.name) ? 'importErrorScan'
+            : /\.json$/i.test(file.name) ? 'importErrorJson' : 'importUnreadable';
+      setError(t(errorKey));
+      setImportStage('review');
     }
   };
 
   if (!family) return <div className={`${styles.resumeEmpty} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
     <strong>{t('emptyTitle')}</strong>
     <p>{t('emptyBody')}</p>
-    <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json" onChange={importResume} />
+    <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp" onChange={chooseResume} />
     <button type="button" disabled={!onEdit} onClick={() => input.current?.click()}>{t('upload')}</button>
     <small>{t('acceptedFormats')}</small>
+    {pendingFile && <ImportReview file={pendingFile} stage={importStage} onImport={() => void importResume()} onCancel={() => setPendingFile(null)} />}
     {error && <p role="alert" className={styles.resumeError}>{error}</p>}
   </div>;
 
@@ -119,6 +155,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const originalRendered = renderCanvasResumeRevision(original);
   const differences = original.document && active.document ? compareResumeDocuments(original.document, active.document).filter((difference) => difference.changed) : [];
   const ats = active.document && jobDescription.trim() ? analyzeResumeAgainstJob(active.document, jobDescription) : null;
+  const bulletSuggestions = active.document ? suggestResumeBulletConsolidation(active.document) : [];
   const page = resumePageDimensions(active.pageSize, active.orientation);
   const changePresentation = (patch: Parameters<typeof updateActiveResumePresentation>[1]) => commit(updateActiveResumePresentation(family, patch));
   const createVersion = () => {
@@ -129,7 +166,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   };
 
   return <div className={`${styles.resumeStudio} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
-    <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json" onChange={importResume} />
+    <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp" onChange={chooseResume} />
     <div className={styles.resumeSourceBar}>
       <label><span>{t('version')}</span><select value={active.id} onChange={(event) => commit(selectResumeRevision(family, event.target.value))}>
         {family.revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.kind === 'original' ? t('originalPrefix', { title: revision.title }) : revision.title}{revision.id === family.masterRevisionId ? ` · ${t('master')}` : ''}</option>)}
@@ -143,6 +180,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       <button type="button" disabled={!onEdit} aria-pressed={family.watched} onClick={() => commit(updateResumeFamilySettings(family, { watched: !family.watched }))}>{family.watched ? t('unwatch') : t('watch')}</button>
       <button type="button" disabled={!shareActions || family.privacy !== 'public'} aria-expanded={sharesOpen} onClick={() => setSharesOpen((open) => !open)}>{t('shareResume')}</button>
     </div>
+    {pendingFile && <ImportReview file={pendingFile} stage={importStage} onImport={() => void importResume()} onCancel={() => setPendingFile(null)} />}
     {sharesOpen && <section className={styles.resumeSharePanel}>
       <p>{t('sharePublicOnly')}</p>
       <div><button type="button" disabled={sharing} onClick={() => { setSharing(true); void shareActions?.create('view').finally(() => setSharing(false)); }}>{t('copyPublicLink')}</button>
@@ -204,6 +242,14 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         if (!active.document || !ats) return;
         onTailor?.(resumeTailorPrompt(active, jobDescription, ats));
       }}>{t('askRecruiterToTailor')}</button>
+    </details>
+    <details className={styles.resumeAtsPanel}>
+      <summary>{t('consolidateBullets')}</summary>
+      {bulletSuggestions.length ? <div className={styles.resumeBulletSuggestions}>{bulletSuggestions.map((suggestion) => <article key={suggestion.id}><strong>{suggestion.bullet}</strong><small>{t('duplicateBulletsFound', { count: suggestion.duplicates.length })}</small>{suggestion.duplicates.map((duplicate) => <del key={duplicate}>{duplicate}</del>)}</article>)}</div> : <p className={styles.resumeEmptyAnalysis}>{t('noDuplicateBullets')}</p>}
+      <button type="button" disabled={!onEdit || active.kind === 'original' || !active.document || !bulletSuggestions.length} onClick={() => {
+        if (!active.document) return;
+        commit(updateActiveResume(family, { document: applyResumeBulletConsolidation(active.document, bulletSuggestions) }));
+      }}>{t('applyConsolidation', { count: bulletSuggestions.length })}</button>
     </details>
     {view === 'edit' && active.kind === 'derived' && <div className={styles.resumeEditStack}>
       {active.document && <ResumeStructuredEditor document={active.document} onChange={(document) => commit(updateActiveResume(family, { document }))} />}

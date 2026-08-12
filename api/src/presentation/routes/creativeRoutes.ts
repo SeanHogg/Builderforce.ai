@@ -151,28 +151,38 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
   /** Parse text, Office/PDF files, and photographed scans into canonical JSON Resume. */
   router.post('/resume/import', async (c) => {
     const form = await c.req.formData();
-    const file = form.get('file');
+    const file = form.get('file') as unknown;
     const extractedText = String(form.get('text') ?? '').trim().slice(0, 80_000);
-    if (!(file instanceof File)) return c.json({ error: 'A resume file is required' }, 400);
-    const extension = (file.name.split('.').pop() ?? '').toLowerCase();
+    if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || !('name' in file)) return c.json({ error: 'A resume file is required' }, 400);
+    const resumeFile = file as File;
+    const extension = (resumeFile.name.split('.').pop() ?? '').toLowerCase();
     if (!RESUME_IMPORT_EXTENSIONS.has(extension)) return c.json({ error: 'Unsupported resume file type' }, 415);
-    if (!file.size || file.size > RESUME_IMPORT_MAX_BYTES) return c.json({ error: 'Resume files must be between 1 byte and 20MB' }, 413);
-    const fileBytes = await file.arrayBuffer();
+    if (!resumeFile.size || resumeFile.size > RESUME_IMPORT_MAX_BYTES) return c.json({ error: 'Resume files must be between 1 byte and 20MB' }, 413);
+    const fileBytes = await resumeFile.arrayBuffer();
 
     let sourceFileKey: string | null = null;
     if (c.env.UPLOADS) {
       sourceFileKey = `${c.get('tenantId')}/${c.get('userId')}/resumes/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension || 'bin'}`;
       await c.env.UPLOADS.put(sourceFileKey, fileBytes, {
-        httpMetadata: { contentType: file.type || 'application/octet-stream' },
-        customMetadata: { originalName: file.name, tenantId: String(c.get('tenantId')), purpose: 'resume-source' },
+        httpMetadata: { contentType: resumeFile.type || 'application/octet-stream' },
+        customMetadata: { originalName: resumeFile.name, tenantId: String(c.get('tenantId')), purpose: 'resume-source' },
       });
     }
+    if (extension === 'json') {
+      try {
+        const document = JSON.parse(new TextDecoder().decode(fileBytes)) as unknown;
+        if (!document || typeof document !== 'object' || Array.isArray(document)) throw new Error('not an object');
+        return c.json({ document, sourceFileKey, provider: 'builderforce-json', model: 'deterministic' });
+      } catch {
+        return c.json({ error: 'JSON Resume must contain one valid object', sourceFileKey }, 422);
+      }
+    }
 
-    const dataUrl = extractedText ? null : `data:${file.type || 'application/octet-stream'};base64,${bytesBase64(fileBytes)}`;
+    const dataUrl = extractedText ? null : `data:${resumeFile.type || 'application/octet-stream'};base64,${bytesBase64(fileBytes)}`;
     const content: unknown = extractedText
       ? `${RESUME_EXTRACTION_PROMPT}\n\nSOURCE RESUME:\n${extractedText}`
       : extension === 'pdf' || extension === 'doc' || extension === 'docx'
-        ? [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'file', file: { filename: file.name, file_data: dataUrl } }]
+        ? [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'file', file: { filename: resumeFile.name, file_data: dataUrl } }]
         : [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }];
     try {
       const { proxy } = await tenantProxyForPlan(c.env, c.get('tenantId'));

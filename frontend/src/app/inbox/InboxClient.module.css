@@ -1,4 +1,6 @@
-.shell { height: calc(100dvh - var(--app-header-height, 58px)); min-height: 620px; display: grid; grid-template-rows: auto 1fr; color: var(--text-primary); background: var(--bg-base); }
+/* `--app-header-height` was declared nowhere, so only its 58px fallback ever
+   rendered. The canonical token for the shell's top bar is --shell-topbar-height. */
+.shell { height: calc(100dvh - var(--shell-topbar-height)); min-height: 620px; display: grid; grid-template-rows: auto 1fr; color: var(--text-primary); background: var(--bg-base); }
 .topbar { min-height: 58px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
 .brand { font-size: var(--font-size-section); margin: 0 10px 0 0; }
 .account, .search, .control, .textarea { border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-primary); border-radius: var(--radius-md); font: inherit; }

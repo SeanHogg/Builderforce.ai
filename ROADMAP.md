@@ -137,7 +137,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 36 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
 
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
@@ -158,7 +158,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 36 |
+| 14 | 37 |
 | 15 | 28 |
 
 ---
@@ -802,6 +802,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ## 14 · 🖥️ Frontend, i18n, Theme & Marketing/SEO
 
+- **Three frontend build guards are red on work owned by the in-flight public-résumé slice** *(found during the Canvas tool-execution fix, 2026-08-12)*. `npm run check:design-tokens` reports `var(--surface-subtle)` — a token declared in neither theme, so it renders nothing — at `components/creation-canvas/CreationCanvas.module.css` on `.resumeEmpty` and `.resumeTemplateGallery`; `npm run check:design-scale` reports `literalHexFiles: 3 (baseline 0)` in `components/resume/PublicResumeView.tsx`, `lib/canvasResume.ts` and `lib/canvasResumeRenderer.ts` plus `offScaleRadii: 26 (baseline 6)` and `offScaleFontSizes: 3956 (baseline 3929)`; `npm run check:architecture` reports `'use client' files: 774 exceeds baseline 769`. Fix = swap `--surface-subtle` for `--surface-card`/`--surface-card-strong` (or declare it under BOTH `:root` and `html[data-theme='light']`), token-ise or `COLOUR_EXEMPT` the three résumé renderer files with their reason, and either reduce or deliberately re-baseline the two ratchets. **Blocker: those exact files are being written by a concurrent in-flight session right now** — `CreationCanvas.module.css` line numbers moved between two consecutive guard runs during this pass — so editing them would collide with unsaved work; the résumé slice must land first. Unblocks: a green `frontend npm test`, so one red guard stops hiding the next ([[build-guard-ratchets]]).
 - **Product Updates has no unread-since-last-open indicator** *(product-update/beta pass 2026-08-09)*. The changelog is now reachable everywhere — the marketing footer version and the app sidebar version both open the one app-wide `ProductUpdatesHost` (see [DONE.md](./DONE.md)) — but nothing tells a user there is something new behind it, so the affordance only pays off for someone who thinks to click a version number. Every ingredient exists: `release_notes.publishedAt` is the "new since" clock and `release_note_beta_enrollments` shows the per-user table pattern to copy. Fix = persist a per-user `product_updates_seen_at`, expose the count of notes published after it on the existing `/api/release-notes/betas` read (it is already the signed-in call), and badge both version triggers from one shared hook so the two cannot disagree. Unblocks: passive feature discovery rather than opt-in.
 - **Weekly release-digest audience query is an unbounded full-table scan** *(release-notes pass 2026-07-24)*. `runWeeklyReleaseDigest` (`api/src/application/email/releaseDigest.ts`) selects every verified, non-suspended user in one query and sends in 10-wide batches with no cursor/cap; fine at current scale (Neon Free, small base) but will exceed Worker CPU/subrequest limits and Resend rate windows as the user base grows. Fix = paginate the audience (keyset by user id), persist per-run progress so a Worker eviction resumes rather than re-sends, and honour a Resend batch/rate ceiling. Unblocks: safe digest sends at scale.
 - **Sales-deck slide-19 footnote is not yet seat-specific + the deck generator is missing.** The pricing-credibility decision landed (Teams = org-wide volume pricing, **5-seat minimum**, enforced live — see DONE.md 2026-07-24); the deck's slide-19 already carries a provisional "org-wide volume pricing" footnote (framing now *confirmed* correct), but it doesn't state the specific 5-seat minimum. Updating the rendered PNG/PDF/PPTX is blocked because the generator (`scratchpad/deck.py`, Pillow + Edge-headless SVG rasterization) referenced by `marketing/pitch-deck/README.md` no longer exists in the repo — it lived in an ephemeral scratchpad. Fix = reconstruct `deck.py` (or a committed replacement generator) under `marketing/pitch-deck/`, then re-render slide 19 to say "5-seat minimum" and rebuild the PDF/PPTX. Unblocks: a self-consistent deck + repeatable deck regeneration.

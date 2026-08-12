@@ -19,6 +19,10 @@ export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
 export type ResumePageSize = 'letter' | 'legal' | 'a4';
 export type ResumeOrientation = 'portrait' | 'landscape';
 export type ResumeHeadingStyle = 'underlined' | 'divider' | 'caps' | 'plain';
+export type ResumeSectionLayout = 'timeline' | 'cards' | 'grid' | 'list' | 'compact';
+export type ResumeSortOrder = 'date_desc' | 'date_asc' | 'manual';
+export type ResumeHeroLayout = 'split' | 'stacked' | 'compact';
+export interface ResumeSectionRule { layout: ResumeSectionLayout; columns?: 1 | 2 | 3 | 4; showHighlights?: boolean; showMedia?: boolean; sortBy?: ResumeSortOrder }
 
 export interface ResumeTemplateDefinition {
   id: ResumeTemplateId;
@@ -33,10 +37,18 @@ export interface ResumeTemplateDefinition {
   headingStyle: ResumeHeadingStyle;
   industry: string;
   sidebar: ResumeSectionId[];
+  hero?: { enabled: boolean; layout: ResumeHeroLayout; showAvatar: boolean; showContactButtons: boolean; showSummary: boolean; showVideo: boolean };
+  sections?: Partial<Record<ResumeSectionId, ResumeSectionRule>>;
 }
 
+const PRINT_HERO = { enabled: true, layout: 'compact', showAvatar: false, showContactButtons: true, showSummary: true, showVideo: false } as const;
+const BASE_SECTIONS: Partial<Record<ResumeSectionId, ResumeSectionRule>> = {
+  work: { layout: 'timeline', showHighlights: true, sortBy: 'date_desc' }, education: { layout: 'timeline', sortBy: 'date_desc' }, volunteer: { layout: 'timeline', showHighlights: true, sortBy: 'date_desc' },
+  skills: { layout: 'grid', columns: 3 }, languages: { layout: 'grid', columns: 3 }, projects: { layout: 'cards' }, awards: { layout: 'list' }, certificates: { layout: 'list' }, publications: { layout: 'list' }, interests: { layout: 'grid', columns: 3 }, references: { layout: 'list' },
+};
+
 export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
-  { id: 'hired-default', labelKey: 'template_hired-default', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'plain', industry: 'General', sidebar: [] },
+  { id: 'hired-default', labelKey: 'template_hired-default', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'plain', industry: 'General', sidebar: [], hero: { enabled: true, layout: 'split', showAvatar: true, showContactButtons: true, showSummary: true, showVideo: true }, sections: BASE_SECTIONS },
   { id: 'payroll-iron-gray', labelKey: 'template_payroll-iron-gray', mode: 'print', columns: 2, accent: '#475569', paper: '#ffffff', ink: '#1e293b', font: 'serif', density: 'compact', headingStyle: 'divider', industry: 'Payroll / Finance', sidebar: ['skills', 'education', 'certificates', 'languages'] },
   { id: 'risk-asphalt', labelKey: 'template_risk-asphalt', mode: 'print', columns: 2, accent: '#27272a', paper: '#ffffff', ink: '#18181b', font: 'sans', density: 'comfortable', headingStyle: 'caps', industry: 'Risk / Consulting', sidebar: ['skills', 'languages', 'certificates'] },
   { id: 'executive-taupe', labelKey: 'template_executive-taupe', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Executive', sidebar: [] },
@@ -49,6 +61,55 @@ export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
   { id: 'actor-headshot-hero', labelKey: 'template_actor-headshot-hero', mode: 'hero', columns: 1, accent: '#404040', paper: '#ffffff', ink: '#171717', font: 'serif', density: 'compact', headingStyle: 'caps', industry: 'Acting', sidebar: [] },
   { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Film directing', sidebar: [] },
 ] as const;
+
+export function normalizedResumeTemplate(template: ResumeTemplateDefinition): ResumeTemplateDefinition & { hero: NonNullable<ResumeTemplateDefinition['hero']>; sections: NonNullable<ResumeTemplateDefinition['sections']> } {
+  const hero = template.hero ?? (template.mode === 'hero'
+    ? { enabled: true, layout: 'split' as const, showAvatar: true, showContactButtons: true, showSummary: true, showVideo: true }
+    : { ...PRINT_HERO });
+  const sections = { ...BASE_SECTIONS, ...(template.sections ?? {}) };
+  if (template.id === 'intern-education-first') {
+    sections.skills = { layout: 'grid', columns: 2 }; sections.languages = { layout: 'grid', columns: 2 }; sections.interests = { layout: 'grid', columns: 2 };
+  }
+  if (template.id === 'actor-headshot-hero') sections.projects = { layout: 'list', showHighlights: true, showMedia: true, sortBy: 'date_desc' };
+  if (template.id === 'director-filmography-serif') sections.projects = { layout: 'list', showHighlights: true, showMedia: true, sortBy: 'date_desc' };
+  return { ...template, hero, sections };
+}
+
+type ResumeTemplateDescriptorInput = Partial<ResumeTemplateDefinition> & { version?: unknown; documentMode?: unknown; layout?: unknown; theme?: unknown; hero?: unknown; sections?: unknown };
+
+/** Validate/migrate Hired descriptor v1.0–v1.2 into the Canvas renderer contract. */
+export function resumeTemplateFromDescriptor(value: unknown): ResumeTemplateDefinition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as ResumeTemplateDescriptorInput;
+  if (!['1.0', '1.1', '1.2'].includes(String(raw.version)) || typeof raw.id !== 'string' || !RESUME_TEMPLATE_IDS.includes(raw.id as ResumeTemplateId)) return null;
+  const stock = RESUME_TEMPLATES.find((item) => item.id === raw.id)!;
+  const theme = raw.theme && typeof raw.theme === 'object' ? raw.theme as Record<string, unknown> : {};
+  const layout = raw.layout && typeof raw.layout === 'object' ? raw.layout as Record<string, unknown> : {};
+  const heroRaw = raw.hero && typeof raw.hero === 'object' ? raw.hero as Record<string, unknown> : {};
+  const mode = raw.documentMode === 'hero' || raw.documentMode === 'print' ? raw.documentMode : stock.mode;
+  const columns = layout.columns === 1 || layout.columns === 2 ? layout.columns : stock.columns;
+  const font = ['sans', 'serif', 'mono'].includes(String(theme.fontFamily)) ? theme.fontFamily as ResumeTemplateDefinition['font'] : stock.font;
+  const density = ['compact', 'comfortable', 'spacious'].includes(String(theme.density)) ? theme.density as ResumeTemplateDefinition['density'] : stock.density;
+  const headingStyle = ['underlined', 'divider', 'caps', 'plain'].includes(String(theme.headingStyle)) ? theme.headingStyle as ResumeHeadingStyle : stock.headingStyle;
+  const sectionRules: NonNullable<ResumeTemplateDefinition['sections']> = {};
+  if (Array.isArray(raw.sections)) for (const item of raw.sections) {
+    if (!item || typeof item !== 'object' || (item as Record<string, unknown>).kind === 'component') continue;
+    const section = item as Record<string, unknown>; const key = String(section.key) as ResumeSectionId;
+    if (!RESUME_SECTION_ORDER.includes(key) || section.enabled === false || !['timeline', 'cards', 'grid', 'list', 'compact'].includes(String(section.layout))) continue;
+    sectionRules[key] = { layout: section.layout as ResumeSectionLayout,
+      ...([1, 2, 3, 4].includes(Number(section.columns)) ? { columns: Number(section.columns) as 1 | 2 | 3 | 4 } : {}),
+      ...(typeof section.showHighlights === 'boolean' ? { showHighlights: section.showHighlights } : {}), ...(typeof section.showMedia === 'boolean' ? { showMedia: section.showMedia } : {}),
+      ...(['date_desc', 'date_asc', 'manual'].includes(String(section.sortBy)) ? { sortBy: section.sortBy as ResumeSortOrder } : {}),
+    };
+  }
+  const boolean = (key: string, fallback: boolean) => typeof heroRaw[key] === 'boolean' ? heroRaw[key] as boolean : fallback;
+  const fallbackHero = normalizedResumeTemplate(stock).hero;
+  return { ...stock, mode, columns, font, density, headingStyle,
+    sidebar: Array.isArray(layout.sidebar) ? layout.sidebar.filter((item): item is ResumeSectionId => typeof item === 'string' && RESUME_SECTION_ORDER.includes(item as ResumeSectionId)) : stock.sidebar,
+    hero: { enabled: boolean('enabled', fallbackHero.enabled), layout: ['split', 'stacked', 'compact'].includes(String(heroRaw.layout)) ? heroRaw.layout as ResumeHeroLayout : fallbackHero.layout, showAvatar: boolean('showAvatar', fallbackHero.showAvatar), showContactButtons: boolean('showContactButtons', fallbackHero.showContactButtons), showSummary: boolean('showSummary', fallbackHero.showSummary), showVideo: boolean('showVideo', fallbackHero.showVideo) },
+    sections: Object.keys(sectionRules).length ? sectionRules : normalizedResumeTemplate(stock).sections,
+  };
+}
 
 export interface CanvasResumeLocation extends Record<string, unknown> {
   address?: string; postalCode?: string; city?: string; countryCode?: string; region?: string;
@@ -185,6 +246,7 @@ export interface CanvasResumeRevision {
   templateId: ResumeTemplateId;
   pageSize: ResumePageSize;
   orientation: ResumeOrientation;
+  sourceFile?: { key?: string | null; name: string; mimeType: string; size: number };
   sourceRevisionId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -205,7 +267,7 @@ export interface CanvasResumeFamily {
 
 const id = () => crypto.randomUUID();
 
-export function createResumeFamily(args: { title: string; markdown: string; document?: CanvasResumeDocument; now?: string; idFactory?: () => string }): CanvasResumeFamily {
+export function createResumeFamily(args: { title: string; markdown: string; document?: CanvasResumeDocument; sourceFile?: CanvasResumeRevision['sourceFile']; now?: string; idFactory?: () => string }): CanvasResumeFamily {
   const now = args.now ?? new Date().toISOString();
   const revisionId = (args.idFactory ?? id)();
   const original: CanvasResumeRevision = {
@@ -217,6 +279,7 @@ export function createResumeFamily(args: { title: string; markdown: string; docu
     templateId: 'hired-default',
     pageSize: 'a4',
     orientation: 'portrait',
+    ...(args.sourceFile ? { sourceFile: clone(args.sourceFile) } : {}),
     sourceRevisionId: null,
     createdAt: now,
     updatedAt: now,

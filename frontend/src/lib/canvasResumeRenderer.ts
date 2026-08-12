@@ -2,6 +2,7 @@ import { escapeHtml, markdownToHtml } from './richText';
 import {
   RESUME_TEMPLATES,
   activeResumeRevision,
+  normalizedResumeTemplate,
   resumeFamilyFromNode,
   type CanvasResumeRevision,
   type ResumeOrientation,
@@ -35,7 +36,7 @@ export const RESUME_DOCUMENT_STYLES = `
   .canvasResumeDocument a { color: var(--resume-accent); }
   .canvasResumeColumns { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, .85fr); gap: 9mm; align-items: start; }
   .canvasResumeColumns > aside { border-left: .25mm solid color-mix(in srgb, var(--resume-accent) 28%, transparent); padding-left: 6mm; }
-  .canvasResumeDocument section[data-layout="grid"] ul { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.5mm 4mm; padding-left:0; list-style:none; }
+  .canvasResumeDocument section[data-layout="grid"] ul { display:grid; grid-template-columns:repeat(var(--section-columns,2),minmax(0,1fr)); gap:1.5mm 4mm; padding-left:0; list-style:none; }
   .canvasResumeDocument section[data-layout="cards"] h3 { border:.25mm solid color-mix(in srgb,var(--resume-accent) 22%,transparent); border-radius:1.5mm; padding:2mm; }
   .canvasResumeDocument section[data-layout="timeline"] { border-left:.5mm solid color-mix(in srgb,var(--resume-accent) 28%,transparent); padding-left:4mm; }
   .canvasResumeDocument[data-mode="hero"] h1 { padding-top: 4mm; font-size: 30pt; }
@@ -61,13 +62,6 @@ const TEMPLATE_SECTION_ORDER: Partial<Record<ResumeTemplateDefinition['id'], str
   'director-filmography-serif': ['projects', 'awards', 'publications', 'work', 'education', 'skills', 'references'],
 };
 
-const TEMPLATE_SECTION_LAYOUT: Partial<Record<ResumeTemplateDefinition['id'], Partial<Record<string, 'timeline' | 'cards' | 'grid' | 'list'>>>> = {
-  'hired-default': { work: 'timeline', education: 'timeline', volunteer: 'timeline', skills: 'grid', languages: 'grid', projects: 'cards', interests: 'grid' },
-  'intern-education-first': { skills: 'grid', languages: 'grid', interests: 'grid' },
-  'actor-headshot-hero': { skills: 'grid', languages: 'grid' },
-  'director-filmography-serif': { skills: 'grid' },
-};
-
 interface RenderedSection { id: string; html: string }
 
 function structuredTemplateHtml(markdown: string, template: ResumeTemplateDefinition): string {
@@ -85,8 +79,11 @@ function structuredTemplateHtml(markdown: string, template: ResumeTemplateDefini
     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
     return (ai < 0 ? Number.MAX_SAFE_INTEGER : ai) - (bi < 0 ? Number.MAX_SAFE_INTEGER : bi);
   });
-  const layouts = TEMPLATE_SECTION_LAYOUT[template.id] ?? {};
-  const wrap = (section: RenderedSection) => `<section data-section="${section.id}" data-layout="${layouts[section.id] ?? 'list'}">${section.html}</section>`;
+  const descriptor = normalizedResumeTemplate(template);
+  const wrap = (section: RenderedSection) => {
+    const rule = descriptor.sections[section.id as keyof typeof descriptor.sections];
+    return `<section data-section="${section.id}" data-layout="${rule?.layout ?? 'list'}" data-sort="${rule?.sortBy ?? 'manual'}" data-highlights="${rule?.showHighlights !== false}" data-media="${rule?.showMedia === true}" style="--section-columns:${rule?.columns ?? 2}">${section.html}</section>`;
+  };
   if (template.columns === 1) return `${intro}<div class="canvasResumeMain">${sections.map(wrap).join('')}</div>`;
   const sidebarIds = new Set<string>(template.sidebar);
   const sidebar = sections.filter((section) => sidebarIds.has(section.id));
@@ -113,12 +110,12 @@ function templateFor(revision: CanvasResumeRevision): ResumeTemplateDefinition {
 
 /** The exact artifact markup used on Canvas, in standalone HTML, and in print/PDF. */
 export function renderCanvasResumeRevision(revision: CanvasResumeRevision): RenderedCanvasResume {
-  const template = templateFor(revision);
+  const template = normalizedResumeTemplate(templateFor(revision));
   const variables = `--resume-accent:${template.accent};--resume-paper:${template.paper};--resume-ink:${template.ink}`;
   return {
     revision,
     template,
-    html: `<article class="canvasResumeDocument" data-template="${template.id}" data-mode="${template.mode}" data-font="${template.font}" data-density="${template.density}" data-heading="${template.headingStyle}" data-columns="${template.columns}" data-page-size="${revision.pageSize}" data-orientation="${revision.orientation}" style="${variables}">${structuredTemplateHtml(revision.markdown, template)}</article>`,
+    html: `<article class="canvasResumeDocument" data-template="${template.id}" data-mode="${template.mode}" data-hero-layout="${template.hero.layout}" data-show-avatar="${template.hero.showAvatar}" data-show-contact="${template.hero.showContactButtons}" data-show-summary="${template.hero.showSummary}" data-show-video="${template.hero.showVideo}" data-font="${template.font}" data-density="${template.density}" data-heading="${template.headingStyle}" data-columns="${template.columns}" data-page-size="${revision.pageSize}" data-orientation="${revision.orientation}" style="${variables}">${structuredTemplateHtml(revision.markdown, template)}</article>`,
   };
 }
 

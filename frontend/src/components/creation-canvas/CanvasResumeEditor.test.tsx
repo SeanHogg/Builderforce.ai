@@ -1,7 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
 import { activeResumeRevision, createResumeFamily, deriveResume, resumeNodePatch, type CanvasResumeFamily } from '@/lib/canvasResume';
+import { importResumeSource } from '@/lib/resumeImportApi';
+
+vi.mock('@/lib/resumeImportApi', () => ({ importResumeSource: vi.fn() }));
 
 vi.mock('next-intl', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next-intl')>()),
@@ -11,6 +14,27 @@ vi.mock('next-intl', async (importOriginal) => ({
 }));
 
 describe('CanvasResumeEditor', () => {
+  it('reviews file metadata before structuring and preserves the protected source reference', async () => {
+    vi.mocked(importResumeSource).mockResolvedValue({
+      document: { basics: { name: 'Ada Lovelace', email: 'ada@example.test' }, skills: [{ name: 'Algorithms' }] },
+      sourceFileKey: '1/user/resumes/source.json', provider: 'builderforce-json', model: 'deterministic',
+    });
+    const onEdit = vi.fn();
+    const { container } = render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Resume' }} onEdit={onEdit} />);
+    const file = new File(['{}'], 'ada-resume.json', { type: 'application/json' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+    expect(screen.getByText('ada-resume.json')).toBeTruthy();
+    expect(screen.getByText(/JSON · 1 KB/)).toBeTruthy();
+    expect(onEdit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Import and structure' }));
+
+    await waitFor(() => expect(onEdit).toHaveBeenCalledOnce());
+    const family = onEdit.mock.calls[0]?.[0]?.resumeFamily as CanvasResumeFamily;
+    expect(activeResumeRevision(family).document?.basics?.name).toBe('Ada Lovelace');
+    expect(activeResumeRevision(family).sourceFile).toMatchObject({ key: '1/user/resumes/source.json', name: 'ada-resume.json' });
+  });
+
   it('edits canonical fields and regenerates the active rendered résumé', () => {
     const original = createResumeFamily({
       title: 'Uploaded',
