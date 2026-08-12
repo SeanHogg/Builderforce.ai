@@ -9,7 +9,7 @@
  * page — and the page is the promise a buyer reads. Worse, the two arrays could
  * disagree with each other, and did.
  *
- * So the claim is DERIVED. Five ports feed it, each already the single source of
+ * So the claim is DERIVED. Six ports feed it, each already the single source of
  * truth for its own surface:
  *
  *   connectors — `defaults/` built-in manifests: the day-one catalog every tenant
@@ -20,6 +20,7 @@
  *                credential can be stored for and a workflow node can query.
  *   drive      — `drive/driveProviders`: the cloud-drive port.
  *   mailbox    — `mailbox/mailboxProviders`: the connected-mailbox port.
+ *   payout     — `payouts/payoutProviders`: where an earner's money is sent.
  *
  * A system that appears on more than one port (GitHub is a built-in connector AND
  * a synced board) is ONE catalog entry with both surfaces, because it is one
@@ -40,6 +41,7 @@ import { BOARD_PROVIDERS, type BoardProviderCategory } from '../boardsync/provid
 import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import type { ConnectorCategory, ConnectorManifest } from '../connectors/connectorManifest';
 import { MAILBOX_PROVIDER_NAMES } from '../mailbox/mailboxProviders';
+import { describePayoutProviders } from '../payouts/payoutProviders';
 import { describeProviders, type ProviderFamily } from './dataProviderCatalog';
 
 /**
@@ -64,7 +66,7 @@ export const INTEGRATION_CATEGORIES = [
 export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
 
 /** Which port backs an entry. An entry may have several. */
-export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox';
+export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout';
 
 /** What moves, and which way. Derived per surface — never asserted by hand. */
 export type IntegrationDirection = 'import' | 'export' | 'two-way' | 'event-ingest';
@@ -207,6 +209,24 @@ function build(): IntegrationCatalogEntry[] {
       surfaces: ['mailbox'],
       direction: 'two-way',
       capabilities: ['oauth'],
+    });
+  }
+
+  // Payout destinations. `export` because money LEAVES through them, and the
+  // three-word difference between "we can read your Stripe" and "we can pay you
+  // through your Stripe" is the whole reason a buyer reads this page. Stripe is
+  // already here as a connector, so it merges into one entry with two surfaces —
+  // which is the merge rule doing exactly what it exists for.
+  for (const provider of describePayoutProviders({})) {
+    merge(byId, {
+      // The provider's own key, NOT a `payout-` prefix: prefixing would give
+      // Stripe two cards on one page saying two halves of one answer.
+      id: provider.name,
+      name: provider.label,
+      category: 'finance',
+      surfaces: ['payout'],
+      direction: 'export',
+      capabilities: provider.connect === 'oauth' ? ['oauth'] : [],
     });
   }
 

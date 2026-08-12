@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { BOARD_PROVIDERS } from '../boardsync/providerCatalog';
 import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import { MAILBOX_PROVIDER_NAMES } from '../mailbox/mailboxProviders';
+import { PAYOUT_PROVIDER_NAMES } from '../payouts/payoutProviders';
 import { describeProviders } from './dataProviderCatalog';
 import {
   INTEGRATION_CATALOG,
@@ -34,6 +35,19 @@ describe('integration catalog projection', () => {
 
   it('covers every mailbox provider', () => {
     for (const name of MAILBOX_PROVIDER_NAMES) expect(ids).toContain(`mailbox-${name}`);
+  });
+
+  it('covers every payout destination, as an export', () => {
+    for (const name of PAYOUT_PROVIDER_NAMES) {
+      expect(ids).toContain(name);
+      const entry = INTEGRATION_CATALOG.find((item) => item.id === name);
+      expect(entry?.surfaces).toEqual(expect.arrayContaining(['payout']));
+    }
+    // Stripe is a connector AND a payout destination — one entry, both surfaces,
+    // exactly as GitHub is one entry across connector + board.
+    const stripe = INTEGRATION_CATALOG.find((entry) => entry.id === 'stripe');
+    expect(stripe?.surfaces).toEqual(expect.arrayContaining(['connector', 'payout']));
+    expect(INTEGRATION_CATALOG.filter((entry) => entry.id === 'stripe')).toHaveLength(1);
   });
 
   it('names one entry per system, not one per port', () => {

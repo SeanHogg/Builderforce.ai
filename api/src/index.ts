@@ -104,6 +104,8 @@ import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceS
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
 import { createSalesRoutes } from './presentation/routes/salesRoutes';
+import { createMessageRoutes } from './presentation/routes/messageRoutes';
+import { createPayoutRoutes } from './presentation/routes/payoutRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createObjectRoutes } from './presentation/routes/objectRoutes';
 import { createDomainRoutes } from './presentation/routes/domainRoutes';
@@ -489,6 +491,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // and the activity-signal → billable-timecard pipeline.
   app.route('/api/freelancers', createFreelancerRoutes());
   app.route('/api/sales', createSalesRoutes(db));
+  // Person-to-person messaging (the sales hub's communication channel). Sits
+  // beside /api/sales rather than inside it because the threads are the kernel's,
+  // not the CRM's — sales is only the first audience with a reason to use them.
+  app.route('/api/messages', createMessageRoutes(db));
   app.route('/api/engagements', createEngagementRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
 
@@ -681,6 +687,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // and the identity a campaign can send from.
   app.route('/api/mailbox',  createMailboxRoutes(db));
   app.route('/api/drive',    createDriveRoutes(db));
+  // Where an earner's money goes — the sixth connection port, same shape as the
+  // two above it (consent or a typed credential, sealed, with a reconnect state).
+  app.route('/api/payouts',  createPayoutRoutes(db));
   // Connected social accounts — the feed the canvas renders and the accounts a
   // social campaign publishes to. Accounts themselves are connector connections,
   // so connecting one still happens through /api/connectors.

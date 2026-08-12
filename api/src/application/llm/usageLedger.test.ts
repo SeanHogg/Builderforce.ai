@@ -7,7 +7,53 @@ import {
   DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS,
   computeRecordedCostMillicents,
   PREMIUM_REQUEST_SURCHARGE_MILLICENTS,
+  resolveUsageDatabase,
 } from './usageLedger';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+
+describe('resolveUsageDatabase', () => {
+  const applicationDb = { kind: 'application' } as unknown as Db;
+  const transactionalDb = { kind: 'transactional' } as unknown as Db;
+
+  it('reads usage from the transactional ledger when production isolates it', () => {
+    const env = {
+      NEON_DATABASE_URL: 'postgres://application',
+      NEON_TRANSACTIONAL_DATABASE_URL: 'postgres://transactional',
+    } as Env;
+    const builtFor: Env[] = [];
+
+    const selected = resolveUsageDatabase(env, applicationDb, (receivedEnv) => {
+      builtFor.push(receivedEnv);
+      return transactionalDb;
+    });
+
+    expect(selected).toBe(transactionalDb);
+    expect(builtFor).toEqual([env]);
+  });
+
+  it('keeps local and staged reads on the application database without the ledger binding', () => {
+    const env = { NEON_DATABASE_URL: 'postgres://application' } as Env;
+    let built = false;
+
+    const selected = resolveUsageDatabase(env, applicationDb, () => {
+      built = true;
+      return transactionalDb;
+    });
+
+    expect(selected).toBe(applicationDb);
+    expect(built).toBe(false);
+  });
+
+  it('treats a whitespace-only ledger binding as absent', () => {
+    const env = {
+      NEON_DATABASE_URL: 'postgres://application',
+      NEON_TRANSACTIONAL_DATABASE_URL: '   ',
+    } as Env;
+
+    expect(resolveUsageDatabase(env, applicationDb, () => transactionalDb)).toBe(applicationDb);
+  });
+});
 
 describe('resolvePaidOverflowCapMillicents', () => {
   it('uses the $0.50 default for a free tenant with no override', () => {

@@ -27,11 +27,21 @@ export function isTermsExemptPath(path: string): boolean {
  */
 export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const authHeader = c.req.header('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
+  /**
+   * A WebSocket upgrade cannot carry an Authorization header — the browser API
+   * has no way to set one — so a live room under this middleware has to accept
+   * `?token=`. `authMiddleware` already does, unconditionally; this one accepts
+   * it ONLY on an upgrade request, which is strictly narrower: a token in a query
+   * string can leak through a Referer header or an access log, and no ordinary
+   * navigation or XHR carries `Upgrade: websocket`.
+   */
+  const upgrade = c.req.header('Upgrade')?.toLowerCase() === 'websocket';
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : upgrade ? (c.req.query('token') ?? '') : '';
+  if (!token) {
     throw new UnauthorizedError('Missing or malformed Authorization header');
   }
-
-  const token = authHeader.slice(7);
   let payload;
   try {
     payload = await verifyWebJwt(token, c.env.JWT_SECRET);

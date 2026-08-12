@@ -2041,10 +2041,10 @@ html[data-theme='light'] .nebula {
 
 /* THE index (DestinationIndex.tsx) — PRD 21 §3.4.
    One component replaced three (`SectionTabs`, `PillTabs`, `AdminGroupNav`) and
-   one style block replaces theirs. It decides its own orientation: at or under
-   six items it is a compact row; above six it becomes a vertical index column,
-   because "no horizontal tab bar renders more than 6 items anywhere" (§6.3) and
-   Workforce's fourteen sub-views never fit in a bar. */
+   one style block replaces theirs. A nested sub-menu is a TAB ROW at the top of
+   its page; past `INDEX_ROW_LIMIT` it scrolls on one line (`data-scroll`) rather
+   than wrapping into a block, which is the failure §6.3 was written against. The
+   vertical column is now only what the shell panel's index rail asks for. */
 .ui-index {
   display: flex;
   gap: var(--space-2);
@@ -2053,10 +2053,23 @@ html[data-theme='light'] .nebula {
 
 .ui-index[data-orientation='horizontal'] {
   flex-wrap: wrap;
+  align-items: center;
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-1);
   overflow-x: auto;
 }
+
+/* Past the row limit: one line that scrolls. `scrollbar-width: thin` keeps the
+   strip from claiming a full gutter on the platforms that reserve one. */
+.ui-index[data-orientation='horizontal'][data-scroll='true'] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ui-index[data-orientation='horizontal'][data-scroll='true'] > span { flex-shrink: 0; }
 
 .ui-index[data-orientation='vertical'] {
   flex-direction: column;
@@ -2114,6 +2127,17 @@ html[data-theme='light'] .nebula {
   color: var(--text-muted);
   padding: var(--space-3) var(--space-3) var(--space-1);
 }
+
+/* In a row the grouping is a caption BEFORE its first tab, not a heading above a
+   column — same information, read left to right. */
+.ui-index[data-orientation='horizontal'] .ui-index__group {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  white-space: nowrap;
+}
+.ui-index[data-orientation='horizontal'] > span:first-child .ui-index__group { padding-left: 0; }
 
 /* The body of a destination opened over the board (PRD 21 §3.4).
    ---------------------------------------------------------------------------
@@ -2620,6 +2644,88 @@ select.input option {
 
 .data-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Sticky header — opt in with `.table-wrap .table-wrap--sticky`.
+   .table-wrap already declares overflow-x:auto, which makes it the scroll
+   container in BOTH axes, so a sticky <thead> sticks to the WRAP rather than to
+   the page — and only once the wrap has a height to scroll inside. That height
+   is what this adds. Viewport-relative so a phone never gets a table taller than
+   its own screen. */
+.table-wrap--sticky {
+  overflow-y: auto;
+  max-height: 68vh;
+}
+
+.table-wrap--sticky .data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  /* thead's background lives on the ROW, and a row does not paint behind its own
+     sticky cells — without this the body scrolls visibly under the labels. */
+  background: var(--bg-muted);
+}
+
+/* Sortable column header. The <th> gives up its padding to the button inside so
+   the whole cell is the hit target rather than just the words. */
+.data-table th.th-sortable {
+  padding: 0;
+}
+
+.data-table .th-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  /* 36px keeps the header tappable on a phone; the padding matches a plain th. */
+  min-height: 36px;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.data-table .th-sort:hover {
+  background: var(--bg-hover);
+}
+
+.data-table .th-sort:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.data-table .th-sort--active {
+  color: var(--text-strong);
+}
+
+/* The arrow is a persistent affordance, not a hover-only one: on touch there is
+   no hover, so a hidden-until-hover indicator means the column never announces
+   that it sorts. Faint when idle, accented when it is the active sort. */
+.data-table .th-sort__arrow {
+  display: inline-flex;
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
+.data-table .th-sort--active .th-sort__arrow {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Multi-line ellipsis for a cell carrying free text a person wrote. A table row
+   is a summary — the full text is one click away in the row's drawer — and an
+   uncapped prompt turns one row into a screenful. */
+.text-clamp {
+  --clamp-lines: 3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp-lines);
+  line-clamp: var(--clamp-lines);
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .text-muted,

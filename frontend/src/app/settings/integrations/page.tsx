@@ -9,10 +9,11 @@ import { IntegrationsGallery } from '@/components/integrations/IntegrationsGalle
 import { MailboxIntegrations } from '@/components/integrations/MailboxIntegrations';
 import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
 import { ApiKeysContent } from '@/components/settings/ApiKeysContent';
+import { PayoutConnections } from '@/components/payouts/PayoutConnections';
 import { getStoredTenant } from '@/lib/auth';
 import { Icon } from '@/components/ui/Icon';
 
-type Category = 'all' | 'models' | 'connectors' | 'apps' | 'developer';
+type Category = 'all' | 'models' | 'connectors' | 'apps' | 'payments' | 'developer';
 const CATEGORIES: Array<{ id: Category; icon: string }> = [
   { id: 'all', icon: '' },
   { id: 'models', icon: '🧠' },
@@ -22,6 +23,10 @@ const CATEGORIES: Array<{ id: Category; icon: string }> = [
   // a tool are different jobs with different contracts.
   { id: 'connectors', icon: '🔗' },
   { id: 'apps', icon: '🔌' },
+  // Money OUT. Its own category rather than a card inside "apps" because the
+  // question is different in kind: every other connection here reads or writes
+  // data, and this one moves funds to a bank account somebody owns.
+  { id: 'payments', icon: '🏦' },
   { id: 'developer', icon: '🔑' },
 ];
 
@@ -70,6 +75,9 @@ export default function SettingsIntegrationsPage() {
       {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
       {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} /></section>}
       {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><MailboxIntegrations search={search} viewMode={viewMode} /><IntegrationsGallery search={search} viewMode={viewMode} /></section>}
+      {/* The SAME component `/billing/payouts` and the Sales Hub render — one
+          surface for "where does my money go", reached from three doors. */}
+      {show('payments') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.payments')}</h2><p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('paymentsIntro')}</p><PayoutConnections returnTo="/settings/integrations" search={search} /></section>}
       {isOwner && show('developer') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.developer')}</h2><ApiKeysContent embedded showProviderKeys={false} search={search} externalViewMode={viewMode} /></section>}
     </PageContainer>
   );

@@ -391,6 +391,17 @@ export interface Env {
   STRIPE_PRICE_YEARLY?: string;
 
   // ---------------------------------------------------------------------------
+  // Payout destinations (optional — the `payouts` port, one key pair per OAuth
+  // provider). A `fields` provider (bank account, Wise) needs nothing here: the
+  // earner supplies the whole credential, so it is connectable on every install.
+  // ---------------------------------------------------------------------------
+  /** Stripe Connect OAuth client id (`ca_…`). The SECRET half is
+   *  `STRIPE_SECRET_KEY`, which Connect reuses — Stripe issues no second secret. */
+  STRIPE_CONNECT_CLIENT_ID?: string;
+  PAYPAL_CLIENT_ID?: string;
+  PAYPAL_CLIENT_SECRET?: string;
+
+  // ---------------------------------------------------------------------------
   // OAuth providers (optional — only required for the providers you enable)
   // Set via: wrangler secret put GOOGLE_CLIENT_ID  (etc.)
   // ---------------------------------------------------------------------------

@@ -65,7 +65,7 @@ import { buildMigrationProviderFactory } from '../migration/buildProviderFactory
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
-import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
+import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
 import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';

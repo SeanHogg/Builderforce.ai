@@ -11,7 +11,7 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LlmModelStatus } from '@/lib/adminApi';
 
@@ -116,6 +116,7 @@ export function AdminPanelHeader({
   onRefresh?: () => void;
   actions?: React.ReactNode;
 }) {
+  const t = useTranslations('admin.common');
   return (
     <div
       style={{
@@ -136,7 +137,7 @@ export function AdminPanelHeader({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {actions}
           {onRefresh && (
-            <button type="button" className="btn-ghost" onClick={onRefresh}>↻ Refresh</button>
+            <button type="button" className="btn-ghost" onClick={onRefresh}>↻ {t('refresh')}</button>
           )}
         </div>
       )}
@@ -182,6 +183,123 @@ export function ModelPoolBadges({
         ))}
       </div>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Sortable table headers.
+ *
+ * Admin tables are long — the adoption-sessions list alone is unbounded in
+ * visitors — and a long table with a fixed order answers only the question its
+ * default sort happens to be about. Sorting is therefore chrome, like the
+ * loading and error shells above, and it lives here for the same reason: five
+ * columns in one table already means five copies of the same aria-sort wiring,
+ * and a second panel that wanted it would make ten.
+ *
+ * The COMPARATORS stay with the caller. Only the panel knows whether "Engagement"
+ * means messages or tokens, and a generic value-extractor would have to be told
+ * anyway — so this owns the toggle, the accessible state and the indicator, and
+ * nothing about the data.
+ * ------------------------------------------------------------------------- */
+
+export type SortDirection = 'asc' | 'desc';
+
+export interface TableSort<K extends string> {
+  key: K;
+  direction: SortDirection;
+}
+
+/**
+ * Sort `rows` by the active column, and toggle direction when the active column
+ * is clicked again.
+ *
+ * A comparator is written ASCENDING once and reversed here, so a column cannot
+ * end up sorting one way correctly and the other way by accident. Clicking a NEW
+ * column starts at `defaultDirection` (descending for the numeric and date
+ * columns that dominate these tables — "most recent" and "most active" are what
+ * a click on them is asking for) rather than inheriting the previous column's
+ * direction, which reads as a broken sort.
+ */
+export function useTableSort<K extends string, T>(
+  rows: readonly T[],
+  comparators: Record<K, (a: T, b: T) => number>,
+  initial: TableSort<K>,
+  defaultDirection: SortDirection = 'desc',
+): {
+  sort: TableSort<K>;
+  toggle: (key: K) => void;
+  sorted: T[];
+} {
+  const [sort, setSort] = useState<TableSort<K>>(initial);
+
+  const toggle = useCallback((key: K) => {
+    setSort((current) => (
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: defaultDirection }
+    ));
+  }, [defaultDirection]);
+
+  const sorted = useMemo(() => {
+    const compare = comparators[sort.key];
+    if (!compare) return [...rows];
+    const factor = sort.direction === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => compare(a, b) * factor);
+    // `comparators` is rebuilt each render by every caller (they close over
+    // nothing that changes), so it is deliberately not a dependency — the sort
+    // re-runs when the rows or the active column change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, sort.key, sort.direction]);
+
+  return { sort, toggle, sorted };
+}
+
+/**
+ * One sortable column header. Renders a real `<button>` inside the `<th>` so the
+ * column is reachable and toggleable by keyboard, and carries `aria-sort` so a
+ * screen reader is told the order rather than being left to infer it from an
+ * arrow it cannot see.
+ */
+export function SortableTh<K extends string>({
+  columnKey,
+  label,
+  sort,
+  onSort,
+  sortLabel,
+  style,
+}: {
+  columnKey: K;
+  label: React.ReactNode;
+  sort: TableSort<K>;
+  onSort: (key: K) => void;
+  /** Accessible name for the control, e.g. "Sort by Last seen". */
+  sortLabel: string;
+  style?: React.CSSProperties;
+}) {
+  const active = sort.key === columnKey;
+  return (
+    <th
+      className="th-sortable"
+      aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      style={style}
+    >
+      <button
+        type="button"
+        className={active ? 'th-sort th-sort--active' : 'th-sort'}
+        onClick={() => onSort(columnKey)}
+        aria-label={sortLabel}
+        title={sortLabel}
+      >
+        <span>{label}</span>
+        <span
+          className="th-sort__arrow"
+          aria-hidden="true"
+          style={{ transform: active && sort.direction === 'asc' ? 'rotate(180deg)' : undefined }}
+        >
+          <Icon name="chevron-down" size={13} />
+        </span>
+      </button>
+    </th>
   );
 }
 

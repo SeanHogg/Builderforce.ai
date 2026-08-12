@@ -12,6 +12,26 @@ import { TenantPaidOverflowCapEditor } from '@/components/admin/TenantPaidOverfl
 import { TenantImageCreditsEditor } from '@/components/admin/TenantImageCreditsEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
+/**
+ * The minimal AdminUser the emulation launcher needs, built from a roster row.
+ * Both the table and the card roster start emulation this way, so the shape —
+ * including which fields a membership row can and cannot vouch for — is decided
+ * once here rather than re-guessed per call site.
+ */
+function adminUserFromMember(m: TenantMember): AdminUser {
+  return {
+    id: m.id,
+    email: m.email,
+    username: m.username,
+    displayName: m.displayName,
+    isSuperadmin: false,
+    createdAt: m.joinedAt,
+    // A tenant member is by definition a builder in at least this workspace.
+    accountType: 'standard',
+    tenantCount: 1,
+  };
+}
+
 export default function TenantsPanel() {
   const t = useTranslations('admin');
   const { startEmulation } = useEmulationLauncher();
@@ -166,17 +186,7 @@ export default function TenantsPanel() {
                                       style={{ fontSize: 11, padding: '2px 8px' }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        // Build a minimal AdminUser from TenantMember for the modal
-                                        const adminUser: AdminUser = {
-                                          id: m.id,
-                                          email: m.email,
-                                          username: m.username,
-                                          displayName: m.displayName,
-                                          isSuperadmin: false,
-                                          createdAt: m.joinedAt,
-                                          tenantCount: 1,
-                                        };
-                                        startEmulation(adminUser);
+                                        startEmulation(adminUserFromMember(m));
                                       }}
                                     >
                                       {t('tenants.emulate')}
@@ -306,16 +316,7 @@ export default function TenantsPanel() {
                                   style={{ fontSize: 11, padding: '2px 8px' }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const adminUser: AdminUser = {
-                                      id: m.id,
-                                      email: m.email,
-                                      username: m.username,
-                                      displayName: m.displayName,
-                                      isSuperadmin: false,
-                                      createdAt: m.joinedAt,
-                                      tenantCount: 1,
-                                    };
-                                    startEmulation(adminUser);
+                                    startEmulation(adminUserFromMember(m));
                                   }}
                                 >
                                   {t('tenants.emulate')}

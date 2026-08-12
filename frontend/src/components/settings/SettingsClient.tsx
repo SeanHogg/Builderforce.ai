@@ -176,8 +176,9 @@ export default function SettingsClient() {
   };
 
   // Grouped by the question a person is actually asking — *You* vs *Workspace*
-  // (PRD 21 §3.4). Eight sub-views is past the six a horizontal bar can carry, so
-  // `DestinationIndex` renders this as a vertical index column on its own.
+  // (PRD 21 §3.4). `DestinationIndex` renders this as a TAB ROW across the top of
+  // the page, scrolling on one line past six items; the group names survive as
+  // inline captions. Orientation is its decision, never a prop passed from here.
   const subTabs: IndexItem[] = [
     { id: '', label: t('accountTab'), icon: '👤', href: '/settings', group: t('groupYou') },
     { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality', group: t('groupYou') },

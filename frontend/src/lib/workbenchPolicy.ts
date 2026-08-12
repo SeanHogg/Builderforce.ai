@@ -115,6 +115,8 @@ const SHEET_PATTERNS: RegExp[] = [
   /^\/settings(?:\/|$)/,
   /^\/security(?:\/|$)/,
   /^\/pricing(?:\/|$)/,
+  // The billing console — your own account, so the same sheet Settings gets.
+  /^\/billing(?:\/|$)/,
   /^\/profile(?:\/|$)/,
 ];
 

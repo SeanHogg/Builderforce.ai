@@ -16,14 +16,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect, createTenant, getMe, getMyTenants, type OnboardingProgress } from './auth';
-import { createProject, fetchProjects } from './api';
+import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants, type OnboardingProgress } from './auth';
 import { creationSessionsApi } from './builderforceApi';
 
-export function starterWorkspaceName(user?: { name?: string | null; email?: string | null } | null): string {
-  const identity = (user?.name?.trim() || user?.email?.split('@')[0]?.trim() || '').slice(0, 60);
-  if (!identity) return 'My workspace';
-  return /workspace$/i.test(identity) ? identity : `${identity}'s Workspace`;
+/**
+ * Adopt the user's workspace when they have exactly one, so the tenant picker is
+ * never shown to somebody with nothing to pick. Both entry points into the
+ * "we now have a web token but no tenant token" state need this — the zero-setup
+ * landing and the post-terms-bump resume — so it lives here once.
+ *
+ * Returns true when a workspace was selected. Zero workspaces (server-side
+ * provisioning still in flight) or several both fall through to the picker.
+ */
+async function selectSoleTenant(
+  webToken: string,
+  selectTenant: (tenant: Awaited<ReturnType<typeof getMyTenants>>[number]) => Promise<void>,
+): Promise<boolean> {
+  const tenants = await getMyTenants(webToken);
+  const sole = tenants.length === 1 ? tenants[0] : undefined;
+  if (!sole) return false;
+  await selectTenant(sole); // mints the tenant JWT (persisted synchronously)
+  return true;
 }
 
 export interface ActiveTermsDoc {
@@ -151,16 +164,15 @@ export async function acceptActiveTerms(
  * should consume `phase` here so all gates evolve together.
  */
 export function useOnboardingState(): OnboardingState {
-  const { user, webToken, tenantToken, selectTenant, selectAccountType } = useAuth();
+  const { webToken, tenantToken, selectTenant, selectAccountType } = useAuth();
 
   const [terms, setTerms] = useState<ActiveTermsDoc | null>(null);
   const [needsTerms, setNeedsTerms] = useState<boolean | null>(null);
   const [needsRole, setNeedsRole] = useState<boolean | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(!!webToken);
-  // Auto-provisioning a human-named workspace, starter project, and first
-  // Creation Session for a brand-new
-  // builder. Kept in `loading` so the gate holds the skeleton (never flashes the
+  // Selecting the brand-new builder's workspace and seeding their first Creation
+  // Session. Kept in `loading` so the gate holds the skeleton (never flashes the
   // tenant picker) while it runs. The ref makes it fire at most once per mount.
   const [provisioning, setProvisioning] = useState(false);
   const provisionAttempted = useRef(false);
@@ -195,15 +207,17 @@ export function useOnboardingState(): OnboardingState {
     void load();
   }, [load]);
 
-  // Zero-setup onboarding: a brand-new builder should land straight in a usable
-  // workspace instead of hand-typing a workspace name and a project name. Once
-  // terms + role are cleared and no workspace is selected yet, provision a
-  // workspace + "My first project" (both renameable later), then create the
-  // first durable Session shown on the default Dashboard Create tab.
+  // Zero-setup onboarding, client half. The workspace and its starter project are
+  // provisioned SERVER-side now (`ensureStarterWorkspace`, called by every signup
+  // door and re-checked on every `GET /api/auth/me`), because doing it here made a
+  // brand-new builder's workspace conditional on them staying in the browser long
+  // enough for this effect to finish — every drop-off left an account with zero
+  // workspaces. What is left here is what only the client can do: pick up that
+  // lone workspace so the tenant picker never appears, and seed the first
+  // Creation Session that the Dashboard Create tab returns them to.
   // Guardrails:
   //   • builders only — a hired ('freelancer') account has no workspace.
-  //   • ZERO existing workspaces only — a returning / multi-workspace user still
-  //     flows through the normal picker (auto-selects a lone workspace elsewhere).
+  //   • EXACTLY ONE workspace — a multi-workspace user still gets the picker.
   //   • best-effort — any failure falls through to the manual pending-tenant path
   //     (the /tenants picker), so this can never trap a user.
   useEffect(() => {
@@ -215,41 +229,17 @@ export function useOnboardingState(): OnboardingState {
     setProvisioning(true);
     void (async () => {
       try {
-        const tenants = await getMyTenants(webToken);
-        if (tenants.length > 0) return; // existing users keep the normal picker flow
-        const workspaceName = starterWorkspaceName(user);
-        const tenant = await createTenant(webToken, workspaceName);
-        await selectTenant(tenant); // mints the tenant JWT (persisted synchronously)
-        // Give the new workspace a starter project so the app is immediately usable
-        // (createProject also seeds its board + Evermind). Guarded so a returning
-        // path that somehow already has projects never gets a duplicate.
-        const projects = await fetchProjects().catch(() => []);
-        if (projects.length === 0) {
-          // Best-effort with a couple of retries: a transient failure here would
-          // otherwise strand the fresh workspace with no project. (The dashboard's
-          // build prompt can also create one, so this is never a hard dead-end —
-          // but we try hard to land the user fully ready.)
-          let created = false;
-          for (let attempt = 0; attempt < 3 && !created; attempt++) {
-            try {
-              await createProject({ name: 'My first project' });
-              created = true;
-            } catch {
-              if (attempt === 2) {
-                // Don't swallow silently — leave a diagnosable signal rather than a mystery empty workspace.
-                console.warn('[onboarding] starter project provisioning failed after retries');
-              }
-            }
-          }
-        }
-        // A Session, not the Project, is the creator's return point. This is
-        // intentionally best-effort just like starter-Project provisioning: a
+        const sole = await selectSoleTenant(webToken, selectTenant);
+        if (!sole) return; // zero (server provisioning still in flight) or many → picker
+        // A Session, not the Project, is the creator's return point. Best-effort: a
         // temporary API failure must never prevent the user reaching Dashboard,
-        // where the prompt can still create a local-first Session.
-        try {
-          await creationSessionsApi.create({ title: 'My first creation' });
-        } catch {
-          console.warn('[onboarding] first Creation Session provisioning failed; Dashboard local-first creation remains available');
+        // where the prompt can still create a local-first Session. Only seeded when
+        // the workspace has none, so a returning user never accumulates duplicates.
+        const existing = await creationSessionsApi.list().catch(() => null);
+        if (existing && existing.sessions.length === 0) {
+          await creationSessionsApi.create({ title: 'My first creation' }).catch(() => {
+            console.warn('[onboarding] first Creation Session provisioning failed; Dashboard local-first creation remains available');
+          });
         }
       } catch {
         /* fall through to the manual /tenants picker (pending-tenant phase) */
@@ -257,7 +247,7 @@ export function useOnboardingState(): OnboardingState {
         setProvisioning(false);
       }
     })();
-  }, [webToken, tenantToken, needsTerms, needsRole, accountType, provisioning, selectTenant, user?.email, user?.name]);
+  }, [webToken, tenantToken, needsTerms, needsRole, accountType, provisioning, selectTenant]);
 
   const selectRole = useCallback(async (accountType: 'standard' | 'freelancer' | 'sales', ageAttested: boolean) => {
     await selectAccountType(accountType, ageAttested);
@@ -280,12 +270,7 @@ export function useOnboardingState(): OnboardingState {
     // normal pending-tenant picker, so this can't regress the multi-workspace
     // or error paths. [1837]
     if (!tenantToken) {
-      try {
-        const tenants = await getMyTenants(webToken);
-        if (tenants.length === 1 && tenants[0]) await selectTenant(tenants[0]);
-      } catch {
-        /* fall through to the tenant picker (pending-tenant phase) */
-      }
+      await selectSoleTenant(webToken, selectTenant).catch(() => false);
     }
   }, [webToken, terms, tenantToken, selectTenant]);
 

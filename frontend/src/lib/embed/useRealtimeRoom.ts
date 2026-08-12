@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { AUTH_API_URL, getStoredTenantToken } from '../auth';
+import { AUTH_API_URL, getStoredTenantToken, getStoredWebToken } from '../auth';
 
 /**
  * Subscribe to a collaborative session room over WebSocket. The server pushes a
@@ -13,11 +13,22 @@ import { AUTH_API_URL, getStoredTenantToken } from '../auth';
  * or null when nothing is open. `onChange` MUST be stable (useCallback) so the
  * socket isn't torn down every render. Reconnects with a short backoff; the
  * surface still works if the socket can't be established.
+ *
+ * `auth` names WHICH token the room is behind, because the API has two: a
+ * workspace-scoped one (`tenant`, the default — every collaborative room is
+ * inside a workspace) and a person-scoped one (`web`), which is what the message
+ * hub uses because a conversation with the platform owner is not workspace work.
+ * Sending the wrong one 401s the upgrade and the surface silently stops
+ * updating, so it is a parameter rather than a guess.
  */
-export function useRealtimeRoom(wsPath: string | null, onChange: () => void): void {
+export function useRealtimeRoom(
+  wsPath: string | null,
+  onChange: () => void,
+  auth: 'tenant' | 'web' = 'tenant',
+): void {
   useEffect(() => {
     if (!wsPath) return;
-    const token = getStoredTenantToken();
+    const token = auth === 'web' ? getStoredWebToken() : getStoredTenantToken();
     if (!token) return;
 
     const base = AUTH_API_URL.replace(/^http/, 'ws');
@@ -51,5 +62,5 @@ export function useRealtimeRoom(wsPath: string | null, onChange: () => void): vo
       if (retry) clearTimeout(retry);
       try { ws?.close(); } catch { /* ignore */ }
     };
-  }, [wsPath, onChange]);
+  }, [auth, wsPath, onChange]);
 }

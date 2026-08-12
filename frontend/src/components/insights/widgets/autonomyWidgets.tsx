@@ -72,9 +72,8 @@ type Labels = ReturnType<typeof useAutonomyLabels>;
 /** Loading / error boilerplate every card shares, plus the shared labels. */
 function useAuto(days: number) {
   const labels = useAutonomyLabels();
-  const { data, error } = useAutonomy(days);
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{labels.t('loading')}</Muted> : null;
-  return { data, state, ...labels };
+  const source = useAutonomy(days);
+  return { data: source.data, state: useSourceState(source), ...labels };
 }
 
 // ── Colour identity ───────────────────────────────────────────────────────────

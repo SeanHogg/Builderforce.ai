@@ -30,6 +30,8 @@ export interface AdminUser {
   displayName: string | null;
   isSuperadmin: boolean;
   createdAt: string;
+  /** Which shell the account is. Only 'standard' (builder) gets a workspace. */
+  accountType: 'standard' | 'freelancer' | 'sales';
   tenantCount: number;
 }
 

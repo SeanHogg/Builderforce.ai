@@ -18,13 +18,9 @@
  */
 
 import { useTranslations } from 'next-intl';
-import {
-  insightsApi, agileMetricsApi,
-  type DoraInsights, type LifecycleInsights, type VelocityInsights, type LifecyclePhase,
-} from '@/lib/builderforceApi';
-import { useSharedSource } from '@/lib/widgets/sharedSource';
+import { type LifecyclePhase } from '@/lib/builderforceApi';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
@@ -32,25 +28,7 @@ import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetr
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { hrs, pct } from '../format';
-import { useProjectScope } from '@/lib/ProjectScopeContext';
-
-// ── Shared, deduped collector reads (one request per source × window) ──────────
-
-/** One shared read of the DORA four-keys collector per window. */
-function useDora(days: number) {
-  const { currentProjectId } = useProjectScope();
-  return useSharedSource<DoraInsights>(`dora:${days}:p:${currentProjectId ?? 0}`, () => insightsApi.dora(days, currentProjectId));
-}
-/** One shared read of the life-cycle (cycle time) collector per window. */
-function useLifecycle(days: number) {
-  const { currentProjectId } = useProjectScope();
-  return useSharedSource<LifecycleInsights>(`lifecycle:${days}:p:${currentProjectId ?? 0}`, () => insightsApi.lifecycle(days, currentProjectId));
-}
-/** One shared read of the derived sprint-velocity collector per project/window. */
-function useVelocity(days: number) {
-  const { currentProjectId } = useProjectScope();
-  return useSharedSource<VelocityInsights>(`velocity:${days}:p:${currentProjectId ?? 0}`, () => agileMetricsApi.derivedVelocity(currentProjectId));
-}
+import { useDora, useLifecycle, useVelocity } from '../insightsSources';
 
 // Both lenses live behind the same Delivery hub slide-out.
 const DRILL_DELIVERY: WidgetDrill = { kind: 'panel', hub: 'delivery', panel: 'delivery' };
@@ -85,23 +63,20 @@ function fmtDur(hours: number): string {
 /** Loading / error wrapper for the DORA-backed cards. */
 function useDoraBody(days: number) {
   const t = useTranslations('insights');
-  const { data, error } = useDora(days);
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useDora(days);
+  return { data: source.data, state: useSourceState(source), t };
 }
 /** Loading / error wrapper for the life-cycle-backed cards. */
 function useLifecycleBody(days: number) {
   const t = useTranslations('insights');
-  const { data, error } = useLifecycle(days);
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useLifecycle(days);
+  return { data: source.data, state: useSourceState(source), t };
 }
 /** Loading / error wrapper for the velocity-backed cards. */
 function useVelocityBody(days: number) {
   const t = useTranslations('insights');
-  const { data, error } = useVelocity(days);
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useVelocity(days);
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 // ── DORA widget bodies ─────────────────────────────────────────────────────────

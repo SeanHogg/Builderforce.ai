@@ -23,6 +23,7 @@ import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { lexicalEval } from '../eval/semanticEval';
+import { resolveUsageDatabase } from '../llm/usageLedger';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
 //    schema change — see the Gap Register note on score calibration). ────────────
@@ -387,8 +388,9 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       return lexicalEval({ question, answer });
     })();
 
+    const usageDb = resolveUsageDatabase(env, db);
     const [{ model, steps, costMc }, pr, degraded, approval, toolCounts, plan] = await Promise.all([
-      resolveRunModel(db, args.executionId),
+      resolveRunModel(usageDb, args.executionId),
       resolveTaskPrSignal(db, exec.tenantId, exec.taskId),
       runWasDegraded(db, args.executionId),
       resolveApprovalOutcome(db, args.executionId),

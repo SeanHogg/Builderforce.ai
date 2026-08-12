@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 
 /**
  * Shared presentational bodies for registry widgets.
@@ -27,4 +28,24 @@ export function WidgetStat({ value, sub }: { value: string; sub?: string }) {
 /** Muted inline text — the canonical loading / error / empty-state line for a widget body. */
 export function WidgetMuted({ children }: { children: ReactNode }) {
   return <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{children}</span>;
+}
+
+/**
+ * The pre-data body of a widget: its error line, its loading line, or `null` once
+ * the source has resolved. Every widget module had re-inlined the identical
+ * ternary (`error ? <Muted>{error}</Muted> : data == null ? <Muted>loading</Muted>
+ * : null`), which is how a widget could end up reporting a failed read as an
+ * empty chart. One place decides, so every widget says the same thing.
+ *
+ * Returns `null` when there is data — the caller then renders its own body:
+ *
+ *   const src = useDora(days);
+ *   const state = useSourceState(src);
+ *   if (!src.data) return state;
+ */
+export function useSourceState(source: { data: unknown; error: string | null }): ReactNode {
+  const t = useTranslations('widgets');
+  if (source.error) return <WidgetMuted>{source.error}</WidgetMuted>;
+  if (source.data == null) return <WidgetMuted>{t('loading')}</WidgetMuted>;
+  return null;
 }

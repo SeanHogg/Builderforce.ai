@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
+import { billingApi, type BillingPlan, type BillingSubscription } from '@/lib/billingApi';
 import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
@@ -21,24 +21,11 @@ import { isNavigationFeatureId } from '@/lib/navigationFeatures';
 import { useCart } from '@/lib/CartContext';
 import { calculateSubscriptionLine } from '@/lib/subscriptionCart';
 
-type Plan = 'free' | 'pro' | 'teams';
-
-interface Subscription {
-  plan: Plan;
-  effectivePlan: Plan;
-  billingStatus: string;
-  billingCycle: 'monthly' | 'yearly' | null;
-  billingEmail: string | null;
-  billingPaymentBrand: string | null;
-  billingPaymentLast4: string | null;
-  billingUpdatedAt: string | null;
-  seatCount: number | null;
-  pricing: {
-    pro: { monthly: number; yearly: number; yearlySavingsPercent: number };
-    teams: { perSeatMonthly: number; perSeatYearly: number; yearlySavingsPercent: number; minimumSeats: number };
-    managedAgentHost: { perAgentHostMonthly: number };
-  };
-}
+// The subscription shape and its two calls live in `lib/billingApi` — `/billing`
+// reads exactly the same three things, and a second copy of the fetch here is
+// what dropped the emulation and locale headers on this page.
+type Plan = BillingPlan;
+type Subscription = BillingSubscription;
 
 function PlanBadge({ plan }: { plan: Plan }) {
   const t = useTranslations('planBadge.tier');
@@ -124,13 +111,7 @@ export default function PricingPageClient() {
     setLoading(true);
     setError(null);
     try {
-      const token = getStoredTenantToken();
-      const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/subscription`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json() as Subscription;
-      setSub(data);
+      setSub(await billingApi.subscription(tenantId));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errorLoad'));
     } finally {
@@ -220,12 +201,7 @@ export default function PricingPageClient() {
     if (!(await confirm({ message: t('downgradeConfirm'), destructive: false }))) return;
     setDowngrading(true);
     try {
-      const token = getStoredTenantToken();
-      const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/subscription/free`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
+      await billingApi.downgradeToFree(tenantId);
       await fetchSub();
     } catch { /* noop */ }
     finally { setDowngrading(false); }

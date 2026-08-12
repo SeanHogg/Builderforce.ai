@@ -15,9 +15,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { aiImpactApi, type AiImpactInsights } from '@/lib/aiImpactApi';
-import { useSharedSource } from '@/lib/widgets/sharedSource';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -26,12 +24,8 @@ import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { usd, pct, score2, int } from '../format';
+import { useAiImpact } from '../insightsSources';
 import { ProviderConsumptionBreakdown } from '../AiInsightSummaries';
-
-/** One shared, deduped read of the AI-Impact collector per (window). */
-function useAiImpact(days: number) {
-  return useSharedSource<AiImpactInsights>(`ai-impact:${days}`, () => aiImpactApi.get(days));
-}
 
 const DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'ai-impact' };
 const CAP = 'insights.aiImpact' as const;
@@ -41,9 +35,8 @@ const CAP = 'insights.aiImpact' as const;
 /** Wrap a card body: handles loading / error so each widget needn't repeat it. */
 function useImpact(days: number) {
   const t = useTranslations('insights');
-  const { data, error } = useAiImpact(days);
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useAiImpact(days);
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 // ── Widget bodies ──────────────────────────────────────────────────────────────

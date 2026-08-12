@@ -301,7 +301,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
     seat: 'platform', stage: 'admin', rung: RUNG.SIGNED_IN,
-    match: ['/settings', '/security', '/pricing', '/tenants'],
+    match: ['/settings', '/security', '/billing', '/tenants'],
     tabKind: 'route',
     tabs: [
       { id: '/settings', labelKey: 'tab.settings', icon: '⚙', activePaths: [] },
@@ -311,7 +311,11 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/settings/viewpoint', labelKey: 'tab.viewpoint', icon: '🎯' },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
-      { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },
+      // `/billing`, NOT `/pricing`. A signed-in customer clicking "Billing" is
+      // asking what they are on and where their money goes — `/pricing` is the
+      // marketing comparison for somebody deciding whether to buy, and it answers
+      // none of those questions. The console links OUT to it.
+      { id: '/billing', labelKey: 'tab.billing', icon: '💳', activePaths: ['/billing'] },
       { id: '/tenants', labelKey: 'tab.tenant', icon: '🏢' },
     ],
   },

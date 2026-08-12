@@ -1,10 +1,14 @@
 /** Server-backed CRM shared by a sales associate and platform superadmins. */
 import { Hono, type Context } from 'hono';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { TenantService } from '../../application/tenant/TenantService';
 import { commissionPercentToBps } from '../../application/sales/salesPolicy';
 import { SalesWorkspaceService, type SalesWorkspaceDb } from '../../application/sales/SalesWorkspaceService';
+import {
+  buildSalesReport, earnedCommissionCents, isSalesReportWindow, recentReferrals, windowStart,
+} from '../../application/sales/salesReports';
+import { PayoutAccountService } from '../../application/payouts/PayoutAccountService';
 
 const STAGES = new Set(['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost']);
 const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
@@ -137,6 +141,62 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
     const body = await c.req.json<Record<string, unknown>>();
     return c.json(await sales.setGoals(target.id, { outreachTarget: positive(body.outreachTarget, 50), contactsTarget: positive(body.contactsTarget, 20), meetingsTarget: positive(body.meetingsTarget, 3) }));
+  });
+
+  /**
+   * GET /reports — the CRO report, for whoever is entitled to it.
+   *
+   * ONE handler serves both audiences (the brief's "the same reports the sales
+   * rep would get but aggregated across accounts, and filtered to a specific
+   * user"), because they ARE the same report over a different population:
+   *
+   *   • an associate       → always their own rows, `associateId` ignored;
+   *   • a superadmin       → the aggregate, or one associate when `associateId`
+   *                          is supplied — which is the filter, not a second view.
+   *
+   * A second endpoint for the admin flavour would be a second definition of
+   * "conversion rate" waiting to disagree with this one.
+   */
+  r.get('/reports', async (c) => {
+    const current = await viewer(c);
+    if (!current) return c.json({ error: 'Authentication required' }, 401);
+    const requested = c.req.query('associateId');
+    if (current.isSuperadmin) {
+      const report = await sales.report(requested || null);
+      return c.json({ report, scope: requested ? 'associate' : 'aggregate' });
+    }
+    const target = await owner(c);
+    if (!target) return c.json({ error: 'Sales associate access required' }, 403);
+    return c.json({ report: await sales.report(target.id), scope: 'associate' });
+  });
+
+  /**
+   * GET /payouts — earned, paid, available, plus the history and the destination.
+   *
+   * "Earned" comes from the sales domain (converted commission) and "paid" from
+   * the ledger, which is the split `PayoutAccountService` documents: one fact in
+   * one place, and the difference is arithmetic rather than a third stored number.
+   */
+  r.get('/payouts', async (c) => {
+    const target = await owner(c);
+    if (!target) return c.json({ error: 'Forbidden' }, 403);
+    const payouts = new PayoutAccountService(db, c.env as Env);
+    const earned = await earnedCommissionCents(db, target.id);
+    const [balance, history, accounts] = await Promise.all([
+      payouts.balance(target.id, earned),
+      payouts.payouts(target.id),
+      payouts.list(target.id),
+    ]);
+    return c.json({ balance, payouts: history, accounts });
+  });
+
+  /** GET /leads — referrals that signed up inside a window (default: this month). */
+  r.get('/leads', async (c) => {
+    const target = await owner(c);
+    if (!target) return c.json({ error: 'Forbidden' }, 403);
+    const requested = c.req.query('window');
+    const window = isSalesReportWindow(requested) ? requested : 'month';
+    return c.json({ window, leads: await recentReferrals(db, target.id, windowStart(window, new Date())) });
   });
 
   r.post('/notes', async (c) => {

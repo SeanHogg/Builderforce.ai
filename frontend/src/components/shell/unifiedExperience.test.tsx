@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { DestinationIndex, INDEX_ROW_LIMIT, resolveOrientation, type IndexItem } from './DestinationIndex';
+import { DestinationIndex, INDEX_ROW_LIMIT, indexScrolls, resolveOrientation, type IndexItem } from './DestinationIndex';
 import en from '@/i18n/messages/en.json';
 
 /**
@@ -42,19 +42,42 @@ describe('PRD 21 §6 — acceptance', () => {
     expect(read('components/AppShell.tsx')).toContain("from './shell/ShellIndex'");
   });
 
-  it('#3 above the row limit the index turns vertical, so no bar holds seven', () => {
+  /**
+   * §6.3, as amended (operator decision, 2026-08-12): a nested sub-menu is a tab
+   * ROW at the top of its page, and past the row limit it SCROLLS on one line
+   * rather than flipping to a column. The constraint that survives is the one
+   * that mattered — an over-long index must never wrap into a stacked block.
+   */
+  it('#3 an auto index is always a row, and past the limit it scrolls', () => {
     expect(resolveOrientation('auto', INDEX_ROW_LIMIT)).toBe('horizontal');
-    expect(resolveOrientation('auto', INDEX_ROW_LIMIT + 1)).toBe('vertical');
+    expect(resolveOrientation('auto', INDEX_ROW_LIMIT + 1)).toBe('horizontal');
+    expect(indexScrolls('horizontal', INDEX_ROW_LIMIT)).toBe(false);
+    expect(indexScrolls('horizontal', INDEX_ROW_LIMIT + 1)).toBe(true);
 
     const many = Array.from({ length: 14 }, (_, i) => item(`t${i}`));
     const { container } = renderIndex(<DestinationIndex items={many} activeId="t0" ariaLabel="Sub-views" />);
-    expect(container.querySelector('.ui-index')?.getAttribute('data-orientation')).toBe('vertical');
+    const nav = container.querySelector('.ui-index');
+    expect(nav?.getAttribute('data-orientation')).toBe('horizontal');
+    expect(nav?.getAttribute('data-scroll')).toBe('true');
   });
 
-  it('#3 a short set stays a compact row', () => {
+  it('#3 a short set stays a compact row that does not need to scroll', () => {
     const few = Array.from({ length: 4 }, (_, i) => item(`t${i}`));
     const { container } = renderIndex(<DestinationIndex items={few} activeId="t0" ariaLabel="Sub-views" />);
-    expect(container.querySelector('.ui-index')?.getAttribute('data-orientation')).toBe('horizontal');
+    const nav = container.querySelector('.ui-index');
+    expect(nav?.getAttribute('data-orientation')).toBe('horizontal');
+    expect(nav?.getAttribute('data-scroll')).toBeNull();
+  });
+
+  it('the column survives only where a caller owns one, and it is asked for', () => {
+    const many = Array.from({ length: 8 }, (_, i) => item(`t${i}`));
+    const { container } = renderIndex(
+      <DestinationIndex items={many} activeId="t0" ariaLabel="Sub-views" orientation="vertical" />,
+    );
+    expect(container.querySelector('.ui-index')?.getAttribute('data-orientation')).toBe('vertical');
+    // The shell panel is that caller — it must keep asking, or the rail becomes a
+    // tab strip crushed into a 168px column.
+    expect(read('components/shell/ShellPanel.tsx')).toContain('orientation="vertical"');
   });
 
   it('#6 a locked destination is visible and disabled, never hidden', () => {

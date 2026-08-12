@@ -29,7 +29,7 @@ import { keyResults, objectiveLinks, objectives, projects, tasks } from '../../i
 import { TaskType } from '../../domain/shared/types';
 import type { TaskService } from '../task/TaskService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
+import { invalidateProjectsList } from '../project/projectsListCache';
 
 /** The PMO rollup/tree version token (mirrors pmoRoutes.pmoVersionKey). Inlined to
  *  avoid a pmoRoutes ↔ this-module import cycle — pmoRoutes calls convertWorkItemType. */

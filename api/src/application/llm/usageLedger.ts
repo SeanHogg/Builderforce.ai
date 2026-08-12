@@ -208,6 +208,20 @@ interface ProxyUsageResult {
 }
 
 /**
+ * Resolve the database that owns the usage ledger. Production isolates
+ * `llm_usage_log` in the transactional database; local/test environments keep it
+ * in the application database. Readers and writers must use this same boundary or
+ * a scored cloud run is incorrectly attributed to the `unknown` model.
+ */
+export function resolveUsageDatabase(
+  env: Env,
+  db: Db,
+  buildTransactional: (env: Env) => Db = buildTransactionalDatabase,
+): Db {
+  return env.NEON_TRANSACTIONAL_DATABASE_URL?.trim() ? buildTransactional(env) : db;
+}
+
+/**
  * Record usage for an internal `ideProxy(...).complete()` caller (brain, QA gen,
  * repo analysis, security review, IDE chat, …) that would otherwise bypass the
  * ledger entirely. No-ops when the call produced no usage (error / stream).
@@ -250,7 +264,7 @@ export async function recordProxyUsage(
  *  Best-effort — never throws (logging must not fail a run). */
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
-    const usageDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+    const usageDb = resolveUsageDatabase(env, db);
     // Clamp tokens ONCE at the canonical write boundary so neither the cost price
     // nor the persisted columns can carry a NaN/negative/fractional from a bad
     // upstream turn — every usage producer (gateway + cloud) funnels through here.

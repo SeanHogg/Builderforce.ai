@@ -3,10 +3,8 @@ import { Hono, type Context } from 'hono';
 import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { notSystemTask } from '../../application/task/taskScope';
-import { ensureProjectTemplate } from '../../application/project/projectTemplate';
-import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
-import { provisionDefaultProjectEvermind } from '../../application/llm/projectEvermind';
-import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
+import { provisionProject } from '../../application/project/provisionProject';
+import { invalidateProjectsList, projectsListVersionKey } from '../../application/project/projectsListCache';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached, bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
@@ -55,30 +53,6 @@ type ChatCompletionPayload = {
  * Maps between HTTP request/response and the application service.
  * No business logic lives here.
  */
-/** Version-token key for a tenant's cached `/api/projects` list. */
-export function projectsListVersionKey(tenantId: number): string {
-  return `projects-list:tenant:${tenantId}`;
-}
-
-/**
- * Bust the cached `/api/projects` list for a tenant. Call from any write that
- * changes the list rows OR the aggregates it folds in (project CRUD, task
- * count/status/date/archival changes). Bumping a per-tenant version token is one
- * cheap KV write; every list key embedding the old token ages out on its TTL.
- * The KV TTL is the backstop for the rarer aggregates we don't bump explicitly
- * (workflow count, architecture PRD, agent-host assignment, initiative-level
- * goal links) — mirrors the completed-by-assignee convention in reportRoutes.
- */
-export async function invalidateProjectsList(env: Env, tenantId: number): Promise<void> {
-  // Task/objective/project writes that reshape the list also change what the
-  // chat↔ticket link picker can find, so orphan its typeahead cache in the same
-  // beat (the picker is a ticket surface, exactly like the projects list).
-  await Promise.all([
-    bumpCacheVersion(env, projectsListVersionKey(tenantId)),
-    bumpTicketSearchVersion(env, tenantId),
-  ]);
-}
-
 export function createProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -705,26 +679,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       origin: body.origin ?? null,
       tenantId,
     });
-    await ensureProjectTemplate(c.env.UPLOADS, project);
-    // Provision the project's board from a kanban template so its lanes carry role
-    // ownership + per-lane requirements from day one (the onboarding "recommended
-    // roster" reads from this). Defaults to the Standard SWE board; best-effort so a
-    // template failure never blocks project creation.
-    {
-      const plain = project.toPlain();
-      const templateId = (body as { kanbanTemplateId?: string }).kanbanTemplateId?.trim() || DEFAULT_TEMPLATE_ID;
-      await new KanbanTemplateService(db)
-        .applyToProject(c.env as Env, tenantId, plain.id, templateId, plain.name)
-        .catch((error) => {
-          reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
-        });
-    }
-    // Give the project a DEFAULT Evermind so it always has a self-learning model to
-    // run/learn/edit — even when the manager never seeds one from a Studio model.
-    // Best-effort (never blocks creation); inference stays OFF until opted in.
-    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.toPlain().id, name);
-    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+    await provisionProject(c.env as Env, db, tenantId, project, {
+      kanbanTemplateId: (body as { kanbanTemplateId?: string }).kanbanTemplateId,
     });
     return c.json(project.toPlain(), 201);
   });
@@ -801,12 +757,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
     });
 
-    await ensureProjectTemplate(c.env.UPLOADS, created);
-    // Default Evermind for every newly-created project (see POST / above).
-    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, created.toPlain().id, name);
-    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
-    });
+    await provisionProject(c.env as Env, db, tenantId, created);
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -923,12 +874,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
           rootWorkingDirectory,
         });
 
-    // Newly scaffolded (non-repo, default designer) projects get the starter
-    // template so the IDE opens runnable — updates of an existing project keep
-    // whatever files it already has.
-    if (!existing) await ensureProjectTemplate(c.env.UPLOADS, project);
-    // Default Evermind for a freshly-scaffolded project (see POST / above).
-    if (!existing) await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.id, name);
+    // Newly scaffolded (non-repo, default designer) projects get the full starter
+    // provisioning (files + board + Evermind) so the IDE opens runnable — updates
+    // of an existing project keep whatever files and board it already has.
+    if (!existing) await provisionProject(c.env as Env, db, tenantId, project);
 
     let selectedAgentHostId: number | null = null;
 

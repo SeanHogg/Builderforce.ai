@@ -45,7 +45,7 @@ import {
   type PmoScopeKind,
 } from '../../application/pmo/portfolioRollup';
 import { computeValueStream } from '../../application/pmo/valueStream';
-import { invalidateProjectsList, projectsListVersionKey } from './projectRoutes';
+import { invalidateProjectsList, projectsListVersionKey } from '../../application/project/projectsListCache';
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError } from '../../application/workitem/convertWorkItemType';
 import { TaskService } from '../../application/task/TaskService';
 import { notSystemTask } from '../../application/task/taskScope';

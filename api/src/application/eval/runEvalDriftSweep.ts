@@ -18,6 +18,18 @@ import { buildTenantDriftReport } from '../../presentation/routes/evalRoutes';
 import { notifyAlert } from '../alerts/runAlertSweep';
 import type { Env } from '../../env';
 
+export function buildEvalDriftAlertMessage(
+  drifting: Array<{ group: string; result: { severity: string } }>,
+): string {
+  const groups = drifting
+    .map((g) => `${g.group} (severity ${g.result.severity})`)
+    .join(', ');
+  return (
+    `Eval drift detected on ${drifting.length} ` +
+    `${drifting.length === 1 ? 'group' : 'groups'}: ${groups}.`
+  );
+}
+
 export async function runEvalDriftSweep(env: Env): Promise<void> {
   const db = buildDatabase(env);
 
@@ -48,12 +60,7 @@ export async function runEvalDriftSweep(env: Env): Promise<void> {
       // so a notification/insert failure can't disrupt the drift sweep.
       if (report.drifting.length > 0) {
         try {
-          const groups = report.drifting
-            .map((g) => `${g.group} (severity ${g.result.severity})`)
-            .join(', ');
-          const message =
-            `Eval drift detected on ${report.drifting.length} ` +
-            `${report.drifting.length === 1 ? 'group' : 'groups'}: ${groups}.`;
+          const message = buildEvalDriftAlertMessage(report.drifting);
           const notified = await notifyAlert(env, db, {
             tenantId,
             message,

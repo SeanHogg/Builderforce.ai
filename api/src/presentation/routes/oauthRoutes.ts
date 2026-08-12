@@ -17,6 +17,7 @@ import {
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword } from '../../infrastructure/auth/HashService';
 import { signState, verifyState, exchangeCodeForTokens } from '../../infrastructure/auth/oauthState';
+import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import type { Db } from '../../infrastructure/database/connection';
 
 // ---------------------------------------------------------------------------
@@ -484,6 +485,20 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           locale: localeFromHeaders(headerHints(c.req)),
         });
         userId = newId;
+        // Zero-setup onboarding: an OAuth signup gets its workspace + starter
+        // project HERE, before the redirect, rather than from a browser effect the
+        // user must stay long enough to trigger. Awaited (not waitUntil) so the
+        // workspace exists before the callback page's first `/me`, which would
+        // otherwise race the same provisioning. Never throws — see the use case.
+        // OAuth carries no role choice, so this uses the 'standard' default; a
+        // user who later picks Hired keeps an unused starter workspace, which the
+        // hired shell does not surface.
+        await ensureStarterWorkspace(c.env as Env, db, {
+          id: newId,
+          email: normalizedEmail,
+          username,
+          displayName: providerUser.name,
+        });
         // Brand-new account (no provider link, no same-email user) — this is the
         // only signup branch in this handler, so the welcome email belongs here.
         // Fire-and-forget: a mail failure must never block the sign-in redirect.

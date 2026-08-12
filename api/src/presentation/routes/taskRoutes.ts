@@ -11,7 +11,7 @@ import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../i
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
-import { invalidateProjectsList } from './projectRoutes';
+import { invalidateProjectsList } from '../../application/project/projectsListCache';
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../application/workitem/convertWorkItemType';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';

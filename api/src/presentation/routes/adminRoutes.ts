@@ -1253,10 +1253,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         u.display_name  AS "displayName",
         u.is_superadmin AS "isSuperadmin",
         u.created_at    AS "createdAt",
+        -- Which shell the account is: only a builder ('standard') is provisioned a
+        -- workspace, so without this a hired/sales account's legitimate zero reads
+        -- identically to a broken builder's.
+        u.account_type  AS "accountType",
         COUNT(DISTINCT tm.tenant_id)::int AS "tenantCount"
       FROM users u
       LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
-      GROUP BY u.id, u.email, u.username, u.display_name, u.is_superadmin, u.created_at
+      GROUP BY u.id, u.email, u.username, u.display_name, u.is_superadmin, u.created_at, u.account_type
       ORDER BY u.created_at DESC
       LIMIT 500
     `);

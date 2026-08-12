@@ -1,4 +1,5 @@
 import { apiRequest } from './apiClient';
+import type { PayoutAccount, PayoutBalance, PayoutRecord } from './payoutsApi';
 
 export type SalesStage = 'new' | 'contacted' | 'qualified' | 'meeting' | 'proposal' | 'won' | 'lost';
 export type SalesContact = { id: string; ownerUserId: string; name: string; email: string; company: string; market: string; stage: SalesStage; lastTouchAt: string | null };
@@ -9,6 +10,58 @@ export type SalesAssociate = { id: string; email: string; name: string | null; c
 export type SalesWorkspace = { contacts: SalesContact[]; campaigns: SalesCampaign[]; goals: SalesGoals; notes: SalesNote[] };
 export type SalesCommissionRule = { ruleKey: string; plan: 'pro' | 'teams'; billingCycle: 'monthly' | 'yearly'; referralBps: number; salesBps: number; updatedAt: string };
 export type SalesPricing = { currency: string; pro: { monthly: number; yearly: number }; teams: { perSeatMonthly: number; perSeatYearly: number; minimumSeats: number } };
+
+/**
+ * The CRO report — ONE shape for both audiences.
+ *
+ * `associateUserId` null means the aggregate across every associate (what a
+ * superadmin sees) and `associates` is then the leaderboard; set means one
+ * person's rows and `associates` is empty. The rep's hub and the admin panel
+ * therefore render the SAME component off the SAME type, which is what stops
+ * "conversion rate" meaning two things in two places.
+ */
+export const SALES_REPORT_WINDOWS = ['week', 'month', 'quarter', 'ytd', 'all'] as const;
+export type SalesReportWindow = (typeof SALES_REPORT_WINDOWS)[number];
+
+export type SalesWindowTotals = {
+  window: SalesReportWindow;
+  signups: number;
+  conversions: number;
+  conversionRatePercent: number;
+  revenueCents: number;
+  commissionCents: number;
+  averageDaysToConvert: number | null;
+};
+
+export type SalesAssociateLine = {
+  associateUserId: string;
+  name: string | null;
+  email: string;
+  signups: number;
+  conversions: number;
+  revenueCents: number;
+  commissionCents: number;
+  lastSignupAtISO: string | null;
+};
+
+export type SalesReport = {
+  generatedAtISO: string;
+  associateUserId: string | null;
+  windows: SalesWindowTotals[];
+  funnel: Array<{ stage: string; count: number }>;
+  stalledContacts: number;
+  associates: SalesAssociateLine[];
+};
+
+export type SalesLead = {
+  id: string;
+  attributionType: string;
+  signedUpAt: string;
+  convertedAt: string | null;
+  plan: string | null;
+  revenueCents: number | null;
+  commissionCents: number | null;
+};
 
 const query = (associateId?: string | null) => associateId ? `?associateId=${encodeURIComponent(associateId)}` : '';
 const json = (body: unknown) => ({ method: 'POST', auth: 'web' as const, body: JSON.stringify(body) });
@@ -27,4 +80,12 @@ export const salesApi = {
   commissionRules: () => apiRequest<{ rules: SalesCommissionRule[]; pricing: SalesPricing }>('/api/sales/commission-rules', { auth: 'web' }),
   saveCommissionRules: (rules: Array<{ plan: string; billingCycle: string; referralPercent: number; salesPercent: number }>) => apiRequest<{ rules: SalesCommissionRule[]; pricing: SalesPricing }>('/api/sales/commission-rules', { method: 'PUT', auth: 'web', body: JSON.stringify({ rules }) }),
   claimReferral: (referralCode: string) => apiRequest<{ claimed: boolean }>('/api/sales/claim-referral', { method: 'POST', auth: 'web', body: JSON.stringify({ referralCode }) }),
+  /** Omit `associateId` for your own report; a superadmin omitting it gets the
+   *  aggregate and supplying it gets that one associate — the filter, not a
+   *  second endpoint. */
+  report: (associateId?: string | null) => apiRequest<{ report: SalesReport; scope: 'aggregate' | 'associate' }>(`/api/sales/reports${query(associateId)}`, { auth: 'web' }),
+  payouts: (associateId?: string | null) => apiRequest<{ balance: PayoutBalance; payouts: PayoutRecord[]; accounts: PayoutAccount[] }>(`/api/sales/payouts${query(associateId)}`, { auth: 'web' }),
+  leads: (window: SalesReportWindow = 'month', associateId?: string | null) => apiRequest<{ window: SalesReportWindow; leads: SalesLead[] }>(
+    `/api/sales/leads?window=${window}${associateId ? `&associateId=${encodeURIComponent(associateId)}` : ''}`, { auth: 'web' },
+  ),
 };

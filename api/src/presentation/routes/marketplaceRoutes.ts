@@ -16,6 +16,7 @@ import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
+import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
@@ -156,6 +157,11 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       passwordHash,
       locale,
     });
+
+    // This path never creates a gig account, so the new user is a builder and gets
+    // the same zero-setup workspace + starter project every other signup door
+    // provisions. Never throws — see the use case.
+    await ensureStarterWorkspace(c.env as Env, db, { id: userId, email, username, displayName: display_name ?? username });
 
     // Fire-and-forget: a mail failure must not fail the registration. This path
     // never creates a gig account, so the builder next steps apply.

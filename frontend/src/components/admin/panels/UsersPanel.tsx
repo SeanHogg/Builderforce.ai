@@ -8,6 +8,36 @@ import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { useEmulationLauncher } from '@/components/admin/EmulationLauncher';
 import { AdminError, AdminLoading, errText, fmtDate } from '@/components/admin/adminShared';
 
+/**
+ * A user's workspace count, read as a verdict rather than a number.
+ *
+ * Zero is normal for a hired/sales account (those shells have no workspace) and
+ * is a DEFECT for a builder — zero-setup onboarding provisions one server-side at
+ * signup, so a builder at zero means provisioning never ran. Owning that rule in
+ * one component keeps the table and the card view from disagreeing about it.
+ */
+function WorkspaceCount({ user, label }: { user: AdminUser; label?: boolean }) {
+  const t = useTranslations('admin');
+  const missing = user.tenantCount === 0 && user.accountType === 'standard';
+  const text = label ? t('users.workspacesCount', { count: user.tenantCount }) : String(user.tenantCount);
+  if (!missing) return <span>{text}</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      {text}
+      <span className="badge badge-danger" title={t('users.noWorkspaceHint')}>{t('users.noWorkspace')}</span>
+    </span>
+  );
+}
+
+/** The account's shell. Explains a legitimate zero above, so it sits beside it. */
+function AccountTypeBadge({ accountType }: { accountType: AdminUser['accountType'] }) {
+  const t = useTranslations('admin');
+  const key = accountType === 'freelancer' ? 'users.typeFreelancer'
+    : accountType === 'sales' ? 'users.typeSales'
+    : 'users.typeBuilder';
+  return <span className="badge badge-neutral">{t(key)}</span>;
+}
+
 export default function UsersPanel() {
   const t = useTranslations('admin');
   const { startEmulation } = useEmulationLauncher();
@@ -59,6 +89,7 @@ export default function UsersPanel() {
               <tr>
                 <th>{t('users.colEmail')}</th>
                 <th>{t('users.colUsername')}</th>
+                <th>{t('users.colType')}</th>
                 <th>{t('users.colWorkspaces')}</th>
                 <th>{t('users.colJoined')}</th>
                 <th>{t('users.colRole')}</th>
@@ -70,7 +101,8 @@ export default function UsersPanel() {
                 <tr key={u.id}>
                   <td>{u.email}</td>
                   <td className="text-muted">{u.username ?? '—'}</td>
-                  <td>{u.tenantCount}</td>
+                  <td><AccountTypeBadge accountType={u.accountType} /></td>
+                  <td><WorkspaceCount user={u} /></td>
                   <td className="text-muted">{fmtDate(u.createdAt)}</td>
                   <td>
                     {u.isSuperadmin ? (
@@ -117,11 +149,12 @@ export default function UsersPanel() {
                   <span className="badge badge-neutral">{t('users.roleUser')}</span>
                 )}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                {u.username ?? '—'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-muted)' }}>
+                <span style={{ wordBreak: 'break-all' }}>{u.username ?? '—'}</span>
+                <AccountTypeBadge accountType={u.accountType} />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
-                <span>{t('users.workspacesCount', { count: u.tenantCount })}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-muted)' }}>
+                <WorkspaceCount user={u} label />
                 <span>{fmtDate(u.createdAt)}</span>
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>

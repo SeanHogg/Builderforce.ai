@@ -7,6 +7,7 @@ import {
   salesReferrals, salesWeeklyGoals, users,
 } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
+import { buildSalesReport } from './salesReports';
 
 export type SalesWorkspaceDb = Db;
 
@@ -41,6 +42,11 @@ export class SalesWorkspaceService {
   async associates() {
     return this.db.select({ id: users.id, email: users.email, name: users.displayName, createdAt: users.createdAt })
       .from(users).where(eq(users.accountType, 'sales')).orderBy(desc(users.createdAt));
+  }
+
+  /** The CRO report. `associateUserId` null = every associate (the aggregate). */
+  report(associateUserId: string | null) {
+    return buildSalesReport(this.db, { associateUserId });
   }
 
   async claimReferral(userId: string, referralCode: string, env: Env) {

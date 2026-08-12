@@ -28,6 +28,7 @@ import {
   salesReferrals,
 } from '../../infrastructure/database/schema';
 import { notify } from '../../application/notifications/notify';
+import { accountTypeGetsWorkspace, ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
@@ -835,6 +836,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await provisionFreelancer(c, created);
     }
 
+    // Zero-setup onboarding: a builder gets their workspace + starter project HERE,
+    // the moment the account exists, not when a browser effect happens to run. This
+    // form is an explicit role choice, so we already know they're a builder.
+    // Best-effort by contract (see ensureStarterWorkspace) — it never throws.
+    await ensureStarterWorkspace(c.env as Env, db, created);
+
     // Email-ownership gate: the account exists but is UNVERIFIED — no session is
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
@@ -1145,6 +1152,23 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
+
+    // Self-heal for zero-setup onboarding. Accounts created before provisioning
+    // moved server-side — and any account whose creation-time provisioning failed
+    // — would otherwise sit at zero workspaces forever. This is the one request
+    // every surface makes on load, so it is where the repair belongs. It runs
+    // AFTER the response via waitUntil so it never adds latency to the gate, and
+    // is a no-op (one indexed membership read) for everybody already provisioned.
+    if (accountTypeGetsWorkspace(full?.accountType)) {
+      c.executionCtx.waitUntil(ensureStarterWorkspace(c.env as Env, db, {
+        id: userId,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+        accountType: full?.accountType ?? 'standard',
+      }));
+    }
+
     return c.json({
       user: {
         ...user,
@@ -1208,6 +1232,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (accountType === 'freelancer') {
       await provisionFreelancer(c, row);
     }
+
+    // Picking Build is the OAuth/magic-link equivalent of the register form's role
+    // choice — so it gets the same zero-setup workspace. Idempotent, so an account
+    // already provisioned at creation just no-ops here.
+    await ensureStarterWorkspace(c.env as Env, db, row);
 
     // The role-specific next steps. Only reachable past the idempotency guard
     // above, so the choice — and this email — happen exactly once per account.
