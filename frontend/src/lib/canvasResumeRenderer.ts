@@ -3,7 +3,9 @@ import {
   RESUME_TEMPLATES,
   activeResumeRevision,
   normalizedResumeTemplate,
+  renderResumeMarkdown,
   resumeFamilyFromNode,
+  type CanvasResumeDocument,
   type CanvasResumeRevision,
   type ResumeOrientation,
   type ResumePageSize,
@@ -40,6 +42,21 @@ export const RESUME_DOCUMENT_STYLES = `
   .canvasResumeDocument section[data-layout="cards"] h3 { border:.25mm solid color-mix(in srgb,var(--resume-accent) 22%,transparent); border-radius:1.5mm; padding:2mm; }
   .canvasResumeDocument section[data-layout="timeline"] { border-left:.5mm solid color-mix(in srgb,var(--resume-accent) 28%,transparent); padding-left:4mm; }
   .canvasResumeDocument[data-mode="hero"] h1 { padding-top: 4mm; font-size: 30pt; }
+  .canvasResumeHero { display:grid; gap:6mm; margin:-16mm -18mm 8mm; padding:14mm 18mm; color:#fff; background:linear-gradient(135deg,var(--resume-accent),color-mix(in srgb,var(--resume-accent) 58%,#111827)); }
+  .canvasResumeDocument[data-density="compact"] .canvasResumeHero { margin:-11mm -13mm 7mm; padding:10mm 13mm; }
+  .canvasResumeDocument[data-density="spacious"] .canvasResumeHero { margin:-20mm -21mm 9mm; padding:16mm 21mm; }
+  .canvasResumeHero[data-layout="split"] { grid-template-columns:auto minmax(0,1fr) minmax(45mm,.75fr); align-items:center; }
+  .canvasResumeHero[data-layout="stacked"] { text-align:center; justify-items:center; }
+  .canvasResumeHero[data-layout="compact"] { grid-template-columns:auto 1fr; align-items:center; padding-top:7mm; padding-bottom:7mm; }
+  .canvasResumeAvatar { width:25mm; height:25mm; border-radius:999px; object-fit:cover; border:1mm solid rgb(255 255 255 / 45%); }
+  .canvasResumeHero h1 { color:inherit; padding:0 !important; }
+  .canvasResumeHero p { max-width:150mm; }
+  .canvasResumeContacts { display:flex; flex-wrap:wrap; gap:2mm; margin-top:3mm; }
+  .canvasResumeContacts a { color:inherit; border:.25mm solid rgb(255 255 255 / 48%); border-radius:99px; padding:1.3mm 3mm; text-decoration:none; }
+  .canvasResumeHeroMedia video { display:block; width:100%; max-height:48mm; object-fit:cover; border-radius:2mm; }
+  .canvasResumeMediaStrip { display:flex; flex-wrap:wrap; gap:2mm; margin:2mm 0 4mm; }
+  .canvasResumeMediaStrip img,.canvasResumeMediaStrip video { width:32mm; height:24mm; border-radius:1.5mm; object-fit:cover; border:.25mm solid color-mix(in srgb,var(--resume-accent) 25%,transparent); }
+  .canvasResumeMediaStrip a { display:inline-flex; align-items:center; min-height:8mm; padding:1mm 2mm; border:.25mm solid color-mix(in srgb,var(--resume-accent) 25%,transparent); border-radius:1.5mm; }
   @media print {
     .canvasResumeDocument { min-height: auto; border-radius: 0; box-shadow: none; }
     .canvasResumeDocument h2, .canvasResumeDocument h3, .canvasResumeDocument li { break-inside: avoid; }
@@ -64,16 +81,80 @@ const TEMPLATE_SECTION_ORDER: Partial<Record<ResumeTemplateDefinition['id'], str
 
 interface RenderedSection { id: string; html: string }
 
-function structuredTemplateHtml(markdown: string, template: ResumeTemplateDefinition): string {
+const text = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
+const safeUrl = (value: unknown, protocols = ['https:', 'http:']): string => {
+  const candidate = text(value);
+  if (!candidate) return '';
+  try { const parsed = new URL(candidate); return protocols.includes(parsed.protocol) ? candidate : ''; } catch { return ''; }
+};
+const cloneDocument = (document: CanvasResumeDocument): CanvasResumeDocument => JSON.parse(JSON.stringify(document)) as CanvasResumeDocument;
+
+function descriptorDocument(revision: CanvasResumeRevision, template: ResumeTemplateDefinition): CanvasResumeDocument | null {
+  if (!revision.document || revision.structuredStale) return null;
+  const document = cloneDocument(revision.document);
+  const descriptor = normalizedResumeTemplate(template);
+  if (Array.isArray(document.references)) document.references = document.references.filter((reference) => !reference || typeof reference !== 'object' || Array.isArray(reference) || (reference as Record<string, unknown>).private !== true);
+  for (const [sectionId, rule] of Object.entries(descriptor.sections)) {
+    const rows = document[sectionId];
+    if (!Array.isArray(rows)) continue;
+    const records = rows.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row));
+    if (rule?.showHighlights === false) for (const row of records) delete row.highlights;
+    if (rule?.sortBy === 'date_desc' || rule?.sortBy === 'date_asc') rows.sort((a, b) => {
+      const leftRecord = a as Record<string, unknown>; const rightRecord = b as Record<string, unknown>;
+      const left = text(leftRecord.startDate ?? leftRecord.date ?? leftRecord.releaseDate); const right = text(rightRecord.startDate ?? rightRecord.date ?? rightRecord.releaseDate);
+      return rule.sortBy === 'date_desc' ? right.localeCompare(left) : left.localeCompare(right);
+    });
+  }
+  return document;
+}
+
+function mediaMarkup(document: CanvasResumeDocument, itemId: unknown): string {
+  if (!text(itemId) || !Array.isArray(document.metaData)) return '';
+  const items = document.metaData.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value) && text((value as Record<string, unknown>).referenceId) === text(itemId));
+  const markup = items.map((item) => {
+    const url = safeUrl(item.url); if (!url) return '';
+    const label = escapeHtml(text(item.name) || 'Media'); const kind = text(item.metaType).toLowerCase();
+    if (kind.includes('image')) return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(url)}" alt="${label}" loading="lazy"></a>`;
+    if (kind.includes('video') && /\.(mp4|webm)(?:$|\?)/i.test(url)) return `<video src="${escapeHtml(url)}" controls preload="metadata" aria-label="${label}"></video>`;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${label}</a>`;
+  }).filter(Boolean).join('');
+  return markup ? `<div class="canvasResumeMediaStrip">${markup}</div>` : '';
+}
+
+function enhanceSectionMedia(section: RenderedSection, document: CanvasResumeDocument, template: ResumeTemplateDefinition): RenderedSection {
+  const rule = normalizedResumeTemplate(template).sections[section.id as keyof NonNullable<ResumeTemplateDefinition['sections']>];
+  const rows = document[section.id] as unknown;
+  if (!rule?.showMedia || !Array.isArray(rows)) return section;
+  let index = 0;
+  return { ...section, html: section.html.replace(/<h3>(.*?)<\/h3>/g, (heading) => `${heading}${mediaMarkup(document, (rows[index++] as Record<string, unknown> | undefined)?.id)}`) };
+}
+
+function heroMarkup(document: CanvasResumeDocument | null, template: ResumeTemplateDefinition): string {
+  if (!document) return '';
+  const descriptor = normalizedResumeTemplate(template); const basics = document.basics ?? {};
+  if (!descriptor.hero.enabled) return '';
+  const avatar = descriptor.hero.showAvatar ? safeUrl(basics.image) : '';
+  const name = text(basics.name); const label = text(basics.label); const summary = descriptor.hero.showSummary ? text(basics.summary) : '';
+  const contacts = descriptor.hero.showContactButtons ? [
+    text(basics.email) ? { href: `mailto:${text(basics.email)}`, label: text(basics.email) } : null,
+    text(basics.phone) ? { href: `tel:${text(basics.phone).replace(/[^+\d]/g, '')}`, label: text(basics.phone) } : null,
+    safeUrl(basics.url) ? { href: safeUrl(basics.url), label: text(basics.url) } : null,
+  ].filter((item): item is { href: string; label: string } => !!item) : [];
+  const video = descriptor.hero.showVideo ? safeUrl(basics.video) : '';
+  const identity = `<div class="canvasResumeIdentity">${name ? `<h1>${escapeHtml(name)}</h1>` : ''}${label ? `<p>${escapeHtml(label)}</p>` : ''}${contacts.length ? `<nav class="canvasResumeContacts">${contacts.map((item) => `<a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a>`).join('')}</nav>` : ''}${summary ? `<p>${escapeHtml(summary)}</p>` : ''}</div>`;
+  return `<header class="canvasResumeHero" data-layout="${descriptor.hero.layout}">${avatar ? `<img class="canvasResumeAvatar" src="${escapeHtml(avatar)}" alt="${escapeHtml(name)}">` : ''}${identity}${video && /\.(mp4|webm)(?:$|\?)/i.test(video) ? `<div class="canvasResumeHeroMedia"><video src="${escapeHtml(video)}" controls preload="metadata"></video></div>` : ''}</header>`;
+}
+
+function structuredTemplateHtml(markdown: string, template: ResumeTemplateDefinition, document: CanvasResumeDocument | null): string {
   const raw = markdownToHtml(markdown);
   const headings = [...raw.matchAll(/<h2>(.*?)<\/h2>/g)];
-  if (!headings.length) return raw;
-  const intro = raw.slice(0, headings[0]!.index);
+  if (!headings.length) return document && template.mode === 'hero' ? heroMarkup(document, template) : raw;
+  const intro = document && template.mode === 'hero' && normalizedResumeTemplate(template).hero.enabled ? heroMarkup(document, template) : raw.slice(0, headings[0]!.index);
   const sections: RenderedSection[] = headings.map((heading, index) => {
     const id = SECTION_FROM_HEADING[heading[1]!.replace(/<[^>]+>/g, '').trim().toLowerCase()] ?? `section-${index}`;
     const end = headings[index + 1]?.index ?? raw.length;
     return { id, html: raw.slice(heading.index, end) };
-  });
+  }).map((section) => document ? enhanceSectionMedia(section, document, template) : section);
   const order = TEMPLATE_SECTION_ORDER[template.id] ?? [];
   sections.sort((a, b) => {
     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
@@ -81,7 +162,7 @@ function structuredTemplateHtml(markdown: string, template: ResumeTemplateDefini
   });
   const descriptor = normalizedResumeTemplate(template);
   const enabled = new Set<string>(descriptor.enabledSections);
-  const visibleSections = sections.filter((section) => enabled.has(section.id));
+  const visibleSections = sections.filter((section) => enabled.has(section.id) && !(template.mode === 'hero' && section.id === 'summary'));
   const wrap = (section: RenderedSection) => {
     const rule = descriptor.sections[section.id as keyof typeof descriptor.sections];
     return `<section data-section="${section.id}" data-layout="${rule?.layout ?? 'list'}" data-sort="${rule?.sortBy ?? 'manual'}" data-highlights="${rule?.showHighlights !== false}" data-media="${rule?.showMedia === true}" style="--section-columns:${rule?.columns ?? 2}">${section.html}</section>`;
@@ -113,11 +194,13 @@ function templateFor(revision: CanvasResumeRevision): ResumeTemplateDefinition {
 /** The exact artifact markup used on Canvas, in standalone HTML, and in print/PDF. */
 export function renderCanvasResumeRevision(revision: CanvasResumeRevision): RenderedCanvasResume {
   const template = normalizedResumeTemplate(templateFor(revision));
+  const document = descriptorDocument(revision, template);
+  const markdown = document ? renderResumeMarkdown(document) : revision.markdown;
   const variables = `--resume-accent:${template.accent};--resume-paper:${template.paper};--resume-ink:${template.ink}`;
   return {
     revision,
     template,
-    html: `<article class="canvasResumeDocument" data-template="${template.id}" data-mode="${template.mode}" data-hero-layout="${template.hero.layout}" data-show-avatar="${template.hero.showAvatar}" data-show-contact="${template.hero.showContactButtons}" data-show-summary="${template.hero.showSummary}" data-show-video="${template.hero.showVideo}" data-font="${template.font}" data-density="${template.density}" data-heading="${template.headingStyle}" data-columns="${template.columns}" data-page-size="${revision.pageSize}" data-orientation="${revision.orientation}" style="${variables}">${structuredTemplateHtml(revision.markdown, template)}</article>`,
+    html: `<article class="canvasResumeDocument" data-template="${template.id}" data-mode="${template.mode}" data-hero-layout="${template.hero.layout}" data-show-avatar="${template.hero.showAvatar}" data-show-contact="${template.hero.showContactButtons}" data-show-summary="${template.hero.showSummary}" data-show-video="${template.hero.showVideo}" data-font="${template.font}" data-density="${template.density}" data-heading="${template.headingStyle}" data-columns="${template.columns}" data-page-size="${revision.pageSize}" data-orientation="${revision.orientation}" style="${variables}">${structuredTemplateHtml(markdown, template, document)}</article>`,
   };
 }
 

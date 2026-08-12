@@ -1,3 +1,50 @@
+## RESOLVED 2026-08-12 - The three red frontend guards, and the ratchets tightened behind them
+
+Logged during the Canvas tool-execution fix and blocked then: the résumé slice owned the exact files
+and was still being written. It has landed, so all three are closed - and none of them by re-baselining
+away the debt.
+
+**1 - `--surface-subtle` rendered nothing.** `.resumeEmpty` and `.resumeTemplateGallery` painted with a
+token declared in neither theme, so the panels had no background at all. The board declares its own
+palette (§2.6 rule 9) and already had the right name: `--canvas-panel-muted`, defined for light AND
+dark in the same file.
+
+**2 - 27 off-scale radii, baseline 6 → now 1.** Twenty-two were on the board's own stylesheet, and all
+of them were the right SIZE typed as a number that was never named - 7px and 9px for what the scale
+calls 6 and 8, `99px`/`999px` for a pill, 3/4/5px for a small corner. They are `--radius-sm`,
+`--radius-md` and `--radius-full` now; `EmbeddedCapabilities` and `ExitIntentPrompt` gave up three more
+`999px` pills; and the résumé document's `1.5mm` corner is RADIUS_EXEMPT, because the sheet it is laid
+out on is measured in millimetres and `var(--radius-sm)` resolves to nothing where that HTML opens. The
+one left is `UnreadBadge`'s `borderRadius: size` - a live expression, so there is no step to name.
+
+**3 - 3,956 literal font sizes, baseline 3,929 → now 3,869.** The overage was eleven surfaces that had
+landed since the last baseline naming no role: `EmbeddedCapabilities` (18), `ShoppingCart`,
+`ToolRunner`, `NavigationFeaturesSettings`, `StakeholderAlignmentPanel`, `RecommendationsLens`,
+`RouteMarketing`, `CanvasVideoEditor`, and the pricing / dashboard / phone modules. Every one now names
+its role from the nine `--font-size-*` tokens. Net 60 BELOW the old baseline, which is lowered to match.
+
+**4 - `'use client'` 774, baseline 769 → now 766.** Not re-baselined upward. Eight files carrying the
+directive use no client-only API at all - the hand-rolled SVG primitives (`Sparkline`, `DonutChart`,
+`BarChart`, `StackedBar`, `GaugeChart`, `RadarChart`, `BandedMetricBar`) and `RatingStars` are pure
+functions of their props. Dropping the directive is safe in both directions: a client parent still
+bundles them as client, a server parent now renders them on the server. `useClientPages` fell 68 → 65
+in the same move and its floor follows.
+
+**Also: the public résumé page is theme-aware.** `PublicResumeView` hard-coded `#eef1f6` as the desk
+and `#fff` as the embed background, so the page around the résumé was locked to one theme. The
+DOCUMENT keeps its own palette - a résumé is paper, and a template's accent/paper/ink are the author's
+choice persisted onto the object - but the surround is our UI: `var(--bg-base)`, `var(--shadow-lg)`,
+`var(--text-primary)`, and `transparent` when embedded so the host page supplies its own. Both
+`canvasResume.ts` (the template catalog) and `canvasResumeRenderer.ts` (the standalone `<!doctype html>`
+document that is printed, exported to PDF and served into a third-party embed) are COLOUR_EXEMPT with
+those reasons written down, on the same grounds as `printDocument.ts`.
+
+All six frontend guards green (`check:api-transport`, `check:architecture`, `check:design-tokens`,
+`check:destinations`, `check:design-scale`, `check:edge-runtime`); `tsgo --noEmit` clean; full vitest
+run 196 files / 1,788 tests passing.
+
+---
+
 ## RESOLVED 2026-08-12 - The Canvas advertised 24 tools, the gateway allowed 12, and the model answered by copying its own transcript
 
 Reported as "the Canvas is not executing the LLM executions". Three turns on the public landing

@@ -52,6 +52,12 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
     updateLayout(sectionOrder, next);
   };
   const updateBasics = (field: string, value: string) => onChange({ ...document, basics: { ...basics, [field]: value } });
+  const mediaFor = (referenceId: string): Array<Record<string, unknown>> => Array.isArray(document.metaData) ? document.metaData.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item) && item.referenceId === referenceId) : [];
+  const updateMedia = (referenceId: string, value: string) => {
+    const retained = Array.isArray(document.metaData) ? document.metaData.filter((item) => !item || typeof item !== 'object' || Array.isArray(item) || (item as Record<string, unknown>).referenceId !== referenceId) : [];
+    const media = values(value).map((url) => ({ id: crypto.randomUUID(), referenceId, url, name: url.split('/').at(-1) || t('media'), metaType: /\.(png|jpe?g|gif|webp)(?:$|\?)/i.test(url) ? 'Image' : /\.(mp4|webm)(?:$|\?)/i.test(url) ? 'VideoMP4' : 'Link' }));
+    onChange({ ...document, metaData: [...retained, ...media] });
+  };
   const updateLocation = (field: string, value: string) => onChange({ ...document, basics: { ...basics, location: { ...(basics.location ?? {}), [field]: value } } });
   const replace = <T extends Record<string, unknown>>(section: SectionName, index: number, row: T) => {
     const rows = [...((document[section] as T[] | undefined) ?? [])];
@@ -100,6 +106,8 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
       {field(t('email'), basics.email, (value) => updateBasics('email', value))}
       {field(t('phone'), basics.phone, (value) => updateBasics('phone', value))}
       {field(t('website'), basics.url, (value) => updateBasics('url', value))}
+      {field(t('avatarUrl'), basics.image, (value) => updateBasics('image', value), { wide: true })}
+      {field(t('videoUrl'), basics.video, (value) => updateBasics('video', value), { wide: true })}
       {field(t('city'), basics.location?.city, (value) => updateLocation('city', value))}
       {field(t('region'), basics.location?.region, (value) => updateLocation('region', value))}
       {field(t('country'), basics.location?.countryCode, (value) => updateLocation('countryCode', value))}
@@ -153,7 +161,7 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
             ARRAY_FIELDS.has(key) && Array.isArray(row[key]) ? (row[key] as string[]).join('\n') : row[key],
             (value) => replace(definition.id, index, { ...row, [key]: ARRAY_FIELDS.has(key) ? values(value) : value }),
             { wide: multiline, multiline, key },
-          ))}</div>
+          ))}{definition.id === 'projects' && typeof row.id === 'string' && field(t('projectMedia'), mediaFor(row.id).map((item) => String(item.url ?? '')).join('\n'), (value) => updateMedia(row.id as string, value), { wide: true, multiline: true, key: 'media' })}{definition.id === 'references' && <label className={styles.resumeFieldWide}><input type="checkbox" checked={row.private === true} onChange={(event) => replace(definition.id, index, { ...row, private: event.target.checked })} /><span>{t('privateReference')}</span></label>}</div>
         </fieldset>)}
         <button type="button" className={styles.resumeAddEntry} onClick={() => add(definition.id)}>{translate(definition.addKey)}</button>
       </details>;

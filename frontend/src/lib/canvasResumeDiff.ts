@@ -33,13 +33,26 @@ function normalized(value: unknown): unknown {
 const stable = (value: unknown): string => JSON.stringify(normalized(value));
 const count = (value: unknown): number => Array.isArray(value) ? value.length : value && typeof value === 'object' ? Object.keys(value as Record<string, unknown>).filter((key) => (value as Record<string, unknown>)[key] != null && (value as Record<string, unknown>)[key] !== '').length : value == null || value === '' ? 0 : 1;
 
-function scalarFields(section: ResumeDiffSection, source: unknown, target: unknown): ResumeFieldDifference[] {
-  if (!source || typeof source !== 'object' || Array.isArray(source) || !target || typeof target !== 'object' || Array.isArray(target)) return [];
-  const sourceRow = source as Record<string, unknown>;
-  const targetRow = target as Record<string, unknown>;
-  return [...new Set([...Object.keys(sourceRow), ...Object.keys(targetRow)])]
-    .filter((key) => stable(sourceRow[key]) !== stable(targetRow[key]))
-    .map((key) => ({ path: `${section}.${key}`, source: sourceRow[key], target: targetRow[key] }));
+function fieldDifferences(section: ResumeDiffSection, source: unknown, target: unknown): ResumeFieldDifference[] {
+  if (Array.isArray(source) || Array.isArray(target)) {
+    const left = Array.isArray(source) ? source : []; const right = Array.isArray(target) ? target : [];
+    const length = Math.max(left.length, right.length); const fields: ResumeFieldDifference[] = [];
+    for (let index = 0; index < length; index++) {
+      const sourceRow = left[index]; const targetRow = right[index];
+      if (!sourceRow || typeof sourceRow !== 'object' || Array.isArray(sourceRow) || !targetRow || typeof targetRow !== 'object' || Array.isArray(targetRow)) {
+        if (stable(sourceRow) !== stable(targetRow)) fields.push({ path: `${section}[${index}]`, source: sourceRow, target: targetRow });
+        continue;
+      }
+      const sourceRecord = sourceRow as Record<string, unknown>; const targetRecord = targetRow as Record<string, unknown>;
+      for (const key of new Set([...Object.keys(sourceRecord), ...Object.keys(targetRecord)])) {
+        if (stable(sourceRecord[key]) !== stable(targetRecord[key])) fields.push({ path: `${section}[${index}].${key}`, source: sourceRecord[key], target: targetRecord[key] });
+      }
+    }
+    return fields;
+  }
+  if (!source || typeof source !== 'object' || !target || typeof target !== 'object') return stable(source) === stable(target) ? [] : [{ path: section, source, target }];
+  const sourceRow = source as Record<string, unknown>; const targetRow = target as Record<string, unknown>;
+  return [...new Set([...Object.keys(sourceRow), ...Object.keys(targetRow)])].filter((key) => stable(sourceRow[key]) !== stable(targetRow[key])).map((key) => ({ path: `${section}.${key}`, source: sourceRow[key], target: targetRow[key] }));
 }
 
 /** Canonical, deterministic comparison used by both the compare UI and merge preview. */
@@ -52,7 +65,7 @@ export function compareResumeDocuments(source: CanvasResumeDocument, target: Can
       changed: stable(sourceValue) !== stable(targetValue),
       sourceCount: count(sourceValue),
       targetCount: count(targetValue),
-      fields: section === 'basics' ? scalarFields(section, sourceValue, targetValue) : [],
+      fields: fieldDifferences(section, sourceValue, targetValue),
     };
   });
 }

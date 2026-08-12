@@ -23,6 +23,10 @@ describe('Canvas resume comparison and merge', () => {
       { path: 'basics.summary', source: 'Original summary', target: 'Tailored summary' },
     ]);
     expect(differences.find((difference) => difference.section === 'skills')).toMatchObject({ sourceCount: 1, targetCount: 2 });
+    expect(differences.find((difference) => difference.section === 'work')?.fields).toEqual([
+      { path: 'work[0].position', source: 'Programmer', target: 'Senior Programmer' },
+      { path: 'work[0].highlights', source: ['Original'], target: ['Tailored'] },
+    ]);
   });
 
   it('merges selected sections while retaining target extensions', () => {

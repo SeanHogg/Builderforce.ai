@@ -751,6 +751,11 @@
 .resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { background:repeating-linear-gradient(to bottom,#fff 0,#fff calc(var(--resume-page-height) - 2px),#94a3b8 calc(var(--resume-page-height) - 2px),#94a3b8 var(--resume-page-height)); }
 .resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { margin-left:0; }
 .resumePageModes { display:flex; gap:4px; }
+.resumeFieldDiffs { display:grid; gap:3px; margin:5px 0 0; padding:0; list-style:none; font-size:11px; }
+.resumeFieldDiffs li { display:grid; grid-template-columns:minmax(80px,.7fr) 1fr 1fr; gap:5px; align-items:start; }
+.resumeFieldDiffs del,.resumeFieldDiffs ins { overflow-wrap:anywhere; padding:2px 4px; border-radius:3px; }
+.resumeFieldDiffs del { background:rgb(239 68 68 / 10%); }
+.resumeFieldDiffs ins { background:rgb(34 197 94 / 12%); text-decoration:none; }
 @media (max-width: 480px) {
   .resumePreviewViewport { max-width:100%; padding:8px; }
   .resumePreviewCanvas { margin-left:0; }

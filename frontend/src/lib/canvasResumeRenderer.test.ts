@@ -44,4 +44,40 @@ describe('canonical Canvas resume renderer', () => {
     expect(html).toContain('data-section="projects" data-layout="list"');
     expect(html).toContain('data-media="true"');
   });
+
+  it('renders safe hero avatar, contacts, summary and associated video from canonical basics', () => {
+    const family = createResumeFamily({ title: 'Ada', markdown: '# Ada', document: { basics: { name: 'Ada Lovelace', label: 'Engineer', image: 'https://cdn.example/ada.jpg', email: 'ada@example.com', phone: '+1 555 0100', url: 'https://ada.example', summary: 'Builds engines.', video: 'https://cdn.example/reel.mp4' } }, idFactory: () => 'source' });
+    const html = renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(family) })!.html;
+    expect(html).toContain('class="canvasResumeHero"');
+    expect(html).toContain('class="canvasResumeAvatar"');
+    expect(html).toContain('mailto:ada@example.com');
+    expect(html).toContain('tel:+15550100');
+    expect(html).toContain('Builds engines.');
+    expect(html.match(/Builds engines\./g)).toHaveLength(1);
+    expect(html).toContain('https://cdn.example/reel.mp4');
+  });
+
+  it('sorts descriptor sections, suppresses highlights, and renders bound media only when enabled', () => {
+    const family = createResumeFamily({ title: 'Ada', markdown: '# Ada', document: {
+      basics: { name: 'Ada' },
+      projects: [
+        { id: 'old', name: 'Old Film', startDate: '2020', highlights: ['Old credit'] },
+        { id: 'new', name: 'New Film', startDate: '2025', highlights: ['New credit'] },
+      ],
+      metaData: [{ id: 'still', referenceId: 'new', metaType: 'Image', url: 'https://cdn.example/still.jpg', name: 'Production still' }],
+    }, idFactory: () => 'source' });
+    const selected = { ...family, revisions: family.revisions.map((revision) => ({ ...revision, templateId: 'actor-headshot-hero' as const })) };
+    const html = renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(selected) })!.html;
+    expect(html.indexOf('New Film')).toBeLessThan(html.indexOf('Old Film'));
+    expect(html).toContain('class="canvasResumeMediaStrip"');
+    expect(html).toContain('https://cdn.example/still.jpg');
+  });
+
+  it('suppresses references marked private from every canonical rendition', () => {
+    const family = createResumeFamily({ title: 'Ada', markdown: '# Ada', document: { basics: { name: 'Ada' }, references: [{ name: 'Public Ref', reference: 'Visible' }, { name: 'Private Ref', reference: 'Secret', private: true }] }, idFactory: () => 'source' });
+    const html = renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(family) })!.html;
+    expect(html).toContain('Public Ref');
+    expect(html).not.toContain('Private Ref');
+    expect(html).not.toContain('Secret');
+  });
 });

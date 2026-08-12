@@ -277,7 +277,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         <strong>{t('changesFromOriginal', { count: differences.length })}</strong>
         {differences.length ? differences.map((difference) => <label key={difference.section}>
           <input type="checkbox" checked={mergeSections.includes(difference.section)} onChange={() => setMergeSections((current) => current.includes(difference.section) ? current.filter((section) => section !== difference.section) : [...current, difference.section])} />
-          <span>{t(`diff_${difference.section}`)} <small>{t('entryChange', { source: difference.sourceCount, target: difference.targetCount })}</small></span>
+          <span>{t(`diff_${difference.section}`)} <small>{t('entryChange', { source: difference.sourceCount, target: difference.targetCount })}</small>{difference.fields.length > 0 && <ul className={styles.resumeFieldDiffs}>{difference.fields.slice(0, 12).map((field) => <li key={field.path}><code>{field.path}</code><del>{typeof field.source === 'string' ? field.source : JSON.stringify(field.source)}</del><ins>{typeof field.target === 'string' ? field.target : JSON.stringify(field.target)}</ins></li>)}</ul>}</span>
         </label>) : <p>{t('noStructuredChanges')}</p>}
         <button type="button" disabled={!onEdit || !mergeSections.length || !original.document || !active.document} onClick={() => {
           if (!original.document || !active.document) return;
