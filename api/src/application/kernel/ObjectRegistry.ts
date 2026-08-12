@@ -476,7 +476,7 @@ export async function revokeShareLink(db: Db, env: Env, tenantId: number, object
 export async function resolveShareToken(
   db: Db,
   token: string,
-): Promise<{ objectId: string; scope: string } | null> {
+): Promise<{ tenantId: number; objectId: string; scope: string } | null> {
   const [row] = await db
     .select()
     .from(shareLinks)
@@ -498,7 +498,7 @@ export async function resolveShareToken(
     .update(shareLinks)
     .set({ useCount: row.useCount + 1, lastUsedAt: new Date() })
     .where(and(eq(shareLinks.id, row.id), eq(shareLinks.tenantId, row.tenantId)));
-  return { objectId: row.objectId, scope: row.scope };
+  return { tenantId: row.tenantId, objectId: row.objectId, scope: row.scope };
 }
 
 /** Version history for anything versionable. */

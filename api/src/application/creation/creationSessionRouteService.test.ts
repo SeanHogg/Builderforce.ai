@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   creationKindForModality,
   durableCreationGraph,
+  cleanCommentAnchor,
   creationObjectSearchText,
   creationSessionSearchStatus,
   isCreationEventWriteConflict,
@@ -42,6 +43,32 @@ describe('creationSessionSearchStatus', () => {
     expect(creationSessionSearchStatus('deleted')).toBe('active');
     expect(creationSessionSearchStatus('archived')).toBe('archived');
     expect(creationSessionSearchStatus('all')).toBe('all');
+  });
+});
+
+describe('cleanCommentAnchor', () => {
+  it('normalizes a semantic resume field anchor', () => {
+    expect(cleanCommentAnchor({
+      kind: 'resume-field',
+      revisionId: ' revision-1 ',
+      section: ' work ',
+      entryId: ' job-1 ',
+      field: ' summary ',
+      ignored: 'not persisted',
+    })).toEqual({
+      kind: 'resume-field',
+      revisionId: 'revision-1',
+      section: 'work',
+      entryId: 'job-1',
+      field: 'summary',
+    });
+  });
+
+  it('rejects malformed and incomplete anchors', () => {
+    expect(cleanCommentAnchor(null)).toBeNull();
+    expect(cleanCommentAnchor([])).toBeNull();
+    expect(cleanCommentAnchor({ kind: 'pixel', x: 1 })).toBeNull();
+    expect(cleanCommentAnchor({ kind: 'resume-field', section: 'work' })).toBeNull();
   });
 });
 

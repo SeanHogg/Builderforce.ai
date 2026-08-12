@@ -13425,6 +13425,7 @@
     "macosMeta": "Nécessite macOS 13 ou une version ultérieure",
     "note": "Choisissez une méthode d’installation, copiez la commande et exécutez-la dans votre terminal."
   },
+  "publicResume": { "loading": "Chargement du CV…", "unavailable": "Ce lien de CV n’est pas disponible." },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "Importez votre CV dans Canvas",
@@ -13545,6 +13546,14 @@
       "unarchive": "Désarchiver",
       "watch": "Suivre",
       "unwatch": "Ne plus suivre",
+      "shareResume": "Partager le CV",
+      "sharePublicOnly": "Les liens publics utilisent le modèle par défaut et cessent de fonctionner si la confidentialité change.",
+      "copyPublicLink": "Copier le lien public",
+      "copyEmbedLink": "Copier le lien d’intégration",
+      "shareUseCount": "{count, plural, =0 {Non consulté} one {Consulté une fois} other {Consulté # fois}}",
+      "shareExpires": "Expire le {date}",
+      "revokeShare": "Révoquer",
+      "noActiveShares": "Aucun lien actif.",
       "deleteVersion": "Supprimer la version",
       "detachVersion": "Détacher comme CV",
       "importAsVersion": "Importer comme nouvelle version",
@@ -15006,6 +15015,10 @@
       "deleteWorkspaceFailed": "Impossible de supprimer l'espace de travail"
     },
     "noticeSessionSaved": "Session enregistrée",
+    "resumeShareSaveFirst": "Enregistrez ce Canvas avant de partager un CV.",
+    "resumeLinkCopied": "Lien public du CV copié",
+    "resumeEmbedCopied": "Lien d’intégration du CV copié",
+    "resumeShareRevoked": "Lien du CV révoqué",
     "noticeSavedOnDevice": "Enregistré sur cet appareil",
     "noticeSavingChanges": "Enregistrement des modifications…",
     "noticeConcurrentMerged": "Modifications concurrentes fusionnées ; nouvel enregistrement…",

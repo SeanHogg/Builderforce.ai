@@ -172,6 +172,76 @@ describe('runCreationCanvasAi', () => {
     expect(answer).toContain('created the SEO');
   });
 
+  /**
+   * The measured public-canvas failure, 2026-08-12 (ui 2026.7.210): the transcript's
+   * last assistant line was a failure notice, and the free model returned it back
+   * verbatim with a "Brain: " prefix — 15 completion tokens, zero tool calls — which
+   * the surface presented as a fresh answer and stored, compounding the prefix on the
+   * turn after it.
+   */
+  it('retries instead of accepting a reply that just repeats the previous assistant message', async () => {
+    const add = vi.fn(() => ({ ok: true, proposed: true }));
+    const conversation = [
+      { role: 'user' as const, content: 'i want to connect my email and run a marketing campaign' },
+      { role: 'assistant' as const, content: "I couldn't prepare any canvas changes from that request." },
+    ];
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: "Brain: I couldn't prepare any canvas changes from that request.", toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"emailCampaign","title":"Launch campaign"}' }], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'tool_calls' })
+      .mockResolvedValueOnce({ text: 'I drafted the campaign on the canvas.', toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'I want to connect my email and run a marketing campaign',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local', conversation,
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: add }],
+    });
+
+    expect(add).toHaveBeenCalledOnce();
+    expect(answer).toBe('I drafted the campaign on the canvas.');
+    expect(mocks.streamChatCompletion.mock.calls[1][0].messages.some(
+      (message: { content: string }) => message.content.includes('repeated an earlier message'),
+    )).toBe(true);
+  });
+
+  it('strips a speaker label the model copied onto its own answer', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Brain: Here is what SEO work matters most.', toolCalls: [], finishReason: 'stop' });
+
+    await expect(runCreationCanvasAi({
+      prompt: 'What should I know about SEO?',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+    })).resolves.toBe('Here is what SEO work matters most.');
+  });
+
+  it('reports a runtime notice as UNANSWERED so the surface keeps it out of the transcript', async () => {
+    const unanswered = vi.fn();
+    mocks.streamChatCompletion.mockResolvedValue({ text: '', toolCalls: [], resolvedModel: 'weak/model', finishReason: 'stop' });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Create a campaign plan on the canvas',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
+      onUnanswered: unanswered,
+    });
+
+    expect(answer).toBe("I couldn't prepare any canvas changes from that request.");
+    expect(unanswered).toHaveBeenCalledWith({ reason: 'command-not-executed' });
+  });
+
+  it('tells an anonymous canvas which capabilities need an account instead of leaving it to guess', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Signing up unlocks the mailbox; here is the plan meanwhile.', toolCalls: [], finishReason: 'stop' });
+
+    await runCreationCanvasAi({
+      prompt: 'I want to connect my email and run a marketing campaign',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+    });
+
+    const systemBlocks = mocks.streamChatCompletion.mock.calls[0][0].messages
+      .filter((message: { role: string }) => message.role === 'system')
+      .map((message: { content: string }) => message.content).join('\n');
+    expect(systemBlocks).toContain('This is an ANONYMOUS canvas');
+    expect(systemBlocks).toContain('Never answer a request like that with a refusal alone');
+  });
+
   it('finishes the exact website-redesign request instead of exhausting the turn on encyclopedic search', async () => {
     const prompt = 'i have an existing website (https://burnrateos.com/) I want to improve it with a new website design. Research other websites that provide business tools and design a better UI/UX. Show me a comparisoin between the two designs. Provide step by step guidance to the new website.';
     const fetch = vi.fn(() => ({ ok: true, url: 'https://burnrateos.com/', title: 'BurnRateOS', text: 'AI C-Suite for founders' }));

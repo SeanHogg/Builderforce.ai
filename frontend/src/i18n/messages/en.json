@@ -13426,6 +13426,7 @@
     "macosMeta": "Requires macOS 13 or later",
     "note": "Choose an install method, copy the command, and run it in your terminal."
   },
+  "publicResume": { "loading": "Loading résumé…", "unavailable": "This résumé link is unavailable." },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "Bring your résumé into Canvas",
@@ -13546,6 +13547,14 @@
       "unarchive": "Unarchive",
       "watch": "Watch",
       "unwatch": "Unwatch",
+      "shareResume": "Share résumé",
+      "sharePublicOnly": "Public links use the family's default template and stop working if privacy changes.",
+      "copyPublicLink": "Copy public link",
+      "copyEmbedLink": "Copy embed link",
+      "shareUseCount": "{count, plural, =0 {Not viewed} one {Viewed once} other {Viewed # times}}",
+      "shareExpires": "Expires {date}",
+      "revokeShare": "Revoke",
+      "noActiveShares": "No active links.",
       "deleteVersion": "Delete version",
       "detachVersion": "Detach as résumé",
       "importAsVersion": "Import as new version",
@@ -15007,6 +15016,10 @@
       "deleteWorkspaceFailed": "Could not delete the workspace"
     },
     "noticeSessionSaved": "Session saved",
+    "resumeShareSaveFirst": "Save this Canvas before sharing a résumé.",
+    "resumeLinkCopied": "Public résumé link copied",
+    "resumeEmbedCopied": "Résumé embed link copied",
+    "resumeShareRevoked": "Résumé link revoked",
     "noticeSavedOnDevice": "Saved on this device",
     "noticeSavingChanges": "Saving changes…",
     "noticeConcurrentMerged": "Concurrent changes merged; saving again…",

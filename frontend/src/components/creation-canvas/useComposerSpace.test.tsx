@@ -15,7 +15,14 @@ import { useComposerSpace } from './useComposerSpace';
  *  so this one keeps its callbacks and `resize()` fires them, which is the event
  *  the browser raises when the dock's height actually changes. */
 const observers: Array<() => void> = [];
-const resize = () => observers.forEach((callback) => callback());
+/** Fire the observers, then WAIT A FRAME: notifications are delivered through
+ *  `observeResizeOnAnimationFrame`, so the republish happens on the next animation
+ *  frame rather than inside the callback. Asserting synchronously read the value from
+ *  before the resize. */
+const resize = async () => {
+  observers.forEach((callback) => callback());
+  await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+};
 
 beforeAll(() => {
   globalThis.ResizeObserver = class {
@@ -65,12 +72,12 @@ describe('useComposerSpace', () => {
     expect(spaceOf(getByTestId('board'))).toBe('150px');
   });
 
-  it('grows when the dock does — the execution chip pushes the rail up', () => {
+  it('grows when the dock does — the execution chip pushes the rail up', async () => {
     const { getByTestId, rerender } = render(<Board withDock dockTop={650} />);
     expect(spaceOf(getByTestId('board'))).toBe('150px');
     // A run starts: the utilities row appears and the dock's top edge rises.
     rerender(<Board withDock dockTop={600} />);
-    resize();
+    await resize();
     expect(spaceOf(getByTestId('board'))).toBe('200px');
   });
 

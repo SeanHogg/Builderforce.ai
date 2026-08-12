@@ -54,7 +54,15 @@ import { sendCreationSessionInviteEmail } from '../../infrastructure/email/Email
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { normalizeChatMode } from '../brain/chatMode';
 import { sha256Hex } from '../../domain/shared/hash';
-import { findObject, getObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
+import {
+  createShareLink,
+  findObject,
+  getObject,
+  getObjectShares,
+  registerObject,
+  revokeShareLink,
+  type ObjectRef,
+} from '../kernel/ObjectRegistry';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { creationSessionQuotaError, resolveCreationSessionQuota } from '../../domain/tenant/creationSessionQuota';
 import {
@@ -101,6 +109,7 @@ type PatchSessionBody = { title?: string; description?: string | null; folder?: 
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[]; anchor?: unknown };
+type ResumeShareBody = { expiresAt?: string | null; maxUses?: number | null };
 type CanvasCommand = { type?: string; [key: string]: unknown };
 type CommandsBody = { commands?: CanvasCommand[]; atomic?: boolean };
 type PinBody = { pinned?: boolean };
@@ -220,6 +229,31 @@ async function ensureSessionObject(db: Db, env: Env, session: SessionRef): Promi
 
 async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef | null> {
   return findObject(db, session.tenantId, 'creation_session', session.id);
+}
+
+function publicResumeFamily(content: unknown): Record<string, unknown> | null {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
+  const family = (content as Record<string, unknown>).resumeFamily;
+  if (!family || typeof family !== 'object' || Array.isArray(family)) return null;
+  return (family as Record<string, unknown>).privacy === 'public' ? family as Record<string, unknown> : null;
+}
+
+async function ensureResumeObject(db: Db, env: Env, access: { session: SessionRef }, objectId: string) {
+  const [row] = await db.select({ id: creationSessionObjects.id, kind: creationSessionObjects.kind, content: creationSessionObjects.content })
+    .from(creationSessionObjects)
+    .where(and(eq(creationSessionObjects.id, objectId), eq(creationSessionObjects.sessionId, access.session.id)))
+    .limit(1);
+  if (!row || row.kind !== 'resume' || !publicResumeFamily(row.content)) return null;
+  const parent = await ensureSessionObject(db, env, access.session);
+  const title = cleanTitle((row.content as Record<string, unknown>).title, 'Resume');
+  return registerObject(db, env, {
+    tenantId: access.session.tenantId,
+    kind: 'canvas_resume',
+    refId: row.id,
+    domain: 'canvas',
+    title,
+    parentId: parent.id,
+  });
 }
 
 /**
@@ -1218,6 +1252,52 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       .leftJoin(users, eq(users.id, creationSessionComments.createdBy))
       .where(where).orderBy(desc(creationSessionComments.createdAt)).limit(200);
     return c.json({ comments });
+  });
+
+  router.get('/:id/objects/:objectId/resume-shares', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const objectId = c.req.param('objectId');
+    if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
+    const registered = await findObject(db, access.session.tenantId, 'canvas_resume', objectId);
+    if (!registered) return c.json({ shares: [] });
+    return c.json({ shares: await getObjectShares(db, c.env, access.session.tenantId, registered.id) });
+  });
+
+  router.post('/:id/objects/:objectId/resume-shares', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const objectId = c.req.param('objectId');
+    if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
+    const registered = await ensureResumeObject(db, c.env, access, objectId);
+    if (!registered) return c.json({ error: 'Only a public resume can be shared' }, 409);
+    const body = await c.req.json<ResumeShareBody>().catch(() => ({} as ResumeShareBody));
+    const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) return c.json({ error: 'Expiry must be in the future' }, 400);
+    const maxUses = body.maxUses == null ? null : Math.floor(body.maxUses);
+    if (maxUses != null && (!Number.isFinite(maxUses) || maxUses < 1 || maxUses > 1_000_000)) return c.json({ error: 'maxUses must be between 1 and 1,000,000' }, 400);
+    const share = await createShareLink(db, c.env, {
+      tenantId: access.session.tenantId,
+      objectId: registered.id,
+      scope: 'view',
+      expiresAt,
+      maxUses,
+      createdBy: c.get('userId') as string,
+    });
+    return c.json({ ...share, viewPath: `/resume/${share.token}`, embedPath: `/embed/resume/${share.token}` }, 201);
+  });
+
+  router.delete('/:id/objects/:objectId/resume-shares/:shareId', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const objectId = c.req.param('objectId');
+    const registered = UUID_RE.test(objectId) ? await findObject(db, access.session.tenantId, 'canvas_resume', objectId) : null;
+    if (!registered) return c.json({ error: 'Resume share not found' }, 404);
+    const shareId = c.req.param('shareId');
+    const ownsShare = (await getObjectShares(db, c.env, access.session.tenantId, registered.id)).some((share) => share.id === shareId);
+    if (!ownsShare) return c.json({ error: 'Resume share not found' }, 404);
+    await revokeShareLink(db, c.env, access.session.tenantId, registered.id, shareId);
+    return c.body(null, 204);
   });
 
   router.post('/:id/comments', async (c) => {

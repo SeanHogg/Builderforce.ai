@@ -13425,6 +13425,7 @@
     "macosMeta": "Erfordert macOS 13 oder neuer",
     "note": "Wähle eine Installationsmethode, kopiere den Befehl und führe ihn im Terminal aus."
   },
+  "publicResume": { "loading": "Lebenslauf wird geladen…", "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar." },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "Lebenslauf in Canvas übernehmen",
@@ -13545,6 +13546,14 @@
       "unarchive": "Wiederherstellen",
       "watch": "Beobachten",
       "unwatch": "Nicht mehr beobachten",
+      "shareResume": "Lebenslauf teilen",
+      "sharePublicOnly": "Öffentliche Links verwenden die Standardvorlage und enden bei einer Änderung des Datenschutzes.",
+      "copyPublicLink": "Öffentlichen Link kopieren",
+      "copyEmbedLink": "Einbettungslink kopieren",
+      "shareUseCount": "{count, plural, =0 {Nicht angesehen} one {Einmal angesehen} other {# Mal angesehen}}",
+      "shareExpires": "Läuft am {date} ab",
+      "revokeShare": "Widerrufen",
+      "noActiveShares": "Keine aktiven Links.",
       "deleteVersion": "Version löschen",
       "detachVersion": "Als Lebenslauf ablösen",
       "importAsVersion": "Als neue Version importieren",
@@ -15006,6 +15015,10 @@
       "deleteWorkspaceFailed": "Arbeitsbereich konnte nicht gelöscht werden"
     },
     "noticeSessionSaved": "Sitzung gespeichert",
+    "resumeShareSaveFirst": "Speichere diesen Canvas, bevor du einen Lebenslauf teilst.",
+    "resumeLinkCopied": "Öffentlicher Lebenslauf-Link kopiert",
+    "resumeEmbedCopied": "Einbettungslink für Lebenslauf kopiert",
+    "resumeShareRevoked": "Lebenslauf-Link widerrufen",
     "noticeSavedOnDevice": "Auf diesem Gerät gespeichert",
     "noticeSavingChanges": "Änderungen werden gespeichert…",
     "noticeConcurrentMerged": "Gleichzeitige Änderungen zusammengeführt; wird erneut gespeichert…",

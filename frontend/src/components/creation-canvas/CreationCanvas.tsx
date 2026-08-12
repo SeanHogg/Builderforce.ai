@@ -60,6 +60,7 @@ import {
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
 } from '@/lib/guestRoomApi';
 import { GuestAiUnavailableError, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
+import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
@@ -77,7 +78,7 @@ import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type Mailb
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { appendCanvasVideoSource, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { appendCanvasVideoSource, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
@@ -92,7 +93,7 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
-import { initializeResumeFromPatch, preserveResumeSourceForPatch } from '@/lib/canvasResume';
+import { activeResumeRevision, initializeResumeFromPatch, preserveResumeSourceForPatch, resumeFamilyFromNode } from '@/lib/canvasResume';
 import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
@@ -907,6 +908,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const composerDockRef = useComposerSpace(flowWrapRef);
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
+  /** Set by the turn runner when the string it returned is a RUNTIME NOTICE rather
+   *  than an answer Brain produced — read once when the turn settles so the notice is
+   *  shown to the user without entering the transcript the next turn is built from. */
+  const turnUnanswered = useRef<{ reason: string; detail?: string } | null>(null);
   const undoStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
   const historyBaseline = useRef<string | null>(null);
@@ -2729,7 +2734,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!fileDragDepth.current) setFileDragging(false);
   }, []);
 
-  const canvasActions = useMemo<BrainAction[]>(() => [{
+  const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
     description: 'Prepare one of the 48 migrated executive use cases for execution on this Canvas. Call this first when the prompt contains a legacy dotted use-case id. It returns the exact operation, completion condition, permitted existing Canvas outputs, and live evidence from the already-owning Builderforce domains. It never creates schema or mutates canonical domain data.',
     parameters: {
@@ -3675,7 +3680,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
+    // ADVERTISE ONLY WHAT THIS SESSION CAN EXECUTE. An anonymous canvas has no tenant,
+    // so every tool that reads or writes a tenant resource (a connected mailbox,
+    // canonical PRDs, tenant domain data, server-side image generation) is removed
+    // here — the gateway strips them from the request anyway
+    // (`api/application/guest/guestCanvasTools`). Advertising them regardless is what
+    // made "connect my email" fail silently: the model planned around
+    // `canvas_add_inbox`, the gateway deleted it before dispatch, and the turn ended
+    // with prose and zero tool calls. Both sides read ONE contract.
+  }].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -3767,6 +3781,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedIds([brainId]);
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
+      turnUnanswered.current = null;
       setBrainTrace([]);
       setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
       setProposedChanges([]);
@@ -3795,7 +3810,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return confirm({ title: 'Approve agent action', message: `A session agent wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
       };
       const runGroupTurn = async () => {
-        const historicalConversation = timeline.map((message) => ({ role: message.messageRole, content: message.metadata?.authoredBy?.name ? `${message.metadata.authoredBy.name}: ${message.body}` : message.body }));
+        const historicalConversation = canvasTranscriptForModel(timeline);
         const groupConversation = connectedAgentNodes.length
           ? [...historicalConversation, { role: 'user' as const, content: request }]
           : historicalConversation;
@@ -3880,6 +3895,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           disabledModels: brainRuntime.current.disabledModels,
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
           onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
+          onUnanswered: (outcome) => { turnUnanswered.current = outcome; },
           ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
             recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
             learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
@@ -3907,6 +3923,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
       );
       void runGroupTurn().then((answer) => {
+        // A runtime notice ("I couldn't prepare any canvas changes…") is NOT something
+        // Brain said, and writing it into the transcript as an assistant reply is what
+        // let one failed turn become the template for the next: the following request
+        // carried it as an example answer and a free model reproduced it verbatim.
+        // Recorded as a failed turn instead — visible to the user, invisible to the model.
+        const unanswered = turnUnanswered.current;
+        turnUnanswered.current = null;
         const changes = [...proposalBuffer.current];
         const changedKinds = new Set(changes.flatMap((change) => {
           if (change.type === 'object.add') return [change.node.data.kind];
@@ -3920,7 +3943,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const executiveContractSatisfied = !executiveWorkflow || executiveWorkflow.outputs.some((kind) => changedKinds.has(kind as CreationObjectKind));
         turnDone({ ok: executiveContractSatisfied, detail: `${proposalBuffer.current.length} proposed change(s)${executiveUseCase ? ` · ${executiveUseCase.id} ${executiveContractSatisfied ? 'complete' : 'incomplete'}` : ''}` });
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
-        if (answer.trim()) {
+        if (answer.trim() && unanswered) {
+          appendTimeline('system', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:unanswered`);
+          setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
+        } else if (answer.trim()) {
           appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' } }, `${requestMessageId}:assistant`);
           setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
           const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
@@ -4949,6 +4975,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(detachedId);
     setSelectedIds([detachedId]);
   }, [setNodes]);
+  const createResumeShare = useCallback(async (nodeId: string, kind: 'view' | 'embed') => {
+    if (persistence !== 'server') throw new Error(t('resumeShareSaveFirst'));
+    const share = await creationSessionsApi.resumeShares.create(sessionId, nodeId);
+    const path = kind === 'embed' ? share.embedPath : share.viewPath;
+    await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+    setNotice(t(kind === 'embed' ? 'resumeEmbedCopied' : 'resumeLinkCopied'));
+  }, [persistence, sessionId, t]);
+  const listResumeShares = useCallback((nodeId: string) => persistence === 'server'
+    ? creationSessionsApi.resumeShares.list(sessionId, nodeId).then((result) => result.shares)
+    : Promise.resolve([]), [persistence, sessionId]);
+  const revokeResumeShare = useCallback(async (nodeId: string, shareId: string) => {
+    await creationSessionsApi.resumeShares.revoke(sessionId, nodeId, shareId);
+    setNotice(t('resumeShareRevoked'));
+  }, [sessionId, t]);
   /**
    * The same treatment for `runWorkflow`, which needed it just as badly and was
    * missed.
@@ -4984,11 +5024,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, cardsEditable, detachResumeFromNode, exportFromNode, openBuiltinAgentSurfaceFromNode, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
+  }), [canRun, cardsEditable, createResumeShare, detachResumeFromNode, exportFromNode, listResumeShares, openBuiltinAgentSurfaceFromNode, revokeResumeShare, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether

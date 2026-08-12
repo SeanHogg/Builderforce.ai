@@ -131,6 +131,8 @@ import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
+import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
+import { resolvePublicResume } from './application/creation/publicResumeProjection';
 import { createCreativeRoutes } from './presentation/routes/creativeRoutes';
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
@@ -720,6 +722,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
+  app.route('/api/public/resumes', createPublicResumeRoutes((token) => resolvePublicResume(db, token)));
   app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));

@@ -13425,6 +13425,7 @@
     "macosMeta": "Requiere macOS 13 o posterior",
     "note": "Elige un método de instalación, copia el comando y ejecútalo en tu terminal."
   },
+  "publicResume": { "loading": "Cargando currículum…", "unavailable": "Este enlace de currículum no está disponible." },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "Lleva tu currículum a Canvas",
@@ -13545,6 +13546,14 @@
       "unarchive": "Desarchivar",
       "watch": "Seguir",
       "unwatch": "Dejar de seguir",
+      "shareResume": "Compartir currículum",
+      "sharePublicOnly": "Los enlaces públicos usan la plantilla predeterminada y dejan de funcionar si cambia la privacidad.",
+      "copyPublicLink": "Copiar enlace público",
+      "copyEmbedLink": "Copiar enlace de inserción",
+      "shareUseCount": "{count, plural, =0 {Sin visitas} one {Visto una vez} other {Visto # veces}}",
+      "shareExpires": "Caduca el {date}",
+      "revokeShare": "Revocar",
+      "noActiveShares": "No hay enlaces activos.",
       "deleteVersion": "Eliminar versión",
       "detachVersion": "Separar como currículum",
       "importAsVersion": "Importar como nueva versión",
@@ -15006,6 +15015,10 @@
       "deleteWorkspaceFailed": "No se pudo eliminar el espacio de trabajo"
     },
     "noticeSessionSaved": "Sesión guardada",
+    "resumeShareSaveFirst": "Guarda este Canvas antes de compartir un currículum.",
+    "resumeLinkCopied": "Enlace público del currículum copiado",
+    "resumeEmbedCopied": "Enlace de inserción del currículum copiado",
+    "resumeShareRevoked": "Enlace del currículum revocado",
     "noticeSavedOnDevice": "Guardado en este dispositivo",
     "noticeSavingChanges": "Guardando cambios…",
     "noticeConcurrentMerged": "Cambios concurrentes fusionados; guardando de nuevo…",

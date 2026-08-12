@@ -1,43 +1,20 @@
+import { GUEST_CANVAS_TOOL_NAMES } from '@builderforce/creation-canvas-contract';
 import type { ChatCompletionRequest } from '../llm/LlmProxyService';
 
 /**
- * The fixed tool vocabulary an anonymous canvas turn may use. Two kinds, both safe for
- * a guest for different reasons:
+ * The fixed tool vocabulary an anonymous canvas turn may use is declared ONCE, in
+ * `@builderforce/creation-canvas-contract`, because two packages enforce it: the
+ * browser decides what to ADVERTISE to the model and this gateway decides what to
+ * ACCEPT. Maintained as two hand-written lists they drifted — the canvas advertised 24
+ * canvas tools while this filter allowed 12, so the model planned around capabilities
+ * (a connected mailbox, `canvas_read_object`) that were deleted before dispatch and
+ * returned prose with zero tool calls. See the contract module for the measurement.
  *
- *  • `canvas_*` — descriptions of LOCAL, client-side operations on the guest's own
- *    in-browser document. The API never executes them.
- *  • `builtin_web_*` / `builtin_geo_*` — RESEARCH. These do run server-side, but only
- *    through the public guest research surface (`/api/guest/research/*`), which takes a
- *    signed guest token, charges its own daily allowance, uses the PLATFORM search
- *    backing rather than any tenant's key, and fetches behind the same SSRF guard as
- *    every other surface. They are on this list because a canvas that cannot look
- *    anything up answers research questions from the model's weights and invents its
- *    numbers — which is exactly what an anonymous visitor asks it to do first.
- *
- * Every other tenant, MCP, filesystem and caller-invented tool stays unavailable.
+ * This filter remains the SECURITY boundary regardless: a guest token may never reach
+ * a tenant resource, and the client is not trusted to enforce that. It just no longer
+ * owns a second, divergent copy of the vocabulary.
  */
-export const GUEST_CANVAS_TOOL_NAMES = new Set([
-  'canvas_read_snapshot',
-  // Pure client-side computation over rows already loaded in the guest's own
-  // browser. Without it a guest can only be told placeholder numbers.
-  'canvas_query_dataset',
-  'canvas_read_document',
-  'canvas_add_object',
-  'canvas_update_object',
-  'canvas_delete_object',
-  'canvas_arrange_objects',
-  'canvas_set_object_layout',
-  'canvas_invoke_object_action',
-  'canvas_connect_objects',
-  'canvas_update_connection',
-  'canvas_delete_connection',
-  // Research. The names MUST match the advertised `builtin_*` names the authed canvas
-  // gets from the MCP catalog, because ONE system prompt names these tools for both
-  // surfaces (see prompt-tool-name contract, api/scripts/check-prompt-tool-names.mjs).
-  'builtin_web_search',
-  'builtin_web_fetch',
-  'builtin_geo_geocode',
-]);
+export { GUEST_CANVAS_TOOL_NAMES };
 
 type FunctionTool = {
   type: 'function';

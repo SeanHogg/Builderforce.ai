@@ -43,6 +43,7 @@ import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websiteWysiwyg';
 import { CanvasVideoEditor } from './CanvasVideoEditor';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
+import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -1790,6 +1791,9 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onExport?: (nodeId: string, action: CanvasExportAction) => void;
   onResumeTailor?: (nodeId: string, prompt: string) => void;
   onResumeDetach?: (nodeId: string, data: Partial<CreationNodeData>) => void;
+  onResumeShare?: (nodeId: string, kind: 'view' | 'embed') => Promise<void>;
+  onResumeSharesList?: (nodeId: string) => Promise<CanvasResumeShare[]>;
+  onResumeShareRevoke?: (nodeId: string, shareId: string) => Promise<void>;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -1831,7 +1835,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
   }, [authored]);
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A game is played in its own body, so it needs the width a game needs.
@@ -1893,7 +1897,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}
         {data.kind === 'video' && <CanvasVideoEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
-        {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} {...(onResumeTailor ? { onTailor: (prompt) => onResumeTailor(id, prompt) } : {})} {...(onResumeDetach ? { onDetach: (patch) => onResumeDetach(id, patch) } : {})} />}
+        {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} {...(onResumeTailor ? { onTailor: (prompt) => onResumeTailor(id, prompt) } : {})} {...(onResumeDetach ? { onDetach: (patch) => onResumeDetach(id, patch) } : {})} {...(onResumeShare && onResumeSharesList && onResumeShareRevoke ? { shareActions: { create: (kind: 'view' | 'embed') => onResumeShare(id, kind), list: () => onResumeSharesList(id), revoke: (shareId: string) => onResumeShareRevoke(id, shareId) } } : {})} />}
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
         {data.kind === 'game' && <GameBody data={data} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}

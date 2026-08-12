@@ -8091,6 +8091,16 @@ export interface CreationSessionComment {
   updatedAt: string;
 }
 
+export interface CanvasResumeShare {
+  id: string;
+  scope: string;
+  expiresAt: string | null;
+  maxUses: number | null;
+  useCount: number;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
 export interface CreationSessionActivity {
   id: string;
   kind: 'event' | 'comment';
@@ -8220,6 +8230,12 @@ export const creationSessionsApi = {
     resolve: (id: string, commentId: string, resolved: boolean) =>
       request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
   },
+  resumeShares: {
+    list: (id: string, objectId: string) => request<{ shares: CanvasResumeShare[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/resume-shares`),
+    create: (id: string, objectId: string, body: { expiresAt?: string | null; maxUses?: number | null } = {}) =>
+      request<{ id: string; token: string; viewPath: string; embedPath: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/resume-shares`, { method: 'POST', body: JSON.stringify(body) }),
+    revoke: (id: string, objectId: string, shareId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/resume-shares/${encodeURIComponent(shareId)}`, { method: 'DELETE' }),
+  },
   templates: {
     list: () => request<{ builtInIds: string[]; templates: CreationTemplate[] }>('/api/creation-sessions/templates'),
     create: (body: { name: string; description?: string; category?: string; visibility?: 'private' | 'tenant'; graph: CreationGraphInput }) => request<{ template: { id: string; name: string } }>('/api/creation-sessions/templates', { method: 'POST', body: JSON.stringify(body) }),
@@ -8237,6 +8253,7 @@ export const creationSessionsApi = {
   openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
 };
+
 
 // ---------------------------------------------------------------------------
 // Challenges — paste a brief, get a working system

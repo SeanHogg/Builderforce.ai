@@ -15,6 +15,7 @@ import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
 import { ensureGuestToken } from '@/lib/guestRoomApi';
 import { GUEST_RESEARCH_ACTIONS } from '@/lib/guestResearchActions';
+import { conversationSpeakerLabels, echoesEarlierAnswer, stripSpeakerLabel } from '@/lib/canvasTranscript';
 
 type CanvasAiOptions = {
   prompt: string;
@@ -46,6 +47,18 @@ type CanvasAiOptions = {
   /** Fired when a command-stalled model is replaced by a model that already
    * demonstrated tool calling earlier in the same turn. */
   onModelFallback?: (model: string) => void;
+  /**
+   * Fired when the string this function returns is a RUNTIME NOTICE rather than
+   * something the model actually said — the turn produced no answer, executed no
+   * command, or died on a tool error.
+   *
+   * The surface needs this to keep the notice OUT of the session transcript. Storing
+   * it as an assistant message is what let one failed turn poison every turn after it:
+   * the next request carried "I couldn't prepare any canvas changes from that request"
+   * as an example assistant reply, and a free model reproduced it verbatim instead of
+   * answering (2026-08-12, ui 2026.7.210).
+   */
+  onUnanswered?: (outcome: { reason: 'no-answer' | 'command-not-executed' | 'tool-error'; detail?: string }) => void;
   /** Awaitable in-app approval. Mutating tenant actions are refused when this is
    * absent; the runner must never fall back to a browser-native prompt. */
   confirmAction?: (request: { name: string; args: unknown }) => Promise<boolean>;
@@ -273,13 +286,23 @@ function snapshotHasTabularRows(snapshot: string): boolean {
 
 /** Imperative canvas turns must not degrade into a prose-only answer. */
 function requestsCanvasMutation(prompt: string): boolean {
-  const verb = '(?:create|build|design|redesign|improve|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate|research|compare|show|provide)';
+  const verb = '(?:create|build|design|redesign|improve|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate|research|compare|show|provide|run|launch|start|plan|organi[sz]e|schedule|send)';
+  // A request is routinely phrased as a WANT rather than an order — "I want to connect
+  // my email and run a marketing campaign" is an instruction, not small talk, and the
+  // clause-boundary matcher below cannot see it because the verb sits after "to".
+  // Missing it meant the no-tool-call recovery never armed for exactly the kind of
+  // request the canvas exists to serve (measured 2026-08-12, ui 2026.7.210: one model
+  // round, zero tool calls, no retry).
+  const intent = '(?:i(?:\'d| would)?\\s+(?:want|need|would\\s+like)(?:\\s+you)?\\s+to|i\'m\\s+(?:trying|looking)\\s+to|can\\s+you|could\\s+you|would\\s+you|please|let\'?s|help\\s+me(?:\\s+to)?)';
   return new RegExp(`^(?:please\\s+)?${verb}\\b`, 'i').test(prompt.trim())
     // Real requests commonly begin with context ("I have an existing website …")
     // and put the imperative in the next sentence or bullet. The old start-only
     // classifier missed exactly that shape and allowed a prose summary to count as
     // completion. Keep the boundary narrow so "How do I design…?" remains a question.
     || new RegExp(`(?:^|[.!?;:]\\s+|\\n\\s*|[-*]\\s+)(?:please\\s+)?${verb}\\b`, 'i').test(prompt)
+    // Still verb-anchored, so "I want a coffee" and "can you explain SEO?" stay
+    // ordinary conversation.
+    || new RegExp(`(?:^|[.!?;:]\\s+|\\n\\s*|[-*]\\s+)${intent}\\s+${verb}\\b`, 'i').test(prompt)
     || /\b(?:change|update|edit|revise|replace|apply)\s+(?:this|the|selected|its)\b/i.test(prompt);
 }
 
@@ -358,6 +381,24 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       role: 'system',
       content: 'For a Twilio AI journey request, inspect the whole board before authoring and update/reuse matching Twilio objects instead of duplicating them. Produce one coherent, reusable customer journey: a specific persona and before/after outcome; an executable workflow where a visible LLM/agent decision directly leads to a real action on the existing twilio connector; approval, failure, and production-readiness details; a lightweight architecture diagram; an evidence-based quality evaluation covering creativity, long-term end-user impact, market potential, and technical feasibility; a concise live-demo script; measurable success evidence; an Idea-to-Real website handoff that uses the existing BuilderForce Embedded install path at /embedded and documents the host script, chosen customer-site capability, identity/events, and acceptance test; and one guidedTour object whose targetObjectId values point at the actual objects created or reused, including the embed handoff. Never create a connector object: Canvas exposes the canonical Twilio connection settings when the workflow needs them. Never invent a second embed SDK or iframe contract: use the existing BuilderForce Embedded capability and its generated workspace key/snippets. Prefer one strong workflow over separate generic SMS and Voice workflows unless the user explicitly asks for multiple channels. Do not name the experience after a contest or create competition-application artifacts unless the user explicitly asks for them.',
     },
+    // ANONYMOUS CANVAS. The blocks above describe the full product, including tools
+    // that only exist for a signed-in tenant (`canvas_read_project_prds`,
+    // `canvas_create_project_prd`, a connected mailbox, server-side image work). On a
+    // guest board those are neither advertised nor accepted, so without this the model
+    // is reading instructions about tools it does not have — which is how "connect my
+    // email" produced a bare refusal instead of the one useful answer available.
+    ...(options.persistence === 'local' ? [{
+      role: 'system',
+      content: 'This is an ANONYMOUS canvas: it is saved on this device and has no account behind it. You still have the full local authoring, layout, dataset, diagnostics and web-research tools, and you must use them. What you do NOT have is anything that reads a tenant: a connected mailbox or inbox, canonical project PRDs, tenant domain data, and server-side image search or generation. When the user asks for one of those — connecting an email account, sending from their mailbox, reading their company data — do BOTH of these in the same turn: say in one sentence that it needs a free account and where the connection is made, and then build the part you CAN build on the canvas now (the campaign plan, the audience definition, the message drafts, the workflow) with canvas_add_object. Never answer a request like that with a refusal alone, and never claim you connected something you did not.',
+    } satisfies ChatCompletionMessage] : []),
+    // ANSWER DISCIPLINE. Cheap free-pool models handed a labelled transcript reproduce
+    // the previous assistant line verbatim instead of answering (measured 2026-08-12:
+    // 15 completion tokens, zero tool calls, the reply being the prior reply with a
+    // "Brain: " prefix). Both halves of that failure are named here explicitly.
+    {
+      role: 'system',
+      content: 'Answer the user\'s latest message. Never repeat, quote back, or lightly reword an earlier assistant message in this conversation as your reply — an earlier reply, including one that reported a failure, is never the answer to a new request. Never begin your reply with a speaker name or role label such as "Brain:"; write the answer itself.',
+    },
     // MODE (0409) — LAST of the system blocks so it is the nearest instruction to the
     // user's turn: it decides whether this turn may leave tracked, dispatched work
     // behind, and it must not be argued out of that by the long authoring block above.
@@ -386,6 +427,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let proposedCanvasMutation = false;
   let executiveRequestRecoveryUsed = false;
   let imperativeMutationRecoveryUsed = false;
+  let degenerateAnswerRecoveryUsed = false;
   let authoringDirectiveIssued = false;
   let narrowSearches = 0;
   let lastToolError = '';
@@ -393,6 +435,33 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let activeModelStrict = options.modelStrict;
   const toolCallingModels: string[] = [];
   const commandFailedModels = new Set(options.disabledModels ?? []);
+  /** Labels this session's transcript uses, so a copied `Brain: ` prefix can be
+   *  recognised and removed without touching an answer that legitimately opens with
+   *  a colon. */
+  const speakerLabels = conversationSpeakerLabels(options.conversation, [options.participant?.name]);
+  /**
+   * Retire the model that just failed to produce a usable turn and continue on one
+   * that already emitted valid tool calls in this same turn.
+   *
+   * Shared by BOTH give-up paths (a command the model would not execute, and an
+   * empty/echoed answer) — they differ only in what they tell the replacement model.
+   * Returns false when no proven model is left, which is the caller's signal to stop.
+   */
+  const switchToProvenModel = (failedModel: string | null | undefined, directive: string): boolean => {
+    if (failedModel) {
+      commandFailedModels.add(failedModel);
+      options.onModelDisabled?.(failedModel);
+    }
+    const fallback = [...toolCallingModels].reverse().find((model) => !commandFailedModels.has(model));
+    if (!fallback || (fallback === activeModel && activeModelStrict === true)) return false;
+    activeModel = fallback;
+    activeModelStrict = true;
+    imperativeMutationRecoveryUsed = false;
+    degenerateAnswerRecoveryUsed = false;
+    options.onModelFallback?.(fallback);
+    messages.push({ role: 'system', content: `${directive} Continue on ${fallback}, which already emitted valid tool calls in this turn.` });
+    return true;
+  };
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
   const hasTabularData = snapshotHasTabularRows(options.canvasSnapshot);
   // An informational question is allowed to mention documents, reports, charts,
@@ -454,6 +523,30 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       activeModelStrict = false;
     }
     if (!result.toolCalls.length) {
+      // A DEGENERATE turn — the model returned nothing at all, or reproduced an
+      // earlier assistant message instead of answering. Neither is an answer, and
+      // neither is caught by the intent-based recoveries below (a plain question
+      // degenerates just as easily as a command). Checked FIRST because an echoed
+      // reply otherwise reaches the user as a fresh one and is stored, which is what
+      // let a single failed turn become the template for every turn after it.
+      const spoken = stripSpeakerLabel(result.text || finalText, speakerLabels).trim();
+      if (!spoken || echoesEarlierAnswer(spoken, options.conversation, speakerLabels)) {
+        if (!degenerateAnswerRecoveryUsed) {
+          degenerateAnswerRecoveryUsed = true;
+          messages.push({
+            role: 'system',
+            content: 'Your prior response was empty or repeated an earlier message in this conversation, so it did not answer anything. Do not restate a previous reply, and do not prefix your answer with a speaker name. Answer the user\'s latest message directly now, and call the canvas_* tools for any change it asks for.',
+          });
+          finalText = '';
+          continue;
+        }
+        if (switchToProvenModel(result.resolvedModel, 'The prior model returned an empty or repeated response twice and has been disabled for this session.')) {
+          finalText = '';
+          continue;
+        }
+        finalText = '';
+        break;
+      }
       if (!options.participant && !proposedCanvasMutation && !imperativeMutationRecoveryUsed
         && mutationRequested
         && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
@@ -467,20 +560,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         continue;
       }
       if (mutationRequested && !proposedCanvasMutation && imperativeMutationRecoveryUsed) {
-        if (result.resolvedModel) {
-          commandFailedModels.add(result.resolvedModel);
-          options.onModelDisabled?.(result.resolvedModel);
-        }
-        const fallback = [...toolCallingModels].reverse().find((model) => !commandFailedModels.has(model));
-        if (fallback && (fallback !== activeModel || activeModelStrict !== true)) {
-          activeModel = fallback;
-          activeModelStrict = true;
-          imperativeMutationRecoveryUsed = false;
-          options.onModelFallback?.(fallback);
-          messages.push({
-            role: 'system',
-            content: `The prior model did not execute the Canvas command after a retry and has been disabled for this session. Continue on ${fallback}, which already emitted valid tool calls in this turn. Stop researching and use canvas_add_object or canvas_update_object now to complete the user's requested artifact.`,
-          });
+        if (switchToProvenModel(
+          result.resolvedModel,
+          'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.',
+        )) {
           finalText = '';
           continue;
         }
@@ -501,7 +584,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
         return finish(incompleteDocumentAnswer(requestedPages, documentWords, documentWordCountExact));
       }
-      return finish(verified(result.text || finalText));
+      // `spoken` is the answer with any copied speaker label already removed, so a
+      // model that relapses cannot seed the next turn with a prefix to extend.
+      return finish(verified(spoken));
     }
     messages.push({
       role: 'assistant', content: result.text,
@@ -550,8 +635,16 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
     return finish(incompleteDocumentAnswer(requestedPages, documentWords, documentWordCountExact));
   }
-  if (finalText.trim()) return finish(verified(finalText));
+  const trailing = stripSpeakerLabel(finalText, speakerLabels).trim();
+  if (trailing && !echoesEarlierAnswer(trailing, options.conversation, speakerLabels)) return finish(verified(trailing));
   if (proposedCanvasMutation) return finish('I added the requested content to the canvas.');
-  if (lastToolError) return finish(`I couldn't prepare the requested canvas changes: ${lastToolError}`);
-  return finish("I couldn't prepare any canvas changes from that request.");
+  // From here down the string is a RUNTIME NOTICE, not something the model said. The
+  // caller is told so it can record it as a failed turn instead of writing it into the
+  // transcript as an assistant reply for the next turn to copy.
+  if (lastToolError) {
+    options.onUnanswered?.({ reason: 'tool-error', detail: lastToolError });
+    return `I couldn't prepare the requested canvas changes: ${lastToolError}`;
+  }
+  options.onUnanswered?.({ reason: mutationRequested ? 'command-not-executed' : 'no-answer' });
+  return "I couldn't prepare any canvas changes from that request.";
 }

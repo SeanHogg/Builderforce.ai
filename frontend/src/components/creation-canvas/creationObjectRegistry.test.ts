@@ -162,7 +162,14 @@ describe('creation object registry', () => {
       ],
     };
     const context = creationObjectAiContext({ kind: 'resume', title: 'Ada', resumeFamily });
-    expect(context.resumeFamily).toMatchObject({ originalRevisionId: 'original', revisions: [{ document: { basics: { name: 'Ada' }, work: [{ position: 'Programmer' }] } }] });
+    // `toMatchObject` compares arrays by LENGTH as well as content, so listing one
+    // revision against a two-revision family asserted the opposite of the intent —
+    // Brain must see the WHOLE lineage. Assert the shape of each revision instead.
+    expect(context.resumeFamily).toMatchObject({ originalRevisionId: 'original', activeRevisionId: 'derived' });
+    const revisions = (context.resumeFamily as { revisions: unknown[] }).revisions;
+    expect(revisions).toHaveLength(2);
+    expect(revisions[0]).toMatchObject({ id: 'original', document: { basics: { name: 'Ada' }, work: [{ position: 'Programmer' }] } });
+    expect(revisions[1]).toMatchObject({ id: 'derived', document: { skills: [{ name: 'Computing' }] } });
     expect(creationObjectMutableFields('resume')).toContain('resumeDocument');
     expect(creationObjectMutableFields('resume')).not.toContain('resumeFamily');
   });

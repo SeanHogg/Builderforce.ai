@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import { DocumentEditor } from './DocumentEditor';
@@ -35,10 +35,13 @@ import {
 import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
 import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
 import { analyzeResumeAgainstJob, resumeTailorPrompt } from '@/lib/canvasResumeAts';
+import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
 type ResumeView = 'edit' | 'preview' | 'compare';
 
-export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void }) {
+type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
+
+export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions }) {
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;
@@ -50,6 +53,16 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach }: { data:
   const [mergeSections, setMergeSections] = useState<ResumeDiffSection[]>([]);
   const [jobDescription, setJobDescription] = useState('');
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [sharesOpen, setSharesOpen] = useState(false);
+  const [shares, setShares] = useState<CanvasResumeShare[]>([]);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    if (!sharesOpen || !shareActions) return;
+    let live = true;
+    shareActions.list().then((rows) => { if (live) setShares(rows); }).catch(() => {});
+    return () => { live = false; };
+  }, [shareActions, sharesOpen]);
 
   const commit = (next: CanvasResumeFamily) => onEdit?.({
     ...resumeNodePatch(next),
@@ -128,7 +141,14 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach }: { data:
       </select></label>
       <button type="button" disabled={!onEdit} onClick={() => commit(updateResumeFamilySettings(family, { archivedAt: family.archivedAt ? null : new Date().toISOString() }))}>{family.archivedAt ? t('unarchive') : t('archive')}</button>
       <button type="button" disabled={!onEdit} aria-pressed={family.watched} onClick={() => commit(updateResumeFamilySettings(family, { watched: !family.watched }))}>{family.watched ? t('unwatch') : t('watch')}</button>
+      <button type="button" disabled={!shareActions || family.privacy !== 'public'} aria-expanded={sharesOpen} onClick={() => setSharesOpen((open) => !open)}>{t('shareResume')}</button>
     </div>
+    {sharesOpen && <section className={styles.resumeSharePanel}>
+      <p>{t('sharePublicOnly')}</p>
+      <div><button type="button" disabled={sharing} onClick={() => { setSharing(true); void shareActions?.create('view').finally(() => setSharing(false)); }}>{t('copyPublicLink')}</button>
+      <button type="button" disabled={sharing} onClick={() => { setSharing(true); void shareActions?.create('embed').finally(() => setSharing(false)); }}>{t('copyEmbedLink')}</button></div>
+      {shares.length ? <ul>{shares.map((share) => <li key={share.id}><span>{t('shareUseCount', { count: share.useCount })}{share.expiresAt ? ` · ${t('shareExpires', { date: new Date(share.expiresAt).toLocaleDateString() })}` : ''}</span><button type="button" onClick={() => { void shareActions?.revoke(share.id).then(() => setShares((rows) => rows.filter((row) => row.id !== share.id))); }}>{t('revokeShare')}</button></li>)}</ul> : <p>{t('noActiveShares')}</p>}
+    </section>}
     <div className={styles.resumeVersionCreator}>
       <input value={newTitle} placeholder={t('versionNamePlaceholder')} aria-label={t('versionName')} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createVersion(); }} />
       <button type="button" disabled={!onEdit} onClick={createVersion}>{t('createFromOriginal')}</button>

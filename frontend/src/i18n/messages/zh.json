@@ -13425,6 +13425,7 @@
     "macosMeta": "需要 macOS 13 或更高版本",
     "note": "选择安装方式，复制命令，然后在终端中运行。"
   },
+  "publicResume": { "loading": "正在加载简历…", "unavailable": "此简历链接不可用。" },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "将简历导入 Canvas",
@@ -13545,6 +13546,14 @@
       "unarchive": "取消归档",
       "watch": "关注",
       "unwatch": "取消关注",
+      "shareResume": "分享简历",
+      "sharePublicOnly": "公开链接使用默认模板；隐私设置更改后链接会立即失效。",
+      "copyPublicLink": "复制公开链接",
+      "copyEmbedLink": "复制嵌入链接",
+      "shareUseCount": "已查看 {count} 次",
+      "shareExpires": "{date} 到期",
+      "revokeShare": "撤销",
+      "noActiveShares": "没有有效链接。",
       "deleteVersion": "删除版本",
       "detachVersion": "分离为独立简历",
       "importAsVersion": "导入为新版本",
@@ -15006,6 +15015,10 @@
       "deleteWorkspaceFailed": "无法删除工作区"
     },
     "noticeSessionSaved": "会话已保存",
+    "resumeShareSaveFirst": "分享简历前请先保存此画布。",
+    "resumeLinkCopied": "已复制公开简历链接",
+    "resumeEmbedCopied": "已复制简历嵌入链接",
+    "resumeShareRevoked": "已撤销简历链接",
     "noticeSavedOnDevice": "已保存到本设备",
     "noticeSavingChanges": "正在保存更改…",
     "noticeConcurrentMerged": "已合并并发更改；正在重新保存…",
