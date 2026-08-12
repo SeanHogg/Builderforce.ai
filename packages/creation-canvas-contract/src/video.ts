@@ -32,6 +32,8 @@ export interface CanvasVideoClip {
   trimStartSeconds: number;
   volume: number;
   label: string;
+  captions?: string;
+  chapterTitle?: string;
 }
 
 export interface CanvasVideoTimeline {
@@ -77,6 +79,8 @@ export function canvasVideoTimelineFrom(value: unknown): CanvasVideoTimeline {
       trimStartSeconds: finite(clip.trimStartSeconds, 0),
       volume: Math.min(2, finite(clip.volume, 1)),
       label: typeof clip.label === 'string' ? clip.label : '',
+      ...(typeof clip.captions === 'string' ? { captions: clip.captions } : {}),
+      ...(typeof clip.chapterTitle === 'string' ? { chapterTitle: clip.chapterTitle } : {}),
     }];
   }) : [];
   return {

@@ -965,9 +965,9 @@ Renderer parity is independently required; copying IDs is not completion.
 | A-014 | Music catalog | — | **MISSING** |
 | A-015 | Master/track/layer audio mixer and mute | Per-clip volume exists; mixer absent | **PARTIAL** |
 | A-016 | Audio ducking | — | **MISSING** |
-| A-017 | Generate/edit captions | — | **MISSING** |
-| A-018 | Caption styles/position and burn-in | — | **MISSING** |
-| A-019 | Chapter markers | — | **MISSING** |
+| A-017 | Generate/edit captions | Visual clips have persisted editable caption/teleprompter text with live preview and browser-render composition; automatic transcription remains | **PARTIAL** |
+| A-018 | Caption styles/position and burn-in | Canonical compositor burns a legible lower-third caption into exported frames; style/position presets remain | **PARTIAL** |
+| A-019 | Chapter markers | Visual clips persist editable chapter titles alongside clip timing | **PORTED** |
 | A-020 | Multi-language dubbing | — | **MISSING** |
 | A-021 | Accessibility/WCAG advisory | — | **MISSING** |
 | A-022 | AI rewrite selected text | Generic Brain update only | **PARTIAL** |
@@ -1004,7 +1004,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | V-011 | Multicam/layout presets | — | **MISSING** |
 | V-012 | Motion presets and scene effects | — | **MISSING** |
 | V-013 | Video filters/chroma key | — | **MISSING** |
-| V-014 | Captions, chapters and teleprompter | — | **MISSING** |
+| V-014 | Captions, chapters and teleprompter | Per-visual-clip caption/teleprompter and chapter fields persist; captions render live and burn into exported Canvas frames | **PORTED** |
 | V-015 | Video generation returns editable frames/clips | Generated frames become editable visual clips | **PORTED** |
 | V-016 | Export real composed video | Browser renderer exists | **PORTED** |
 | V-017 | H.264 MP4 | Canvas renderer output is implementation-dependent, not profile-selected | **PARTIAL** |

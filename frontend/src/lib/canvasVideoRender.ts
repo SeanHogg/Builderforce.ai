@@ -32,6 +32,15 @@ function drawContained(context: CanvasRenderingContext2D, element: HTMLVideoElem
   context.drawImage(element, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
+type CaptionContext = { save(): void; restore(): void; measureText(text: string): { width: number }; fillRect(x: number, y: number, width: number, height: number): void; fillText(text: string, x: number, y: number, maxWidth?: number): void; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline };
+export function drawCanvasVideoCaptions(context: CaptionContext, caption: string, width: number, height: number) {
+  const text = caption.trim(); if (!text) return;
+  context.save(); context.font = `600 ${Math.max(22, Math.round(height * .038))}px Arial`; context.textAlign = 'center'; context.textBaseline = 'bottom';
+  const padding = Math.round(height * .018); const boxWidth = Math.min(width * .9, context.measureText(text).width + padding * 2); const boxHeight = Math.round(height * .075);
+  context.fillStyle = 'rgba(0,0,0,.72)'; context.fillRect((width - boxWidth) / 2, height - boxHeight - padding, boxWidth, boxHeight);
+  context.fillStyle = '#fff'; context.fillText(text, width / 2, height - padding * 1.8, boxWidth - padding * 2); context.restore();
+}
+
 /**
  * Browser-native first renderer. It records the Canvas compositor plus the Web
  * Audio mix in real time, producing an editable object's derived WebM rendition.
@@ -89,6 +98,7 @@ export async function renderCanvasVideo(
         }
         if (active && clip.track === 'visual' && source && element && !(element instanceof HTMLAudioElement)) {
           drawContained(context, element, canvas.width, canvas.height);
+          if (clip.captions) drawCanvasVideoCaptions(context, clip.captions, canvas.width, canvas.height);
         }
       }
       onProgress?.(elapsed / duration);
@@ -105,4 +115,3 @@ export async function renderCanvasVideo(
   if (!blob.size) throw new Error('The browser produced an empty video');
   return blob;
 }
-

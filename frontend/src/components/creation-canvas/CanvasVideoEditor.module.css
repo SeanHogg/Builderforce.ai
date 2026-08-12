@@ -3,6 +3,7 @@
 .preview > img, .preview > video { position: absolute; width: 100%; height: 100%; object-fit: contain; }
 .preview > audio { display: none; }
 .preview > span { color: var(--canvas-muted); font-size: var(--font-size-field-label); }
+.previewCaptions { position:absolute; z-index:2; bottom:3.8rem; left:10%; right:10%; padding:.45rem .7rem; border-radius:var(--radius-sm); background:rgb(0 0 0 / 72%); color:#fff; text-align:center; font-weight:650; }
 .transport { position: absolute; inset: auto var(--space-2) var(--space-2); z-index: 2; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-md); background: color-mix(in srgb, var(--canvas-panel) 88%, transparent); backdrop-filter: blur(10px); }
 .transport button, .captureBar button, .captureBar label { min-height: 2rem; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); padding: 0 var(--space-2); font: inherit; cursor: pointer; }
 .transport time { font-variant-numeric: tabular-nums; font-size: var(--font-size-field-label); white-space: nowrap; }
@@ -47,6 +48,9 @@
 .storyboard article > div > input { width:100%; }
 .sceneActions { display:flex !important; grid-template-columns:repeat(4,auto); gap:2px; }
 .sceneActions button { min-width:1.6rem; min-height:1.6rem; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); }
+.clipText { grid-column:1 / -1; }
+.clipText label { display:grid; grid-template-columns:5rem minmax(12rem,1fr); align-items:center; gap:var(--space-2); }
+.clipText textarea,.clipText input { width:100%; box-sizing:border-box; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); }
 @container (max-width: 700px) {
   .editor { min-width: 18rem; }
   .timeline section { grid-template-columns: 5rem minmax(20rem, 1fr); }

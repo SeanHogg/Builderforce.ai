@@ -13426,7 +13426,10 @@
     "macosMeta": "Requires macOS 13 or later",
     "note": "Choose an install method, copy the command, and run it in your terminal."
   },
-  "publicResume": { "loading": "Loading résumé…", "unavailable": "This résumé link is unavailable." },
+  "publicResume": {
+    "loading": "Loading résumé…",
+    "unavailable": "This résumé link is unavailable."
+  },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "Bring your résumé into Canvas",
@@ -13701,8 +13704,21 @@
       "searchVideoTemplates": "Search video résumé templates",
       "allProfessions": "All professions",
       "scenes": "scenes",
-      "storyboard": "Storyboard"
-      ,"copySuffix": "copy","sceneTitle": "Scene {number} title","transition": "Transition","transition_cut": "Cut","transition_fade": "Fade","transition_slide": "Slide","transition_zoom": "Zoom","moveSceneEarlier": "Move {title} earlier","moveSceneLater": "Move {title} later","duplicateScene": "Duplicate {title}","deleteScene": "Delete {title}"
+      "storyboard": "Storyboard",
+      "copySuffix": "copy",
+      "sceneTitle": "Scene {number} title",
+      "transition": "Transition",
+      "transition_cut": "Cut",
+      "transition_fade": "Fade",
+      "transition_slide": "Slide",
+      "transition_zoom": "Zoom",
+      "moveSceneEarlier": "Move {title} earlier",
+      "moveSceneLater": "Move {title} later",
+      "duplicateScene": "Duplicate {title}",
+      "deleteScene": "Delete {title}",
+      "captionsAndChapter": "Captions and chapter",
+      "caption": "Caption / teleprompter",
+      "chapter": "Chapter marker"
     },
     "comparison": {
       "promptTitle": "Shared comparison prompt",
@@ -15001,12 +15017,12 @@
     "creativeGenerating": "Generating…",
     "creativeGenerated": "{file} generated and validated",
     "creativeGeneratedOffline": "{file} generated with the offline baseline — the generator was unavailable",
-      "creativeGeneratedStatus": "Generated",
-      "imageFoundStatus": "Found",
-      "imageFoundValidation": "Selected from {provider}",
-      "imageGeneratedValidation": "Image generation returned renderable pixels",
-      "imageFoundProposal": "Add found image “{title}”",
-      "imageGeneratedProposal": "Add generated image “{title}”",
+    "creativeGeneratedStatus": "Generated",
+    "imageFoundStatus": "Found",
+    "imageFoundValidation": "Selected from {provider}",
+    "imageGeneratedValidation": "Image generation returned renderable pixels",
+    "imageFoundProposal": "Add found image “{title}”",
+    "imageGeneratedProposal": "Add generated image “{title}”",
     "creativeApplied": "Applied",
     "creativeNoMediaModel": "Publish an Evermind media model to render this object",
     "creativeNoFrames": "The model returned no readable frames",
@@ -16386,7 +16402,11 @@
       "seoDescription": "Plan projects, coordinate people and AI agents, and move accountable work through board, table, calendar, and Gantt views in Builderforce.ai.",
       "primaryCta": "Create your first project",
       "secondaryCta": "Sign in",
-      "proof": ["Free workspace", "No credit card", "Human approvals built in"],
+      "proof": [
+        "Free workspace",
+        "No credit card",
+        "Human approvals built in"
+      ],
       "closingEyebrow": "Start with real work",
       "closingTitle": "Your next project can already have a team.",
       "closingBody": "Create the workspace, shape the plan, and assign the first task to a person or agent in minutes.",
@@ -16394,10 +16414,18 @@
       "visual": {
         "aria": "Example project board showing planned, active, and completed agent work",
         "title": "Launch workspace",
-        "planned": "Planned", "progress": "In progress", "done": "Done",
-        "plannedKicker": "Research", "plannedTask": "Validate customer problem", "plannedOwner": "Maya · Product",
-        "progressKicker": "Agent running", "progressTask": "Build onboarding prototype", "progressOwner": "Builder agent",
-        "doneKicker": "Approved", "doneTask": "Define launch metrics", "doneOwner": "Rene · Growth"
+        "planned": "Planned",
+        "progress": "In progress",
+        "done": "Done",
+        "plannedKicker": "Research",
+        "plannedTask": "Validate customer problem",
+        "plannedOwner": "Maya · Product",
+        "progressKicker": "Agent running",
+        "progressTask": "Build onboarding prototype",
+        "progressOwner": "Builder agent",
+        "doneKicker": "Approved",
+        "doneTask": "Define launch metrics",
+        "doneOwner": "Rene · Growth"
       }
     },
     "manager": {
@@ -16408,15 +16436,27 @@
       "authRequired": "Authentication required · Manager uses your tenant, projects, and permissions",
       "primaryCta": "Sign in to open Manager",
       "secondaryCta": "Create a free workspace",
-      "proof": ["Explainable decisions", "Approval-aware autonomy", "Live execution details"],
+      "proof": [
+        "Explainable decisions",
+        "Approval-aware autonomy",
+        "Live execution details"
+      ],
       "closingEyebrow": "Put the backlog in motion",
       "closingTitle": "Give every project an accountable operating rhythm.",
       "closingBody": "Sign in to see Manager work against your real tenant context, project policies, team capacity, and delivery history.",
       "closingCta": "Sign in to Manager",
       "visual": {
         "aria": "Example AI Manager dashboard showing delivery health, prioritized work, risks, and recent decisions",
-        "title": "AI Manager", "live": "Active", "deliveryHealth": "Delivery health", "healthChange": "+8 this week",
-        "prioritized": "Prioritized", "risks": "Risks flagged", "decisions": "Decisions", "decisionTitle": "Backlog reordered", "decisionBody": "Moved onboarding fix ahead of campaign work", "now": "Now"
+        "title": "AI Manager",
+        "live": "Active",
+        "deliveryHealth": "Delivery health",
+        "healthChange": "+8 this week",
+        "prioritized": "Prioritized",
+        "risks": "Risks flagged",
+        "decisions": "Decisions",
+        "decisionTitle": "Backlog reordered",
+        "decisionBody": "Moved onboarding fix ahead of campaign work",
+        "now": "Now"
       }
     }
   },
@@ -16811,7 +16851,11 @@
     "rules": "Rules & AI agent",
     "refresh": "Refresh",
     "folders": "Mailbox folders",
-    "folder": { "all": "Inbox", "unread": "Unread", "attachments": "Attachments" },
+    "folder": {
+      "all": "Inbox",
+      "unread": "Unread",
+      "attachments": "Attachments"
+    },
     "marketing": "Marketing",
     "campaigns": "Campaigns",
     "connectedAs": "Connected as",
@@ -16842,7 +16886,11 @@
     "agent": "AI agent",
     "chooseAgent": "Choose an agent",
     "responseMode": "Response mode",
-    "mode": { "draft": "Draft only", "approval": "Require approval", "automatic": "Respond automatically" },
+    "mode": {
+      "draft": "Draft only",
+      "approval": "Require approval",
+      "automatic": "Respond automatically"
+    },
     "instructions": "Response instructions",
     "saveRule": "Save rule",
     "createAgent": "Create an email agent",

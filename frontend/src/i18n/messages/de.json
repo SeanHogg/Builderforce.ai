@@ -13425,7 +13425,10 @@
     "macosMeta": "Erfordert macOS 13 oder neuer",
     "note": "Wähle eine Installationsmethode, kopiere den Befehl und führe ihn im Terminal aus."
   },
-  "publicResume": { "loading": "Lebenslauf wird geladen…", "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar." },
+  "publicResume": {
+    "loading": "Lebenslauf wird geladen…",
+    "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar."
+  },
   "creationCanvas": {
     "resumeEditor": {
       "emptyTitle": "Lebenslauf in Canvas übernehmen",
@@ -13700,8 +13703,21 @@
       "searchVideoTemplates": "Video-Lebenslauf-Vorlagen suchen",
       "allProfessions": "Alle Berufe",
       "scenes": "Szenen",
-      "storyboard": "Storyboard"
-      ,"copySuffix": "Kopie","sceneTitle": "Titel der Szene {number}","transition": "Übergang","transition_cut": "Schnitt","transition_fade": "Blende","transition_slide": "Schieben","transition_zoom": "Zoom","moveSceneEarlier": "{title} nach vorne","moveSceneLater": "{title} nach hinten","duplicateScene": "{title} duplizieren","deleteScene": "{title} löschen"
+      "storyboard": "Storyboard",
+      "copySuffix": "Kopie",
+      "sceneTitle": "Titel der Szene {number}",
+      "transition": "Übergang",
+      "transition_cut": "Schnitt",
+      "transition_fade": "Blende",
+      "transition_slide": "Schieben",
+      "transition_zoom": "Zoom",
+      "moveSceneEarlier": "{title} nach vorne",
+      "moveSceneLater": "{title} nach hinten",
+      "duplicateScene": "{title} duplizieren",
+      "deleteScene": "{title} löschen",
+      "captionsAndChapter": "Untertitel und Kapitel",
+      "caption": "Untertitel / Teleprompter",
+      "chapter": "Kapitelmarke"
     },
     "comparison": {
       "promptTitle": "Gemeinsamer Vergleichsprompt",
@@ -15000,12 +15016,12 @@
     "creativeGenerating": "Wird erzeugt…",
     "creativeGenerated": "{file} erzeugt und geprüft",
     "creativeGeneratedOffline": "{file} mit der Offline-Basis erzeugt — der Generator war nicht verfügbar",
-      "creativeGeneratedStatus": "Erzeugt",
-      "imageFoundStatus": "Gefunden",
-      "imageFoundValidation": "Aus {provider} ausgewählt",
-      "imageGeneratedValidation": "Die Bilderzeugung hat darstellbare Pixel zurückgegeben",
-      "imageFoundProposal": "Gefundenes Bild „{title}“ hinzufügen",
-      "imageGeneratedProposal": "Erzeugtes Bild „{title}“ hinzufügen",
+    "creativeGeneratedStatus": "Erzeugt",
+    "imageFoundStatus": "Gefunden",
+    "imageFoundValidation": "Aus {provider} ausgewählt",
+    "imageGeneratedValidation": "Die Bilderzeugung hat darstellbare Pixel zurückgegeben",
+    "imageFoundProposal": "Gefundenes Bild „{title}“ hinzufügen",
+    "imageGeneratedProposal": "Erzeugtes Bild „{title}“ hinzufügen",
     "creativeApplied": "Angewendet",
     "creativeNoMediaModel": "Veröffentlichen Sie ein Evermind-Medienmodell, um dieses Objekt zu erzeugen",
     "creativeNoFrames": "Das Modell lieferte keine lesbaren Einzelbilder",
@@ -16379,12 +16395,68 @@
     "faqHeading": "Häufig gestellte Fragen",
     "relatedReading": "Weiterführende Artikel",
     "projects": {
-      "eyebrow": "Projekte mit Agenten-Power", "title": "Aus Plänen wird Arbeit, die vorankommt", "description": "Bringen Sie Menschen und KI-Agenten in einem Arbeitsbereich zusammen – von Kontext und Prioritäten bis zu Aufgaben, Freigaben und messbarem Fortschritt.", "seoDescription": "Planen Sie Projekte, koordinieren Sie Menschen und KI-Agenten und steuern Sie Arbeit in Board-, Tabellen-, Kalender- und Gantt-Ansichten in Builderforce.ai.", "primaryCta": "Erstes Projekt erstellen", "secondaryCta": "Anmelden", "proof": ["Kostenloser Arbeitsbereich", "Keine Kreditkarte", "Menschliche Freigaben integriert"], "closingEyebrow": "Mit echter Arbeit starten", "closingTitle": "Ihr nächstes Projekt kann schon ein Team haben.", "closingBody": "Erstellen Sie den Arbeitsbereich, strukturieren Sie den Plan und weisen Sie die erste Aufgabe in Minuten einem Menschen oder Agenten zu.", "closingCta": "Projekt kostenlos erstellen",
-      "visual": { "aria": "Beispielprojekt mit geplanter, aktiver und abgeschlossener Agentenarbeit", "title": "Launch-Arbeitsbereich", "planned": "Geplant", "progress": "In Arbeit", "done": "Erledigt", "plannedKicker": "Recherche", "plannedTask": "Kundenproblem validieren", "plannedOwner": "Maya · Produkt", "progressKicker": "Agent aktiv", "progressTask": "Onboarding-Prototyp bauen", "progressOwner": "Builder-Agent", "doneKicker": "Freigegeben", "doneTask": "Launch-Kennzahlen definieren", "doneOwner": "Rene · Wachstum" }
+      "eyebrow": "Projekte mit Agenten-Power",
+      "title": "Aus Plänen wird Arbeit, die vorankommt",
+      "description": "Bringen Sie Menschen und KI-Agenten in einem Arbeitsbereich zusammen – von Kontext und Prioritäten bis zu Aufgaben, Freigaben und messbarem Fortschritt.",
+      "seoDescription": "Planen Sie Projekte, koordinieren Sie Menschen und KI-Agenten und steuern Sie Arbeit in Board-, Tabellen-, Kalender- und Gantt-Ansichten in Builderforce.ai.",
+      "primaryCta": "Erstes Projekt erstellen",
+      "secondaryCta": "Anmelden",
+      "proof": [
+        "Kostenloser Arbeitsbereich",
+        "Keine Kreditkarte",
+        "Menschliche Freigaben integriert"
+      ],
+      "closingEyebrow": "Mit echter Arbeit starten",
+      "closingTitle": "Ihr nächstes Projekt kann schon ein Team haben.",
+      "closingBody": "Erstellen Sie den Arbeitsbereich, strukturieren Sie den Plan und weisen Sie die erste Aufgabe in Minuten einem Menschen oder Agenten zu.",
+      "closingCta": "Projekt kostenlos erstellen",
+      "visual": {
+        "aria": "Beispielprojekt mit geplanter, aktiver und abgeschlossener Agentenarbeit",
+        "title": "Launch-Arbeitsbereich",
+        "planned": "Geplant",
+        "progress": "In Arbeit",
+        "done": "Erledigt",
+        "plannedKicker": "Recherche",
+        "plannedTask": "Kundenproblem validieren",
+        "plannedOwner": "Maya · Produkt",
+        "progressKicker": "Agent aktiv",
+        "progressTask": "Onboarding-Prototyp bauen",
+        "progressOwner": "Builder-Agent",
+        "doneKicker": "Freigegeben",
+        "doneTask": "Launch-Kennzahlen definieren",
+        "doneOwner": "Rene · Wachstum"
+      }
     },
     "manager": {
-      "eyebrow": "Verantwortliche KI-Projektleitung", "title": "Der AI Manager, der Ihre Lieferung voranbringt", "description": "Er priorisiert den Backlog, erkennt blockierte Arbeit, koordiniert Agenten und erklärt jede Entscheidung direkt im Projekt Ihres Teams.", "seoDescription": "Der AI Manager von Builderforce.ai priorisiert Backlogs, erkennt Risiken, koordiniert Agenten und protokolliert nachvollziehbare Entscheidungen. Anmeldung erforderlich.", "authRequired": "Anmeldung erforderlich · Manager nutzt Ihren Mandanten, Ihre Projekte und Berechtigungen", "primaryCta": "Anmelden und Manager öffnen", "secondaryCta": "Kostenlosen Arbeitsbereich erstellen", "proof": ["Nachvollziehbare Entscheidungen", "Freigabegesteuerte Autonomie", "Live-Ausführungsdetails"], "closingEyebrow": "Backlog in Bewegung bringen", "closingTitle": "Geben Sie jedem Projekt einen verantwortlichen Arbeitsrhythmus.", "closingBody": "Melden Sie sich an, damit Manager mit Ihrem echten Mandantenkontext, Regeln, Kapazitäten und Lieferverlauf arbeitet.", "closingCta": "Bei Manager anmelden",
-      "visual": { "aria": "Beispiel-Dashboard des AI Managers mit Lieferstatus, Prioritäten, Risiken und Entscheidungen", "title": "AI Manager", "live": "Aktiv", "deliveryHealth": "Lieferstatus", "healthChange": "+8 diese Woche", "prioritized": "Priorisiert", "risks": "Risiken markiert", "decisions": "Entscheidungen", "decisionTitle": "Backlog neu geordnet", "decisionBody": "Onboarding-Fix vor Kampagnenarbeit verschoben", "now": "Jetzt" }
+      "eyebrow": "Verantwortliche KI-Projektleitung",
+      "title": "Der AI Manager, der Ihre Lieferung voranbringt",
+      "description": "Er priorisiert den Backlog, erkennt blockierte Arbeit, koordiniert Agenten und erklärt jede Entscheidung direkt im Projekt Ihres Teams.",
+      "seoDescription": "Der AI Manager von Builderforce.ai priorisiert Backlogs, erkennt Risiken, koordiniert Agenten und protokolliert nachvollziehbare Entscheidungen. Anmeldung erforderlich.",
+      "authRequired": "Anmeldung erforderlich · Manager nutzt Ihren Mandanten, Ihre Projekte und Berechtigungen",
+      "primaryCta": "Anmelden und Manager öffnen",
+      "secondaryCta": "Kostenlosen Arbeitsbereich erstellen",
+      "proof": [
+        "Nachvollziehbare Entscheidungen",
+        "Freigabegesteuerte Autonomie",
+        "Live-Ausführungsdetails"
+      ],
+      "closingEyebrow": "Backlog in Bewegung bringen",
+      "closingTitle": "Geben Sie jedem Projekt einen verantwortlichen Arbeitsrhythmus.",
+      "closingBody": "Melden Sie sich an, damit Manager mit Ihrem echten Mandantenkontext, Regeln, Kapazitäten und Lieferverlauf arbeitet.",
+      "closingCta": "Bei Manager anmelden",
+      "visual": {
+        "aria": "Beispiel-Dashboard des AI Managers mit Lieferstatus, Prioritäten, Risiken und Entscheidungen",
+        "title": "AI Manager",
+        "live": "Aktiv",
+        "deliveryHealth": "Lieferstatus",
+        "healthChange": "+8 diese Woche",
+        "prioritized": "Priorisiert",
+        "risks": "Risiken markiert",
+        "decisions": "Entscheidungen",
+        "decisionTitle": "Backlog neu geordnet",
+        "decisionBody": "Onboarding-Fix vor Kampagnenarbeit verschoben",
+        "now": "Jetzt"
+      }
     }
   },
   "burnrateMarketing": {
@@ -16778,7 +16850,11 @@
     "rules": "Rules & AI agent",
     "refresh": "Refresh",
     "folders": "Mailbox folders",
-    "folder": { "all": "Inbox", "unread": "Unread", "attachments": "Attachments" },
+    "folder": {
+      "all": "Inbox",
+      "unread": "Unread",
+      "attachments": "Attachments"
+    },
     "marketing": "Marketing",
     "campaigns": "Campaigns",
     "connectedAs": "Connected as",
@@ -16809,7 +16885,11 @@
     "agent": "AI agent",
     "chooseAgent": "Choose an agent",
     "responseMode": "Response mode",
-    "mode": { "draft": "Draft only", "approval": "Require approval", "automatic": "Respond automatically" },
+    "mode": {
+      "draft": "Draft only",
+      "approval": "Require approval",
+      "automatic": "Respond automatically"
+    },
     "instructions": "Response instructions",
     "saveRule": "Save rule",
     "createAgent": "Create an email agent",
