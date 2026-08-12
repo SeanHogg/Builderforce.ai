@@ -45,11 +45,11 @@ const cardStyle: React.CSSProperties = {
 };
 
 const sectionTitle: React.CSSProperties = {
-  fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14,
+  fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14,
 };
 
 const rowStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '6px 0',
+  display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 'var(--font-size-body)', padding: '6px 0',
 };
 
 export type BillingView = 'account' | 'payouts';
@@ -58,7 +58,9 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
   const t = useTranslations('billing');
   const locale = useLocale();
   const tenant = getStoredTenant();
-  const tenantId = tenant?.id ?? null;
+  // `Tenant.id` is a string in the stored session; every billing route keys on
+  // the numeric id, so the narrowing happens once here rather than at four calls.
+  const tenantId = tenant?.id != null ? Number(tenant.id) : null;
 
   const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
   const [card, setCard] = useState<CardValidationState | null>(null);
@@ -140,14 +142,14 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
             ))}
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{tenantId == null ? t('noWorkspace') : t('loading')}</p>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{tenantId == null ? t('noWorkspace') : t('loading')}</p>
         )}
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {/* The brochure is a LINK from the console, never the console itself. */}
           <Link
             href="/pricing"
             style={{
-              padding: '6px 12px', fontSize: 12, fontWeight: 600, minHeight: 34, display: 'inline-flex', alignItems: 'center',
+              padding: '6px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, minHeight: 34, display: 'inline-flex', alignItems: 'center',
               background: 'var(--surface-interactive)', color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', textDecoration: 'none',
             }}
@@ -159,14 +161,14 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
 
       <div style={cardStyle}>
         <div style={sectionTitle}>{t('paymentMethodTitle')}</div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.55 }}>{t('paymentMethodIntro')}</p>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.55 }}>{t('paymentMethodIntro')}</p>
         {card?.validated ? (
           <div style={rowStyle}>
             <span style={{ color: 'var(--text-muted)' }}>{t('cardOnFile')}</span>
             <span style={{ color: 'var(--text-primary)' }}>{card.brand ?? t('card')} •••• {card.last4 ?? '····'}</span>
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('noCard')}</p>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('noCard')}</p>
         )}
         <RoleGate capability="billing.manage">
           <Button size="sm" variant={card?.validated ? 'ghost' : 'primary'} loading={busy} onClick={() => void startCardValidation()}>
@@ -181,7 +183,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
     <>
       <div style={cardStyle}>
         <div style={sectionTitle}>{t('destinationsTitle')}</div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('destinationsIntro')}</p>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('destinationsIntro')}</p>
         <PayoutConnections returnTo="/billing/payouts" onChanged={() => void loadPayouts()} />
       </div>
 
@@ -192,11 +194,11 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
           <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{money(paidCents)}</span>
         </div>
         {payouts.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('noPayouts')}</p>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('noPayouts')}</p>
         ) : (
           // Wide content scrolls inside its own container; the page never does.
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 420 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)', minWidth: 420 }}>
               <thead>
                 <tr>
                   {[t('colDate'), t('colAmount'), t('colProvider'), t('colStatus')].map((heading) => (
@@ -223,10 +225,10 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
 
   return (
     <PageContainer width="readable" style={{ padding: '32px 40px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 20px' }}>{t('intro')}</p>
+      <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
+      <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 20px' }}>{t('intro')}</p>
       <DestinationIndex items={subTabs} activeId={view} ariaLabel={t('subnavLabel')} />
-      {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 13, marginBottom: 14 }}>{error}</p>}
+      {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</p>}
       {view === 'payouts' ? renderPayouts() : renderAccount()}
     </PageContainer>
   );

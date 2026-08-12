@@ -18,16 +18,25 @@ import type { Capability } from '@/lib/rbac';
  * hidden) — the server requireRole() on /api/insights/* is the real authority.
  */
 export function LensPage({
-  capability, titleKey, subtitleKey, children, gate = true,
+  capability, titleKey, subtitleKey, actions, children, gate = true,
 }: {
-  capability: Capability;
+  /**
+   * The capability the page's content requires. Optional: the /insights home
+   * dashboard has no capability of its own — it shows whichever widgets the user
+   * pinned, and each of those self-gates — so it renders the same chrome with no
+   * gate rather than borrowing an unrelated lens's capability to satisfy a
+   * required prop.
+   */
+  capability?: Capability;
   titleKey: string;
   subtitleKey: string;
+  /** Page-level controls rendered opposite the title (window selector, actions). */
+  actions?: ReactNode;
   children: ReactNode;
   /**
-   * Wrap children in the capability <RoleGate>. Default true. Set false for hub
-   * pages whose children gate themselves per-lens (e.g. the delivery hub, where
-   * each drill-down drawer applies its own lens capability).
+   * Wrap children in the capability <RoleGate>. Default true; ignored when no
+   * `capability` is given. Set false for hub pages whose children gate themselves
+   * per-lens (e.g. the delivery hub, where each drill-down applies its own).
    */
   gate?: boolean;
 }) {
@@ -44,11 +53,14 @@ export function LensPage({
 
   return (
     <PageContainer>
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{t(titleKey)}</h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>{t(subtitleKey)}</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, margin: 0 }}>{t(titleKey)}</h1>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginTop: 4 }}>{t(subtitleKey)}</p>
+        </div>
+        {actions && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{actions}</div>}
       </div>
-      {gate ? (
+      {capability && gate ? (
         <RoleGate capability={capability} variant="block">
           {children}
         </RoleGate>
@@ -61,7 +73,7 @@ export function LensPage({
 
 const selectStyle: React.CSSProperties = {
   padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)',
 };
 
 /** Shared 7/30/90-day window selector used by the time-windowed lenses. */

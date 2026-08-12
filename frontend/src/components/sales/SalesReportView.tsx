@@ -106,7 +106,7 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 12 }}>
           {tiles.map((tile) => (
             <div key={tile.key}>
-              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.15 }}>{tile.value}</div>
+              <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.15 }}>{tile.value}</div>
               <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>{tile.label}</div>
             </div>
           ))}
@@ -117,11 +117,11 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
       <section style={cardStyle}>
         <p style={captionStyle}>{t('funnelTitle')}</p>
         {funnel.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('funnelEmpty')}</p>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('funnelEmpty')}</p>
         ) : (
           <BarChart data={funnel} ariaLabel={t('funnelTitle')} formatValue={(value) => number(value)} labelWidth={110} />
         )}
-        <p style={{ fontSize: 13, color: report.stalledContacts > 0 ? 'var(--coral-bright)' : 'var(--text-muted)', margin: '12px 0 0' }}>
+        <p style={{ fontSize: 'var(--font-size-body)', color: report.stalledContacts > 0 ? 'var(--coral-bright)' : 'var(--text-muted)', margin: '12px 0 0' }}>
           {report.stalledContacts > 0 ? t('stalled', { count: report.stalledContacts }) : t('noStalled')}
         </p>
       </section>
@@ -131,7 +131,7 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
         <section style={cardStyle}>
           <p style={captionStyle}>{t('leaderboardTitle')}</p>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 520 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)', minWidth: 520 }}>
               <thead>
                 <tr>
                   {[t('colAssociate'), t('colSignups'), t('colConversions'), t('colRevenue'), t('colCommission')].map((heading, index) => (

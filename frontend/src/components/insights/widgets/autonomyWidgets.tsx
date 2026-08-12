@@ -28,13 +28,11 @@
 import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import {
-  autonomyApi, autonomousHopShare, shareOfCreated,
+  autonomousHopShare, shareOfCreated,
   AUTONOMY_STAGES, ORIGIN_ORDER, STAGE_FIELD,
   type AutonomyOriginStats, type AutonomyStage, type AutonomySummary, type TicketOrigin,
 } from '@/lib/autonomyApi';
-import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { useSharedSource } from '@/lib/widgets/sharedSource';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { BarChart } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
@@ -44,15 +42,7 @@ import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { int, pct } from '../format';
-
-/** One shared, deduped read of the Autonomy collector per (window × project). */
-function useAutonomy(days: number) {
-  const { currentProjectId } = useProjectScope();
-  return useSharedSource<AutonomySummary>(
-    `autonomy:${days}:${currentProjectId ?? 'all'}`,
-    () => autonomyApi.get(days, currentProjectId),
-  );
-}
+import { useAutonomy } from '../insightsSources';
 
 /**
  * Localized labels for the lens's two enumerations. Kept as one hook so the
@@ -478,6 +468,3 @@ export const AUTONOMY_WIDGETS: WidgetDef[] = [
 
 /** Ids in the order the full lens lays them out. */
 export const AUTONOMY_WIDGET_IDS = AUTONOMY_WIDGETS.map((w) => w.id);
-
-/** Re-exported so the lens header can reuse the SAME deduped read (no extra request). */
-export { useAutonomy };

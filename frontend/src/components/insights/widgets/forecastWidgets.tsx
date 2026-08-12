@@ -14,7 +14,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { TrendChart, type TrendSeries } from '@/components/charts/TrendChart';
 import { forecastApi, type ForecastInsights, type ForecastMetric, type ForecastUnit } from '@/lib/forecastApi';
@@ -34,10 +34,9 @@ function fmt(unit: ForecastUnit): (v: number) => string {
 
 /** One shared, deduped read of the forecast collector per metric+window. */
 function useForecast(metric: ForecastMetric, days: number) {
-  const { data, error } = useSharedSource<ForecastInsights>(`forecast:${metric}:${days}`, () => forecastApi.get(metric, days));
+  const source = useSharedSource<ForecastInsights>(`forecast:${metric}:${days}`, () => forecastApi.get(metric, days));
   const t = useTranslations('insights');
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 // ── Widget bodies ──────────────────────────────────────────────────────────────

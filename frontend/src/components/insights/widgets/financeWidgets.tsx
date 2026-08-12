@@ -21,17 +21,17 @@ import { useTranslations } from 'next-intl';
 import {
   insightsApi,
   type FinanceInsights,
-  type EngineeringInsights,
   type EffectivenessBucket,
 } from '@/lib/builderforceApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { usd, pct, score2, int } from '../format';
+import { useEngineering } from '../insightsSources';
 
 // ── Shared, deduped sources (one request per source+window) ────────────────────
 
@@ -47,11 +47,6 @@ function useFinance() {
   return useSharedSource<FinanceInsights>(`finance:${period}`, () => insightsApi.finance(period));
 }
 
-/** One shared, deduped read of the engineering-effectiveness collector per window. */
-function useEngineering(days: number) {
-  return useSharedSource<EngineeringInsights>(`engineering:${days}`, () => insightsApi.engineering(days));
-}
-
 const FIN_DRILL: WidgetDrill = { kind: 'panel', hub: 'finance', panel: 'finance' };
 const ENG_DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'engineering' };
 const FIN_CAP = 'insights.finance' as const;
@@ -62,17 +57,15 @@ const ENG_CAP = 'insights.engineering' as const;
 /** Wrap a finance card body: handles loading / error so each widget needn't repeat it. */
 function useFin() {
   const t = useTranslations('insights');
-  const { data, error } = useFinance();
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useFinance();
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 /** Wrap an engineering card body: handles loading / error. */
 function useEng(days: number) {
   const t = useTranslations('insights');
-  const { data, error } = useEngineering(days);
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useEngineering(days);
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 // ── Finance widget bodies ──────────────────────────────────────────────────────

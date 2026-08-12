@@ -90,7 +90,7 @@ const BASELINE = {
    * `StakeholderAlignmentPanel`, `RecommendationsLens`, `CanvasVideoEditor`, and the
    * pricing / dashboard / phone modules.
    */
-  offScaleFontSizes: 3869,
+  offScaleFontSizes: 3827,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

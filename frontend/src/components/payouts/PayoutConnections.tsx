@@ -222,7 +222,7 @@ export function PayoutConnections({ returnTo, search = '', onChanged }: PayoutCo
                 onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
                 style={{
                   padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, minHeight: 40,
+                  background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', minHeight: 40,
                 }}
               />
               {field.help && <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-eyebrow)' }}>{field.help}</small>}

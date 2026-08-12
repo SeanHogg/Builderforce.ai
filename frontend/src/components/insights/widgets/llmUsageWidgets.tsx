@@ -18,46 +18,32 @@
  */
 
 import { useTranslations } from 'next-intl';
-import { llmApi, dashboardApi, type LlmUsageStats, type DashboardUsage } from '@/lib/builderforceApi';
-import { useSharedSource } from '@/lib/widgets/sharedSource';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { usd, int, compactTokens } from '../format';
+import { useLlmUsage, useLlmBySource } from '../insightsSources';
 
 /** Drill back into the full LLM-Usage report (the AI Insights slide-out). */
 const DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'llm-usage' };
 /** Cost-bearing cards are a manager surface — gated like the finance lens. */
 const FINANCE_CAP = 'insights.finance' as const;
 
-// ── Shared, deduped data sources (one fetch per source regardless of pins) ──────
-
-/** LLM provider usage totals + per-model split (`/llm/v1/usage`). */
-function useLlmUsage() {
-  return useSharedSource<LlmUsageStats>('llm:usage', () => llmApi.usage());
-}
-
-/** Token + estimated-cost usage split by source/project — cloud/on-prem/web (`/api/dashboard/usage`). */
-function useLlmBySource() {
-  return useSharedSource<DashboardUsage>('llm:by-source:week', () => dashboardApi.usage('week'));
-}
 
 // ── Card-body wrappers: own loading / error so each widget needn't repeat it ────
 
 function useUsageBody() {
   const t = useTranslations('widgets');
-  const { data, error } = useLlmUsage();
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useLlmUsage();
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 function useSourceBody() {
   const t = useTranslations('widgets');
-  const { data, error } = useLlmBySource();
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useLlmBySource();
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 /**
@@ -121,7 +107,7 @@ function LlmSpendCard(_props: WidgetCardProps) {
 }
 
 /** Translation key per source bucket — the catalogs own the wording. */
-const SOURCE_LABEL_KEY: Record<DashboardUsage['byKind'][number]['kind'], string> = {
+const SOURCE_LABEL_KEY: Record<'cloud' | 'on-prem' | 'web', string> = {
   cloud: 'llmUsage.sourceCloud',
   'on-prem': 'llmUsage.sourceOnPrem',
   web: 'llmUsage.sourceWeb',

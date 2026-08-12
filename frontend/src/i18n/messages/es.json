@@ -424,8 +424,10 @@
         "apps": "Integraciones de aplicaciones",
         "developer": "Claves API de desarrollador",
         "embed": "Incrustar",
-        "connectors": "Conectores"
-      }
+        "connectors": "Conectores",
+        "payments": "Pagos y cobros"
+      },
+      "paymentsIntro": "Conecta una cuenta bancaria, PayPal, Stripe o Wise. El dinero que se te debe se envía a tu destino predeterminado."
     }
   },
   "nav": {
@@ -474,7 +476,8 @@
       "hiring": "Contratación",
       "investor": "Inversores",
       "governance": "Gobernanza",
-      "support": "Soporte"
+      "support": "Soporte",
+      "salesProgramme": "Programa de ventas"
     },
     "tab": {
       "projects": "Proyectos",
@@ -574,7 +577,8 @@
       "market": "Mercado",
       "admin": "Administración",
       "notYet": "aún no",
-      "lockHint": "Inicia sesión para usarlo"
+      "lockHint": "Inicia sesión para usarlo",
+      "expand": "Expandir"
     }
   },
   "alerts": {
@@ -3756,6 +3760,12 @@
       "add": "Añadir widget",
       "remove": "Quitar widget",
       "empty": "Aún no hay widgets: añade uno arriba."
+    },
+    "viz": {
+      "stat": "Número",
+      "bar": "Barras",
+      "line": "Líneas",
+      "gauge": "Indicador"
     }
   },
   "finops": {
@@ -3883,7 +3893,9 @@
       "empInitiatives": "Mezcla de iniciativas",
       "forecast": "Pronóstico",
       "autonomy": "Autonomía",
-      "chatModes": "Conversaciones frente a ejecuciones"
+      "chatModes": "Conversaciones frente a ejecuciones",
+      "aiHub": "Perspectivas de IA",
+      "deliveryHub": "Entrega"
     },
     "title": {
       "aiProductivity": "Puntuación de productividad de IA",
@@ -4005,7 +4017,23 @@
       "chatModeCostShare": "Proporción del coste de ejecución",
       "chatModeMix": "Conversaciones por modo",
       "chatModeFunnel": "Despachados frente a vinculados",
-      "chatModeTable": "Desglose por modo"
+      "chatModeTable": "Desglose por modo",
+      "aiHubImpact": "Impacto de la IA",
+      "aiHubEngineering": "Eficacia de la IA",
+      "aiHubLlmUsage": "Uso de LLM",
+      "aiHubRecommendations": "Recomendaciones",
+      "delivHubDelivery": "Entrega",
+      "delivHubAutonomy": "Salud de la autonomía",
+      "delivHubBottlenecks": "Cuellos de botella",
+      "delivHubDora": "Métricas DORA",
+      "delivHubSpace": "Métricas SPACE",
+      "delivHubBenchmarking": "Comparativa del sector",
+      "delivHubFunnel": "Embudo de innovación",
+      "delivHubCrossTeam": "Entre equipos",
+      "delivHubDelayTaxonomy": "Causas de retraso",
+      "aiHubConsumption": "Tokens de IA este mes",
+      "delivHubVerdict": "¿Estáis entregando valor?",
+      "overviewAsk": "Haz una pregunta"
     },
     "loading": "Cargando…",
     "overview": {
@@ -4204,7 +4232,23 @@
     "desc": {
       "chatModeWorkShare": "Proporción de conversaciones iniciadas como trabajo delegado en lugar de una pregunta.",
       "chatModeExecutionRate": "De los tiques que abrieron las conversaciones de trabajo, cuántos inició realmente un agente.",
-      "chatModeCostShare": "Proporción del gasto en IA destinada a ejecución en lugar de conversación."
+      "chatModeCostShare": "Proporción del gasto en IA destinada a ejecución en lugar de conversación.",
+      "aiHubImpactDesc": "Tendencias de adopción y uso de modelos, una matriz de evaluación multiherramienta y una puntuación compuesta de productividad de IA.",
+      "aiHubEngineeringDesc": "Qué enfoque de IA realmente se entrega: puntuación de resultados, tasa de fusión y coste por tipo de trabajo y modelo.",
+      "aiHubLlmUsageDesc": "Uso de tokens, solicitudes y estado de los modelos, además del gasto estimado por origen, proyecto, equipo, usuario y repositorio.",
+      "aiHubRecommendationsDesc": "Acciones prescriptivas priorizadas y anomalías sobre las que actuar, extraídas de cada perspectiva.",
+      "delivHubDeliveryDesc": "Burnup, previsión y desviación de alcance de un entregable en iniciativas, proyectos y versiones.",
+      "delivHubAutonomyDesc": "¿El trabajo se terminó solo? Embudo del ciclo de vida según quién creó el ticket, reparto de movimientos autónomos y humanos, y dónde se detiene la autonomía.",
+      "delivHubBottlenecksDesc": "Dónde se atasca el trabajo: tiempo por etapa, la etapa más lenta, ciclos de retrabajo y el WIP atascado ahora mismo.",
+      "delivHubDoraDesc": "Las cuatro claves de DevOps —frecuencia de despliegue, lead time, tasa de fallos de cambio y tiempo de restauración— frente a los niveles de rendimiento.",
+      "delivHubSpaceDesc": "El marco de productividad de desarrolladores de cinco dimensiones que complementa a DORA.",
+      "delivHubBenchmarkingDesc": "Cómo se posicionan tus métricas de entrega frente a un grupo del sector: percentil y calificación por industria y tamaño de equipo.",
+      "delivHubFunnelDesc": "Idea → validada → en construcción → entregada → medida: conversión, tiempo de generación de valor y el flujo de ideas.",
+      "delivHubCrossTeamDesc": "Clasifica cada equipo frente a los demás",
+      "delivHubDelayTaxonomyDesc": "Por qué el trabajo va con retraso",
+      "aiHubConsumptionDesc": "Tokens de IA consumidos este mes, con la tendencia diaria del mes en curso.",
+      "delivHubVerdictDesc": "Estado de la entrega de un vistazo: un veredicto y una puntuación de 0 a 100 que combinan DORA, el tiempo de ciclo y los cuellos de botella en vivo.",
+      "overviewAsk": "Pregunta por cualquier métrica en lenguaje natural y obtén el número junto con la métrica que coincidió."
     }
   },
   "compile": {
@@ -9274,7 +9318,6 @@
       "empty": "No se encontraron sesiones de invitados.",
       "visitor": "Visitante",
       "engagement": "Interacción",
-      "firstSeen": "Primera visita",
       "lastSeen": "Última visita",
       "conversion": "Conversión",
       "brainMessages": "{count} mensajes de Brain",
@@ -12290,7 +12333,47 @@
     "removeCardTitle": "¿Eliminar tu tarjeta?",
     "removeCardWarning": "Se desactivarán los modelos premium y dejaremos de almacenar tu tarjeta. Tu plan y los modelos incluidos seguirán funcionando. Puedes añadir una tarjeta de nuevo cuando quieras.",
     "removeCardConfirm": "Eliminar tarjeta",
-    "removeCardFailed": "No pudimos eliminar la tarjeta. Inténtalo de nuevo."
+    "removeCardFailed": "No pudimos eliminar la tarjeta. Inténtalo de nuevo.",
+    "title": "Facturación",
+    "intro": "Tu plan, la tarjeta que lo paga y adónde va tu propio dinero.",
+    "subnavLabel": "Secciones de facturación",
+    "accountTab": "Cuenta",
+    "payoutsTab": "Pagos",
+    "planTitle": "Plan",
+    "plan": "Plan",
+    "status": "Estado",
+    "cycle": {
+      "monthly": "Mensual",
+      "yearly": "Anual"
+    },
+    "seats": "Puestos",
+    "billingEmail": "Correo de facturación",
+    "none": "Ninguno",
+    "noWorkspace": "Selecciona un espacio de trabajo para ver su facturación.",
+    "loading": "Cargando…",
+    "loadFailed": "No pudimos cargar tus datos de facturación.",
+    "comparePlans": "Comparar planes",
+    "paymentMethodTitle": "Método de pago",
+    "paymentMethodIntro": "La tarjeta con la que se cobran tu suscripción y el uso medido. Añadirla ejecuta una verificación de 0 USD, nunca un cargo.",
+    "cardOnFile": "Tarjeta registrada",
+    "card": "Tarjeta",
+    "noCard": "Aún no hay ninguna tarjeta registrada.",
+    "addCard": "Añadir una tarjeta",
+    "cardFailed": "No pudimos iniciar la verificación de la tarjeta. Inténtalo de nuevo.",
+    "destinationsTitle": "Adónde va tu dinero",
+    "destinationsIntro": "Conecta una cuenta bancaria, PayPal, Stripe o Wise. Las comisiones y facturas se pagan a tu destino predeterminado.",
+    "historyTitle": "Historial de pagos",
+    "totalPaid": "Total pagado",
+    "noPayouts": "Todavía no se ha pagado nada.",
+    "colDate": "Fecha",
+    "colAmount": "Importe",
+    "colProvider": "Enviado por",
+    "colStatus": "Estado",
+    "planName": {
+      "free": "Gratis",
+      "pro": "Pro",
+      "teams": "Equipos"
+    }
   },
   "policyPacks": {
     "title": "Paquetes de políticas",
@@ -14204,6 +14287,17 @@
         "needsMedia": "{account} necesita una imagen o un vídeo: no puede publicar solo texto.",
         "accountNotReady": "{account} no está lista ({fields}).",
         "accountMissing": "Una cuenta de {network} a la que apunta esta campaña ya no está conectada."
+      },
+      "pipelineAllSegments": "Todos los segmentos",
+      "pipelineMore": "+{count} más",
+      "pipelineStage": {
+        "new": "Nuevo",
+        "contacted": "Contactado",
+        "qualified": "Cualificado",
+        "meeting": "Reunión",
+        "proposal": "Propuesta",
+        "won": "Ganado",
+        "lost": "Perdido"
       }
     },
     "editor": {
@@ -15350,6 +15444,10 @@
       "interactive-3d": {
         "name": "Estudio de juegos y 3D",
         "description": "Diseña juegos jugables, planos CAD y modelos 3D con persistencia de proyecto respaldada por MCP."
+      },
+      "sales-hub": {
+        "name": "Sales Hub",
+        "description": "El tablero prescriptivo para vender Builderforce: un kanban por segmento, las métricas, el deck y un coach CRO."
       }
     },
     "pitch": {
@@ -16954,6 +17052,7 @@
       "run": "Opéralo como empresa.",
       "measure": "¿Está funcionando?",
       "market": "Vender, comprar, contratar, que te encuentren.",
+      "expand": "Hazlo crecer.",
       "admin": "Configuración."
     },
     "arcNote": "Generada desde la propia navegación del producto, así que esta tabla no puede anunciar un destino inexistente ni omitir uno real.",
@@ -17145,5 +17244,158 @@
     "getCta": "Obtener esta habilidad",
     "browseCta": "Explorar el marketplace",
     "aboutHeading": "Acerca de esta habilidad"
+  },
+  "payouts": {
+    "loading": "Cargando destinos de pago…",
+    "loadFailed": "No pudimos cargar tus destinos de pago.",
+    "connect": "Conectar",
+    "reconnect": "Volver a conectar",
+    "connected": "Conectado",
+    "notConnected": "Sin conectar",
+    "notConfigured": "Todavía no está disponible en esta instalación: el operador no ha configurado este proveedor.",
+    "default": "Predeterminado",
+    "makeDefault": "Hacer predeterminado",
+    "disconnect": "Desconectar",
+    "disconnectTitle": "¿Desconectar este destino de pago?",
+    "disconnectMessage": "Dejaremos de enviar dinero a {label}. Los pagos ya realizados permanecen en tu historial.",
+    "needsReconnect": "Requiere reconexión",
+    "connectFailed": "No pudimos conectar esa cuenta.",
+    "actionFailed": "No funcionó. Inténtalo de nuevo.",
+    "connectTitle": "Conectar {provider}",
+    "crumb": "Pagos",
+    "fieldsIntro": "Estos datos se cifran y solo se usan para enviarte dinero. Nada de esto vuelve a mostrarse una vez guardado.",
+    "saveDestination": "Guardar destino"
+  },
+  "salesHub": {
+    "title": "Sales Hub",
+    "intro": "Tus enlaces, tus leads, tus números y tu dinero, sin salir del lienzo.",
+    "subnavLabel": "Secciones del Sales Hub",
+    "loading": "Cargando…",
+    "loadFailed": "No pudimos cargar tu Sales Hub.",
+    "tab": {
+      "overview": "Resumen",
+      "leads": "Leads",
+      "reports": "Informes",
+      "payouts": "Pagos",
+      "inbox": "Bandeja",
+      "kit": "Kit de ventas"
+    },
+    "linksTitle": "Tus enlaces",
+    "linksIntro": "Todo registro a través de ellos se te atribuye, y cada conversión paga comisión a la tarifa publicada.",
+    "referralLink": "Enlace de referido",
+    "referralLinkHint": "Compártelo donde quieras: un registro por aquí se te acredita a la tarifa de referido.",
+    "salesLink": "Enlace de venta",
+    "salesLinkHint": "Úsalo para acuerdos que vendiste tú. Paga la tarifa de venta, más alta.",
+    "canvasTitle": "Tu lienzo de ventas",
+    "canvasIntro": "El pipeline, el mercado objetivo, la campaña, el deck y tu coach CRO viven en el tablero. Este hub es la lectura.",
+    "openCanvas": "Abrir mi lienzo",
+    "balanceTitle": "Comisión",
+    "earned": "Ganado",
+    "paid": "Pagado",
+    "available": "Disponible",
+    "leadsTitle": "Leads actuales",
+    "leadsEmpty": "Todavía nadie se ha registrado con tus enlaces.",
+    "colSignedUp": "Registro",
+    "colSource": "Origen",
+    "colStatus": "Estado",
+    "colPlan": "Plan",
+    "colCommission": "Comisión",
+    "source": {
+      "referral": "Referido",
+      "sales": "Vendido"
+    },
+    "converted": "Convertido",
+    "signedUp": "Registrado",
+    "destinationsTitle": "Adónde va tu dinero",
+    "payoutHistoryTitle": "Historial de pagos",
+    "noPayouts": "Todavía no se ha pagado nada.",
+    "kitTitle": "Kit de ventas",
+    "kitIntro": "El deck para enviar. Adjúntalo: no mandes un enlace detrás de un login.",
+    "kitAsset": {
+      "pdf": "Deck de presentación (PDF)",
+      "pptx": "Deck de presentación (PowerPoint)",
+      "slides": "Cada diapositiva en PNG"
+    },
+    "kitAll": "Ver el kit de prensa completo",
+    "report": {
+      "resultsTitle": "Resultados",
+      "windowLabel": "Periodo del informe",
+      "window": {
+        "week": "Esta semana",
+        "month": "Este mes",
+        "quarter": "Este trimestre",
+        "ytd": "Año en curso",
+        "all": "Histórico"
+      },
+      "signups": "Registros",
+      "conversions": "Conversiones",
+      "conversionRate": "Tasa de conversión",
+      "revenue": "Ingresos atribuidos",
+      "commission": "Comisión",
+      "daysToConvert": "Días medios hasta convertir",
+      "days": "{days} días",
+      "funnelTitle": "Pipeline por etapa",
+      "funnelEmpty": "Todavía no hay contactos en el pipeline.",
+      "stalled": "{count} contactos llevan dos semanas sin contacto.",
+      "noStalled": "Nada estancado: todos los contactos abiertos se tocaron en las últimas dos semanas.",
+      "leaderboardTitle": "Por comercial",
+      "colAssociate": "Comercial",
+      "colSignups": "Registros",
+      "colConversions": "Conversiones",
+      "colRevenue": "Ingresos",
+      "colCommission": "Comisión",
+      "stage": {
+        "new": "Nuevo",
+        "contacted": "Contactado",
+        "qualified": "Cualificado",
+        "meeting": "Reunión",
+        "proposal": "Propuesta",
+        "won": "Ganado",
+        "lost": "Perdido"
+      }
+    },
+    "launcher": {
+      "workspaceName": "Espacio de ventas de {name}",
+      "defaultOwner": "Mi",
+      "workspaceFailed": "No pudimos preparar tu espacio de ventas.",
+      "canvasTitle": "Sales Hub: mi lienzo de ventas",
+      "canvasDescription": "El tablero prescriptivo para vender Builderforce: pipeline por segmento, las métricas, el deck y tu coach CRO.",
+      "canvasPrompt": "Revisa mi pipeline y dime la acción comercial de mayor impacto para esta semana.",
+      "canvasFailed": "No pudimos abrir tu lienzo de ventas.",
+      "eyebrow": "Sales Hub",
+      "heading": "Preparando tu lienzo de ventas",
+      "preparing": "Creando tu pipeline, objetivos, deck y coach CRO…",
+      "retryHint": "Recarga la página para volver a intentarlo."
+    }
+  },
+  "salesAdmin": {
+    "title": "Programa de ventas",
+    "intro": "El mismo informe que lee cada comercial, agregado a todo el programa o filtrado a una persona.",
+    "loading": "Cargando…",
+    "loadFailed": "No pudimos cargar el informe del programa.",
+    "filterLabel": "Mostrar",
+    "everyone": "Todos ({count} comerciales)",
+    "openCanvas": "Abrir su lienzo",
+    "message": "Escribir a {name}",
+    "noCanvas": "Ese comercial todavía no ha abierto su lienzo de ventas.",
+    "canvasFailed": "No pudimos abrir ese lienzo."
+  },
+  "messages": {
+    "open": "Mensajes",
+    "openWithCount": "Mensajes, {count} sin leer",
+    "crumb": "Mensajes",
+    "title": "Mensajes",
+    "conversations": "Conversaciones",
+    "startNew": "Iniciar una conversación",
+    "untitled": "Conversación",
+    "pickSomeone": "Elige una conversación a la izquierda o inicia una nueva.",
+    "nobodyToMessage": "Todavía no hay nadie a quien escribir desde esta cuenta.",
+    "emptyThread": "Aún no hay mensajes: di algo.",
+    "placeholder": "Escribe un mensaje… (Enter para enviar, Mayús+Enter para salto de línea)",
+    "send": "Enviar",
+    "you": "Tú",
+    "them": "Ellos",
+    "sendFailed": "No se pudo enviar el mensaje.",
+    "openFailed": "No se pudo abrir esa conversación."
   }
 }

@@ -64,9 +64,9 @@ function FunnelStat({ label, value, hint }: { label: string; value: string; hint
         background: 'var(--surface-card)',
       }}
     >
-      <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', marginTop: 2 }}>{value}</div>
-      {hint && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>{hint}</div>}
+      <div className="text-muted" style={{ fontSize: 'var(--font-size-eyebrow)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-strong)', marginTop: 2 }}>{value}</div>
+      {hint && <div className="text-muted" style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 2 }}>{hint}</div>}
     </div>
   );
 }
@@ -74,7 +74,7 @@ function FunnelStat({ label, value, hint }: { label: string; value: string; hint
 /** One `label: value` line in the drawer's detail block. */
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 13 }}>
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 'var(--font-size-small)' }}>
       <span className="text-muted" style={{ minWidth: 110 }}>{label}</span>
       <span style={{ color: 'var(--text-strong)', overflowWrap: 'anywhere' }}>{value}</span>
     </div>
@@ -239,38 +239,38 @@ export default function GuestSessionsPanel() {
                     <button
                       type="button"
                       className="btn-ghost"
-                      style={{ fontFamily: 'monospace', fontSize: 12, padding: 0, textAlign: 'left' }}
+                      style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-small)', padding: 0, textAlign: 'left' }}
                       onClick={() => void openLead(session)}
                     >
                       {session.visitorId}
                     </button>
-                    <div className="text-muted" style={{ fontSize: 12 }}>{session.landingPath ?? '—'}</div>
+                    <div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{session.landingPath ?? '—'}</div>
                   </td>
                   <td style={{ maxWidth: 380, minWidth: 220 }}>
                     {session.firstPrompt ? (
                       <>
                         {/* `title` carries the full text for a pointer; the drawer
                             carries it for everyone else. */}
-                        <div className="text-clamp" style={{ fontSize: 13 }} title={session.firstPrompt}>
+                        <div className="text-clamp" style={{ fontSize: 'var(--font-size-small)' }} title={session.firstPrompt}>
                           {session.firstPrompt}
                         </div>
-                        <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
+                        <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 2 }}>
                           {t('promptMeta', { count: session.promptCount, surface: session.lastSurface ?? '—' })}
                         </div>
                       </>
                     ) : (
-                      <span className="text-muted" style={{ fontSize: 12 }}>{t('noPrompt')}</span>
+                      <span className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{t('noPrompt')}</span>
                     )}
                   </td>
                   <td>
                     <div>{t('brainMessages', { count: session.guestChatCount })}</div>
-                    <div className="text-muted" style={{ fontSize: 12 }}>
+                    <div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>
                       {t('tokensAndTools', { tokens: fmtNum(session.guestChatTokens), tools: fmtNum(session.toolRuns) })}
                     </div>
                   </td>
                   <td className="text-muted">
                     {fmtDateTime(session.lastSeenAt)}
-                    <div style={{ fontSize: 12 }}>{t('firstSeenAt', { at: fmtDateTime(session.firstSeenAt) })}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)' }}>{t('firstSeenAt', { at: fmtDateTime(session.firstSeenAt) })}</div>
                   </td>
                   <td>
                     {session.isPaid ? (
@@ -281,7 +281,7 @@ export default function GuestSessionsPanel() {
                       <span className="badge badge-neutral">{t('guest')}</span>
                     )}
                     {session.convertedEmail && (
-                      <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>{session.convertedEmail}</div>
+                      <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 4 }}>{session.convertedEmail}</div>
                     )}
                   </td>
                   <td>
@@ -320,7 +320,7 @@ export default function GuestSessionsPanel() {
       >
         {openVisitor && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{openVisitor.visitorId}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere' }}>{openVisitor.visitorId}</div>
 
             {/* The numbers the row could only hint at, at the scope they belong to. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -345,14 +345,14 @@ export default function GuestSessionsPanel() {
             </div>
 
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px', color: 'var(--text-strong)' }}>
+              <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-strong)' }}>
                 {t('promptHistory')}
               </h3>
               <AdminError message={promptsError} />
               {loadingPrompts ? (
                 <AdminLoading />
               ) : prompts.length === 0 ? (
-                <p className="text-muted" style={{ fontSize: 13 }}>{t('noPrompt')}</p>
+                <p className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{t('noPrompt')}</p>
               ) : (
                 <ol style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: 0, padding: 0, listStyle: 'none' }}>
                   {prompts.map((prompt) => (
@@ -367,8 +367,8 @@ export default function GuestSessionsPanel() {
                     >
                       {/* Unclamped on purpose — the drawer is where the full text
                           lives, and clamping it here would leave nowhere to read it. */}
-                      <div style={{ fontSize: 13, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{prompt.prompt}</div>
-                      <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                      <div style={{ fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{prompt.prompt}</div>
+                      <div className="text-muted" style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 4 }}>
                         {t('promptRowMeta', { surface: prompt.surface, at: fmtDateTime(prompt.createdAt) })}
                       </div>
                     </li>

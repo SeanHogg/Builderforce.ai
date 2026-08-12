@@ -1,4 +1,6 @@
 import type { WidgetDef } from './types';
+import { AI_HUB_WIDGETS, DELIVERY_HUB_WIDGETS } from '@/components/insights/widgets/hubWidgets';
+import { ASK_WIDGETS } from '@/components/insights/widgets/askWidget';
 import { AI_IMPACT_WIDGETS } from '@/components/insights/widgets/aiImpactWidgets';
 import { LLM_USAGE_WIDGETS } from '@/components/insights/widgets/llmUsageWidgets';
 import { DELIVERY_WIDGETS } from '@/components/insights/widgets/deliveryWidgets';
@@ -25,6 +27,14 @@ import { EMP_METRICS_WIDGETS } from '@/components/widgets/registry-modules/empMe
  * which derives entirely from this list. Keep groups together for a tidy picker.
  */
 export const ALL_WIDGETS: WidgetDef[] = [
+  // ── Insights HUBS ──
+  // The at-a-glance tiles of /insights/ai and /insights/delivery. They are
+  // registered first because they are what those pages ARE — the hubs render
+  // their own widgets from this registry rather than owning a private layout, so
+  // a hub tile and a pinned copy of it are the same component.
+  ...AI_HUB_WIDGETS,
+  ...DELIVERY_HUB_WIDGETS,
+  ...ASK_WIDGETS,
   // ── Insights lenses ──
   ...AI_IMPACT_WIDGETS,
   ...LLM_USAGE_WIDGETS,

@@ -6,48 +6,75 @@
  *
  * It unifies the two things that used to be split across a Home idea and a
  * "Custom Dashboards" page:
- *   • "My Dashboard" — the widgets YOU pinned from anywhere in the app (personal).
+ *   • "My Dashboard" — the widgets YOU pinned from anywhere in the app (personal,
+ *     drag-reorderable).
  *   • Named, tenant-SHARED dashboards — manager-built layouts of the same widgets
- *     (rich registry cards) and scalar metrics, plus the plain-English "Ask".
+ *     (rich registry cards) and scalar metrics.
  * Every Insights tab (AI, Delivery, Finance…) is likewise just a dashboard of
  * widgets whose cards can be pinned back here. Pin a card → it shows up here.
+ *
+ * ── A standard page, not a canvas ────────────────────────────────────────────
+ * This was a `WorkspaceCanvas`: pinned widgets were laid out by computing x/y
+ * from the pin's index, so the page ignored each widget's size hint, could not
+ * reflow, and — the real cost — the drag-to-REORDER that pins are stored with had
+ * no UI, because a floating panel's position is not an order. It is now the same
+ * chrome every other insights page uses ({@link LensPage}) over the shared
+ * {@link ReorderableWidgetGrid}, so widgets read identically here, inside a lens,
+ * and on a custom canvas — and dragging one actually persists its position.
  */
 
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
-import { DaysWindowSelect } from '@/components/insights/LensShell';
+import { LensPage, DaysWindowSelect } from '@/components/insights/LensShell';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
+import { WidgetGrid } from '@/components/widgets/WidgetGrid';
+import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGrid';
 import { AddWidgetPicker } from '@/components/widgets/AddWidgetPicker';
-import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
+import { PmEmpty, PmError } from '@/components/pm/pmShared';
 import { usePins } from '@/lib/widgets/PinsProvider';
 import { getWidget, listWidgetGroups } from '@/lib/widgets/registry';
+import type { WidgetSize } from '@/lib/widgets/types';
 import { DashboardWidget } from '@/components/dashboard';
 import {
   dashboardsApi,
   type DashboardData,
   type MetricCatalogEntry,
-  type QueryAnswer,
   type SavedDashboard,
   type WidgetViz,
 } from '@/lib/dashboardsApi';
 
 const VIZ_OPTIONS: WidgetViz[] = ['stat', 'bar', 'line', 'gauge'];
 
+/** The Ask-a-question card is a registered widget; the home page always shows it. */
+const ASK_IDS = ['overview.ask'];
+
+/** Same span rule as WidgetGrid, so a saved dashboard lays out like every other. */
+const SPAN: Record<WidgetSize, React.CSSProperties> = {
+  sm: {},
+  md: { gridColumn: 'span 2' },
+  lg: { gridColumn: '1 / -1' },
+};
+
+const gridStyle: React.CSSProperties = {
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, alignItems: 'stretch',
+};
+
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', minWidth: 0,
 };
 const btnStyle: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
+  background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer',
+  fontWeight: 600, fontSize: 'var(--font-size-small)', whiteSpace: 'nowrap',
 };
-const primaryBtn: React.CSSProperties = { ...btnStyle, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: '1px solid transparent' };
+const primaryBtn: React.CSSProperties = {
+  ...btnStyle, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: '1px solid transparent',
+};
 
 /** 'me' = the personal pinned view; a number = a saved tenant-shared dashboard id. */
 type View = 'me' | number;
@@ -56,8 +83,11 @@ export default function InsightsHomePage() {
   const t = useTranslations('insights');
   const td = useTranslations('dashboards');
   const tw = useTranslations('widgets');
-  const router = useRouter();
+  // LensPage owns the redirect for a signed-out / tenantless visitor; this page
+  // still reads the session so its own dashboard reads never fire before there
+  // is a tenant to scope them to (they would 401).
   const { isAuthenticated, hasTenant } = useAuth();
+  const signedIn = isAuthenticated && hasTenant;
   const { pinned, loading: pinsLoading } = usePins();
 
   const [days, setDays] = useState(30);
@@ -75,18 +105,13 @@ export default function InsightsHomePage() {
   const [pickWidget, setPickWidget] = useState('');
   const widgetGroups = useMemo(() => listWidgetGroups(), []);
 
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState<QueryAnswer | null>(null);
-  const [asking, setAsking] = useState(false);
-
-  const active = useMemo(() => (typeof view === 'number' ? dashboards.find((d) => d.id === view) ?? null : null), [dashboards, view]);
-
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/login');
-    else if (!hasTenant) router.replace('/tenants');
-  }, [isAuthenticated, hasTenant, router]);
+  const active = useMemo(
+    () => (typeof view === 'number' ? dashboards.find((d) => d.id === view) ?? null : null),
+    [dashboards, view],
+  );
 
   const reload = useCallback(async () => {
+    if (!signedIn) return;
     setError(null);
     try {
       const [list, cat] = await Promise.all([dashboardsApi.list(), dashboardsApi.metrics()]);
@@ -96,9 +121,9 @@ export default function InsightsHomePage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [pickMetric]);
+  }, [pickMetric, signedIn]);
 
-  useEffect(() => { if (isAuthenticated && hasTenant) void reload(); }, [isAuthenticated, hasTenant, reload]);
+  useEffect(() => { void reload(); }, [reload]);
 
   const loadData = useCallback(async (id: number) => {
     try { setData(await dashboardsApi.data(id)); }
@@ -140,105 +165,138 @@ export default function InsightsHomePage() {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
-  const ask = async () => {
-    if (!question.trim()) return;
-    setAsking(true); setAnswer(null);
-    try { setAnswer(await dashboardsApi.query(question.trim())); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setAsking(false); }
-  };
-
-  if (!isAuthenticated || !hasTenant) return null;
-
   const tabStyle = (on: boolean): React.CSSProperties => ({
-    ...btnStyle, background: on ? 'var(--coral-bright)' : 'var(--bg-elevated)', color: on ? 'var(--text-on-accent)' : 'var(--text-primary)',
+    ...btnStyle,
+    background: on ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+    color: on ? 'var(--text-on-accent)' : 'var(--text-primary)',
     border: `1px solid ${on ? 'transparent' : 'var(--border-subtle)'}`,
   });
 
-  const panels: WorkspaceCanvasPanel[] = [
-    {
-      id: 'insights-dashboard-controls', title: t('home.title'), subtitle: t('home.subtitle'), icon: '📌',
-      position: { x: 36, y: 36 }, width: 1300, height: 180,
-      content: <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+  return (
+    <LensPage
+      titleKey="home.title"
+      subtitleKey="home.subtitle"
+      actions={
+        <>
+          <DaysWindowSelect value={days} onChange={setDays} />
+          {view === 'me' && (
+            <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>
+              <Icon source="＋" size="1em" /> {t('home.addWidgets')}
+            </button>
+          )}
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {error && <PmError message={error} />}
+
+        {/* Dashboard switcher: your pins, then every shared dashboard. */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}><Icon source="📌" size="1em" /> {t('home.myDashboard')}</button>
-          {dashboards.map((d) => <button key={d.id} type="button" style={tabStyle(view === d.id)} onClick={() => setView(d.id)}>{d.name}</button>)}
+          <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}>
+            <Icon source="📌" size="1em" /> {t('home.myDashboard')}
+          </button>
+          {dashboards.map((d) => (
+            <button key={d.id} type="button" style={tabStyle(view === d.id)} onClick={() => setView(d.id)}>{d.name}</button>
+          ))}
           <RoleGate capability="dashboards.manage">
-            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-              <input style={inputStyle} placeholder={td('create.placeholder')} value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                style={inputStyle}
+                placeholder={td('create.placeholder')}
+                aria-label={td('create.placeholder')}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
               <button type="button" style={btnStyle} onClick={() => void createDashboard()}>{td('create.button')}</button>
             </span>
           </RoleGate>
         </div>
-      </div>,
-    },
-    {
-      id: 'insights-ask', title: td('ask.heading'), subtitle: 'Plain-English metric query', icon: '?',
-      position: { x: 36, y: 240 }, width: 1300, height: answer ? 240 : 150,
-      content: <div data-tour="demo-insights">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input style={{ ...inputStyle, flex: '1 1 320px' }} placeholder={td('ask.placeholder')} value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void ask(); }} />
-          <button style={btnStyle} onClick={() => void ask()} disabled={asking}>{asking ? td('ask.asking') : td('ask.button')}</button>
-        </div>
-        {answer && <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{answer.value == null ? '—' : answer.unit === 'USD' ? `$${Math.round(answer.value).toLocaleString('en-US')}` : answer.unit === '%' ? `${Math.round(answer.value * 100) / 100}%` : `${Math.round(answer.value * 100) / 100}${answer.unit === '/day' ? '/day' : answer.unit === 'hours' ? 'h' : ''}`}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{answer.explanation}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{td('ask.matched')}: <code>{answer.matchedMetric}</code></div>
-        </div>}
-      </div>,
-    },
-  ];
 
-  if (view === 'me') {
-    const definitions = pinned.map(getWidget).filter((def): def is NonNullable<typeof def> => Boolean(def));
-    if (definitions.length === 0) {
-      panels.push({
-        id: 'insights-empty', title: t('home.myDashboard'), icon: '📌', position: { x: 36, y: 420 }, width: 620, height: 260,
-        content: <div style={{ padding: 28, textAlign: 'center' }}><h3 style={{ margin: '0 0 8px' }}>{t('home.emptyTitle')}</h3><p style={{ color: 'var(--text-secondary)' }}>{t('home.emptyBody')}</p>{!pinsLoading && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}><Icon source="＋" size="1em" /> {t('home.addWidgets')}</button>}</div>,
-      });
-    } else {
-      definitions.forEach((def, index) => {
-        const wide = def.size === 'lg';
-        const medium = def.size === 'md';
-        const width = wide ? 1300 : medium ? 820 : 400;
-        const column = index % 3;
-        const row = Math.floor(index / 3);
-        panels.push({
-          id: `insights-widget:${def.id}`, title: tw(`title.${def.titleKey}`), subtitle: tw(`group.${def.group}`), icon: '◇',
-          position: { x: 36 + column * 432, y: 420 + row * 390 }, width, height: wide ? 430 : 350,
-          content: <WidgetCard def={def} days={days} />,
-        });
-      });
-    }
-  }
+        {/* Plain-English metric query — a registered widget like everything else. */}
+        <WidgetGrid ids={ASK_IDS} days={days} />
 
-  if (active) {
-    panels.push({
-      id: `insights-dashboard-builder:${active.id}`, title: active.name, subtitle: 'Dashboard modules', icon: '▦',
-      position: { x: 36, y: 420 }, width: 1300, height: 150,
-      content: <RoleGate capability="dashboards.manage" variant="block"><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Select style={inputStyle} value={pickWidget} onChange={(e) => setPickWidget(e.target.value)}><option value="">{tw('addTitle')}…</option>{widgetGroups.map((g) => <optgroup key={g.group} label={tw(`group.${g.group}`)}>{g.widgets.map((w) => <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>)}</optgroup>)}</Select>
-        <button style={btnStyle} onClick={() => void addRegistryWidget()} disabled={!pickWidget}>{tw('addToDashboard')}</button>
-        <Select style={inputStyle} value={pickMetric} onChange={(e) => setPickMetric(e.target.value)}>{metrics.map((m) => <option key={m.key} value={m.key}>{m.label} ({m.unit || 'count'})</option>)}</Select>
-        <Select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)}>{VIZ_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}</Select>
-        <button style={btnStyle} onClick={() => void addMetricWidget()}>{td('widget.add')}</button>
-        <button style={{ ...btnStyle, marginLeft: 'auto', color: 'var(--danger)' }} onClick={() => void deleteDashboard(active.id)}>{td('delete.button')}</button>
-      </div></RoleGate>,
-    });
-    data?.widgets.forEach((w, index) => {
-      const def = w.widgetKey ? getWidget(w.widgetKey) : undefined;
-      panels.push({
-        id: `insights-dashboard-widget:${w.widgetId}`, title: def ? tw(`title.${def.titleKey}`) : (w.title ?? w.label), subtitle: active.name, icon: '◇',
-        position: { x: 36 + (index % 3) * 432, y: 600 + Math.floor(index / 3) * 390 }, width: def?.size === 'md' ? 820 : def?.size === 'lg' ? 1300 : 400, height: def?.size === 'lg' ? 430 : 350,
-        content: <div style={{ position: 'relative', height: '100%' }}>{def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}<RoleGate capability="dashboards.manage"><button onClick={() => void removeWidget(w.widgetId)} title={td('widget.remove')} style={{ position: 'absolute', top: 6, right: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}><Icon source="✕" size="1em" /></button></RoleGate></div>,
-      });
-    });
-    if (data && data.widgets.length === 0) panels.push({ id: `insights-dashboard-empty:${active.id}`, title: active.name, icon: '◇', position: { x: 36, y: 600 }, width: 500, height: 180, content: <p style={{ color: 'var(--text-secondary)' }}>{td('widget.empty')}</p> });
-  }
+        {view === 'me' && (
+          pinned.length === 0 ? (
+            <div style={{
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-lg)', padding: 32, textAlign: 'center',
+            }}>
+              {pinsLoading ? (
+                <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>{t('loading')}</p>
+              ) : (
+                <>
+                  <h3 style={{ margin: '0 0 8px', fontSize: 'var(--font-size-card-title)', fontWeight: 700 }}>{t('home.emptyTitle')}</h3>
+                  <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>{t('home.emptyBody')}</p>
+                  <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>
+                    <Icon source="＋" size="1em" /> {t('home.addWidgets')}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <ReorderableWidgetGrid ids={pinned} days={days} />
+          )
+        )}
 
-  return <PageContainer style={{ padding: 0 }}>
-    <WorkspaceCanvas panels={panels} toolbar={<><DaysWindowSelect value={days} onChange={setDays} />{view === 'me' && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}><Icon source="＋" size="1em" /> {t('home.addWidgets')}</button>}</>} />
-    <AddWidgetPicker open={picker} onClose={() => setPicker(false)} />
-  </PageContainer>;
+        {active && (
+          <>
+            <RoleGate capability="dashboards.manage" variant="block">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Select style={inputStyle} value={pickWidget} onChange={(e) => setPickWidget(e.target.value)} aria-label={tw('addTitle')}>
+                  <option value="">{tw('addTitle')}…</option>
+                  {widgetGroups.map((g) => (
+                    <optgroup key={g.group} label={tw(`group.${g.group}`)}>
+                      {g.widgets.map((w) => <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>)}
+                    </optgroup>
+                  ))}
+                </Select>
+                <button type="button" style={btnStyle} onClick={() => void addRegistryWidget()} disabled={!pickWidget}>{tw('addToDashboard')}</button>
+                <Select style={inputStyle} value={pickMetric} onChange={(e) => setPickMetric(e.target.value)} aria-label={td('widget.add')}>
+                  {metrics.map((m) => <option key={m.key} value={m.key}>{m.label} ({m.unit || 'count'})</option>)}
+                </Select>
+                <Select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)} aria-label={td('widget.add')}>
+                  {VIZ_OPTIONS.map((v) => <option key={v} value={v}>{td(`viz.${v}`)}</option>)}
+                </Select>
+                <button type="button" style={btnStyle} onClick={() => void addMetricWidget()}>{td('widget.add')}</button>
+                <button
+                  type="button"
+                  style={{ ...btnStyle, marginLeft: 'auto', color: 'var(--danger)' }}
+                  onClick={() => void deleteDashboard(active.id)}
+                >{td('delete.button')}</button>
+              </div>
+            </RoleGate>
+
+            {data && data.widgets.length === 0 ? (
+              <PmEmpty message={td('widget.empty')} />
+            ) : (
+              <div style={gridStyle}>
+                {data?.widgets.map((w) => {
+                  const def = w.widgetKey ? getWidget(w.widgetKey) : undefined;
+                  return (
+                    <div key={w.widgetId} style={{ ...SPAN[def?.size ?? 'sm'], position: 'relative' }}>
+                      {def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}
+                      <RoleGate capability="dashboards.manage">
+                        <button
+                          type="button"
+                          onClick={() => void removeWidget(w.widgetId)}
+                          title={td('widget.remove')}
+                          aria-label={td('widget.remove')}
+                          style={{
+                            position: 'absolute', top: 6, right: 6, border: 'none', background: 'transparent',
+                            cursor: 'pointer', color: 'var(--text-secondary)',
+                          }}
+                        ><Icon source="✕" size="1em" /></button>
+                      </RoleGate>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <AddWidgetPicker open={picker} onClose={() => setPicker(false)} />
+    </LensPage>
+  );
 }

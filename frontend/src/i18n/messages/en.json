@@ -424,8 +424,10 @@
         "apps": "App Integrations",
         "developer": "Developer API Keys",
         "embed": "Embed",
-        "connectors": "Connectors"
-      }
+        "connectors": "Connectors",
+        "payments": "Payments & payouts"
+      },
+      "paymentsIntro": "Connect a bank account, PayPal, Stripe or Wise. Money owed to you is sent through your default destination."
     }
   },
   "nav": {
@@ -474,7 +476,8 @@
       "hiring": "Hiring",
       "investor": "Investors",
       "governance": "Governance",
-      "support": "Support"
+      "support": "Support",
+      "salesProgramme": "Sales programme"
     },
     "tab": {
       "projects": "Projects",
@@ -574,7 +577,8 @@
       "market": "Market",
       "admin": "Admin",
       "notYet": "not yet",
-      "lockHint": "Sign in to use this"
+      "lockHint": "Sign in to use this",
+      "expand": "Expand"
     }
   },
   "alerts": {
@@ -3756,6 +3760,12 @@
       "add": "Add widget",
       "remove": "Remove widget",
       "empty": "No widgets yet — add one above."
+    },
+    "viz": {
+      "stat": "Number",
+      "bar": "Bar",
+      "line": "Line",
+      "gauge": "Gauge"
     }
   },
   "finops": {
@@ -3883,7 +3893,9 @@
       "empInitiatives": "Initiative mix",
       "forecast": "Forecast",
       "autonomy": "Autonomy",
-      "chatModes": "Conversations vs Executions"
+      "chatModes": "Conversations vs Executions",
+      "aiHub": "AI Insights",
+      "deliveryHub": "Delivery"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -4005,7 +4017,23 @@
       "chatModeCostShare": "Execution cost share",
       "chatModeMix": "Conversations by mode",
       "chatModeFunnel": "Dispatched vs linked",
-      "chatModeTable": "Mode breakdown"
+      "chatModeTable": "Mode breakdown",
+      "aiHubImpact": "AI Impact",
+      "aiHubEngineering": "AI Effectiveness",
+      "aiHubLlmUsage": "LLM Usage",
+      "aiHubRecommendations": "Recommendations",
+      "delivHubDelivery": "Delivery",
+      "delivHubAutonomy": "Autonomy Health",
+      "delivHubBottlenecks": "Bottlenecks",
+      "delivHubDora": "DORA Metrics",
+      "delivHubSpace": "SPACE Metrics",
+      "delivHubBenchmarking": "Industry Benchmarking",
+      "delivHubFunnel": "Innovation Funnel",
+      "delivHubCrossTeam": "Cross-team",
+      "delivHubDelayTaxonomy": "Delay causes",
+      "aiHubConsumption": "AI tokens this month",
+      "delivHubVerdict": "Are you delivering value?",
+      "overviewAsk": "Ask a question"
     },
     "loading": "Loading…",
     "overview": {
@@ -4204,7 +4232,23 @@
     "desc": {
       "chatModeWorkShare": "Share of conversations started as delegated work rather than a question.",
       "chatModeExecutionRate": "Of the tickets work conversations opened, how many an agent actually started.",
-      "chatModeCostShare": "Share of AI spend going to execution rather than conversation."
+      "chatModeCostShare": "Share of AI spend going to execution rather than conversation.",
+      "aiHubImpactDesc": "Adoption & model-usage trends, a multi-tool evaluation matrix and a composite AI productivity score.",
+      "aiHubEngineeringDesc": "Which AI approach actually ships — outcome score, merge rate and cost by work type and model.",
+      "aiHubLlmUsageDesc": "Token usage, requests and model health, plus estimated spend by source, project, team, user and repo.",
+      "aiHubRecommendationsDesc": "Ranked prescriptive actions and anomalies to act on, drawn from every insight.",
+      "delivHubDeliveryDesc": "Burnup, forecast and scope creep for a deliverable across initiatives, projects and releases.",
+      "delivHubAutonomyDesc": "Did the work finish itself? Lifecycle funnel by who created the ticket, the autonomous-vs-human move split, and where autonomy stalls.",
+      "delivHubBottlenecksDesc": "Where work stalls — time-in-stage, the slowest stage, rework loops and the WIP stuck right now.",
+      "delivHubDoraDesc": "The four DevOps keys — deployment frequency, lead time, change-failure rate and time to restore — vs performance tiers.",
+      "delivHubSpaceDesc": "The five-dimension developer-productivity framework that complements DORA.",
+      "delivHubBenchmarkingDesc": "How your delivery metrics rank against an industry cohort — percentile and rating by industry and team size.",
+      "delivHubFunnelDesc": "Idea → validated → in build → shipped → measured: conversion, time-to-value and the idea pipeline.",
+      "delivHubCrossTeamDesc": "Rank each team against the others",
+      "delivHubDelayTaxonomyDesc": "Why work is running late",
+      "aiHubConsumptionDesc": "AI tokens consumed this month, with the month-to-date daily trend.",
+      "delivHubVerdictDesc": "Delivery health at a glance — one verdict and a 0–100 score fused from DORA, cycle time and live bottlenecks.",
+      "overviewAsk": "Ask for any metric in plain English and get the number, plus the metric it matched."
     }
   },
   "compile": {
@@ -9275,7 +9319,6 @@
       "empty": "No guest sessions found.",
       "visitor": "Visitor",
       "engagement": "Engagement",
-      "firstSeen": "First seen",
       "lastSeen": "Last seen",
       "conversion": "Conversion",
       "brainMessages": "{count} Brain messages",
@@ -12291,7 +12334,47 @@
     "removeCardTitle": "Remove your card?",
     "removeCardWarning": "Premium models will be turned off, and we will stop storing your card. Your plan and included models keep working. You can add a card again at any time.",
     "removeCardConfirm": "Remove card",
-    "removeCardFailed": "We could not remove the card. Please try again."
+    "removeCardFailed": "We could not remove the card. Please try again.",
+    "title": "Billing",
+    "intro": "Your plan, the card that pays for it, and where your own money goes.",
+    "subnavLabel": "Billing sections",
+    "accountTab": "Account",
+    "payoutsTab": "Payouts",
+    "planTitle": "Plan",
+    "plan": "Plan",
+    "status": "Status",
+    "cycle": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "seats": "Seats",
+    "billingEmail": "Billing email",
+    "none": "None",
+    "noWorkspace": "Select a workspace to see its billing.",
+    "loading": "Loading…",
+    "loadFailed": "We could not load your billing details.",
+    "comparePlans": "Compare plans",
+    "paymentMethodTitle": "Payment method",
+    "paymentMethodIntro": "The card your subscription and any metered usage are charged to. Adding one runs a $0 verification, never a charge.",
+    "cardOnFile": "Card on file",
+    "card": "Card",
+    "noCard": "No card on file yet.",
+    "addCard": "Add a card",
+    "cardFailed": "We could not start card verification. Please try again.",
+    "destinationsTitle": "Where your money goes",
+    "destinationsIntro": "Connect a bank account, PayPal, Stripe or Wise. Commission and invoices are paid to your default destination.",
+    "historyTitle": "Payout history",
+    "totalPaid": "Total paid out",
+    "noPayouts": "Nothing has been paid out yet.",
+    "colDate": "Date",
+    "colAmount": "Amount",
+    "colProvider": "Sent via",
+    "colStatus": "Status",
+    "planName": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    }
   },
   "policyPacks": {
     "title": "Policy packs",
@@ -14205,6 +14288,17 @@
         "needsMedia": "{account} needs an image or video — it cannot publish text alone.",
         "accountNotReady": "{account} is not ready ({fields}).",
         "accountMissing": "A {network} account this campaign targets is no longer connected."
+      },
+      "pipelineAllSegments": "All segments",
+      "pipelineMore": "+{count} more",
+      "pipelineStage": {
+        "new": "New",
+        "contacted": "Contacted",
+        "qualified": "Qualified",
+        "meeting": "Meeting",
+        "proposal": "Proposal",
+        "won": "Won",
+        "lost": "Lost"
       }
     },
     "editor": {
@@ -15351,6 +15445,10 @@
       "interactive-3d": {
         "name": "Games & 3D studio",
         "description": "Design playable games, CAD drawings, and 3D models with MCP-backed project persistence."
+      },
+      "sales-hub": {
+        "name": "Sales Hub",
+        "description": "The prescriptive board for selling Builderforce: a kanban by segment, the read-out, the deck, and a CRO coach."
       }
     },
     "pitch": {
@@ -16955,6 +17053,7 @@
       "run": "Run it as a company.",
       "measure": "Is it working?",
       "market": "Sell, buy, hire, be found.",
+      "expand": "Grow it.",
       "admin": "Settings."
     },
     "arcNote": "Generated from the product’s own navigation, so this table cannot advertise a destination that does not exist or miss one that does.",
@@ -17146,5 +17245,158 @@
     "getCta": "Get this skill",
     "browseCta": "Browse the marketplace",
     "aboutHeading": "About this skill"
+  },
+  "payouts": {
+    "loading": "Loading payout destinations…",
+    "loadFailed": "We could not load your payout destinations.",
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "notConfigured": "Not available on this deployment yet — the operator has not set up this provider.",
+    "default": "Default",
+    "makeDefault": "Make default",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect this payout destination?",
+    "disconnectMessage": "Money will stop being sent to {label}. Payouts already sent stay in your history.",
+    "needsReconnect": "Needs reconnecting",
+    "connectFailed": "We could not connect that account.",
+    "actionFailed": "That did not work. Please try again.",
+    "connectTitle": "Connect {provider}",
+    "crumb": "Payouts",
+    "fieldsIntro": "These details are encrypted and only ever used to send you money. Nothing here is shown again once saved.",
+    "saveDestination": "Save destination"
+  },
+  "salesHub": {
+    "title": "Sales Hub",
+    "intro": "Your links, your leads, your numbers and your money — all without leaving the canvas.",
+    "subnavLabel": "Sales Hub sections",
+    "loading": "Loading…",
+    "loadFailed": "We could not load your Sales Hub.",
+    "tab": {
+      "overview": "Overview",
+      "leads": "Leads",
+      "reports": "Reports",
+      "payouts": "Payouts",
+      "inbox": "Inbox",
+      "kit": "Sales kit"
+    },
+    "linksTitle": "Your links",
+    "linksIntro": "Every signup through these is attributed to you, and every conversion pays commission at the published rate.",
+    "referralLink": "Referral link",
+    "referralLinkHint": "Share this anywhere — a signup through it is credited to you at the referral rate.",
+    "salesLink": "Sales link",
+    "salesLinkHint": "Use this for deals you personally sold. It pays the higher sales rate.",
+    "canvasTitle": "Your selling canvas",
+    "canvasIntro": "The pipeline, targets, campaign, deck and your CRO coach live on the board. This hub is the read-out.",
+    "openCanvas": "Open my canvas",
+    "balanceTitle": "Commission",
+    "earned": "Earned",
+    "paid": "Paid out",
+    "available": "Available",
+    "leadsTitle": "Current leads",
+    "leadsEmpty": "Nobody has signed up through your links yet.",
+    "colSignedUp": "Signed up",
+    "colSource": "Source",
+    "colStatus": "Status",
+    "colPlan": "Plan",
+    "colCommission": "Commission",
+    "source": {
+      "referral": "Referral",
+      "sales": "Sold"
+    },
+    "converted": "Converted",
+    "signedUp": "Signed up",
+    "destinationsTitle": "Where your money goes",
+    "payoutHistoryTitle": "Payout history",
+    "noPayouts": "Nothing has been paid out yet.",
+    "kitTitle": "Sales kit",
+    "kitIntro": "The deck to send. Attach it — do not send a link behind a login.",
+    "kitAsset": {
+      "pdf": "Pitch deck (PDF)",
+      "pptx": "Pitch deck (PowerPoint)",
+      "slides": "Every slide as a PNG"
+    },
+    "kitAll": "See the full media kit",
+    "report": {
+      "resultsTitle": "Results",
+      "windowLabel": "Reporting period",
+      "window": {
+        "week": "This week",
+        "month": "This month",
+        "quarter": "This quarter",
+        "ytd": "Year to date",
+        "all": "All time"
+      },
+      "signups": "Signups",
+      "conversions": "Conversions",
+      "conversionRate": "Conversion rate",
+      "revenue": "Attributed revenue",
+      "commission": "Commission",
+      "daysToConvert": "Avg. days to convert",
+      "days": "{days} days",
+      "funnelTitle": "Pipeline by stage",
+      "funnelEmpty": "No contacts in the pipeline yet.",
+      "stalled": "{count} contacts have not been touched in two weeks.",
+      "noStalled": "Nothing is stalled — every open contact was touched in the last two weeks.",
+      "leaderboardTitle": "By associate",
+      "colAssociate": "Associate",
+      "colSignups": "Signups",
+      "colConversions": "Conversions",
+      "colRevenue": "Revenue",
+      "colCommission": "Commission",
+      "stage": {
+        "new": "New",
+        "contacted": "Contacted",
+        "qualified": "Qualified",
+        "meeting": "Meeting",
+        "proposal": "Proposal",
+        "won": "Won",
+        "lost": "Lost"
+      }
+    },
+    "launcher": {
+      "workspaceName": "{name}'s sales workspace",
+      "defaultOwner": "My",
+      "workspaceFailed": "We could not prepare your sales workspace.",
+      "canvasTitle": "Sales Hub — my selling canvas",
+      "canvasDescription": "The prescriptive board for selling Builderforce: pipeline by segment, the read-out, the deck, and your CRO coach.",
+      "canvasPrompt": "Review my pipeline and tell me the highest-impact sales action for this week.",
+      "canvasFailed": "We could not open your sales canvas.",
+      "eyebrow": "Sales Hub",
+      "heading": "Setting up your selling canvas",
+      "preparing": "Building your pipeline, targets, deck and CRO coach…",
+      "retryHint": "Reload the page to try again."
+    }
+  },
+  "salesAdmin": {
+    "title": "Sales programme",
+    "intro": "The same report every associate reads, aggregated across the programme — or filtered to one person.",
+    "loading": "Loading…",
+    "loadFailed": "We could not load the programme report.",
+    "filterLabel": "Show",
+    "everyone": "Everyone ({count} associates)",
+    "openCanvas": "Open their canvas",
+    "message": "Message {name}",
+    "noCanvas": "That associate has not opened their sales canvas yet.",
+    "canvasFailed": "We could not open that canvas."
+  },
+  "messages": {
+    "open": "Messages",
+    "openWithCount": "Messages, {count} unread",
+    "crumb": "Messages",
+    "title": "Messages",
+    "conversations": "Conversations",
+    "startNew": "Start a conversation",
+    "untitled": "Conversation",
+    "pickSomeone": "Pick a conversation on the left, or start a new one.",
+    "nobodyToMessage": "There is nobody to message from this account yet.",
+    "emptyThread": "No messages yet — say something.",
+    "placeholder": "Write a message… (Enter to send, Shift+Enter for a new line)",
+    "send": "Send",
+    "you": "You",
+    "them": "Them",
+    "sendFailed": "That message could not be sent.",
+    "openFailed": "That conversation could not be opened."
   }
 }

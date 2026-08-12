@@ -1,3 +1,51 @@
+## RESOLVED 2026-08-12 - Zero-setup onboarding was a browser effect, so it could be skipped
+
+The admin user directory showed builders sitting at **0 workspaces**, which zero-setup onboarding is
+supposed to make impossible: nobody types a workspace name any more, so there is no step left to abandon.
+The count was not lying - `COUNT(DISTINCT tm.tenant_id)` over active `tenant_members` is a real count. What
+was wrong is WHERE provisioning lived.
+
+**The whole guarantee ran in a React effect.** `useOnboardingState` in `frontend/src/lib/onboarding.ts`
+created the tenant, the starter project and the first Creation Session. That made a builder's workspace
+conditional on four things that are not guaranteed: the user coming back to the web app at all after
+signup, clearing the terms gate, clearing the Build-vs-Hired role gate, and three network calls all
+succeeding. Meanwhile all three doors that create a `users` row - `POST /api/auth/web/register`, the OAuth
+callback in `oauthRoutes.ts`, and `POST /marketplace/auth/register` - created the account and nothing else.
+Every drop-off at the terms or role screen left a permanently workspace-less account behind, and a
+transient `createTenant` failure fell into a bare `catch` that dropped the user on the tenant picker.
+
+**Provisioning is now a server-side use case.** `application/tenant/starterWorkspace.ts` owns
+`ensureStarterWorkspace` - idempotent, never throws, skips the shells that legitimately have no workspace
+(`freelancer`, `sales`) and treats the `standard` column default as a builder, because "the user never
+finished a gate" is precisely the drop-off that used to leave accounts at zero. All three signup doors call
+it at account creation, `POST /api/auth/me/account-type` calls it when an OAuth account picks Build, and
+`GET /api/auth/me` calls it via `waitUntil` as a **self-heal**, so the accounts already stranded at zero
+repair themselves on their owner's next visit rather than needing a backfill script. A short-lived KV claim
+stops two tabs (or the signup redirect racing the first `/me`) from both reading zero and both provisioning.
+
+**One project-provisioning use case, and one project-list cache module.** The starter project had to be
+seeded the same way a real one is, and "create the row" was only half of it - the row is useless without
+its starter files, a kanban board carrying role ownership, and a default Evermind. That orchestration was
+inlined in the HTTP route, and inconsistently: `POST /api/projects` applied the kanban template but
+`/upsert` and `/scaffold` silently did not, so a project born through either had no board. It is now
+`application/project/provisionProject.ts`, called by all four paths, which closes that drift as a side
+effect. `invalidateProjectsList` / `projectsListVersionKey` moved to
+`application/project/projectsListCache.ts`: application modules were reaching UP into
+`presentation/routes/projectRoutes` to bust the cache, and the new use case would have made a third.
+
+**The client half is now only what the client can do,** and the admin screen tells the truth. The gate
+auto-selects the lone workspace (shared with the post-terms-bump resume as `selectSoleTenant`, which was
+duplicated) and seeds the first Creation Session only when the workspace has none. `GET /api/admin/users`
+returns `accountType`, and `UsersPanel` owns the verdict in one `WorkspaceCount` component used by both the
+table and the card view: zero is normal for a hired/sales account and is badged as a **defect** for a
+builder - so this question is answerable from the screen instead of from the source.
+
+Touched: `api/src/application/tenant/starterWorkspace.ts` (+test), `application/project/provisionProject.ts`,
+`application/project/projectsListCache.ts`, `presentation/routes/{auth,oauth,marketplace,project,admin}Routes.ts`,
+`frontend/src/lib/onboarding.ts`, `components/admin/panels/{Users,Tenants}Panel.tsx`, `lib/adminApi.ts`,
+all five i18n catalogs. The frontend's `starterWorkspaceName` and its test were deleted - the naming rule
+lives server-side now.
+
 ## RESOLVED 2026-08-12 - The free tier ends with a button, not a sentence
 
 A guest who spent their ten free canvas turns was told "Sign up free to keep going" and given nothing to

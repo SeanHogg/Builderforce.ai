@@ -3,66 +3,36 @@
 /**
  * Consolidated Delivery hub — the single entry point at /insights/delivery that
  * replaces the six separate routes (Delivery, Bottlenecks, DORA, SPACE,
- * Benchmarking and the Innovation Funnel). It shows one card per report with an
- * at-a-glance KPI summary, and each drills down into the full lens in an
- * interactive slide-out side panel (see DeliveryPanelProvider). Mirrors the AI
- * hub's AiInsightsDashboard.
+ * Benchmarking and the Innovation Funnel). The verdict banner answers "are we
+ * delivering?" first, then one card per report drills into the full lens in the
+ * shared slide-out side panel (see DeliveryPanelProvider).
  *
- * Each summary reads the SAME cached collector its lens reads (so headline
- * numbers agree); a shared 7/30/90-day window drives them all. A card whose
- * panel the user can't access renders the role hint instead of firing the read.
+ * ── It is a standard page, and its cards are REGISTRY WIDGETS ────────────────
+ * This used to be a `WorkspaceCanvas` of absolutely-positioned floating panels,
+ * so the verdict and every summary existed only on this page — un-pinnable, and
+ * laid out by a coordinate table that broke below the canvas's assumed width.
+ * The hub is now a responsive {@link WidgetGrid} over ids from the app-wide
+ * widget registry (see hubWidgets.tsx), so each tile carries its own pin and can
+ * be lifted onto a dashboard or a custom canvas, and the grid reflows instead of
+ * overflowing.
+ *
+ * Each card gates ITSELF on its panel's capability (WidgetCard wraps the body in
+ * RoleGate), so an un-entitled viewer gets the role hint rather than a read that
+ * would 403 — the same rule the old bespoke `SummarySlot` implemented by hand.
+ * And every summary now reads through the deduped source layer, so the verdict's
+ * three collectors are shared with the tiles beside it instead of re-fetched.
  */
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { RoleGate } from '@/components/RoleGate';
-import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
-import { usePermission } from '@/lib/rbac';
-import { DeliveryVerdict } from './DeliveryVerdict';
+import { WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { DaysWindowSelect } from './LensShell';
 import { ExportMenu } from './ExportMenu';
 import { useDeliveryPanel } from './DeliveryPanelProvider';
-import { DELIVERY_PANEL_IDS, DELIVERY_PANELS, isDeliveryPanelId, type DeliveryPanelDef, type DeliveryPanelId } from './deliveryPanels';
-
-/** The "open the full lens" affordance, shared by every dashboard section. */
-function DrillButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-        background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
-        fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap',
-      }}
-    >
-      {label} →
-    </button>
-  );
-}
-
-/**
- * Render a panel's KPI summary, but only fetch when the user is entitled — an
- * un-entitled card shows the shared role hint (via RoleGate) instead of firing a
- * read that would 403. The card decides its own visibility from its capability,
- * so the dashboard never threads a `canX` boolean.
- */
-function SummarySlot({ def, days }: { def: DeliveryPanelDef; days: number }) {
-  const { allowed } = usePermission(def.capability);
-  const Summary = def.Summary;
-  if (!allowed) {
-    return (
-      <RoleGate capability={def.capability} variant="block">
-        <div style={{ minHeight: 64 }} aria-hidden />
-      </RoleGate>
-    );
-  }
-  return <Summary days={days} />;
-}
+import { isDeliveryPanelId, type DeliveryPanelId } from './deliveryPanels';
+import { DELIVERY_HUB_WIDGET_IDS } from './widgets/hubWidgets';
 
 export function DeliveryDashboard() {
-  const t = useTranslations('insights.delivhub');
   const [days, setDays] = useState(30);
   const { open } = useDeliveryPanel();
   const searchParams = useSearchParams();
@@ -75,39 +45,13 @@ export function DeliveryDashboard() {
     if (isDeliveryPanelId(panelParam)) open(panelParam as DeliveryPanelId);
   }, [panelParam, open]);
 
-  const panels: WorkspaceCanvasPanel[] = [
-    {
-      id: 'delivery-verdict', title: t('title'), subtitle: t('subtitle'), icon: '📦',
-      position: { x: 36, y: 36 }, width: 1300, height: 250,
-      content: <DeliveryVerdict days={days} />,
-    },
-    ...DELIVERY_PANEL_IDS.map((id, index) => {
-      const def = DELIVERY_PANELS[id];
-      const column = index % 3;
-      const row = Math.floor(index / 3);
-      return {
-        id: `delivery-${id}`,
-        title: t(def.titleKey),
-        subtitle: t(def.descKey),
-        icon: def.icon,
-        position: { x: 36 + column * 432, y: 314 + row * 330 },
-        width: 400,
-        height: 300,
-        content: <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: '100%' }}>
-          <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>{t(def.descKey)}</p>
-          <SummarySlot def={def} days={days} />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
-            <DrillButton label={t('viewDetails')} onClick={() => open(id)} />
-          </div>
-        </div>,
-      } satisfies WorkspaceCanvasPanel;
-    }),
-  ];
-
   return (
-    <WorkspaceCanvas
-      panels={panels}
-      toolbar={<><ExportMenu days={days} /><DaysWindowSelect value={days} onChange={setDays} /></>}
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <ExportMenu days={days} />
+        <DaysWindowSelect value={days} onChange={setDays} />
+      </div>
+      <WidgetGrid ids={DELIVERY_HUB_WIDGET_IDS} days={days} />
+    </div>
   );
 }

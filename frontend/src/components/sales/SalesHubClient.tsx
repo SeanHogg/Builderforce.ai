@@ -73,7 +73,7 @@ function ShareLink({ label, value, hint }: { label: string; value: string | null
         <code style={{
           flex: '1 1 260px', minWidth: 0, overflowX: 'auto', whiteSpace: 'nowrap',
           padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-          background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12,
+          background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)',
         }}>{value ?? '—'}</code>
         {value && <CopyButton getText={() => value} ariaLabel={label} compact />}
       </div>
@@ -143,7 +143,7 @@ export default function SalesHubClient() {
     <>
       <div style={cardStyle}>
         <p style={captionStyle}>{t('linksTitle')}</p>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('linksIntro')}</p>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('linksIntro')}</p>
         <div style={{ display: 'grid', gap: 14 }}>
           <ShareLink label={t('referralLink')} value={referral} hint={t('referralLinkHint')} />
           <ShareLink label={t('salesLink')} value={sales} hint={t('salesLinkHint')} />
@@ -154,7 +154,7 @@ export default function SalesHubClient() {
           rather than trying to be a second copy of it. */}
       <div style={cardStyle}>
         <p style={captionStyle}>{t('canvasTitle')}</p>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.55 }}>{t('canvasIntro')}</p>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.55 }}>{t('canvasIntro')}</p>
         <Button size="sm" variant="primary" onClick={() => router.push(codes.sessionId ? `/create/${codes.sessionId}` : '/sales/canvas')}>
           {t('openCanvas')}
         </Button>
@@ -170,7 +170,7 @@ export default function SalesHubClient() {
               { label: t('available'), value: money(balance.availableCents) },
             ].map((tile) => (
               <div key={tile.label}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{tile.value}</div>
+                <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{tile.value}</div>
                 <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tile.label}</div>
               </div>
             ))}
@@ -186,10 +186,10 @@ export default function SalesHubClient() {
     <div style={cardStyle}>
       <p style={captionStyle}>{t('leadsTitle')}</p>
       {leads.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('leadsEmpty')}</p>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('leadsEmpty')}</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 480 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)', minWidth: 480 }}>
             <thead>
               <tr>
                 {[t('colSignedUp'), t('colSource'), t('colStatus'), t('colPlan'), t('colCommission')].map((heading, index) => (
@@ -228,7 +228,7 @@ export default function SalesHubClient() {
               { label: t('available'), value: money(balance.availableCents) },
             ].map((tile) => (
               <div key={tile.label}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{tile.value}</div>
+                <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{tile.value}</div>
                 <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tile.label}</div>
               </div>
             ))}
@@ -244,10 +244,10 @@ export default function SalesHubClient() {
       <div style={cardStyle}>
         <p style={captionStyle}>{t('payoutHistoryTitle')}</p>
         {payoutHistory.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('noPayouts')}</p>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('noPayouts')}</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 380 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)', minWidth: 380 }}>
               <tbody>
                 {payoutHistory.map((payout) => (
                   <tr key={payout.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
@@ -268,7 +268,7 @@ export default function SalesHubClient() {
   const renderKit = () => (
     <div style={cardStyle}>
       <p style={captionStyle}>{t('kitTitle')}</p>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('kitIntro')}</p>
+      <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('kitIntro')}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
         {/* MEDIA_KIT is the same single source `/media` renders, so a new asset
             appears in the hub without anyone remembering to add it twice. */}
@@ -284,25 +284,25 @@ export default function SalesHubClient() {
             }}
           >
             <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', fontWeight: 700 }}>{asset.format}</span>
-            <strong style={{ fontSize: 13 }}>{t(`kitAsset.${asset.key}`)}</strong>
+            <strong style={{ fontSize: 'var(--font-size-body)' }}>{t(`kitAsset.${asset.key}`)}</strong>
             <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{asset.size}</span>
           </a>
         ))}
       </div>
       <p style={{ marginTop: 14 }}>
-        <Link href="/media" style={{ fontSize: 13, color: 'var(--coral-bright)', fontWeight: 650 }}>{t('kitAll')} →</Link>
+        <Link href="/media" style={{ fontSize: 'var(--font-size-body)', color: 'var(--coral-bright)', fontWeight: 650 }}>{t('kitAll')} →</Link>
       </p>
     </div>
   );
 
   return (
     <PageContainer width="full" style={{ padding: '24px 28px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 18px' }}>{t('intro')}</p>
+      <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
+      <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 18px' }}>{t('intro')}</p>
       <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
-      {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 13, marginBottom: 14 }}>{error}</p>}
+      {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</p>}
       {sub === 'leads' ? renderLeads()
-        : sub === 'reports' ? (report ? <SalesReportView report={report} window={window_} onWindowChange={setWindow} /> : <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</p>)
+        : sub === 'reports' ? (report ? <SalesReportView report={report} window={window_} onWindowChange={setWindow} /> : <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)' }}>{t('loading')}</p>)
           : sub === 'payouts' ? renderPayouts()
             // The whole webmail client, in the hub — an opportunity that arrives
             // by email is a sales opportunity, and making the associate leave to

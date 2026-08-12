@@ -1,5 +1,6 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
 import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
+import { salesHubTemplate } from '@/lib/sales/salesHubCanvas';
 
 export interface CreationTemplate {
   id: string;
@@ -36,17 +37,17 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
     ],
   },
   {
-    id: 'sales-command-center', name: 'Sales command center', category: 'Marketplace template',
-    description: 'Run targeting, outreach, pipeline management, goals, and coaching from one collaborative canvas.',
-    objects: [
-      { kind: 'salesPipeline', title: 'Live sales pipeline', x: 0, y: 0 },
-      { kind: 'targetMarket', title: 'Target market', x: 440, y: 0 },
-      { kind: 'salesCampaign', title: 'Campaign workspace', x: 880, y: 0 },
-      { kind: 'salesGoal', title: 'Weekly activity goals', x: 0, y: 320 },
-      { kind: 'salesMeeting', title: 'Meetings & coaching', x: 440, y: 320 },
-      { kind: 'agent', title: 'Sales coach', x: 880, y: 320 },
-    ],
-    connections: [{ source: 1, target: 2, label: 'targets' }, { source: 2, target: 0, label: 'creates leads' }, { source: 0, target: 3, label: 'measures' }, { source: 3, target: 5, label: 'coaches' }],
+    // The SAME board a sales associate is provisioned with — `salesHubTemplate()`
+    // projects it from `buildSalesHubGraph`, so the pack a builder places and the
+    // canvas an associate lands on cannot describe selling this product two
+    // different ways. It replaced `sales-command-center`, which was six empty
+    // cards with placeholder titles: a blank page with furniture on it.
+    // The projection returns `kind: string` because the graph builder is in
+    // `lib/` and must not depend on this module's presentation union. The
+    // narrowing is asserted HERE, in the layer that owns the union, and
+    // `creationObjectRegistry.test.ts` proves every kind in every template
+    // resolves — so the assertion is checked rather than trusted.
+    ...(salesHubTemplate() as unknown as CreationTemplate),
   },
   {
     id: 'campaign', name: 'Campaign studio', category: 'Marketplace template',

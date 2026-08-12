@@ -29,6 +29,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { notify } from '../../application/notifications/notify';
 import { accountTypeGetsWorkspace, ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
+import { background } from '../middleware/background';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
@@ -1157,10 +1158,10 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // moved server-side — and any account whose creation-time provisioning failed
     // — would otherwise sit at zero workspaces forever. This is the one request
     // every surface makes on load, so it is where the repair belongs. It runs
-    // AFTER the response via waitUntil so it never adds latency to the gate, and
-    // is a no-op (one indexed membership read) for everybody already provisioned.
+    // AFTER the response so it never adds latency to the gate, and is a no-op
+    // (one indexed membership read) for everybody already provisioned.
     if (accountTypeGetsWorkspace(full?.accountType)) {
-      c.executionCtx.waitUntil(ensureStarterWorkspace(c.env as Env, db, {
+      background(c, ensureStarterWorkspace(c.env as Env, db, {
         id: userId,
         email: user.email,
         username: user.username,

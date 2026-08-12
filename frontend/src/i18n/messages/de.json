@@ -424,8 +424,10 @@
         "apps": "App-Integrationen",
         "developer": "Entwickler-API-Schlüssel",
         "embed": "Einbetten",
-        "connectors": "Konnektoren"
-      }
+        "connectors": "Konnektoren",
+        "payments": "Zahlungen & Auszahlungen"
+      },
+      "paymentsIntro": "Verbinden Sie ein Bankkonto, PayPal, Stripe oder Wise. Ihnen zustehendes Geld wird an Ihr Standardziel gesendet."
     }
   },
   "nav": {
@@ -474,7 +476,8 @@
       "hiring": "Recruiting",
       "investor": "Investoren",
       "governance": "Governance",
-      "support": "Support"
+      "support": "Support",
+      "salesProgramme": "Vertriebsprogramm"
     },
     "tab": {
       "projects": "Projekte",
@@ -574,7 +577,8 @@
       "market": "Markt",
       "admin": "Verwaltung",
       "notYet": "noch nicht",
-      "lockHint": "Zum Nutzen anmelden"
+      "lockHint": "Zum Nutzen anmelden",
+      "expand": "Ausbauen"
     }
   },
   "alerts": {
@@ -3756,6 +3760,12 @@
       "add": "Widget hinzufügen",
       "remove": "Widget entfernen",
       "empty": "Noch keine Widgets — fügen Sie oben eines hinzu."
+    },
+    "viz": {
+      "stat": "Zahl",
+      "bar": "Balken",
+      "line": "Linie",
+      "gauge": "Tacho"
     }
   },
   "finops": {
@@ -3883,7 +3893,9 @@
       "empInitiatives": "Initiativen-Mix",
       "forecast": "Prognose",
       "autonomy": "Autonomie",
-      "chatModes": "Unterhaltungen und Ausführungen"
+      "chatModes": "Unterhaltungen und Ausführungen",
+      "aiHub": "KI-Einblicke",
+      "deliveryHub": "Lieferung"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -4005,7 +4017,23 @@
       "chatModeCostShare": "Anteil der Ausführungskosten",
       "chatModeMix": "Unterhaltungen nach Modus",
       "chatModeFunnel": "Übergeben gegenüber verknüpft",
-      "chatModeTable": "Aufschlüsselung nach Modus"
+      "chatModeTable": "Aufschlüsselung nach Modus",
+      "aiHubImpact": "KI-Wirkung",
+      "aiHubEngineering": "KI-Effektivität",
+      "aiHubLlmUsage": "LLM-Nutzung",
+      "aiHubRecommendations": "Empfehlungen",
+      "delivHubDelivery": "Lieferung",
+      "delivHubAutonomy": "Autonomie-Gesundheit",
+      "delivHubBottlenecks": "Engpässe",
+      "delivHubDora": "DORA-Kennzahlen",
+      "delivHubSpace": "SPACE-Kennzahlen",
+      "delivHubBenchmarking": "Branchen-Benchmarking",
+      "delivHubFunnel": "Innovationstrichter",
+      "delivHubCrossTeam": "Team-übergreifend",
+      "delivHubDelayTaxonomy": "Verzögerungsgründe",
+      "aiHubConsumption": "KI-Tokens diesen Monat",
+      "delivHubVerdict": "Liefert ihr Wert?",
+      "overviewAsk": "Eine Frage stellen"
     },
     "loading": "Laden…",
     "overview": {
@@ -4204,7 +4232,23 @@
     "desc": {
       "chatModeWorkShare": "Anteil der Unterhaltungen, die als übergebene Arbeit statt als Frage begonnen wurden.",
       "chatModeExecutionRate": "Von den durch Arbeits-Unterhaltungen eröffneten Tickets: wie viele ein Agent tatsächlich gestartet hat.",
-      "chatModeCostShare": "Anteil der KI-Ausgaben, der auf Ausführung statt auf Unterhaltung entfällt."
+      "chatModeCostShare": "Anteil der KI-Ausgaben, der auf Ausführung statt auf Unterhaltung entfällt.",
+      "aiHubImpactDesc": "Akzeptanz- und Modellnutzungstrends, eine Multi-Tool-Bewertungsmatrix und ein zusammengesetzter KI-Produktivitätswert.",
+      "aiHubEngineeringDesc": "Welcher KI-Ansatz tatsächlich liefert – Ergebnis-Score, Merge-Rate und Kosten nach Arbeitstyp und Modell.",
+      "aiHubLlmUsageDesc": "Token-Nutzung, Anfragen und Modellzustand sowie geschätzte Ausgaben nach Quelle, Projekt, Team, Benutzer und Repository.",
+      "aiHubRecommendationsDesc": "Priorisierte, umsetzbare Empfehlungen und Anomalien aus allen Einblicken.",
+      "delivHubDeliveryDesc": "Burnup, Prognose und Scope Creep eines Liefergegenstands über Initiativen, Projekte und Releases hinweg.",
+      "delivHubAutonomyDesc": "Hat sich die Arbeit selbst erledigt? Lebenszyklus-Funnel danach, wer das Ticket angelegt hat, Verhältnis autonomer zu menschlichen Wechseln und wo die Autonomie stehen bleibt.",
+      "delivHubBottlenecksDesc": "Wo die Arbeit stockt – Zeit je Phase, langsamste Phase, Nacharbeitsschleifen und das aktuell festhängende WIP.",
+      "delivHubDoraDesc": "Die vier DevOps-Kennzahlen – Deployment-Häufigkeit, Vorlaufzeit, Change-Failure-Rate und Wiederherstellungszeit – im Vergleich zu Leistungsstufen.",
+      "delivHubSpaceDesc": "Das fünfdimensionale Framework für Entwicklerproduktivität, das DORA ergänzt.",
+      "delivHubBenchmarkingDesc": "Wie Ihre Liefermetriken im Vergleich zu einer Branchenkohorte abschneiden – Perzentil und Bewertung nach Branche und Teamgröße.",
+      "delivHubFunnelDesc": "Idee → validiert → in Entwicklung → ausgeliefert → gemessen: Conversion, Time-to-Value und die Ideen-Pipeline.",
+      "delivHubCrossTeamDesc": "Jedes Team gegen die anderen einordnen",
+      "delivHubDelayTaxonomyDesc": "Warum die Arbeit im Verzug ist",
+      "aiHubConsumptionDesc": "Diesen Monat verbrauchte KI-Tokens, mit dem täglichen Verlauf seit Monatsbeginn.",
+      "delivHubVerdictDesc": "Lieferzustand auf einen Blick — ein Urteil und ein Wert von 0–100, gebildet aus DORA, Durchlaufzeit und aktuellen Engpässen.",
+      "overviewAsk": "Fragen Sie in natürlicher Sprache nach einer beliebigen Kennzahl und erhalten Sie den Wert samt der zugeordneten Kennzahl."
     }
   },
   "compile": {
@@ -9274,7 +9318,6 @@
       "empty": "Keine Gastsitzungen gefunden.",
       "visitor": "Besucher",
       "engagement": "Interaktion",
-      "firstSeen": "Erstmals gesehen",
       "lastSeen": "Zuletzt gesehen",
       "conversion": "Konvertierung",
       "brainMessages": "{count} Brain-Nachrichten",
@@ -12290,7 +12333,47 @@
     "removeCardTitle": "Karte entfernen?",
     "removeCardWarning": "Premium-Modelle werden deaktiviert und wir speichern Ihre Karte nicht mehr. Ihr Tarif und die enthaltenen Modelle laufen weiter. Sie können jederzeit wieder eine Karte hinzufügen.",
     "removeCardConfirm": "Karte entfernen",
-    "removeCardFailed": "Die Karte konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+    "removeCardFailed": "Die Karte konnte nicht entfernt werden. Bitte versuchen Sie es erneut.",
+    "title": "Abrechnung",
+    "intro": "Ihr Tarif, die Karte, die ihn bezahlt, und wohin Ihr eigenes Geld fließt.",
+    "subnavLabel": "Abrechnungsbereiche",
+    "accountTab": "Konto",
+    "payoutsTab": "Auszahlungen",
+    "planTitle": "Tarif",
+    "plan": "Tarif",
+    "status": "Status",
+    "cycle": {
+      "monthly": "Monatlich",
+      "yearly": "Jährlich"
+    },
+    "seats": "Plätze",
+    "billingEmail": "Rechnungs-E-Mail",
+    "none": "Keine",
+    "noWorkspace": "Wählen Sie einen Workspace, um dessen Abrechnung zu sehen.",
+    "loading": "Wird geladen…",
+    "loadFailed": "Ihre Abrechnungsdaten konnten nicht geladen werden.",
+    "comparePlans": "Tarife vergleichen",
+    "paymentMethodTitle": "Zahlungsmethode",
+    "paymentMethodIntro": "Die Karte, über die Ihr Abonnement und die gemessene Nutzung abgerechnet werden. Beim Hinzufügen erfolgt eine 0-$-Prüfung, niemals eine Belastung.",
+    "cardOnFile": "Hinterlegte Karte",
+    "card": "Karte",
+    "noCard": "Noch keine Karte hinterlegt.",
+    "addCard": "Karte hinzufügen",
+    "cardFailed": "Die Kartenprüfung konnte nicht gestartet werden. Bitte erneut versuchen.",
+    "destinationsTitle": "Wohin Ihr Geld fließt",
+    "destinationsIntro": "Verbinden Sie ein Bankkonto, PayPal, Stripe oder Wise. Provisionen und Rechnungen werden an Ihr Standardziel ausgezahlt.",
+    "historyTitle": "Auszahlungsverlauf",
+    "totalPaid": "Insgesamt ausgezahlt",
+    "noPayouts": "Es wurde noch nichts ausgezahlt.",
+    "colDate": "Datum",
+    "colAmount": "Betrag",
+    "colProvider": "Gesendet über",
+    "colStatus": "Status",
+    "planName": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    }
   },
   "policyPacks": {
     "title": "Richtlinienpakete",
@@ -14204,6 +14287,17 @@
         "needsMedia": "{account} benötigt ein Bild oder Video — reiner Text ist dort nicht möglich.",
         "accountNotReady": "{account} ist nicht bereit ({fields}).",
         "accountMissing": "Ein {network}-Konto dieser Kampagne ist nicht mehr verbunden."
+      },
+      "pipelineAllSegments": "Alle Segmente",
+      "pipelineMore": "+{count} weitere",
+      "pipelineStage": {
+        "new": "Neu",
+        "contacted": "Kontaktiert",
+        "qualified": "Qualifiziert",
+        "meeting": "Termin",
+        "proposal": "Angebot",
+        "won": "Gewonnen",
+        "lost": "Verloren"
       }
     },
     "editor": {
@@ -15350,6 +15444,10 @@
       "interactive-3d": {
         "name": "Spiele- und 3D-Studio",
         "description": "Spielbare Spiele, CAD-Zeichnungen und 3D-Modelle mit MCP-gestützter Projektpersistenz entwerfen."
+      },
+      "sales-hub": {
+        "name": "Sales Hub",
+        "description": "Das vorgegebene Board für den Verkauf von Builderforce: ein Kanban nach Segment, die Kennzahlen, das Deck und ein CRO-Coach."
       }
     },
     "pitch": {
@@ -16954,6 +17052,7 @@
       "run": "Betreiben Sie es als Unternehmen.",
       "measure": "Funktioniert es?",
       "market": "Verkaufen, kaufen, einstellen, gefunden werden.",
+      "expand": "Lassen Sie es wachsen.",
       "admin": "Einstellungen."
     },
     "arcNote": "Aus der Navigation des Produkts selbst erzeugt — diese Tabelle kann also kein Ziel bewerben, das es nicht gibt, und keines übersehen, das es gibt.",
@@ -17145,5 +17244,158 @@
     "getCta": "Diesen Skill holen",
     "browseCta": "Marktplatz durchsuchen",
     "aboutHeading": "Über diesen Skill"
+  },
+  "payouts": {
+    "loading": "Auszahlungsziele werden geladen…",
+    "loadFailed": "Ihre Auszahlungsziele konnten nicht geladen werden.",
+    "connect": "Verbinden",
+    "reconnect": "Neu verbinden",
+    "connected": "Verbunden",
+    "notConnected": "Nicht verbunden",
+    "notConfigured": "In dieser Installation noch nicht verfügbar – der Betreiber hat diesen Anbieter nicht eingerichtet.",
+    "default": "Standard",
+    "makeDefault": "Als Standard festlegen",
+    "disconnect": "Trennen",
+    "disconnectTitle": "Dieses Auszahlungsziel trennen?",
+    "disconnectMessage": "Es wird kein Geld mehr an {label} gesendet. Bereits erfolgte Auszahlungen bleiben in Ihrem Verlauf.",
+    "needsReconnect": "Neu verbinden erforderlich",
+    "connectFailed": "Dieses Konto konnte nicht verbunden werden.",
+    "actionFailed": "Das hat nicht funktioniert. Bitte erneut versuchen.",
+    "connectTitle": "{provider} verbinden",
+    "crumb": "Auszahlungen",
+    "fieldsIntro": "Diese Angaben werden verschlüsselt und ausschließlich für Ihre Auszahlungen verwendet. Nach dem Speichern werden sie nicht erneut angezeigt.",
+    "saveDestination": "Ziel speichern"
+  },
+  "salesHub": {
+    "title": "Sales Hub",
+    "intro": "Ihre Links, Ihre Leads, Ihre Zahlen und Ihr Geld – ohne das Canvas zu verlassen.",
+    "subnavLabel": "Sales-Hub-Bereiche",
+    "loading": "Wird geladen…",
+    "loadFailed": "Ihr Sales Hub konnte nicht geladen werden.",
+    "tab": {
+      "overview": "Überblick",
+      "leads": "Leads",
+      "reports": "Berichte",
+      "payouts": "Auszahlungen",
+      "inbox": "Posteingang",
+      "kit": "Vertriebskit"
+    },
+    "linksTitle": "Ihre Links",
+    "linksIntro": "Jede Anmeldung über diese Links wird Ihnen zugeordnet, und jeder Abschluss zahlt Provision zum veröffentlichten Satz.",
+    "referralLink": "Empfehlungslink",
+    "referralLinkHint": "Überall teilbar – eine Anmeldung darüber wird Ihnen zum Empfehlungssatz gutgeschrieben.",
+    "salesLink": "Vertriebslink",
+    "salesLinkHint": "Für Abschlüsse, die Sie selbst verkauft haben. Zahlt den höheren Vertriebssatz.",
+    "canvasTitle": "Ihr Vertriebs-Canvas",
+    "canvasIntro": "Pipeline, Zielmarkt, Kampagne, Deck und Ihr CRO-Coach liegen auf dem Board. Dieser Hub ist die Auswertung.",
+    "openCanvas": "Mein Canvas öffnen",
+    "balanceTitle": "Provision",
+    "earned": "Verdient",
+    "paid": "Ausgezahlt",
+    "available": "Verfügbar",
+    "leadsTitle": "Aktuelle Leads",
+    "leadsEmpty": "Über Ihre Links hat sich noch niemand angemeldet.",
+    "colSignedUp": "Anmeldung",
+    "colSource": "Quelle",
+    "colStatus": "Status",
+    "colPlan": "Tarif",
+    "colCommission": "Provision",
+    "source": {
+      "referral": "Empfehlung",
+      "sales": "Verkauft"
+    },
+    "converted": "Abgeschlossen",
+    "signedUp": "Angemeldet",
+    "destinationsTitle": "Wohin Ihr Geld fließt",
+    "payoutHistoryTitle": "Auszahlungsverlauf",
+    "noPayouts": "Es wurde noch nichts ausgezahlt.",
+    "kitTitle": "Vertriebskit",
+    "kitIntro": "Das Deck zum Versenden. Hängen Sie es an – schicken Sie keinen Link hinter einem Login.",
+    "kitAsset": {
+      "pdf": "Pitch-Deck (PDF)",
+      "pptx": "Pitch-Deck (PowerPoint)",
+      "slides": "Jede Folie als PNG"
+    },
+    "kitAll": "Das komplette Medienkit ansehen",
+    "report": {
+      "resultsTitle": "Ergebnisse",
+      "windowLabel": "Berichtszeitraum",
+      "window": {
+        "week": "Diese Woche",
+        "month": "Dieser Monat",
+        "quarter": "Dieses Quartal",
+        "ytd": "Seit Jahresbeginn",
+        "all": "Gesamt"
+      },
+      "signups": "Anmeldungen",
+      "conversions": "Abschlüsse",
+      "conversionRate": "Abschlussquote",
+      "revenue": "Zugeordneter Umsatz",
+      "commission": "Provision",
+      "daysToConvert": "Ø Tage bis zum Abschluss",
+      "days": "{days} Tage",
+      "funnelTitle": "Pipeline nach Phase",
+      "funnelEmpty": "Noch keine Kontakte in der Pipeline.",
+      "stalled": "{count} Kontakte wurden seit zwei Wochen nicht angesprochen.",
+      "noStalled": "Nichts stockt – jeder offene Kontakt wurde in den letzten zwei Wochen angesprochen.",
+      "leaderboardTitle": "Nach Vertriebspartner",
+      "colAssociate": "Vertriebspartner",
+      "colSignups": "Anmeldungen",
+      "colConversions": "Abschlüsse",
+      "colRevenue": "Umsatz",
+      "colCommission": "Provision",
+      "stage": {
+        "new": "Neu",
+        "contacted": "Kontaktiert",
+        "qualified": "Qualifiziert",
+        "meeting": "Termin",
+        "proposal": "Angebot",
+        "won": "Gewonnen",
+        "lost": "Verloren"
+      }
+    },
+    "launcher": {
+      "workspaceName": "Vertriebs-Workspace von {name}",
+      "defaultOwner": "Mein",
+      "workspaceFailed": "Ihr Vertriebs-Workspace konnte nicht vorbereitet werden.",
+      "canvasTitle": "Sales Hub – mein Vertriebs-Canvas",
+      "canvasDescription": "Das vorgegebene Board für den Verkauf von Builderforce: Pipeline nach Segment, die Kennzahlen, das Deck und Ihr CRO-Coach.",
+      "canvasPrompt": "Sieh dir meine Pipeline an und nenne mir die wirkungsvollste Vertriebsaktion für diese Woche.",
+      "canvasFailed": "Ihr Vertriebs-Canvas konnte nicht geöffnet werden.",
+      "eyebrow": "Sales Hub",
+      "heading": "Ihr Vertriebs-Canvas wird eingerichtet",
+      "preparing": "Pipeline, Ziele, Deck und CRO-Coach werden erstellt…",
+      "retryHint": "Laden Sie die Seite neu, um es erneut zu versuchen."
+    }
+  },
+  "salesAdmin": {
+    "title": "Vertriebsprogramm",
+    "intro": "Derselbe Bericht, den jeder Vertriebspartner liest – über das gesamte Programm aggregiert oder auf eine Person gefiltert.",
+    "loading": "Wird geladen…",
+    "loadFailed": "Der Programmbericht konnte nicht geladen werden.",
+    "filterLabel": "Anzeigen",
+    "everyone": "Alle ({count} Vertriebspartner)",
+    "openCanvas": "Deren Canvas öffnen",
+    "message": "{name} schreiben",
+    "noCanvas": "Dieser Vertriebspartner hat sein Vertriebs-Canvas noch nicht geöffnet.",
+    "canvasFailed": "Dieses Canvas konnte nicht geöffnet werden."
+  },
+  "messages": {
+    "open": "Nachrichten",
+    "openWithCount": "Nachrichten, {count} ungelesen",
+    "crumb": "Nachrichten",
+    "title": "Nachrichten",
+    "conversations": "Unterhaltungen",
+    "startNew": "Unterhaltung beginnen",
+    "untitled": "Unterhaltung",
+    "pickSomeone": "Wählen Sie links eine Unterhaltung oder beginnen Sie eine neue.",
+    "nobodyToMessage": "Von diesem Konto aus gibt es noch niemanden zum Schreiben.",
+    "emptyThread": "Noch keine Nachrichten – sagen Sie etwas.",
+    "placeholder": "Nachricht schreiben… (Enter zum Senden, Umschalt+Enter für eine neue Zeile)",
+    "send": "Senden",
+    "you": "Sie",
+    "them": "Gegenüber",
+    "sendFailed": "Diese Nachricht konnte nicht gesendet werden.",
+    "openFailed": "Diese Unterhaltung konnte nicht geöffnet werden."
   }
 }

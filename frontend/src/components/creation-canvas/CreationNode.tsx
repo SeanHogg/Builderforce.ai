@@ -23,6 +23,7 @@ import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
+import { PIPELINE_MAX_CARDS_PER_CELL, cardsAt, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import { CanvasWebPage } from './CanvasWebPage';
 import { DashboardWidgetGrid } from './DashboardWidgetView';
 import { DashboardStructuredEditor } from './DashboardStructuredEditor';
@@ -447,6 +448,71 @@ function SocialCampaignBody({ data }: { data: CreationNodeData }) {
     </ul>}
     {blockers.length > 0 && <div className={styles.taskContext}><small>{t('campaignBlocked')}</small><p>{blockers.join(' · ')}</p></div>}
   </div>;
+}
+
+/**
+ * The sales pipeline, as a kanban with swimlanes.
+ *
+ * Stages across, segments down, a deal at the intersection — because "qualified"
+ * is different work for a founder and for an enterprise buyer, and one column of
+ * both is a list nobody can act on. The model (`canvasSalesPipeline`) does the
+ * normalising; this only draws it.
+ *
+ * `nowheel`/`nodrag` on the scroller: the board owns the wheel for zoom, so
+ * without them scrolling to a later stage zooms the canvas instead.
+ */
+function SalesPipelineBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const model = useMemo(() => readPipelineModel(data as unknown as Record<string, unknown>), [data]);
+  const stageLabel = (stage: string) => (t.has(`pipelineStage.${stage}`) ? t(`pipelineStage.${stage}`) : stage);
+  const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString()}`;
+
+  return (
+    <div
+      className={`${styles.pipelineBoard} nodrag nowheel`}
+      // The column count is DATA, so the grid template reads it rather than the
+      // stylesheet hard-coding seven and breaking on a six-stage pipeline.
+      style={{ ['--pipeline-stages' as string]: String(model.stages.length) }}
+    >
+      <div className={styles.pipelineHead}>
+        {/* The lane gutter's header cell — empty, so the stage columns line up. */}
+        <span aria-hidden="true" />
+        {model.stages.map((stage) => {
+          const totals = stageTotals(model, stage);
+          return (
+            <span key={stage} className={styles.pipelineStageHead}>
+              <b>{stageLabel(stage)}</b>
+              <small>{totals.valueCents > 0 ? `${totals.count} · ${money(totals.valueCents)}` : String(totals.count)}</small>
+            </span>
+          );
+        })}
+      </div>
+      {model.lanes.map((lane, laneIndex) => (
+        <div key={lane.id} className={styles.pipelineLane}>
+          <span className={styles.pipelineLaneHead}>
+            <b>{lane.title || t('pipelineAllSegments')}</b>
+            {lane.hint && <small>{lane.hint}</small>}
+          </span>
+          {model.stages.map((stage) => {
+            const cards = cardsAt(model, laneIndex, stage);
+            const shown = cards.slice(0, PIPELINE_MAX_CARDS_PER_CELL);
+            return (
+              <span key={stage} className={styles.pipelineCell}>
+                {shown.map((card) => (
+                  <article key={card.id} className={styles.pipelineCard}>
+                    <b>{card.title}</b>
+                    {card.note && <p>{card.note}</p>}
+                    {card.valueCents != null && <em>{money(card.valueCents)}</em>}
+                  </article>
+                ))}
+                {cards.length > shown.length && <small>{t('pipelineMore', { count: cards.length - shown.length })}</small>}
+              </span>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function TaskBody({ data }: { data: CreationNodeData }) {
@@ -2047,6 +2113,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
         />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
+        {data.kind === 'salesPipeline' && <SalesPipelineBody data={data} />}
         {data.kind === 'map' && <MapBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}
         {data.kind === 'diagnostics' && (typeof data.toolId === 'string'

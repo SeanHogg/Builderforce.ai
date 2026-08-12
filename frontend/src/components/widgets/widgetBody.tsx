@@ -19,15 +19,15 @@ import { useTranslations } from 'next-intl';
 export function WidgetStat({ value, sub }: { value: string; sub?: string }) {
   return (
     <div>
-      <div style={{ fontSize: '1.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
 
 /** Muted inline text — the canonical loading / error / empty-state line for a widget body. */
 export function WidgetMuted({ children }: { children: ReactNode }) {
-  return <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{children}</span>;
+  return <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{children}</span>;
 }
 
 /**

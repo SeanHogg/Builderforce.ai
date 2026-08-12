@@ -424,8 +424,10 @@
         "apps": "应用集成",
         "developer": "开发者 API 密钥",
         "embed": "嵌入",
-        "connectors": "连接器"
-      }
+        "connectors": "连接器",
+        "payments": "支付与收款"
+      },
+      "paymentsIntro": "连接银行账户、PayPal、Stripe 或 Wise。应付给您的款项将通过默认收款方式发送。"
     }
   },
   "nav": {
@@ -474,7 +476,8 @@
       "hiring": "招聘",
       "investor": "投资人",
       "governance": "治理",
-      "support": "支持"
+      "support": "支持",
+      "salesProgramme": "销售计划"
     },
     "tab": {
       "projects": "项目",
@@ -574,7 +577,8 @@
       "market": "市场",
       "admin": "管理",
       "notYet": "尚未开放",
-      "lockHint": "登录后即可使用"
+      "lockHint": "登录后即可使用",
+      "expand": "拓展"
     }
   },
   "alerts": {
@@ -3756,6 +3760,12 @@
       "add": "添加小组件",
       "remove": "移除小组件",
       "empty": "尚无小组件——在上方添加一个。"
+    },
+    "viz": {
+      "stat": "数字",
+      "bar": "条形图",
+      "line": "折线图",
+      "gauge": "仪表盘"
     }
   },
   "finops": {
@@ -3883,7 +3893,9 @@
       "empInitiatives": "战略分布",
       "forecast": "预测",
       "autonomy": "自主",
-      "chatModes": "对话与执行"
+      "chatModes": "对话与执行",
+      "aiHub": "AI 洞察",
+      "deliveryHub": "交付"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -4005,7 +4017,23 @@
       "chatModeCostShare": "执行成本占比",
       "chatModeMix": "按模式统计的对话",
       "chatModeFunnel": "已派发与已关联",
-      "chatModeTable": "模式明细"
+      "chatModeTable": "模式明细",
+      "aiHubImpact": "AI 影响",
+      "aiHubEngineering": "AI 效能",
+      "aiHubLlmUsage": "LLM 用量",
+      "aiHubRecommendations": "建议",
+      "delivHubDelivery": "交付",
+      "delivHubAutonomy": "自主健康度",
+      "delivHubBottlenecks": "瓶颈",
+      "delivHubDora": "DORA 指标",
+      "delivHubSpace": "SPACE 指标",
+      "delivHubBenchmarking": "行业基准对比",
+      "delivHubFunnel": "创新漏斗",
+      "delivHubCrossTeam": "跨团队",
+      "delivHubDelayTaxonomy": "延误原因",
+      "aiHubConsumption": "本月 AI 令牌",
+      "delivHubVerdict": "你们在创造价值吗？",
+      "overviewAsk": "提一个问题"
     },
     "loading": "加载中…",
     "overview": {
@@ -4204,7 +4232,23 @@
     "desc": {
       "chatModeWorkShare": "以交办工作（而非提问）方式发起的对话占比。",
       "chatModeExecutionRate": "执行对话开出的工单中，实际由代理启动的比例。",
-      "chatModeCostShare": "用于执行（而非对话）的 AI 支出占比。"
+      "chatModeCostShare": "用于执行（而非对话）的 AI 支出占比。",
+      "aiHubImpactDesc": "采用与模型使用趋势、多工具评估矩阵，以及综合 AI 生产力评分。",
+      "aiHubEngineeringDesc": "哪种 AI 方式真正交付——按工作类型和模型分列的结果评分、合并率与成本。",
+      "aiHubLlmUsageDesc": "令牌用量、请求数和模型健康状况，以及按来源、项目、团队、用户和代码库估算的支出。",
+      "aiHubRecommendationsDesc": "依据各项洞察生成的、可执行的优先建议与异常项。",
+      "delivHubDeliveryDesc": "跨计划、项目与发布的可交付物的燃起图、预测与范围蔓延。",
+      "delivHubAutonomyDesc": "工作是否自行完成？按创建者划分的生命周期漏斗、自主与人工移动之比，以及自主执行停滞之处。",
+      "delivHubBottlenecksDesc": "工作卡在哪里——各阶段耗时、最慢阶段、返工循环以及当前滞留的在制品。",
+      "delivHubDoraDesc": "四项 DevOps 关键指标——部署频率、前置时间、变更失败率与恢复时间——并对照绩效等级。",
+      "delivHubSpaceDesc": "与 DORA 互补的五维开发者生产力框架。",
+      "delivHubBenchmarkingDesc": "你的交付指标在行业同类中的排名——按行业与团队规模的百分位与评级。",
+      "delivHubFunnelDesc": "想法 → 验证 → 构建中 → 发布 → 衡量：转化率、价值实现时间与创意管道。",
+      "delivHubCrossTeamDesc": "将每个团队与其他团队排名",
+      "delivHubDelayTaxonomyDesc": "工作为何延误",
+      "aiHubConsumptionDesc": "本月消耗的 AI 令牌数，以及月初至今的每日趋势。",
+      "delivHubVerdictDesc": "交付健康度一览——由 DORA、周期时间和实时瓶颈融合得出的单一结论与 0–100 分评分。",
+      "overviewAsk": "用自然语言询问任何指标，获得数值以及所匹配的指标。"
     }
   },
   "compile": {
@@ -9274,7 +9318,6 @@
       "empty": "未找到访客会话。",
       "visitor": "访客",
       "engagement": "互动",
-      "firstSeen": "首次访问",
       "lastSeen": "最近访问",
       "conversion": "转化",
       "brainMessages": "{count} 条 Brain 消息",
@@ -12290,7 +12333,47 @@
     "removeCardTitle": "要移除您的银行卡吗？",
     "removeCardWarning": "高级模型将被关闭，我们也将不再存储您的银行卡。您的套餐和包含的模型不受影响。您可以随时重新添加银行卡。",
     "removeCardConfirm": "移除银行卡",
-    "removeCardFailed": "无法移除银行卡，请重试。"
+    "removeCardFailed": "无法移除银行卡，请重试。",
+    "title": "账单",
+    "intro": "您的套餐、支付所用的卡片，以及您自己的收款去向。",
+    "subnavLabel": "账单栏目",
+    "accountTab": "账户",
+    "payoutsTab": "收款",
+    "planTitle": "套餐",
+    "plan": "套餐",
+    "status": "状态",
+    "cycle": {
+      "monthly": "按月",
+      "yearly": "按年"
+    },
+    "seats": "席位",
+    "billingEmail": "账单邮箱",
+    "none": "无",
+    "noWorkspace": "请选择一个工作区以查看其账单。",
+    "loading": "加载中…",
+    "loadFailed": "无法加载账单信息。",
+    "comparePlans": "比较套餐",
+    "paymentMethodTitle": "付款方式",
+    "paymentMethodIntro": "用于扣取订阅费和计量用量的卡片。添加时仅执行 0 元验证，不会扣款。",
+    "cardOnFile": "已保存卡片",
+    "card": "卡片",
+    "noCard": "尚未保存卡片。",
+    "addCard": "添加卡片",
+    "cardFailed": "无法开始卡片验证，请重试。",
+    "destinationsTitle": "您的收款去向",
+    "destinationsIntro": "连接银行账户、PayPal、Stripe 或 Wise。佣金与发票将支付至您的默认收款方式。",
+    "historyTitle": "收款记录",
+    "totalPaid": "累计支付",
+    "noPayouts": "尚无任何付款记录。",
+    "colDate": "日期",
+    "colAmount": "金额",
+    "colProvider": "通过",
+    "colStatus": "状态",
+    "planName": {
+      "free": "免费版",
+      "pro": "专业版",
+      "teams": "团队版"
+    }
   },
   "policyPacks": {
     "title": "策略包",
@@ -14204,6 +14287,17 @@
         "needsMedia": "{account} 需要图片或视频，无法只发布文字。",
         "accountNotReady": "{account} 尚未就绪（{fields}）。",
         "accountMissing": "该活动指向的 {network} 账号已不再连接。"
+      },
+      "pipelineAllSegments": "全部客户群",
+      "pipelineMore": "另有 {count} 项",
+      "pipelineStage": {
+        "new": "新建",
+        "contacted": "已联系",
+        "qualified": "已确认需求",
+        "meeting": "已约会议",
+        "proposal": "已报价",
+        "won": "成交",
+        "lost": "流失"
       }
     },
     "editor": {
@@ -15350,6 +15444,10 @@
       "interactive-3d": {
         "name": "游戏与 3D 工作室",
         "description": "借助 MCP 支持的项目持久化设计可玩游戏、CAD 图纸与 3D 模型。"
+      },
+      "sales-hub": {
+        "name": "销售中心",
+        "description": "销售 Builderforce 的规范化画板：按客户群划分的看板、数据读数、演示文稿以及 CRO 教练。"
       }
     },
     "pitch": {
@@ -16954,6 +17052,7 @@
       "run": "像公司一样运营它。",
       "measure": "有效果吗？",
       "market": "销售、采购、招聘、被发现。",
+      "expand": "让它成长。",
       "admin": "设置。"
     },
     "arcNote": "由产品自身的导航生成，因此这张表不会宣传不存在的目的地，也不会遗漏已有的目的地。",
@@ -17145,5 +17244,158 @@
     "getCta": "获取此技能",
     "browseCta": "浏览市场",
     "aboutHeading": "关于此技能"
+  },
+  "payouts": {
+    "loading": "正在加载收款方式…",
+    "loadFailed": "无法加载您的收款方式。",
+    "connect": "连接",
+    "reconnect": "重新连接",
+    "connected": "已连接",
+    "notConnected": "未连接",
+    "notConfigured": "此部署尚未提供 — 管理员还没有配置该服务商。",
+    "default": "默认",
+    "makeDefault": "设为默认",
+    "disconnect": "断开连接",
+    "disconnectTitle": "要断开此收款方式吗？",
+    "disconnectMessage": "资金将不再发送至 {label}。已发放的款项仍会保留在记录中。",
+    "needsReconnect": "需要重新连接",
+    "connectFailed": "无法连接该账户。",
+    "actionFailed": "操作失败，请重试。",
+    "connectTitle": "连接 {provider}",
+    "crumb": "收款",
+    "fieldsIntro": "这些信息已加密，仅用于向您付款。保存后不会再次显示。",
+    "saveDestination": "保存收款方式"
+  },
+  "salesHub": {
+    "title": "销售中心",
+    "intro": "您的链接、线索、数据和收入 — 无需离开画布。",
+    "subnavLabel": "销售中心栏目",
+    "loading": "加载中…",
+    "loadFailed": "无法加载销售中心。",
+    "tab": {
+      "overview": "概览",
+      "leads": "线索",
+      "reports": "报表",
+      "payouts": "收款",
+      "inbox": "收件箱",
+      "kit": "销售资料"
+    },
+    "linksTitle": "您的链接",
+    "linksIntro": "通过这些链接注册的用户都会归属于您，每笔转化都按公布费率支付佣金。",
+    "referralLink": "推荐链接",
+    "referralLinkHint": "可在任何地方分享 — 通过它注册的用户按推荐费率计入您的业绩。",
+    "salesLink": "销售链接",
+    "salesLinkHint": "用于您亲自成交的客户，按更高的销售费率结算。",
+    "canvasTitle": "您的销售画布",
+    "canvasIntro": "管道、目标客户、营销活动、演示文稿和 CRO 教练都在画板上。本中心是数据读数。",
+    "openCanvas": "打开我的画布",
+    "balanceTitle": "佣金",
+    "earned": "已赚取",
+    "paid": "已支付",
+    "available": "可提取",
+    "leadsTitle": "当前线索",
+    "leadsEmpty": "尚无用户通过您的链接注册。",
+    "colSignedUp": "注册时间",
+    "colSource": "来源",
+    "colStatus": "状态",
+    "colPlan": "套餐",
+    "colCommission": "佣金",
+    "source": {
+      "referral": "推荐",
+      "sales": "直销"
+    },
+    "converted": "已转化",
+    "signedUp": "已注册",
+    "destinationsTitle": "您的收款去向",
+    "payoutHistoryTitle": "付款记录",
+    "noPayouts": "尚无任何付款记录。",
+    "kitTitle": "销售资料",
+    "kitIntro": "可直接发送的演示文稿。请以附件形式发送，不要发送需要登录的链接。",
+    "kitAsset": {
+      "pdf": "演示文稿（PDF）",
+      "pptx": "演示文稿（PowerPoint）",
+      "slides": "全部幻灯片 PNG"
+    },
+    "kitAll": "查看完整媒体资料包",
+    "report": {
+      "resultsTitle": "业绩",
+      "windowLabel": "统计周期",
+      "window": {
+        "week": "本周",
+        "month": "本月",
+        "quarter": "本季度",
+        "ytd": "年初至今",
+        "all": "全部"
+      },
+      "signups": "注册数",
+      "conversions": "转化数",
+      "conversionRate": "转化率",
+      "revenue": "归因收入",
+      "commission": "佣金",
+      "daysToConvert": "平均转化天数",
+      "days": "{days} 天",
+      "funnelTitle": "各阶段管道",
+      "funnelEmpty": "管道中暂无联系人。",
+      "stalled": "有 {count} 位联系人已两周未跟进。",
+      "noStalled": "没有停滞项 — 所有进行中的联系人在过去两周内都有跟进。",
+      "leaderboardTitle": "按销售代表",
+      "colAssociate": "销售代表",
+      "colSignups": "注册数",
+      "colConversions": "转化数",
+      "colRevenue": "收入",
+      "colCommission": "佣金",
+      "stage": {
+        "new": "新建",
+        "contacted": "已联系",
+        "qualified": "已确认需求",
+        "meeting": "已约会议",
+        "proposal": "已报价",
+        "won": "成交",
+        "lost": "流失"
+      }
+    },
+    "launcher": {
+      "workspaceName": "{name} 的销售工作区",
+      "defaultOwner": "我",
+      "workspaceFailed": "无法准备您的销售工作区。",
+      "canvasTitle": "销售中心 — 我的销售画布",
+      "canvasDescription": "销售 Builderforce 的规范化画板：按客户群划分的管道、数据读数、演示文稿以及您的 CRO 教练。",
+      "canvasPrompt": "查看我的管道，并告诉我本周影响最大的销售动作。",
+      "canvasFailed": "无法打开您的销售画布。",
+      "eyebrow": "销售中心",
+      "heading": "正在搭建您的销售画布",
+      "preparing": "正在生成您的管道、目标、演示文稿和 CRO 教练…",
+      "retryHint": "请刷新页面重试。"
+    }
+  },
+  "salesAdmin": {
+    "title": "销售计划",
+    "intro": "与每位销售代表看到的相同报表 — 按整个计划汇总，或筛选到某一个人。",
+    "loading": "加载中…",
+    "loadFailed": "无法加载计划报表。",
+    "filterLabel": "显示",
+    "everyone": "全部（{count} 位代表）",
+    "openCanvas": "打开其画布",
+    "message": "给 {name} 发消息",
+    "noCanvas": "该销售代表尚未打开其销售画布。",
+    "canvasFailed": "无法打开该画布。"
+  },
+  "messages": {
+    "open": "消息",
+    "openWithCount": "消息，{count} 条未读",
+    "crumb": "消息",
+    "title": "消息",
+    "conversations": "会话",
+    "startNew": "发起会话",
+    "untitled": "会话",
+    "pickSomeone": "请在左侧选择一个会话，或发起新会话。",
+    "nobodyToMessage": "此账户暂时没有可联系的人。",
+    "emptyThread": "还没有消息 — 说点什么吧。",
+    "placeholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
+    "send": "发送",
+    "you": "我",
+    "them": "对方",
+    "sendFailed": "消息发送失败。",
+    "openFailed": "无法打开该会话。"
   }
 }

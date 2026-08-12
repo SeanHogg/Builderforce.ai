@@ -1,14 +1,13 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { aiImpactApi, PLATFORM_PROVIDER_ID, type AiImpactInsights, type ProviderConsumption } from '@/lib/aiImpactApi';
-import { insightsApi, llmApi, dashboardApi, type EngineeringInsights, type LlmUsageStats, type DashboardUsage } from '@/lib/builderforceApi';
-import { recommendationsApi, type RecommendationsResult, type RecSeverity } from '@/lib/recommendationsApi';
-import { usePmData } from '@/lib/pm/usePmData';
+import { PLATFORM_PROVIDER_ID, type ProviderConsumption } from '@/lib/aiImpactApi';
+import { type RecSeverity } from '@/lib/recommendationsApi';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
 import { usd, pct, score2, int, compactTokens } from './format';
+import { useAiOverview, useLlmUsage, useLlmBySource } from './insightsSources';
 
 /**
  * Compact "at-a-glance" summaries for the combined AI Insights dashboard.
@@ -16,8 +15,16 @@ import { usd, pct, score2, int, compactTokens } from './format';
  * Each summary reads the SAME collector its full lens reads (so the headline
  * numbers always agree) but renders only the KPI row — the full breakdown lives
  * in the drill-down slide-out (the lens itself). Kept tiny and self-contained so
- * the dashboard cards AND the Brain's slide-out can compose them without prop
- * drilling. `days` is owned by the dashboard's shared window selector.
+ * the dashboard cards, the widget registry AND the Brain's slide-out can compose
+ * them without prop drilling. `days` is owned by the shared window selector.
+ *
+ * The three `/ai-overview`-backed summaries used to be handed their slice by the
+ * dashboard through `overrideData` / `bundleLoading` props, which meant the
+ * component only made one round-trip when its ONE particular parent remembered
+ * to bundle for it — and made three when anything else (a pinned widget, the
+ * Brain) mounted them. They now read the bundle through the shared deduped
+ * source {@link useAiOverview} instead, so the single round-trip is a property of
+ * the data layer rather than of a parent's cooperation.
  */
 
 const SEVERITY_COLOR: Record<RecSeverity, string> = {
@@ -25,21 +32,6 @@ const SEVERITY_COLOR: Record<RecSeverity, string> = {
   warning: 'var(--warning)',
   info: 'var(--info)',
 };
-
-/**
- * The dashboard bundles all three summaries in one `/ai-overview` read and hands
- * each its slice via `overrideData` (the bundle may degrade a leg to `null`).
- * While the bundle is in flight it passes `bundleLoading` so the summary shows
- * its loader instead of self-fetching — guaranteeing exactly one round-trip.
- * When neither prop is set (standalone) the summary self-fetches its own lens
- * endpoint — so the same component works both bundled and on its own.
- */
-export interface SummaryProps<T> { days: number; overrideData?: T | null; bundleLoading?: boolean }
-
-/** True when the parent is sourcing this summary's data (loading or resolved). */
-function isBundled<T>(p: SummaryProps<T>): boolean {
-  return p.bundleLoading === true || p.overrideData !== undefined;
-}
 
 /**
  * Consumption per funding credential — the tenant's connected BYO integrations
@@ -99,16 +91,13 @@ export function ProviderConsumptionBreakdown({ providers }: { providers: Provide
   );
 }
 
-export function AiImpactSummary(props: SummaryProps<AiImpactInsights>) {
-  const { days, overrideData } = props;
+export function AiImpactSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const bundled = isBundled(props);
-  const self = usePmData<AiImpactInsights>(() => aiImpactApi.get(days), [days], { skip: bundled });
-  const data = bundled ? (overrideData ?? null) : self.data;
-  const error = bundled ? null : self.error;
+  const { data: overview, error } = useAiOverview(days);
+  const data = overview?.aiImpact ?? null;
 
   if (error) return <PmError message={error} />;
-  if (!data) return <PmEmpty message={t('loading')} />;
+  if (!data) return <PmEmpty message={overview ? t('aiImpact.noUsage') : t('loading')} />;
 
   const p = data.productivity;
   const deltaSub = `${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct.toFixed(0)}% ${t('aiImpact.wow')}`;
@@ -153,8 +142,8 @@ export function LlmUsageSummary(_props: { days: number }) {
   const t = useTranslations('insights');
   // Provider totals are visible to any member; the cost roll-up is a manager
   // surface, so its read is tolerated to fail (the spend KPI shows "—" then).
-  const { data: usage, error } = usePmData<LlmUsageStats>(() => llmApi.usage(), []);
-  const { data: source } = usePmData<DashboardUsage>(() => dashboardApi.usage('week'), []);
+  const { data: usage, error } = useLlmUsage();
+  const { data: source } = useLlmBySource();
 
   if (error) return <PmError message={error} />;
   if (!usage) return <PmEmpty message={t('loading')} />;
@@ -169,16 +158,13 @@ export function LlmUsageSummary(_props: { days: number }) {
   );
 }
 
-export function EngineeringSummary(props: SummaryProps<EngineeringInsights>) {
-  const { days, overrideData } = props;
+export function EngineeringSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const bundled = isBundled(props);
-  const self = usePmData<EngineeringInsights>(() => insightsApi.engineering(days), [days], { skip: bundled });
-  const data = bundled ? (overrideData ?? null) : self.data;
-  const error = bundled ? null : self.error;
+  const { data: overview, error } = useAiOverview(days);
+  const data = overview?.engineering ?? null;
 
   if (error) return <PmError message={error} />;
-  if (!data) return <PmEmpty message={t('loading')} />;
+  if (!data) return <PmEmpty message={overview ? t('eng.noRuns') : t('loading')} />;
 
   return (
     <KpiGrid>
@@ -190,16 +176,13 @@ export function EngineeringSummary(props: SummaryProps<EngineeringInsights>) {
   );
 }
 
-export function RecommendationsSummary(props: SummaryProps<RecommendationsResult>) {
-  const { days, overrideData } = props;
+export function RecommendationsSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const bundled = isBundled(props);
-  const self = usePmData<RecommendationsResult>(() => recommendationsApi.recommendations(days), [days], { skip: bundled });
-  const data = bundled ? (overrideData ?? null) : self.data;
-  const error = bundled ? null : self.error;
+  const { data: overview, error } = useAiOverview(days);
+  const data = overview?.recommendations ?? null;
 
   if (error) return <PmError message={error} />;
-  if (!data) return <PmEmpty message={t('loading')} />;
+  if (!data) return <PmEmpty message={overview ? t('recs.empty') : t('loading')} />;
 
   const recs = data.recommendations;
   if (recs.length === 0) return <PmEmpty message={t('recs.empty')} />;

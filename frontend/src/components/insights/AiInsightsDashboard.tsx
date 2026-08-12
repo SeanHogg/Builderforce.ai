@@ -3,46 +3,37 @@
 /**
  * Consolidated AI Insights hub — the single entry point at /insights/ai that
  * replaces the three separate routes (AI Impact, AI Effectiveness and
- * Recommendations). It shows an at-a-glance summary for each, and every section
- * drills down into the full lens in an interactive slide-out side panel (see
- * AiInsightPanelProvider). Mirrors the Finance hub's FinanceDashboard.
+ * Recommendations). It shows an at-a-glance card for each, and every card drills
+ * down into the full lens in the shared slide-out side panel (see
+ * AiInsightPanelProvider). Mirrors the Delivery and DevEx hubs.
  *
- * Unlike Finance (one bundled audit read), the three AI reports come from
- * distinct collectors, so each summary owns its read and reacts to the shared
- * time-window selector.
+ * ── It is a standard page, and its cards are REGISTRY WIDGETS ────────────────
+ * This used to be a `WorkspaceCanvas`: floating, absolutely-positioned panels
+ * with hard-coded x/y coordinates, which meant the hub's content existed only
+ * here and could not be pinned, shared or dropped on a board. The hub is now a
+ * responsive {@link WidgetGrid} over ids from the app-wide widget registry (see
+ * hubWidgets.tsx). Consequences that matter:
+ *   • every tile carries its own pin, so any of them can go on a user's home
+ *     dashboard, a shared dashboard or a custom canvas;
+ *   • the grid reflows instead of overflowing, so the hub reads at 360px and
+ *     inside the 70vw workbench panel alike;
+ *   • the layout is the registry's size hints, not a coordinate table nobody
+ *     dares renumber.
+ *
+ * The three `/ai-overview`-backed tiles share ONE round-trip through the deduped
+ * source layer (insightsSources.ts) rather than being handed a bundled slice by
+ * this component — so the single request survives being pinned somewhere else.
  */
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { RoleGate } from '@/components/RoleGate';
-import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
-import { aiImpactApi } from '@/lib/aiImpactApi';
-import { usePmData } from '@/lib/pm/usePmData';
-import { AiConsumptionHeader } from './AiConsumptionHeader';
+import { WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { DaysWindowSelect } from './LensShell';
 import { useAiInsightPanel } from './AiInsightPanelProvider';
-import { AI_INSIGHT_PANELS, AI_INSIGHT_PANEL_IDS, isAiInsightPanelId, type AiInsightPanelId } from './aiInsightPanels';
-
-/** The "open the full lens" affordance, shared by every dashboard section. */
-function DrillButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-        background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
-        fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap',
-      }}
-    >
-      {label} →
-    </button>
-  );
-}
+import { isAiInsightPanelId, type AiInsightPanelId } from './aiInsightPanels';
+import { AI_HUB_WIDGET_IDS } from './widgets/hubWidgets';
 
 export function AiInsightsDashboard() {
-  const t = useTranslations('insights.aihub');
   const [days, setDays] = useState(30);
   const { open } = useAiInsightPanel();
   const searchParams = useSearchParams();
@@ -55,71 +46,12 @@ export function AiInsightsDashboard() {
     if (isAiInsightPanelId(panelParam)) open(panelParam as AiInsightPanelId);
   }, [panelParam, open]);
 
-  // ONE bundled read for the three summary cards (AI Impact + Engineering +
-  // Recommendations) instead of three separate fetches on mount. Each leg is
-  // handed to its summary as `overrideData` (the bundle may degrade a leg to
-  // `null`, which the summary renders as its own empty/error state). The
-  // drill-down lenses still fetch their individual endpoints. `llm-usage` isn't
-  // part of the bundle, so it self-fetches as before.
-  const { data: overview } = usePmData(() => aiImpactApi.overview(days), [days]);
-  // Which panels the bundle covers. `llm-usage` isn't in /ai-overview → it keeps
-  // self-fetching (no bundle props passed).
-  const bundledSlice: Partial<Record<AiInsightPanelId, unknown>> = {
-    'ai-impact': overview?.aiImpact,
-    engineering: overview?.engineering,
-    recommendations: overview?.recommendations,
-  };
-  const bundleProps = (id: AiInsightPanelId): { overrideData?: unknown; bundleLoading?: boolean } => {
-    if (!(id in bundledSlice)) return {}; // not bundled → self-fetch
-    return overview ? { overrideData: bundledSlice[id] } : { bundleLoading: true };
-  };
-
-  const panelLayout: Record<AiInsightPanelId, Pick<WorkspaceCanvasPanel, 'position' | 'width' | 'height'>> = {
-    'ai-impact': { position: { x: 36, y: 360 }, width: 720, height: 470 },
-    engineering: { position: { x: 780, y: 360 }, width: 560, height: 300 },
-    'llm-usage': { position: { x: 960, y: 36 }, width: 380, height: 300 },
-    recommendations: { position: { x: 780, y: 684 }, width: 560, height: 310 },
-  };
-
-  const panels: WorkspaceCanvasPanel[] = [
-    {
-      id: 'ai-consumption',
-      title: t('consumption.title'),
-      subtitle: t('consumption.thisMonth'),
-      icon: '↗',
-      position: { x: 36, y: 36 },
-      width: 900,
-      height: 300,
-      content: <AiConsumptionHeader />,
-    },
-    ...AI_INSIGHT_PANEL_IDS.map((id) => {
-      const def = AI_INSIGHT_PANELS[id];
-      const Summary = def.Summary;
-      return {
-        id: `ai-${id}`,
-        title: t(def.titleKey),
-        subtitle: t(def.descKey),
-        icon: def.icon,
-        ...panelLayout[id],
-        content: (
-          <RoleGate capability={def.capability} variant="block">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: '100%' }}>
-              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>{t(def.descKey)}</p>
-              <Summary days={days} {...bundleProps(id)} />
-              <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
-                <DrillButton label={t('viewReport')} onClick={() => open(id)} />
-              </div>
-            </div>
-          </RoleGate>
-        ),
-      } satisfies WorkspaceCanvasPanel;
-    }),
-  ];
-
   return (
-    <WorkspaceCanvas
-      panels={panels}
-      toolbar={<DaysWindowSelect value={days} onChange={setDays} />}
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <DaysWindowSelect value={days} onChange={setDays} />
+      </div>
+      <WidgetGrid ids={AI_HUB_WIDGET_IDS} days={days} />
+    </div>
   );
 }

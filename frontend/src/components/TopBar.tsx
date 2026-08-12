@@ -14,6 +14,7 @@ import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { HeaderCartButton } from './HeaderCartButton';
+import { MessageHubButton, MessageHubPanel } from './messages/MessageHub';
 import NotificationBell from './NotificationBell';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
@@ -135,6 +136,12 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         {hasTenant && <ManagerStatusIndicator />}
 
         {isAuthenticated && <NotificationBell />}
+
+        {/* Beside the cart, as asked: the two-way channel between an associate
+            and the person who runs the programme. Self-gates to nothing when
+            there is nobody this account may message. */}
+        {isAuthenticated && <MessageHubButton />}
+        {isAuthenticated && <MessageHubPanel meId={user?.id ?? null} />}
 
         <HeaderCartButton />
 

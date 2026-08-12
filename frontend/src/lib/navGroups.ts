@@ -44,8 +44,14 @@ import type { SeatOrPlatform } from './seats';
  * left-panel rows — they appear in the marketing header and on `/features`, and
  * when a signed-in person opens one it mounts as a panel over the board rather
  * than throwing them out of their session (§11.4.5).
+ *
+ * `expand` is the arc's last productive step and the newest: MARKET is "put it
+ * in front of people", EXPAND is "grow the business off the back of it" — the
+ * referral and sales-associate programme, where somebody sells Builderforce
+ * itself. It sat under RUN, which read as day-to-day operations and is the one
+ * thing selling the product is not.
  */
-export const STAGES = ['idea', 'make', 'run', 'measure', 'market', 'admin'] as const;
+export const STAGES = ['idea', 'make', 'run', 'measure', 'market', 'expand', 'admin'] as const;
 export type Stage = (typeof STAGES)[number];
 
 /**
@@ -331,7 +337,15 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'query', basePath: '/admin',
     tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
   },
-  { id: 'sales-admin', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], superadminOnly: true, seat: 'CRO', stage: 'admin', rung: RUNG.WORKSPACE },
+  // ── EXPAND ───────────────────────────────────────────────────────────────
+  // The platform owner's view of the sales programme. `/admin/sales`, NOT
+  // `/sales`: `/sales` is the ASSOCIATE's hub and a superadmin opening it would
+  // be reading a hub with no referral link of their own in it. Same reports,
+  // aggregated across every associate, filterable to one.
+  {
+    id: 'sales-admin', labelKey: 'group.salesProgramme', icon: '📈', href: '/admin/sales',
+    match: ['/admin/sales'], superadminOnly: true, seat: 'CRO', stage: 'expand', rung: RUNG.WORKSPACE,
+  },
 ];
 
 /**
@@ -480,7 +494,9 @@ export const FREELANCER_ALLOWED_EXACT = ['/settings', '/security'];
 
 /** Focused navigation for referral and sales-associate accounts. */
 export const SALES_NAV_GROUPS: NavGroup[] = [
-  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'run', rung: RUNG.SIGNED_IN },
+  // EXPAND, not RUN — selling Builderforce is growing the business, not running
+  // day-to-day operations, and RUN is where the operational rows live.
+  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'expand', rung: RUNG.SIGNED_IN },
   { id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings', match: ['/settings'], seat: 'platform', stage: 'admin', rung: RUNG.SIGNED_IN },
 ];
 
@@ -496,7 +512,15 @@ export function navGroupsForAccountType(isFreelancer: boolean, availableForHire 
 }
 
 export function isSalesAllowedPath(pathname: string): boolean {
-  return pathname === '/sales' || pathname.startsWith('/sales/') || pathname === '/create' || pathname.startsWith('/create/') || pathname === '/settings' || pathname === '/security';
+  return pathname === '/sales' || pathname.startsWith('/sales/')
+    || pathname === '/create' || pathname.startsWith('/create/')
+    || pathname === '/settings' || pathname.startsWith('/settings/')
+    // An associate is paid through this product, so the payout console and the
+    // connected mailbox their hub embeds have to be reachable — bouncing them
+    // back to `/sales` was why "connect your bank account" had nowhere to land.
+    || pathname === '/billing' || pathname.startsWith('/billing/')
+    || pathname === '/inbox' || pathname === '/media'
+    || pathname === '/security';
 }
 
 /** Whether a freelancer account may view this in-app path (else redirect). */

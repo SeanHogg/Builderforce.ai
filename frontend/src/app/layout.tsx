@@ -5,6 +5,7 @@ import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
+import { MessageHubProvider } from '@/components/messages/MessageHubContext';
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -184,6 +185,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <ChunkErrorBoundary>
               <AuthProvider>
                 <CartProvider>
+                  {/* Above the router's page slot, beside the cart, for the same
+                      reason the cart is: an open conversation must survive a
+                      navigation. Mounting it inside a page would close the chat
+                      every time somebody clicked a link. */}
+                  <MessageHubProvider>
                   <EmulationProvider>
                     <RolePreviewProvider>
                       <PermissionDebuggerProvider>
@@ -201,6 +207,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       </PermissionDebuggerProvider>
                     </RolePreviewProvider>
                   </EmulationProvider>
+                  </MessageHubProvider>
                 </CartProvider>
               </AuthProvider>
             </ChunkErrorBoundary>

@@ -15,6 +15,11 @@ import { useWidgetDrill } from './useWidgetDrill';
  *
  * It self-gates on the widget's capability (disabled + "Requires <Role>", never
  * hidden) and self-decides its drill affordance — callers pass only the def.
+ *
+ * A widget that declares a `descKey` gets its one-line explainer under the title.
+ * The field had been on {@link WidgetDef} (and populated) without any consumer,
+ * so three widgets carried a description nothing could show; the hub tiles need
+ * exactly that line, and one place rendering it means every surface shows it.
  */
 export function WidgetCard({ def, days, showDrill = true }: { def: WidgetDef; days: number; showDrill?: boolean }) {
   const t = useTranslations('widgets');
@@ -24,8 +29,13 @@ export function WidgetCard({ def, days, showDrill = true }: { def: WidgetDef; da
 
   const body = (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <h3 style={{ fontSize: '0.92rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{t(`title.${def.titleKey}`)}</h3>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{t(`title.${def.titleKey}`)}</h3>
+          {def.descKey && (
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t(`desc.${def.descKey}`)}</p>
+          )}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {drillable && (
             <button

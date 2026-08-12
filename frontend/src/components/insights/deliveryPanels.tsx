@@ -13,9 +13,11 @@
  * a delivery insight. Mirrors the AI hub's aiInsightPanels.tsx and the Finance
  * hub's financePanels.tsx.
  *
- * The delivery lenses are self-contained (prop-less) and each owns its own
- * data + time-window controls, so these panels are launcher tiles (no compact
- * dashboard Summary) — the detail lives entirely in the drill-down.
+ * The delivery lenses are self-contained (prop-less) and each owns its own data +
+ * time-window controls. A panel that ALSO has a headline worth showing outside
+ * the drawer declares a `Summary`; that is the same component the hub renders and
+ * the same one the widget registry projects into a pinnable card (hubWidgets.tsx),
+ * so a report cannot exist in the drawer and be missing from the picker.
  */
 
 import type { ComponentType, ReactNode } from 'react';
@@ -50,8 +52,16 @@ export interface DeliveryPanelDef {
   capability: Capability;
   /** Drawer width (wide for the table/chart-heavy lenses). */
   width?: string;
-  /** Compact at-a-glance KPI card for the dashboard (reads the shared `days`). */
-  Summary: ComponentType<{ days: number }>;
+  /**
+   * Compact at-a-glance KPI card for the hub (reads the shared `days`).
+   *
+   * OPTIONAL, and its absence is meaningful: a panel with no summary is
+   * drill-down-only — there is no headline worth a card, so it gets a drawer and
+   * no dashboard tile. This is the flag the widget projection reads (see
+   * hubWidgets.tsx); it replaced a `() => null` stub, which looked like a summary
+   * to every consumer and rendered an empty box.
+   */
+  Summary?: ComponentType<{ days: number }>;
   /** The full report rendered inside the drill-down slide-out. */
   render: () => ReactNode;
 }
@@ -93,11 +103,11 @@ export const DELIVERY_PANELS: Record<DeliveryPanelId, DeliveryPanelDef> = {
   },
   crossTeam: {
     id: 'crossTeam', icon: '🏁', titleKey: 'panel.crossTeam', descKey: 'panel.crossTeamDesc',
-    capability: 'insights.crossTeam', width: WIDE, Summary: () => null, render: () => <CrossTeamBenchmarkLens />,
+    capability: 'insights.crossTeam', width: WIDE, render: () => <CrossTeamBenchmarkLens />,
   },
   delayTaxonomy: {
     id: 'delayTaxonomy', icon: '🧭', titleKey: 'panel.delayTaxonomy', descKey: 'panel.delayTaxonomyDesc',
-    capability: 'insights.delayTaxonomy', width: WIDE, Summary: () => null, render: () => <DelayTaxonomyLens />,
+    capability: 'insights.delayTaxonomy', width: WIDE, render: () => <DelayTaxonomyLens />,
   },
 };
 

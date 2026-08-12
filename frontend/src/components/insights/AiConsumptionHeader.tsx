@@ -18,6 +18,10 @@ import { compactTokens, pct } from './format';
  * The hub previously surfaced productivity/efficiency scores but NOT the raw
  * token count — this card makes the spend the first thing you see, with a
  * month-to-date daily trend.
+ *
+ * FRAMELESS by design: it is registered as a widget (`ai-hub.consumption`) and the
+ * WidgetCard chrome supplies the frame/title/pin, so a user can pin the token
+ * headline onto any dashboard or canvas without it arriving in a second box.
  */
 export function AiConsumptionHeader() {
   const t = useTranslations('insights.aihub.consumption');
@@ -38,23 +42,18 @@ export function AiConsumptionHeader() {
   const hasTrend = (meter.trend?.length ?? 0) > 1 && (meter.trend ?? []).some((v) => v > 0);
 
   return (
-    <div
-      style={{
-        background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-lg)', padding: 20,
-      }}
-    >
+    <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'stretch' }}>
         {/* Headline figures */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 200, flex: '0 0 auto' }}>
           <div>
-            <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
               {t('title')}
             </div>
-            <div style={{ fontSize: '2.6rem', fontWeight: 800, lineHeight: 1.05, color }}>
+            <div style={{ fontSize: 'var(--font-size-hero)', fontWeight: 800, lineHeight: 1.05, color }}>
               {compactTokens(meter.used)}
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
               {meter.unlimited
                 ? t('thisMonth')
                 : t('ofPlan', { percent: pct(meter.percentUsed), limit: compactTokens(meter.limit) })}
@@ -80,7 +79,7 @@ export function AiConsumptionHeader() {
               ariaLabel={t('trendAria')}
             />
           ) : (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>
               {t('noTrend')}
             </div>
           )}
@@ -93,8 +92,8 @@ export function AiConsumptionHeader() {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
-      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
+      <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
     </div>
   );
 }

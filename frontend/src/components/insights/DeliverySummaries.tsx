@@ -1,21 +1,14 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import {
-  insightsApi,
-  type DoraInsights, type BottleneckInsights, type LifecycleInsights,
-} from '@/lib/builderforceApi';
-import { recommendationsApi, type SpaceMetrics } from '@/lib/recommendationsApi';
-import { benchmarkingApi, type BenchmarkingResult, type BenchmarkRating } from '@/lib/benchmarkingApi';
-import { innovationApi, type FunnelMetrics } from '@/lib/builderforceApi';
-import {
-  autonomyApi, autonomousHopShare, shareOfCreated, type AutonomySummary as AutonomySummaryData,
-} from '@/lib/autonomyApi';
-import { usePmData } from '@/lib/pm/usePmData';
+import { type BenchmarkRating } from '@/lib/benchmarkingApi';
+import { autonomousHopShare, shareOfCreated } from '@/lib/autonomyApi';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
 import { hrs, pct, days as dDays, int } from './format';
-import { useProjectScope } from '@/lib/ProjectScopeContext';
+import {
+  useLifecycle, useBottlenecks, useDora, useSpace, useBenchmarking, useAutonomy, useFunnel,
+} from './insightsSources';
 
 /**
  * Compact "at-a-glance" KPI summaries for the combined Delivery dashboard.
@@ -24,8 +17,12 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
  * headline numbers always agree) but renders only the KPI row — the full
  * breakdown lives in the drill-down slide-out (the lens itself). Kept tiny and
  * self-contained so the dashboard cards AND the Brain's slide-out can compose
- * them without prop drilling. `days` is owned by the dashboard's shared window
- * selector. Mirrors AiInsightSummaries.tsx.
+ * them without prop drilling. `days` is owned by the shared window selector.
+ * Mirrors AiInsightSummaries.tsx.
+ *
+ * Every read goes through the deduped {@link insightsSources} layer, so the
+ * verdict banner, these summaries and any pinned DORA/Delivery widget on the same
+ * page share ONE request per collector instead of each firing their own.
  */
 
 /** Percentile → ordinal label (72 → "72nd"). */
@@ -46,8 +43,7 @@ function ordinal(n: number | null): string {
 /** Delivery — scoped end-to-end cycle time (the Life Cycle Explorer rollup). */
 export function DeliverySummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days, currentProjectId), [days, currentProjectId]);
+  const { data, error } = useLifecycle(days);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -63,8 +59,7 @@ export function DeliverySummary({ days }: { days: number }) {
 /** Bottlenecks — slowest stage, rework rate and currently-stuck WIP. */
 export function BottleneckSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, currentProjectId), [days, currentProjectId]);
+  const { data, error } = useBottlenecks(days);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -81,8 +76,7 @@ export function BottleneckSummary({ days }: { days: number }) {
 /** DORA — the four DevOps keys. */
 export function DoraSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days, currentProjectId), [days, currentProjectId]);
+  const { data, error } = useDora(days);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -100,8 +94,7 @@ export function DoraSummary({ days }: { days: number }) {
 /** SPACE — the five productivity dimensions (0..100 each). */
 export function SpaceSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days, currentProjectId), [days, currentProjectId]);
+  const { data, error } = useSpace(days);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -126,8 +119,7 @@ export function SpaceSummary({ days }: { days: number }) {
 /** Industry benchmarking — average percentile + how many metrics rate elite/high. */
 export function BenchmarkingSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<BenchmarkingResult>(() => benchmarkingApi.get(days, currentProjectId), [days, currentProjectId]);
+  const { data, error } = useBenchmarking(days);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -152,11 +144,7 @@ export function BenchmarkingSummary({ days }: { days: number }) {
  */
 export function AutonomySummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<AutonomySummaryData>(
-    () => autonomyApi.get(days, currentProjectId),
-    [days, currentProjectId],
-  );
+  const { data, error } = useAutonomy(days);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -188,8 +176,7 @@ export function AutonomySummary({ days }: { days: number }) {
 /** Innovation funnel — pipeline size, idea→ship conversion and time-to-value. */
 export function FunnelSummary(_: { days: number }) {
   const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<FunnelMetrics>(() => innovationApi.funnel(undefined, currentProjectId), [currentProjectId]);
+  const { data, error } = useFunnel();
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

@@ -35,7 +35,7 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
 
   const handleBtn: CSSProperties = {
     border: 'none', background: 'transparent', cursor: 'pointer',
-    color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)',
+    color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)', lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-sm)',
   };
 
   return (

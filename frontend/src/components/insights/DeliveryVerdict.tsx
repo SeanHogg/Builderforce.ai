@@ -4,14 +4,9 @@ import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';
 import { GaugeChart } from '@/components/charts/GaugeChart';
-import {
-  insightsApi,
-  type DoraInsights, type BottleneckInsights, type LifecycleInsights,
-} from '@/lib/builderforceApi';
 import { computeDeliveryVerdict, type Verdict, type ReasonTone } from '@/lib/deliveryVerdict';
-import { usePmData } from '@/lib/pm/usePmData';
-import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
+import { useDora, useLifecycle, useBottlenecks } from './insightsSources';
 
 /**
  * Delivery verdict banner — the narrative headline for /insights/delivery. The
@@ -22,17 +17,21 @@ import { PmEmpty, PmError } from '@/components/pm/pmShared';
  * + reasons), so the answer is the first thing on the page.
  *
  * It reads the SAME cached collectors the DORA / Delivery / Bottleneck lenses
- * read (so the headline always agrees with the drill-downs) AND the same verdict
- * math the project cards use (so a project's health never differs between the
- * delivery tab and its card). Self-gates on insights.delivery — an un-entitled
- * viewer sees the role hint, never a 403.
+ * read — literally the same deduped requests, via {@link insightsSources}, so the
+ * three reads it needs are free when the summaries beside it already made them —
+ * AND the same verdict math the project cards use (so a project's health never
+ * differs between the delivery tab and its card). Self-gates on
+ * insights.delivery — an un-entitled viewer sees the role hint, never a 403.
+ *
+ * FRAMELESS by design: it is registered as a widget (`delivery.verdict`), and the
+ * WidgetCard chrome supplies the frame/title/pin. The verdict's own colour is
+ * carried by the left accent rule, not by a second card border.
  */
 
 const TONE_COLOR: Record<ReasonTone, string> = { good: 'var(--success)', warn: 'var(--warning)', bad: 'var(--error)' };
 const VERDICT_COLOR: Record<Verdict, string> = { yes: 'var(--success)', at_risk: 'var(--warning)', no: 'var(--error)', no_data: 'var(--text-muted)' };
 
 export function DeliveryVerdict({ days }: { days: number }) {
-  const { currentProjectId } = useProjectScope();
   const t = useTranslations('insights.delivhub.verdict');
   const { allowed } = usePermission('insights.delivery');
 
@@ -43,13 +42,13 @@ export function DeliveryVerdict({ days }: { days: number }) {
       </RoleGate>
     );
   }
-  return <VerdictInner t={t} days={days} projectId={currentProjectId} />;
+  return <VerdictInner t={t} days={days} />;
 }
 
-function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslations>; days: number; projectId: number | null }) {
-  const dora = usePmData<DoraInsights>(() => insightsApi.dora(days, projectId), [days, projectId]);
-  const life = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days, projectId), [days, projectId]);
-  const bott = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, projectId), [days, projectId]);
+function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days: number }) {
+  const dora = useDora(days);
+  const life = useLifecycle(days);
+  const bott = useBottlenecks(days);
 
   const err = dora.error || life.error || bott.error;
   if (err) return <PmError message={err} />;
@@ -59,21 +58,16 @@ function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslat
   const color = VERDICT_COLOR[result.verdict];
 
   return (
-    <div
-      style={{
-        background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20,
-        border: '1px solid var(--border-subtle)', borderLeft: `5px solid ${color}`,
-      }}
-    >
+    <div style={{ borderLeft: `5px solid ${color}`, paddingLeft: 16 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
             {t('eyebrow')}
           </div>
-          <div style={{ fontSize: '1.9rem', fontWeight: 800, lineHeight: 1.1, color, margin: '2px 0 6px' }}>
+          <div style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, lineHeight: 1.1, color, margin: '2px 0 6px' }}>
             {t(`headline.${result.verdict}`)}
           </div>
-          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)' }}>
             {t(`explain.${result.verdict}`, { days })}
           </div>
 
@@ -83,7 +77,7 @@ function VerdictInner({ t, days, projectId }: { t: ReturnType<typeof useTranslat
                 <span
                   key={r.key}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600,
                     color: TONE_COLOR[r.tone], background: 'var(--bg-base)', border: `1px solid ${TONE_COLOR[r.tone]}`,
                     padding: '4px 10px', borderRadius: 'var(--radius-full)',
                   }}

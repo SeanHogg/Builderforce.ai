@@ -37,7 +37,7 @@ import type { Project, IdeProject } from '@/lib/types';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
-import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { WidgetStat as Stat, WidgetMuted as Muted, useSourceState } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { formatRecency } from '@/components/dashboard/metricFormat';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
@@ -77,9 +77,8 @@ function useOverview() {
 /** Wrap an overview card body: handles loading / error so each widget needn't repeat it. */
 function useOverviewBody() {
   const t = useTranslations('widgets');
-  const { data, error } = useOverview();
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
+  const source = useOverview();
+  return { data: source.data, state: useSourceState(source), t };
 }
 
 // ── Dashboard-home widget bodies (group: 'overview') ───────────────────────────

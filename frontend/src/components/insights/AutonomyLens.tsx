@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { DaysWindowSelect } from './LensShell';
 import { WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { AUTONOMY_WIDGET_IDS, AutonomyCoverage, useAutonomy } from './widgets/autonomyWidgets';
+import { AUTONOMY_WIDGET_IDS, AutonomyCoverage } from './widgets/autonomyWidgets';
+import { useAutonomy } from './insightsSources';
 
 /** The coverage tile is a pinnable widget for other dashboards; inside the lens
  *  the same notice already rides the header, so it is not repeated in the grid. */

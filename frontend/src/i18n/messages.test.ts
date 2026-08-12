@@ -229,7 +229,14 @@ describe('message catalogs', () => {
       ...['domains', 'seats', 'destinations', 'features'].map((stat) => `featuresPage.stat.${stat}`),
       ...FOOTER_COLUMNS.map((column) => `footer.${column.titleKey}`),
       ...familyKeys,
-      ...listWidgets().flatMap(({ titleKey, group }) => [`widgets.title.${titleKey}`, `widgets.group.${group}`]),
+      // A widget's title, its group heading, and — now that WidgetCard renders it
+      // — its optional one-line description. `descKey` had no assertion while it
+      // had no consumer, so a widget could declare one the catalogs didn't have.
+      ...listWidgets().flatMap(({ titleKey, group, descKey }) => [
+        `widgets.title.${titleKey}`,
+        `widgets.group.${group}`,
+        ...(descKey ? [`widgets.desc.${descKey}`] : []),
+      ]),
       ...panelKeys,
     ]);
     const missing = [...keys].filter((key) => t(key as never) === key).sort();
