@@ -22,7 +22,10 @@ import { GAME_FRAME_SANDBOX, gameDocumentFrom } from '@/lib/gameTargets';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
+import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { CanvasWebPage } from './CanvasWebPage';
+import { DashboardWidgetGrid } from './DashboardWidgetView';
+import { DashboardStructuredEditor } from './DashboardStructuredEditor';
 import {
   PITCH_MAX_SCORE, formatPitchDuration, pitchApplicationAnswers, pitchApplicationReadiness, pitchBeats,
   pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage, pitchQaItems, pitchReadiness,
@@ -289,6 +292,160 @@ function EmailTemplateBody({ data }: { data: CreationNodeData }) {
         ? <div className={styles.pills}>{fields.slice(0, 8).map((field) => <span key={field}>{`{{${field}}}`}</span>)}</div>
         : <p className={styles.taskEmpty}>{t('templateNoMergeFields')}</p>}
     </div>
+  </div>;
+}
+
+/** One glyph per network, so a merged feed is scannable before a label is read.
+ *  Network names are brand marks and stay literal — see the i18n rule on tokens. */
+const NETWORK_GLYPH: Readonly<Record<string, string>> = {
+  x: '𝕏', linkedin: 'in', facebook: 'f', instagram: '◎', tiktok: '♪',
+};
+
+const networkGlyph = (network: unknown): string => NETWORK_GLYPH[String(network ?? '')] ?? '◈';
+
+/** Compact engagement numbers: 12400 reads as 12.4k on a 460px tile. */
+function compactCount(value: unknown): string {
+  const n = Number(value) || 0;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+/**
+ * A live social feed tile, merged across every connected account.
+ *
+ * Same two non-negotiables as the inbox, for the same reason — honesty about what is
+ * on screen: the FILTER is shown (a tile reading "12 posts" with no visible filter
+ * claims those are all of them), and the read TIME is shown (a live view with no
+ * freshness marker is a screenshot claiming to be live). It leads with ENGAGEMENT and
+ * the best-performing post rather than a raw list, because "what worked?" is the
+ * question a feed on a CMO's board is actually asked.
+ */
+function SocialFeedBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const posts = Array.isArray(data.posts) ? data.posts : [];
+  const engagement = asRecord(data.engagement, {});
+  const top = asRecord(data.topPost, {});
+  const accounts = Array.isArray(data.accounts) ? data.accounts.map(String) : [];
+  const fetchedAt = typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt) : null;
+
+  if (accounts.length === 0 && posts.length === 0) {
+    return <div className={styles.taskContext}><p className={styles.taskEmpty}>{t('socialNotConnected')}</p></div>;
+  }
+  return <div className={styles.inboxBody}>
+    <div className={styles.inboxMeta}>
+      <span title={accounts.join(', ')}>{accounts.join(' · ') || t('socialAllAccounts')}</span>
+      {fetchedAt && <small>{t('inboxReadAt', { time: fetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</small>}
+    </div>
+    <div className={styles.campaignStats}>
+      <span><small>{t('socialLikes')}</small><b>{compactCount(engagement.likes)}</b></span>
+      <span><small>{t('socialComments')}</small><b>{compactCount(engagement.comments)}</b></span>
+      <span><small>{t('socialShares')}</small><b>{compactCount(engagement.shares)}</b></span>
+    </div>
+    {posts.length === 0
+      ? <p className={styles.taskEmpty}>{t('socialEmpty')}</p>
+      : <ul className={styles.inboxList}>
+        {posts.slice(0, 10).map((raw, index) => {
+          const post = asRecord(raw, {});
+          const metrics = asRecord(post.metrics, {});
+          return <li key={String(post.id ?? index)}>
+            <div className={styles.inboxRowTop}>
+              <b><span className={styles.socialGlyph} aria-hidden>{networkGlyph(post.network)}</span>{String(post.authorName || post.accountName || '')}</b>
+              <small>{post.publishedAtISO
+                ? new Date(String(post.publishedAtISO)).toLocaleDateString([], { month: 'short', day: 'numeric' })
+                : ''}</small>
+            </div>
+            <p>{String(post.text || '')}</p>
+            <div className={styles.socialMetrics}>
+              <span>{t('socialLikeCount', { count: Number(metrics.likes) || 0 })}</span>
+              <span>{t('socialCommentCount', { count: Number(metrics.comments) || 0 })}</span>
+              <span>{t('socialShareCount', { count: Number(metrics.shares) || 0 })}</span>
+            </div>
+          </li>;
+        })}
+      </ul>}
+    {top.text ? <div className={styles.taskContext}>
+      <small>{t('socialTopPost')}</small>
+      <p>{String(top.text)}</p>
+    </div> : null}
+    {posts.length > 10 && <small className={styles.inboxMore}>{t('inboxMore', { count: posts.length - 10 })}</small>}
+  </div>;
+}
+
+/** One pinned post. Unlike the feed tile this does NOT change — that is the reason
+ *  it exists — so it shows the full text and its engagement at the time it was read. */
+function SocialPostBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const metrics = asRecord(data.metrics, {});
+  const permalink = textValue(data.permalink);
+  const thumbnail = textValue(data.thumbnailUrl);
+  return <div className={styles.taskBody}>
+    <div className={styles.taskFacts}>
+      <span><small>{t('socialAccount')}</small><b>{`${networkGlyph(data.network)} ${textValue(data.accountName, '—')}`}</b></span>
+      <span><small>{t('socialPublished')}</small><b>{data.publishedAt ? new Date(String(data.publishedAt)).toLocaleDateString() : '—'}</b></span>
+    </div>
+    {thumbnail && <img className={styles.socialMedia} src={thumbnail} alt="" />}
+    <div className={styles.taskContext}>
+      <small>{t('socialPostText')}</small>
+      {textValue(data.text)
+        ? <p className={styles.emailBodyText}>{String(data.text)}</p>
+        : <p className={styles.taskEmpty}>{t('socialNoText')}</p>}
+    </div>
+    <div className={styles.campaignStats}>
+      <span><small>{t('socialLikes')}</small><b>{compactCount(metrics.likes)}</b></span>
+      <span><small>{t('socialComments')}</small><b>{compactCount(metrics.comments)}</b></span>
+      <span><small>{t('socialShares')}</small><b>{compactCount(metrics.shares)}</b></span>
+    </div>
+    {permalink && <a className={styles.inboxOpenLink} href={permalink} target="_blank" rel="noreferrer noopener">{t('socialOpenPost')}</a>}
+  </div>;
+}
+
+/**
+ * A social campaign tile. Counters lead for the same reason the email campaign's do —
+ * "did it go out, and where?" is the only question it is asked — and each target shows
+ * its own outcome, because "3 of 5 published" without saying WHICH three is unusable.
+ */
+function SocialCampaignBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const posts = Array.isArray(data.posts) ? data.posts : [];
+  // Blockers arrive as CODES so they can be read in the viewer's language. A legacy
+  // string (an older saved board, or an email campaign's flat list) is shown as-is
+  // rather than dropped — an unreadable reason still beats a silent one.
+  const blockers = (Array.isArray(data.blockers) ? data.blockers : []).map((raw) => {
+    if (typeof raw === 'string') return raw;
+    const blocker = asRecord(raw, {});
+    const code = String(blocker.code ?? '');
+    return code
+      ? t(`socialBlocker.${code}` as never, {
+        network: String(blocker.network ?? ''),
+        account: String(blocker.account ?? ''),
+        fields: String(blocker.fields ?? ''),
+      } as never)
+      : '';
+  }).filter(Boolean);
+  const stat = (value: unknown) => String(Number(value) || 0);
+  const scheduledAt = textValue(data.scheduledAt);
+  return <div className={styles.taskBody}>
+    <div className={styles.campaignStats}>
+      <span><small>{t('socialPublishedCount')}</small><b>{stat(data.publishedCount)}/{stat(data.targets ?? posts.length)}</b></span>
+      <span><small>{t('campaignFailed')}</small><b>{stat(data.failedCount)}</b></span>
+      <span><small>{t('socialScheduled')}</small><b>{scheduledAt ? new Date(scheduledAt).toLocaleDateString() : '—'}</b></span>
+    </div>
+    {textValue(data.body) && <div className={styles.taskContext}><small>{t('socialCopy')}</small><p>{String(data.body)}</p></div>}
+    {posts.length > 0 && <ul className={styles.socialTargets}>
+      {posts.slice(0, 8).map((raw, index) => {
+        const post = asRecord(raw, {});
+        const status = String(post.status ?? 'queued');
+        return <li key={String(post.id ?? index)} data-status={status}>
+          <span aria-hidden>{networkGlyph(post.network)}</span>
+          <b>{String(post.accountName || post.network || '')}</b>
+          {post.permalink
+            ? <a href={String(post.permalink)} target="_blank" rel="noreferrer noopener">{t(`socialStatus.${status}`)}</a>
+            : <small>{t(`socialStatus.${status}`)}</small>}
+        </li>;
+      })}
+    </ul>}
+    {blockers.length > 0 && <div className={styles.taskContext}><small>{t('campaignBlocked')}</small><p>{blockers.join(' · ')}</p></div>}
   </div>;
 }
 
@@ -570,36 +727,46 @@ function BuildBody({ data }: { data: CreationNodeData }) {
   );
 }
 
-function DashboardBody({ data }: { data: CreationNodeData }) {
+/**
+ * The Dashboard / Chart / Report card.
+ *
+ * The card used to BE the layout: one bar list, one donut, and — when nothing was
+ * authored — three invented KPIs ("Reach 212K") that made an empty object look like a
+ * finished marketing dashboard. It is now a grid of authored widgets read through
+ * {@link readDashboardWidgets}, so what a dashboard shows is data the author owns and
+ * can add to, reorder, retype and delete. An unauthored dashboard says so instead of
+ * inventing numbers.
+ *
+ * Editing happens BESIDE the drawing rather than instead of it: the grid stays mounted
+ * while the editor is open and both render from the same array, which is what makes the
+ * surface WYSIWYG.
+ */
+function DashboardBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.node');
-  const labels = Array.isArray(data.chartLabels) ? data.chartLabels.map(String).slice(0, 8) : [];
-  const values = Array.isArray(data.chartValues) ? data.chartValues.map(Number).slice(0, 8) : [];
-  const max = Math.max(1, ...values.filter(Number.isFinite));
+  const [editing, setEditing] = useState(false);
+  const widgets = useMemo(() => readDashboardWidgets(data as Record<string, unknown>), [data]);
   const dateRange = optionLabel(data.dateRange, { '30d': t('last30Days'), '7d': t('last7Days'), qtd: t('quarterToDate') }, t('last30Days'));
-  const authoredKpis = Array.isArray(data.kpis) ? data.kpis.slice(0, 6) : [];
-  const kpis = authoredKpis.length ? authoredKpis : data.kind === 'dashboard' ? [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }] : [];
-  // The board's own series colours, declared with the rest of its palette in
-  // CreationCanvas.module.css (PRD 21 §2.6 rule 9). Eight, because that is where
-  // the funnel/status charts stop before they repeat.
-  const palette = ['var(--canvas-series-1)', 'var(--canvas-series-2)', 'var(--canvas-series-3)', 'var(--canvas-series-4)', 'var(--canvas-series-5)', 'var(--canvas-series-6)', 'var(--canvas-series-7)', 'var(--canvas-series-8)'];
-  const positiveValues = values.map((value) => Number.isFinite(value) ? Math.max(0, value) : 0);
-  const total = positiveValues.reduce((sum, value) => sum + value, 0);
-  let cursor = 0;
-  const donutStops = positiveValues.map((value, index) => {
-    const start = total ? cursor / total * 100 : 0;
-    cursor += value;
-    const end = total ? cursor / total * 100 : 0;
-    return `${palette[index % palette.length]} ${start}% ${end}%`;
-  }).join(', ');
   return (
     <>
       {data.kind === 'dashboard' && <div className={styles.widgetContext}><span><small>{t('dateRange')}</small><b>{dateRange}</b></span>{typeof data.fetchedAt === 'string' && <span><small>{t('refreshed')}</small><b>{new Date(data.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>}</div>}
-      {kpis.length > 0 && <div className={styles.kpis}>{kpis.map((raw, index) => { const item = asRecord(raw, { label: t('metricIndex', { index: index + 1 }), value: raw }); return <div key={`${String(item.label)}-${index}`}><small>{String(item.label || t('metricIndex', { index: index + 1 }))}</small><strong>{String(item.value ?? '—')}</strong><em>{String(item.trend || '')}</em></div>; })}</div>}
-      {typeof data.chartTitle === 'string' && data.chartTitle.trim() && <strong className={styles.chartTitle}>{data.chartTitle}</strong>}
-      <div className={styles.charts}>
-        <div><small>{typeof data.yAxisLabel === 'string' && data.yAxisLabel.trim() ? data.yAxisLabel : labels.length ? t('taskCountByStatus') : t('funnel')}</small>{labels.length ? <><div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 'var(--radius-sm)', background: 'var(--canvas-obj-dashboard)', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div>{typeof data.xAxisLabel === 'string' && data.xAxisLabel.trim() && <small className={styles.axisLabel}>{data.xAxisLabel}</small>}</> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
-        <div><small>{labels.length ? t('distribution') : t('channelMix')}</small>{labels.length && total > 0 ? <div className={styles.donutChart}><div className={styles.donut} role="img" aria-label={labels.map((label, index) => `${label}: ${positiveValues[index] ?? 0}`).join(', ')} style={{ background: `conic-gradient(${donutStops})` }} /><div className={styles.donutLegend}>{labels.map((label, index) => <span key={`${label}-legend-${index}`} title={`${label}: ${positiveValues[index] ?? 0}`}><i style={{ background: palette[index % palette.length] }} /><b>{label}</b><em>{positiveValues[index] ?? 0}</em></span>)}</div></div> : <div className={styles.donut} />}</div>
-      </div>
+      {widgets.length > 0
+        ? <DashboardWidgetGrid widgets={widgets} />
+        : <p className={styles.dwEmpty}>{onEdit ? t('dashboardEmptyEditable') : t('dashboardEmpty')}</p>}
+      {typeof data.xAxisLabel === 'string' && data.xAxisLabel.trim() && <small className={styles.axisLabel}>{data.xAxisLabel}</small>}
+      {onEdit && <div className={`${styles.cardActions} nodrag nowheel`}>
+        <button
+          type="button"
+          data-active={editing ? 'true' : undefined}
+          aria-pressed={editing}
+          onClick={(event) => { event.stopPropagation(); setEditing(!editing); }}
+        >{editing ? t('dashboardDone') : t('dashboardEdit')}</button>
+      </div>}
+      {onEdit && editing && <div className="nodrag nowheel" onClick={(event) => event.stopPropagation()}>
+        <DashboardStructuredEditor
+          widgets={widgets}
+          onChange={(next) => onEdit(dashboardWidgetsPatch(next) as Partial<CreationNodeData>)}
+        />
+      </div>}
     </>
   );
 }
@@ -1607,6 +1774,8 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
         edges={surface.edges}
         collaborators={surface.collaborators}
         joinedCollaborator={surface.joinedCollaborator}
+        onReplayMessage={surface.onReplayMessage}
+        guestSignup={surface.guestSignup}
       />
     </section>
   );
@@ -1845,7 +2014,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game','resume', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game','resume','socialFeed','socialPost','socialCampaign', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1877,7 +2046,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           data={data}
           {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
         />}
-        {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
+        {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'map' && <MapBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}
         {data.kind === 'diagnostics' && (typeof data.toolId === 'string'
@@ -1907,6 +2076,9 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'email' && <EmailBody data={data} />}
         {data.kind === 'emailCampaign' && <EmailCampaignBody data={data} />}
         {data.kind === 'emailTemplate' && <EmailTemplateBody data={data} />}
+        {data.kind === 'socialFeed' && <SocialFeedBody data={data} />}
+        {data.kind === 'socialPost' && <SocialPostBody data={data} />}
+        {data.kind === 'socialCampaign' && <SocialCampaignBody data={data} />}
         {data.kind === 'task' && <TaskBody data={data} />}
         {data.kind === 'mockup' && <MockupBody data={data} />}
         {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? t('linkedConcepts', { count: data.items.length }) : t('mockupSetFallback')}</p><div className={styles.pills}><span>{t('expandable')}</span><span>{t('citationsRetained')}</span></div></>}

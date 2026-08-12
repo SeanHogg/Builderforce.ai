@@ -330,6 +330,77 @@ export const marketingCampaignSends = pgTable('marketing_campaign_sends', {
   index('idx_marketing_sends_campaign_status').on(t.campaignId, t.status),
 ]);
 
+/**
+ * A campaign published to the workspace's OWN social accounts.
+ *
+ * Deliberately NOT a `marketing_campaigns` row with a channel column. That table's
+ * every load-bearing column is about reaching a list of strangers by email — a
+ * NOT NULL audience, a DNS-verified sender identity, suppression, per-recipient
+ * unsubscribe tokens — and none of them exist for a post to a Page you own. Forcing
+ * one shape over both would mean a fake audience row per social campaign and a
+ * "sendable?" check that could not be written. The fact is different, so the table is.
+ *
+ * `variants` is per-network copy keyed by network: the same announcement is 280
+ * characters on X and a paragraph on LinkedIn, and a campaign that could only carry
+ * one body would either truncate or under-use every network it touches. Absent key →
+ * the shared `body`, so the simple case stays simple.
+ */
+export const socialCampaigns = pgTable('social_campaigns', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  body:        text('body').notNull().default(''),
+  linkUrl:     varchar('link_url', { length: 1000 }).notNull().default(''),
+  /** Public https URLs. Instagram and TikTok PULL these themselves, so an
+   *  authenticated URL is a failed post rather than a broken image. */
+  mediaUrls:   jsonb('media_urls').$type<string[]>().notNull().default([]),
+  variants:    jsonb('variants').$type<Record<string, string>>().notNull().default({}),
+  status:      varchar('status', { length: 16 }).notNull().default('draft'),
+  scheduledAt: timestamp('scheduled_at'),
+  startedAt:   timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  targets:     integer('targets').notNull().default(0),
+  published:   integer('published').notNull().default(0),
+  failed:      integer('failed').notNull().default(0),
+  /** Launching canvas session, so social delivery rolls up into the SAME outcome
+   *  ledger as the campaign it belongs to. */
+  sessionId:   uuid('session_id').references(() => creationSessions.id, { onDelete: 'set null' }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_social_campaigns_tenant_status').on(t.tenantId, t.status, t.updatedAt),
+]);
+
+/** One row per (campaign, account). The unique index is what makes a resumed or
+ *  retried publish idempotent — a second pass cannot post the same campaign to the
+ *  same Page twice, which on a public feed is not a recoverable mistake. */
+export const socialCampaignPosts = pgTable('social_campaign_posts', {
+  id:           bigserial('id', { mode: 'number' }).primaryKey(),
+  campaignId:   integer('campaign_id').notNull().references(() => socialCampaigns.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  connectionId: uuid('connection_id').notNull().references(() => connectorConnections.id, { onDelete: 'cascade' }),
+  /** Denormalized from the connection because it is a HISTORICAL fact — deleting the
+   *  connection later must not erase which network something went out on. */
+  network:      varchar('network', { length: 16 }).notNull(),
+  /** The copy actually published, after variant resolution. Stored, not recomputed:
+   *  editing the campaign afterwards must not rewrite what the world already saw. */
+  body:         text('body').notNull().default(''),
+  status:       varchar('status', { length: 16 }).notNull().default('queued'),
+  externalId:   varchar('external_id', { length: 255 }),
+  permalink:    varchar('permalink', { length: 1000 }),
+  error:        text('error'),
+  /** Attempts so far. Load-bearing exactly as it is for email: a retryable failure
+   *  returns the row to `queued`, so without a bound a misclassified error would
+   *  requeue forever and the campaign would never complete. */
+  attempts:     integer('attempts').notNull().default(0),
+  publishedAt:  timestamp('published_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_social_posts_campaign_connection').on(t.campaignId, t.connectionId),
+  index('idx_social_posts_campaign_status').on(t.campaignId, t.status),
+]);
+
 // ═══ PRD 20 §5 step 2 — target-schema tables ═══
 //
 // Growth & marketing — the CMO's forty-seven remaining targets (PRD 20 §3.2).

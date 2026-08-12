@@ -265,6 +265,58 @@ describe('runCreationCanvasAi', () => {
     expect(unanswered).toHaveBeenCalledWith({ reason: 'command-not-executed' });
   });
 
+  it('retries a turn TRUNCATED at the output ceiling with a smaller-output directive, not "you repeated yourself"', async () => {
+    const run = vi.fn(() => ({ ok: true, proposed: true }));
+    mocks.streamChatCompletion
+      // The model was mid-way through authoring canvas_add_object when the ceiling
+      // cut it off, so the call never reaches us — indistinguishable from silence
+      // except for finishReason.
+      .mockResolvedValueOnce({ text: 'Here is the launch plan for', toolCalls: [], resolvedModel: 'weak/model', finishReason: 'length' })
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"document","title":"Launch plan","fields":{"content":"Week 1: brief."}}' }], resolvedModel: 'weak/model', finishReason: 'tool_calls' })
+      .mockResolvedValueOnce({ text: 'I added the launch plan.', toolCalls: [], resolvedModel: 'weak/model', finishReason: 'stop' });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Create a launch plan on the canvas',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
+    });
+
+    expect(answer).toBe('I added the launch plan.');
+    const directives = mocks.streamChatCompletion.mock.calls[1][0].messages
+      .filter((message: { role: string }) => message.role === 'system')
+      .map((message: { content: string }) => message.content).join('\n');
+    expect(directives).toContain('cut off at the output limit');
+    expect(directives).not.toContain('repeated an earlier message');
+  });
+
+  it('retries an unparseable tool call by re-encoding it rather than asking for an answer', async () => {
+    const run = vi.fn(() => ({ ok: true, proposed: true }));
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: '', toolCalls: [], resolvedModel: 'googleai/gemini-2.5-flash', finishReason: 'MALFORMED_FUNCTION_CALL' })
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"document","title":"Launch plan","fields":{"content":"Week 1: brief."}}' }], resolvedModel: 'googleai/gemini-2.5-flash', finishReason: 'tool_calls' })
+      .mockResolvedValueOnce({ text: 'I added the launch plan.', toolCalls: [], resolvedModel: 'googleai/gemini-2.5-flash', finishReason: 'stop' });
+
+    const trace = vi.fn();
+    const answer = await runCreationCanvasAi({
+      prompt: 'Create a launch plan on the canvas',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
+      onTrace: trace,
+    });
+
+    expect(answer).toBe('I added the launch plan.');
+    const directives = mocks.streamChatCompletion.mock.calls[1][0].messages
+      .filter((message: { role: string }) => message.role === 'system')
+      .map((message: { content: string }) => message.content).join('\n');
+    expect(directives).toContain('could not be parsed');
+    // The discarded attempt is recorded: a run that looks like "0 tool calls" in the
+    // report was actually a model trying to act.
+    expect(trace.mock.calls.some((call: unknown[]) => {
+      const event = call[0] as { label?: string; isError?: boolean } | undefined;
+      return event?.label === 'malformed tool call' && event.isError === true;
+    })).toBe(true);
+  });
+
   it('tells an anonymous canvas which capabilities need an account instead of leaving it to guess', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Signing up unlocks the mailbox; here is the plan meanwhile.', toolCalls: [], finishReason: 'stop' });
 

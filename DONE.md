@@ -1,3 +1,240 @@
+## RESOLVED 2026-08-12 - The free tier ends with a button, not a sentence
+
+A guest who spent their ten free canvas turns was told "Sign up free to keep going" and given nothing to
+click. The gateway's refusal (`code: 'guest_limit_reached'`, with `reason` and `limit`) was read in exactly
+one place, `describeTurnError`, and only to pick the WORDS; the transcript then ended with a sentence
+recommending an account that no surface offered. The register entry for this named the guest Brain chat as
+blocked on a `@seanhogg/builderforce-brain-ui` release. It was not: the error line lives in
+`GuestBrainPanel.tsx`, and the missing piece was a channel, not a package.
+
+**One CTA, four surfaces.** `components/GuestSignupCta.tsx` owns the "create a free account / sign in" pair
+and the destinations behind it (`/register?next=` and `signInHref(next)`, so the visitor lands back on the
+canvas or room they were in). It decides its own visibility from the prompt it is given - `null` renders
+nothing - so a host mounts it unconditionally instead of re-deriving whether this visitor is blocked. It
+replaced three hand-written copies (the guest cap wall, the kill-switch panel, the canvas account gate),
+each with its own duplicated CSS and its own idea of the label; `common.createFreeAccount` is now the one
+spelling, and the per-namespace copies are deleted from all five catalogs. The SENTENCE stays with each
+surface, which already says why in its own vocabulary.
+
+**One classifier, two allowances, and a channel for the refusal that does not throw.**
+`lib/guestLimit.ts` reads `guest_limit_reached` AND `guest_research_limit_reached` off the structured body
+(never the prose, which is localized and would stop matching outside English). Chat refusals THROW and end
+the turn; research refusals come back as a tool RESULT on purpose, so the turn survives - which meant the
+canvas could never see them. `noteGuestLimit` / `onGuestLimit` carry those to whoever is rendering, and the
+guest transport (`guestRuntime`) announces on the way past.
+
+**Where the button now appears.** The Creation Canvas Brain surface renders it under the transcript in BOTH
+placements (edge dock and the Brain Object - one prop through `brainSurfaceContext`), outside the scroller
+so a blocked guest cannot scroll away from the only thing they can still do, and it retires itself the
+moment a turn succeeds. The guest Brain panel raises its wall for a per-device or per-room cap too - those
+refuse while the local "messages left" counter still believes it has turns, which is exactly when a visitor
+used to get the bare English line beside an enabled composer - and says so with `guestBrain.wallBodyDevice`
+rather than claiming ten messages someone who sent two never had.
+
+Files: `frontend/src/components/GuestSignupCta.tsx` (+ `.module.css`, tests), `frontend/src/lib/guestLimit.ts`,
+`guestResearchActions.ts`, `lib/brain/guestRuntime.ts`, `brain/GuestBrainPanel.tsx`,
+`creation-canvas/{CreationCanvas,BrainDock,CreationNode,brainSurfaceContext}.tsx`, five message catalogs.
+
+## RESOLVED 2026-08-12 - The social feed came to the canvas, and one announcement can now be published to every connected account
+
+A CMO on the board could see their email but not their audience. The five social connector manifests
+(X / LinkedIn / Facebook Pages / Instagram / TikTok, migration 0410) had existed since the connector
+platform shipped and NOTHING consumed them: no way to see what the company had published, no way to post,
+and no campaign that reached further than an inbox. Asked to "show me our socials", Brain had no tool to
+call and answered from imagination. This is the connect -> read -> compose -> publish slice, built on the
+same three seams the mailbox and drive slices are built on.
+
+**A social account is a CONNECTOR CONNECTION - there is no third credential store.**
+`application/social/socialProviders.ts` is ONE port with five adapters that decide only *which connector
+action to call and what the answer means*; credentials, SSRF guarding, timeouts and the audit log stay in
+`executeConnectorAction`, exactly as `mailboxProviders` and `driveProviders` do for their vendors. A sixth
+network is a manifest plus an adapter, not a subsystem. Three networks cannot act without an id the token
+does not imply (which Page, which IG account, which LinkedIn author), so those are declared as NON-SECRET
+auth fields on the same connection - which is why a connection that cannot post says so before anything is
+attempted instead of 400ing at the API.
+
+**Five shapes, one feed.** X returns `public_metrics`, Facebook returns summary edges, Instagram needs a
+container *then* a publish, TikTok answers a 200 carrying its own `error.code`, and LinkedIn hides the
+created post's id in a RESPONSE HEADER - so `executeConnectorAction` gained an opt-in, allowlisted
+`captureHeaders` (never "all headers": a connector response carries `set-cookie`, and the result is handed
+to model tool loops). `readSocialFeed` fans out across accounts, merges newest-first, and returns
+PER-ACCOUNT ERRORS alongside the posts, because one revoked grant must not blank the board. Reads go
+through `getOrSetCached` keyed per account - one entry per account rather than one per page size, so a tile
+asking for 10 and a campaign asking for 25 share a hit and publishing drops exactly one key.
+
+**A social campaign is its own table, on purpose.** `marketing_campaigns` requires an audience and a
+DNS-verified sender and carries suppression and unsubscribe tokens, none of which exist for a post to a
+Page you own; forcing one shape over both would mean a fake audience row per social campaign. `social_campaigns`
++ `social_campaign_posts` (migration 0458) borrow the two invariants that make the email engine safe:
+one row per (campaign, account) UNIQUE, so a retried or resumed run cannot post twice to the same Page,
+and `retryable` deciding requeue-vs-write-off bounded by `SOCIAL_PUBLISH_MAX_ATTEMPTS`. A network that
+cannot publish text alone is SKIPPED with its reason rather than failed - "failed on Instagram" every time
+a campaign has no image is a false alarm, not a defect. `variants` carries per-network copy (280 characters
+on X, a paragraph on LinkedIn) and falls back to the shared body, and the `social-publish` cron sweep
+publishes scheduled campaigns and finishes large ones, signalling the KV work gate so an idle platform
+still never wakes Postgres.
+
+**On the canvas: three kinds, five tools, one panel.** `socialFeed` is a LIVE merged view that stores its
+FILTER and its READ TIME (a tile saying "12 posts" with neither is a screenshot claiming to be live);
+`socialPost` is one post pinned so it stops changing; `socialCampaign` shows each target account's own
+outcome and permalink, because "3 of 5 published" without saying which three is unusable. Brain drives all
+of it - `canvas_add_social_feed`, `canvas_refresh_social_feed`, `canvas_pin_social_post`,
+`canvas_create_social_campaign` and `canvas_publish_social_campaign` - with drafting and publishing kept as
+two explicit acts so a model cannot post to a company's channels as a side effect of being asked to write
+copy. `CanvasSocialPanel` connects accounts (rendering the manifest's own auth fields, so it knows nothing
+about Facebook or LinkedIn), composes, and publishes; it and the tools share ONE node builder, so the tile
+an agent adds and the tile a person adds are the same tile. Editing a campaign's copy on the board WRITES
+THROUGH to the saved campaign - the board showing one message while publishing another is precisely the
+class of drift this codebase refuses.
+
+**Agents get the read half.** `social.list_accounts`, `social.read_feed`, `social_campaign.list` and
+`social_campaign.create` are on `CLOUD_AGENT_PLATFORM_TOOLS`; `social.publish` and
+`social_campaign.publish` are deliberately absent and go through the MANAGER-gated route - the same line
+drawn for `campaign.send`, for the same reason: they reach the public with nobody in the loop to stop them.
+
+**Two things fixed on the way past.** The Drive panel had shipped UNREACHABLE on desktop - `setDriveOpen`
+existed only on the phone rail - so both it and the new social panel now have a rail toggle on both. And
+the Canvas system prompt gained a SOCIAL block: the one shape of request where an authored object is a lie
+is "how are our socials doing?", because the real numbers exist and a plausible invented feed is worse than
+no answer.
+
+Open residuals (consent flows blocked on per-network developer apps and app review; publishing an image the
+canvas itself generated) are recorded in ROADMAP group 9.
+
+## RESOLVED 2026-08-12 - The Dashboard Object became authored, and the Brain transcript got per-message Copy / Send again
+
+Two things the operator asked for on the guest Canvas in the screenshot: the SaaS Metrics Dashboard was
+hardcoded and needed to be a WYSIWYG with different charts, and every Brain message needed a copy icon
+and a "redo" icon that re-sends the same message.
+
+**1 - A dashboard was a FIXED PICTURE with a data hole in it.** `DashboardBody` (CreationNode.tsx) drew
+exactly one bar list and exactly one donut, both fed from a single `chartLabels`/`chartValues` pair, over
+a KPI row that fell back to three INVENTED numbers - `Reach 212K`, `CTR 3.6%`, `Conversion 2.1%` - whenever
+nothing was authored. That is the same failure `emptyShellProblem` was written to stop one field over: an
+object with no content that reads as a finished marketing dashboard. There was no way to add a second
+chart, remove one, reorder them, or say "this one is a funnel", because the layout was source code rather
+than data. A dashboard is now an ORDERED LIST OF WIDGETS (`lib/canvasDashboard.ts`): ten chart kinds
+(KPI / bar / column / line / area / donut / stacked bar / funnel / gauge / table) declared as registry DATA,
+so a new chart type is a row plus one case in ONE renderer. The placeholder KPIs and the decorative
+four-slice `.donut` gradient are deleted - an unauthored dashboard now says it is empty and offers to add
+a widget.
+
+**2 - The editor renders the SAME component as the card.** `DashboardWidgetView` is mounted by both the
+Object card and the editor, so there is no second drawing of a bar chart that could disagree with the
+first, and the grid stays on screen while the fields are open. `DashboardStructuredEditor` is pure and
+canvas-unaware exactly like `ResumeStructuredEditor` - drag/nudge reorder, add, delete with undo, per-widget
+chart type, title, width, categories and series. Changing the chart kind KEEPS the numbers: the data is the
+author's work, the mark over it is a presentation choice.
+
+**3 - One dashboard now holds ONE representation of one fact.** `kpis`/`chartLabels`/`chartValues` are still
+the flat wire format the model authors through `canvas_add_object` and that `canvas_query_dataset`
+materialises, so they stay an INPUT format: `readDashboardWidgets` folds them into widgets on read (and
+every board saved before this change migrates on open), and the editor clears them on its first save.
+Legacy content is never silently dropped - anything not already present as a widget is appended by content
+signature, so a model that patches `chartLabels` onto an edited dashboard still lands a visible chart.
+`widgets` was added to the `dashboard`/`chart`/`report` mutable-field lists and to `CONTEXT_FIELDS`, so
+Brain can both read and author the richer shape.
+
+**4 - The board keeps its own palette.** The marks draw on `--canvas-series-1..8` and `--canvas-ink`, NOT
+`components/charts/*`, which is built on the shell's tokens - CreationCanvas.module.css states the rule in
+its own header ("what must never happen is a board hue inheriting the SHELL's tokens"). The `#1bab75`
+trend green a KPI Object and a dashboard metric tile were both hardcoding is now `--canvas-trend-up`,
+declared once beside the rest of the board's palette.
+
+**5 - Copy and "send again" belonged to the SHARED transcript, not to one host's action bar.** They lived in
+the web Brain panel's `ChatMessageActions`, so the Canvas dock - the surface in the screenshot - had NO
+per-message actions at all, on either role, and neither did the VS Code webview. Both actions are now built
+into `<BrainTimeline>` (`packages/brain-ui`) and render on the user's turn as well as the reply, so all three
+surfaces get them from one place. `ChatMessageActions` lost its copy button (it would have been a second one
+beside it) and keeps only its extras; `useBrainConversation.copyMessage` / `copiedMessageId` had no callers
+left and were deleted. "Send again" is offered on both roles deliberately: replaying a user turn re-asks the
+question, replaying an assistant turn feeds its answer back as the next prompt. It hides itself when the host
+passes no handler, so a read-only transcript offers only copy. Wired to `conv.send` in the Brain panel and
+the VS Code webview, and to `evaluateCanvas` on the Canvas - through a ref, because `<BrainTimeline>` is
+memoized and a fresh closure per render would re-parse the whole transcript on every streamed token.
+
+**6 - Three defects found on the way and fixed in the same pass.** `.resumeLifecycleDialog` used
+`var(--shadow-md)`, which is declared in NEITHER theme (only `--shadow-sm`/`--shadow-lg` exist), so its
+shadow rendered nothing - it was failing `check:design-tokens`. `BrainDock` accepted `onReplayMessage` in its
+props type but never destructured it, so the dock silently swallowed it (caught by the new test, not by the
+compiler). And `creationCanvasAi.test.ts` typed a `.some()` predicate as a 1-tuple, which `tsc` rejects.
+
+New tests: `lib/canvasDashboard.test.ts` (the model, the legacy fold, the round-trip),
+`creation-canvas/dashboardEditor.test.tsx` (open beside the drawing, retype without data loss, add, remove +
+undo, legacy fields cleared on save) and `creation-canvas/brainMessageActions.test.tsx` (both roles, replay
+carries its role, copy confirms, replay hidden without a handler). Localised in all five catalogs; the five
+now-dead node keys (`taskCountByStatus`, `funnel`, `distribution`, `channelMix`, `metricIndex`) and the two
+dead `brain.messageActions` copy keys were removed rather than left behind.
+
+## RESOLVED 2026-08-12 - The 700-token ceiling that caused the whole thing, and what the SUCCESSFUL run still got wrong
+
+The operator confirmed the Canvas was executing again and asked for the successful run (ui 2026.7.213)
+to be reviewed rather than declared fixed. It had four defects left, and the first one is the structural
+cause of every symptom in the three passes above.
+
+**1 - A guest turn that carried TOOLS was clamped to 700 output tokens.** `handleGuestChat` applied one
+ceiling to every request: `GUEST_CHAT_LIMITS.maxTokensPerRequest`, sized for a conversational reply. But
+a canvas turn does not put its work in the reply - it authors the artifact INSIDE `canvas_add_object`,
+and the client asks for 3,200 tokens precisely because of that. The clamp cut the tool call off mid-JSON,
+so the arguments never closed, so the call never reached the loop, so the turn arrived as
+`finish_reason: "length"` with no tool calls - which is *exactly* "the Canvas is not executing the LLM
+executions", and equally exactly why the objects that did land were empty shells. The limit is now
+per-shape: `maxTokensPerRequest: 700` for a conversational turn, `maxToolTokensPerRequest: 3_200` for a
+turn that advertises tools, selected by `isAgenticToolTurn`. The abuse ceiling is unchanged for chat;
+only a turn that is *doing something* gets room to finish doing it.
+
+**2 - A truncated or malformed turn was diagnosed as "you repeated yourself".** Both arrive as "no tool
+calls", which the loop treated as a degenerate answer and answered with *"your prior response was empty
+or repeated an earlier message, answer directly now"* - advice that reproduces truncation identically.
+`finish_reason` is now read through ONE classifier in `brain-embedded/src/finishReason.ts`
+(`turnInterruption`), across vendor spellings (`length`, `max_tokens`, `MAX_TOKENS`, Gemini's
+`MALFORMED_FUNCTION_CALL`), and the loop replies with the directive that matches the interruption:
+**author smaller and split across calls** for truncation, **re-encode the same call as valid JSON** for a
+malformed one - because a malformed call is a model that chose correctly and encoded badly, and telling
+it to "answer" would throw away a correct intent. Two attempts, then the normal fail-over. The two places
+that already hard-coded `=== 'length'` (`brainTriage`, `creationCanvasDiagnostics`) were migrated onto
+the classifier in the same pass, and the report now names discarded tool calls instead of showing a run
+that tried to act as a run with zero tool calls.
+
+**3 - Eight of nine created objects were empty shells.** `canvas_add_object` accepted `{kind, title}` and
+answered `ok: true`, so a truncated or lazy call produced a titled placeholder the user then had to fill
+in themselves - and KPI tiles shipped stamped `status: 'Live'` with no value behind them. Three bespoke
+branches already guarded this for website, course and drawing; the general form is registry-driven now
+(`emptyShellProblem` over `creationObjectContentFields`), so every kind is covered rather than the three
+that happened to get a branch, and the kinds where a bare shell IS the deliverable (chat, frame, timer,
+terminal, comment…) are listed as such. The KPI default is `'No value yet'`.
+
+**4 - The report called a productive 42.9s turn a stall.** `journalGaps` flagged any action over 30s,
+and a `turn` is the whole agent loop - research, several model iterations and every tool call it made -
+so healthy runs read as broken next to genuinely stalled fetches. Tools and network round trips keep the
+30s rule; a turn is called out only when it is long AND called no tool at all, which is the condition
+that actually means "generated prose instead of doing the work".
+
+**Five guards that went red while this landed, fixed rather than re-baselined.** `check:source` found a
+raw NUL byte in `lib/canvasDashboard.ts` — the widget signature joined its parts with `\u0000`/`\u0001`
+typed as the literal bytes, which makes the whole file test as BINARY and invisible to ripgrep; the
+escape sequences produce an identical runtime value. `check:architecture` was +2 on `'use client'`:
+`DashboardWidgetView`, `DashboardStructuredEditor` and `CanvasSocialPanel` are imported only by
+`CreationNode`/`CreationCanvas`, which are already client components, so their directives were redundant
+and came off; `GuestSignupCta` is a shared CTA leaf that a server page can legitimately import, so it
+keeps its boundary and the baseline moved 766 → 767 for it (still down from 769 at the start of the day).
+`check:design-tokens` and `check:design-scale`: the video-résumé slice's caption ink became
+`--text-inverse`, its pill became `--radius-full`, the board's two `3px` corners became `--radius-sm`,
+and `videoResumeTemplates.ts` + `canvasVideoRender.ts` joined `COLOUR_EXEMPT` with their reasons — a
+template's four-colour art direction is burned into an exported MP4, and `context.fillStyle` cannot read
+a `var()`. `check:tenant-scope` flagged `socialCampaignService.ts:199`: the query WAS scoped, but
+`loadCampaigns` took a pre-built `where`, so neither the guard nor a reader could see it. It takes the
+extra predicate now and composes `scopedToTenant` at the query, which also deletes the duplicated
+scoping from both callers.
+
+Tests: `finishReason` (3 new, every vendor spelling + the negative cases), truncation and malformed-call
+recovery in `creationCanvasAi.test.ts`, the turn-vs-tool split in `canvasActionJournal.test.ts`,
+`guestToolTokens.test.ts` (3 new) for the per-shape ceiling, and the empty-shell guard in
+`creationObjectRegistry.test.ts`. frontend creation-canvas+lib 289 passing, api guest+tenant 81 passing,
+brain-embedded 35 passing, both packages typecheck.
+
+---
+
 ## RESOLVED 2026-08-12 - A Canvas session could END ITSELF, and a poisoned transcript could never recover
 
 Follow-up diagnostics on the same session (ui 2026.7.212) after the tool-vocabulary fix. The tools
@@ -6318,7 +6555,7 @@ A tool-less Brain answers every data question with "I don't have that", records 
 **Root cause.** `ingestEngine.ts` contained a raw NUL (0x00) byte — used as a Set-key separator in a template literal, ``  `${grp.id}\0${e.userKey}` ``. **One NUL anywhere in a file makes ripgrep classify the whole file as binary and skip it.** The file was invisible to every code search: audits, code review, `/code-review`, and agent greps all return "no matches" for symbols that are right there. A repo-wide scan found two more with the identical idiom — `insights/engineeringInsights.ts` (2) and `studio/voiceCloneService.ts` (3).
 
 **Fixed without changing behaviour.**
-- `engineeringInsights.ts` and `voiceCloneService.ts` keep the NUL as their separator — it is load-bearing in both (one `split`s the key back apart, the other hashes it into a SHA-256 cache-key digest) — but written as the ` ` ESCAPE. Byte-identical at runtime, so no key changes and no cached voice-synthesis digest is invalidated.
+- `engineeringInsights.ts` and `voiceCloneService.ts` keep the NUL as their separator — it is load-bearing in both (one `split`s the key back apart, the other hashes it into a SHA-256 cache-key digest) — but written as the `\u0000` ESCAPE. Byte-identical at runtime, so no key changes and no cached voice-synthesis digest is invalidated.
 - `ingestEngine.ts`'s key is in-memory batch dedupe only, never split or persisted, so it takes a plain space with a comment explaining why no collision is possible (`grp.id` is a fixed-format uuid).
 - All three files are now searchable; `enforceErrorEventsCap` shows up in a grep for the first time.
 

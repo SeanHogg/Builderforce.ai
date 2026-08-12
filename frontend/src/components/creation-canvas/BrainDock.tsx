@@ -6,6 +6,7 @@ import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
+import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
@@ -62,6 +63,12 @@ export interface BrainSurfaceBodyProps {
   edges: Edge[];
   collaborators?: BrainSurfaceCollaborator[];
   joinedCollaborator?: BrainSurfaceCollaborator | null;
+  /** Re-send a transcript message as the next canvas turn. Omitted on a board the
+   *  viewer cannot drive, which hides the action rather than failing on click. */
+  onReplayMessage?: (message: BrainMessage, role: 'user' | 'assistant') => void;
+  /** The guest wall this conversation ran into, when a turn was refused for want of
+   *  an account. Null on every signed-in board, where the CTA renders nothing. */
+  guestSignup?: GuestSignupPrompt | null;
 }
 
 export interface BrainDockProps extends BrainSurfaceBodyProps {
@@ -86,7 +93,8 @@ export interface BrainDockProps extends BrainSurfaceBodyProps {
  */
 export function BrainSurfaceBody({
   showExecutionDetail, messages, trace, running, runStartedAt = null,
-  node, nodes, edges, collaborators = [], joinedCollaborator = null,
+  node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage,
+  guestSignup = null,
 }: BrainSurfaceBodyProps) {
   const t = useTranslations('creationCanvas');
   const [tab, setTab] = useState<'chat' | 'context'>('chat');
@@ -100,6 +108,12 @@ export function BrainSurfaceBody({
     empty: t('brainEmpty'),
     thinking: liveLine ?? t('brainPhase.thinking'),
     thoughtFor: t('thoughtFor', { duration: '{duration}' }),
+    // The per-message copy / send-again actions are part of the shared transcript, so
+    // the dock has to name them too — otherwise they fall back to the package's
+    // English defaults on a board the user is reading in another language.
+    copy: t('copyMessage'),
+    copied: t('copiedMessage'),
+    replay: t('replayMessage'),
   }), [liveLine, t]);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
@@ -121,16 +135,25 @@ export function BrainSurfaceBody({
       </span>)}
     </div>}
     {tab === 'chat'
-      ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
-        <BrainTimeline
-          messages={messages}
-          trace={showExecutionDetail ? trace : []}
-          streamingText=""
-          isRunning={running}
-          assistantName={t('brain')}
-          labels={timelineLabels}
-        />
-      </div>
+      ? <>
+        <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
+          <BrainTimeline
+            messages={messages}
+            trace={showExecutionDetail ? trace : []}
+            streamingText=""
+            isRunning={running}
+            assistantName={t('brain')}
+            labels={timelineLabels}
+            onReplayMessage={onReplayMessage}
+          />
+        </div>
+        {/* The refusal that ended the last turn is already the final message in the
+            transcript above; this is the button that sentence was asking for. It
+            sits OUTSIDE the scroller so a blocked guest cannot scroll away from the
+            only thing they can still do, and carries no body of its own — the
+            transcript is the statement. */}
+        <GuestSignupCta prompt={guestSignup} />
+      </>
       : <div className={styles.brainDockContext}>
         <BrainContextPanel node={node} nodes={nodes} edges={edges} />
       </div>}
@@ -222,6 +245,7 @@ export function BrainDock({
   mode, side, size, width, showExecutionDetail,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
   messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
+  onReplayMessage, guestSignup = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
 
@@ -305,6 +329,8 @@ export function BrainDock({
         edges={edges}
         collaborators={collaborators}
         joinedCollaborator={joinedCollaborator}
+        onReplayMessage={onReplayMessage}
+        guestSignup={guestSignup}
       />
     </aside>
   );

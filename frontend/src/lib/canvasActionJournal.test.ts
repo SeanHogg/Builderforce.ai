@@ -108,13 +108,36 @@ describe('journalGaps', () => {
     expect(journalGaps(journal.entries(), whole).join(' ')).toContain('never completed');
   });
 
-  it('reports a slow action', () => {
+  it('reports a slow tool call', () => {
+    const time = clock();
+    const journal = createCanvasJournal(time.now);
+    const done = journal.begin('tool', 'builtin_web_fetch');
+    time.advance(45_000);
+    done({ ok: true });
+    expect(journalGaps(journal.entries(), whole).join(' ')).toContain('over 30s');
+  });
+
+  it('does NOT flag a long turn that spent the time calling tools', () => {
+    const time = clock();
+    const journal = createCanvasJournal(time.now);
+    const turn = journal.begin('turn', 'brain.turn');
+    const tool = journal.begin('tool', 'canvas_add_object');
+    time.advance(2_000);
+    tool({ ok: true });
+    time.advance(41_000);
+    turn({ ok: true });
+    const gaps = journalGaps(journal.entries(), whole).join(' ');
+    expect(gaps).not.toContain('over 30s');
+    expect(gaps).not.toContain('without calling a single tool');
+  });
+
+  it('flags a long turn that called no tool at all', () => {
     const time = clock();
     const journal = createCanvasJournal(time.now);
     const done = journal.begin('turn', 'brain.turn');
     time.advance(45_000);
     done({ ok: true });
-    expect(journalGaps(journal.entries(), whole).join(' ')).toContain('over 30s');
+    expect(journalGaps(journal.entries(), whole).join(' ')).toContain('without calling a single tool');
   });
 });
 

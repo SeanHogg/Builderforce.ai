@@ -29,11 +29,13 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, guestMessageAuthor, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { GuestSignupCta } from '@/components/GuestSignupCta';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { GuestRoomBar } from '@/components/brain/GuestRoomBar';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { GuestRoomMeeting } from '@/components/brain/GuestRoomMeeting';
 import { mintGuestSession, getGuestUsage } from '@/lib/guestChatApi';
+import { onGuestLimit, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import {
   createGuestRoom, leaveGuestRoom, appendGuestRoomMessages, refreshGuestCredentials,
@@ -82,7 +84,18 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   const inRoom = !!roomCode;
   const pendingInvite = !!inviteCode && inviteCode !== roomCode;
 
-  const capReached = remaining !== null && remaining <= 0;
+  /**
+   * A wall the counter did not see coming. "Messages left" is this visitor's own
+   * allowance, and it is not the only one that can run out: the per-device cap and
+   * a room's combined cap both refuse while this browser still believes it has
+   * turns left. Those refusals used to land as a bare English error line beside an
+   * enabled composer; now they raise the same wall, which is the only thing a
+   * blocked visitor can act on.
+   */
+  const [refusedWall, setRefusedWall] = useState<GuestLimitRefusal | null>(null);
+  useEffect(() => onGuestLimit(setRefusedWall), []);
+
+  const capReached = (remaining !== null && remaining <= 0) || refusedWall !== null;
 
   // Same capability tiles as the signed-in Brain Storm empty state — the first
   // surface a visitor lands on should show what this thing can make. Guest chats
@@ -195,6 +208,10 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
     if (getActiveGuestRoom()) { await room.refresh(); return; }
     const usage = await getGuestUsage();
     if (usage) { setRemaining(usage.remaining); setLimit(usage.limit); setEnabled(usage.enabled); setRoomsEnabled(usage.roomsEnabled); }
+    // Allowances reset daily. A refusal-raised wall has no counter to retire it, so
+    // it is retired HERE, the moment the server says there are turns again —
+    // otherwise a visitor who came back the next day would still be behind it.
+    if (usage && usage.remaining > 0) setRefusedWall(null);
   }, [room]);
 
   const doSend = useCallback(async (text: string) => {
@@ -363,7 +380,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
 
           {/* Composer OR the sign-up wall */}
           {capReached ? (
-            <GuestCapWall t={t} tRoom={tRoom} limit={limit} shared={inRoom} />
+            <GuestCapWall t={t} tRoom={tRoom} limit={limit} shared={inRoom} refusal={refusedWall} />
           ) : (
             <form onSubmit={onSubmit} className="gb-composer">
               <textarea
@@ -449,35 +466,35 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   );
 }
 
-/** The conversion wall shown once the daily allowance is spent. */
+/**
+ * The conversion wall shown once the daily allowance is spent.
+ *
+ * The buttons themselves are <GuestSignupCta>, shared with the kill-switch panel
+ * below and with the Creation Canvas — one block, one pair of destinations, so a
+ * guest who runs out mid-sentence is offered the same way forward everywhere.
+ * Only the sentence differs here, because a room's allowance was spent by
+ * everyone in it together.
+ */
 function GuestCapWall({
-  t, tRoom, limit, shared,
+  t, tRoom, limit, shared, refusal,
 }: {
   t: ReturnType<typeof useTranslations>;
   tRoom: ReturnType<typeof useTranslations>;
   limit: number;
   /** In a room the allowance was spent by everyone together — say so. */
   shared: boolean;
+  /** The gateway's own verdict, when a refusal (not the local counter) raised this
+   *  wall. A per-device cap is NOT "your ten messages", and saying so to someone
+   *  who has sent two is a lie they can check. */
+  refusal: GuestLimitRefusal | null;
 }) {
+  const body = refusal?.reason === 'ip'
+    ? t('wallBodyDevice')
+    : shared || refusal?.reason === 'room'
+      ? tRoom('wallBody', { count: refusal?.limit ?? limit })
+      : t('wallBody', { count: refusal?.limit ?? limit });
   return (
-    <div className="gb-wall">
-      <div className="gb-wall-emoji"><Icon source="🚀" size="1em" /></div>
-      <div className="gb-wall-title">{t('wallTitle')}</div>
-      <div className="gb-wall-body">{shared ? tRoom('wallBody', { count: limit }) : t('wallBody', { count: limit })}</div>
-      <div className="gb-wall-actions">
-        <Link href="/register" className="gb-wall-primary">{t('createFreeAccount')}</Link>
-        <Link href="/login" className="gb-wall-secondary">{t('signIn')}</Link>
-      </div>
-      <style>{`
-        .gb-wall { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 20px 16px; background: var(--bg-elevated); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-        .gb-wall-emoji { font-size: var(--font-size-section); }
-        .gb-wall-title { font-size: var(--font-size-card-title); font-weight: 700; color: var(--text-primary); }
-        .gb-wall-body { font-size: var(--font-size-small); color: var(--text-muted); max-width: 340px; line-height: 1.5; }
-        .gb-wall-actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
-        .gb-wall-primary { padding: 10px 20px; font-size: var(--font-size-small); font-weight: 600; background: var(--accent); color: var(--text-on-accent); border-radius: var(--radius-lg); text-decoration: none; }
-        .gb-wall-secondary { padding: 10px 20px; font-size: var(--font-size-small); font-weight: 600; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); text-decoration: none; }
-      `}</style>
-    </div>
+    <GuestSignupCta prompt={{ next: '/brainstorm' }} title={t('wallTitle')} body={body} />
   );
 }
 
@@ -488,17 +505,11 @@ function GuestDisabledCTA({ t }: { t: ReturnType<typeof useTranslations> }) {
       <div className="gb-empty-emoji"><Icon source="🧠" size="1em" /></div>
       <div className="gb-empty-title">{t('meetTitle')}</div>
       <div className="gb-empty-body">{t('meetBody')}</div>
-      <div className="gb-wall-actions">
-        <Link href="/register" className="gb-wall-primary">{t('createFreeAccount')}</Link>
-        <Link href="/login" className="gb-wall-secondary">{t('signIn')}</Link>
-      </div>
+      <GuestSignupCta prompt={{ next: '/brainstorm' }} layout="actions" />
       <style>{`
         .gb-disabled { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; color: var(--text-muted); }
         .gb-disabled .gb-empty-title { font-size: var(--font-size-card-title); font-weight: 600; color: var(--text-primary); }
         .gb-disabled .gb-empty-body { font-size: var(--font-size-small); max-width: 300px; line-height: 1.5; }
-        .gb-disabled .gb-wall-actions { display: flex; gap: 10px; margin-top: 8px; }
-        .gb-disabled .gb-wall-primary { padding: 10px 20px; font-size: var(--font-size-small); font-weight: 600; background: var(--accent); color: var(--text-on-accent); border-radius: var(--radius-lg); text-decoration: none; }
-        .gb-disabled .gb-wall-secondary { padding: 10px 20px; font-size: var(--font-size-small); font-weight: 600; background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); text-decoration: none; }
       `}</style>
     </div>
   );

@@ -26,6 +26,7 @@
 import type { BrainConfig, BrainPersistenceAdapter, BrainChat, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL } from '../auth';
 import { parseLlmError } from '../builderforceApi';
+import { guestLimitRefusal, noteGuestLimit } from '../guestLimit';
 import { getModality } from '../modality';
 import { getStoredGuestToken, clearGuestToken } from '../guestChatApi';
 import {
@@ -295,7 +296,17 @@ export const guestBrainConfig: BrainConfig = {
     getToken: getStoredGuestToken,
     // A guest 401 means the token lapsed — drop it so the next send re-mints.
     onUnauthorized: () => { clearGuestToken(); },
-    mapError: parseLlmError,
+    // The gateway's refusal keeps its structured fields (parseLlmError), and a
+    // spent allowance is ANNOUNCED on the way past: the local "messages left"
+    // counter is not the only way to run out — the per-device and per-room caps
+    // refuse while this browser still believes it has turns — and without this a
+    // guest met those walls as a bare English error line with nothing to click.
+    mapError: async (res) => {
+      const error = await parseLlmError(res);
+      const refusal = guestLimitRefusal(error);
+      if (refusal) noteGuestLimit(refusal);
+      return error;
+    },
   },
   persistence: dispatchingGuestPersistence,
   resolveSystemPrompt: (modality) => getModality(modality).brainSystemPrompt,

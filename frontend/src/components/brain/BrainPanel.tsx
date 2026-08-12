@@ -909,6 +909,7 @@ export function BrainPanel({
     empty: tTimeline('empty'),
     copy: tTimeline('copy'),
     copied: tTimeline('copied'),
+    replay: tTimeline('replay'),
     apply: tTimeline('apply'),
     createFile: tTimeline('createFile'),
     preview: tTimeline('preview'),
@@ -956,6 +957,13 @@ export function BrainPanel({
   const onAnswerTimelineQuestion = useCallback((answer: string) => {
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(answer, { addressedTo: r });
+  }, []);
+  /** "Send again" on any message: re-ask with the same text. Addressed to the same
+   *  recipient as a freshly typed turn, so replaying in a multi-party chat reaches
+   *  whoever the composer is currently pointed at rather than silently the Brain. */
+  const onReplayTimelineMessage = useCallback((msg: BrainMessage) => {
+    const { conv: c, recipient: r } = timelineCtxRef.current;
+    void c.send(msg.content, { addressedTo: r });
   }, []);
   const renderTimelineMessage = useCallback(
     (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (
@@ -1596,6 +1604,7 @@ export function BrainPanel({
               renderMessage={renderTimelineMessage}
               renderStreaming={renderTimelineStreaming}
               renderAssistantActions={renderTimelineAssistantActions}
+              onReplayMessage={onReplayTimelineMessage}
             />
           </div>
           {/* Composer chrome uses the shared --chat-ctl-* metrics (globals.css) so the
@@ -1856,8 +1865,6 @@ function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestio
         onRetry={(prompt) => { void conv.send(prompt); }}
       />
       <ChatMessageActions
-        onCopy={() => conv.copyMessage(msg)}
-        copied={conv.copiedMessageId === msg.id}
         feedback={conv.feedbackMap[msg.id]}
         onFeedback={(value) => conv.submitFeedback(msg, value)}
         projectId={projectId}

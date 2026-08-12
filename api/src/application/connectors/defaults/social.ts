@@ -33,7 +33,14 @@ const linkedin: ConnectorManifest = {
   description: 'Publish company or member posts and read engagement on LinkedIn.',
   baseUrl: 'https://api.linkedin.com', docsUrl: 'https://learn.microsoft.com/linkedin/marketing/community-management/shares/posts-api',
   defaultHeaders: { 'LinkedIn-Version': '202606', 'X-Restli-Protocol-Version': '2.0.0' },
-  auth: { kind: 'bearer', fields: [{ key: 'token', label: 'OAuth access token', secret: true, required: true, help: 'Company publishing requires approved Community Management access and the appropriate organization feed scopes.' }] },
+  // `authorUrn` is a NON-SECRET scope field, not a credential: a company-page grant
+  // authenticates as a member, so the token alone cannot say which feed to publish
+  // to. Storing it on the connection is what lets the social port refuse a post it
+  // could not place, instead of publishing to the wrong feed or 400ing at the API.
+  auth: { kind: 'bearer', fields: [
+    { key: 'token', label: 'OAuth access token', secret: true, required: true, help: 'Company publishing requires approved Community Management access and the appropriate organization feed scopes.' },
+    { key: 'authorUrn', label: 'Author URN', secret: false, required: false, placeholder: 'urn:li:organization:1234567', help: 'Which feed posts are published to — an organization URN for a company page, or a person URN to post as yourself.' },
+  ] },
   actions: [
     { key: 'get_profile', label: 'Get connected profile', description: 'Verify the connected LinkedIn member through OpenID Connect.', method: 'GET', path: '/v2/userinfo', mutates: false, params: {} },
     { key: 'create_post', label: 'Create post', description: 'Publish a LinkedIn member or organization post.', method: 'POST', path: '/rest/posts', mutates: true, required: ['author', 'commentary'], params: {
@@ -48,7 +55,10 @@ const facebook: ConnectorManifest = {
   key: 'facebook-pages', name: 'Facebook Pages', category: 'marketing', icon: 'f',
   description: 'Publish to a Facebook Page and measure post and Page performance.',
   baseUrl: 'https://graph.facebook.com/v25.0', docsUrl: 'https://developers.facebook.com/docs/pages-api/posts',
-  auth: { kind: 'bearer', fields: [{ key: 'token', label: 'Page access token', secret: true, required: true }] },
+  auth: { kind: 'bearer', fields: [
+    { key: 'token', label: 'Page access token', secret: true, required: true },
+    { key: 'pageId', label: 'Page ID', secret: false, required: false, placeholder: '1234567890', help: 'The Page this connection publishes to and reports on. A token can administer several.' },
+  ] },
   actions: [
     { key: 'get_account', label: 'Get connected Page account', description: 'Verify the Facebook identity represented by the access token.', method: 'GET', path: '/me', mutates: false, params: { fields: q('Identity fields', { default: 'id,name' }) } },
     { key: 'create_post', label: 'Create Page post', description: 'Publish a text or link post to a Facebook Page.', method: 'POST', path: '/{page_id}/feed', mutates: true, required: ['page_id', 'message'], params: { page_id: p('Facebook Page id'), message: b('Post copy'), link: b('Optional destination URL'), published: bb('Publish immediately', { default: true }) } },
@@ -61,7 +71,10 @@ const instagram: ConnectorManifest = {
   key: 'instagram-business', name: 'Instagram', category: 'marketing', icon: '◎',
   description: 'Publish media to Instagram professional accounts and report media insights.',
   baseUrl: 'https://graph.facebook.com/v25.0', docsUrl: 'https://developers.facebook.com/docs/instagram-platform/content-publishing',
-  auth: { kind: 'bearer', fields: [{ key: 'token', label: 'Instagram user access token', secret: true, required: true }] },
+  auth: { kind: 'bearer', fields: [
+    { key: 'token', label: 'Instagram user access token', secret: true, required: true },
+    { key: 'igUserId', label: 'Instagram account ID', secret: false, required: false, placeholder: '17841400000000000', help: 'The professional account id that owns the media this connection publishes and reports on.' },
+  ] },
   actions: [
     { key: 'get_account', label: 'Get connected Instagram account', description: 'Verify the Instagram professional account identity.', method: 'GET', path: '/me', mutates: false, params: { fields: q('Identity fields', { default: 'id,username,account_type' }) } },
     { key: 'create_media', label: 'Create media container', description: 'Create an Instagram image, carousel, reel, or story publishing container.', method: 'POST', path: '/{ig_user_id}/media', mutates: true, required: ['ig_user_id'], params: { ig_user_id: p('Instagram professional account id'), image_url: b('Public image URL'), video_url: b('Public video URL'), media_type: b('IMAGE, VIDEO, REELS, STORIES or CAROUSEL'), caption: b('Caption and hashtags'), children: ba('Child container ids for a carousel'), is_carousel_item: bb('Whether this is a carousel child') } },

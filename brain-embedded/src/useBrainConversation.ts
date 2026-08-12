@@ -150,7 +150,6 @@ export interface UseBrainConversation {
   errorAction: ChatErrorAction | null;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
   streamingText: string;
-  copiedMessageId: number | null;
   feedbackMap: Record<number, 'up' | 'down'>;
   pendingAttachments: ChatInputAttachment[];
   uploading: boolean;
@@ -167,7 +166,6 @@ export interface UseBrainConversation {
    * running. Pair with `sending` to drive a Stop button.
    */
   stop(): void;
-  copyMessage(msg: BrainMessage): Promise<void>;
   submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
@@ -250,7 +248,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = useState(false);
   const [localError, setLocalError] = useState('');
-  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const [feedbackMap, setFeedbackMap] = useState<Record<number, 'up' | 'down'>>({});
   const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -510,14 +507,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 
-  const copyMessage = useCallback(async (msg: BrainMessage) => {
-    try {
-      await navigator.clipboard.writeText(msg.content);
-      setCopiedMessageId(msg.id);
-      setTimeout(() => setCopiedMessageId((cur) => (cur === msg.id ? null : cur)), 2000);
-    } catch { /* ignore */ }
-  }, []);
-
   const submitFeedback = useCallback(async (msg: BrainMessage, value: 'up' | 'down') => {
     const current = feedbackMap[msg.id];
     const next = current === value ? null : value;
@@ -600,13 +589,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
-    copiedMessageId,
     feedbackMap,
     pendingAttachments,
     uploading,
     send,
     stop,
-    copyMessage,
     submitFeedback,
     attach,
     removeAttachment,

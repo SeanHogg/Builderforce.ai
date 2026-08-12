@@ -9,8 +9,6 @@ import { downloadText } from '@/lib/download';
 import { exportFilenameStem } from '@/lib/brain/messageExport';
 
 export interface ChatMessageActionsProps {
-  onCopy: () => void;
-  copied?: boolean;
   /** When provided, thumbs up/down are shown and call this. Omit to hide feedback buttons (e.g. IDE project chat). */
   feedback?: 'up' | 'down';
   onFeedback?: (value: 'up' | 'down') => void;
@@ -28,12 +26,15 @@ export interface ChatMessageActionsProps {
 }
 
 /**
- * Reusable action bar for assistant messages: Copy, thumbs up/down, export, and
- * project actions. Used by Brain Storm and IDE Brain chat.
+ * The web app's EXTRA assistant-message actions: download, thumbs up/down, export,
+ * and project actions.
+ *
+ * Copy and "send again" are NOT here — they are built into the shared
+ * <BrainTimeline>, so every surface that mounts the transcript gets them (the Canvas
+ * dock and the VS Code webview had neither while this bar was the only place they
+ * existed). This bar composes after them.
  */
 export function ChatMessageActions({
-  onCopy,
-  copied,
   feedback,
   onFeedback,
   projectId,
@@ -62,16 +63,6 @@ export function ChatMessageActions({
         data-state={downloaded ? 'complete' : 'idle'}
       >
         <Icon name={downloaded ? 'document' : 'download'} size={15} />
-      </button>
-      <button
-        type="button"
-        className="bs-action-btn bs-action-btn--icon"
-        onClick={onCopy}
-        title={copied ? t('copied') : t('copy')}
-        aria-label={copied ? t('copied') : t('copy')}
-        data-state={copied ? 'complete' : 'idle'}
-      >
-        <Icon name={copied ? 'check' : 'copy'} size={15} />
       </button>
       {onFeedback != null && (
         <>

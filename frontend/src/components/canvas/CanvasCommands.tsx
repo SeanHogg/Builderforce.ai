@@ -128,6 +128,17 @@ export function CanvasDriveIcon() {
   </svg>;
 }
 
+/** Connected social accounts: a share node — one source, several destinations,
+ *  which is exactly what the panel behind it does. */
+export function CanvasSocialIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="11.6" cy="3.6" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="4.2" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="11.6" cy="12.4" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M6 7 9.9 4.7M6 9l3.9 2.3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+  </svg>;
+}
+
 /** The universal-access glyph used by every canvas that publishes a text outline. */
 export function AccessibleOutlineIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">

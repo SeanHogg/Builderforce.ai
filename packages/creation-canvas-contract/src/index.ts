@@ -21,6 +21,12 @@ export const CREATION_OBJECT_KINDS = [
   // A marketing campaign and the template it renders — the canvas half of
   // "draft this, then send it to that list".
   'emailCampaign', 'emailTemplate',
+  // The social half of the same story, and the same two-kind split as inbox/email
+  // for the same reason: a `socialFeed` is a LIVE merged view across every connected
+  // network that re-reads, while a `socialPost` is one post pinned to the board so it
+  // can be annotated and connected to work and is still there tomorrow. A
+  // `socialCampaign` is one announcement published to every connected account.
+  'socialFeed', 'socialPost', 'socialCampaign',
   // A standards-based learning experience authored and completed on the canvas.
   'course',
   // A reusable, target-aware product onboarding design. It stays provider-neutral:

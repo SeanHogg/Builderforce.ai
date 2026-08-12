@@ -50,6 +50,17 @@ export interface ConnectorCallResult {
   error?: string;
   durationMs: number;
   truncated?: boolean;
+  /**
+   * Response headers the caller NAMED, and only those. Present only when
+   * `captureHeaders` was passed.
+   *
+   * Deliberately opt-in and allowlisted rather than "all headers": a connector
+   * response carries `set-cookie` and vendor auth echoes, and this result is
+   * handed to model tool loops. LinkedIn is why it exists at all — it answers a
+   * created post with 201, an EMPTY body and the new post's id in `x-restli-id`,
+   * so without this the publisher could never record what it published.
+   */
+  headers?: Record<string, string>;
 }
 
 export class ConnectorCallError extends Error {
@@ -353,6 +364,8 @@ export async function executeConnectorAction(args: {
   allowDraft?: boolean;
   fetchImpl?: typeof fetch;
   resolvedOverride?: ResolvedConnector | null;
+  /** Response headers to return, by lowercase name. See {@link ConnectorCallResult.headers}. */
+  captureHeaders?: readonly string[];
 }): Promise<ConnectorCallResult> {
   const {
     db, env, tenantId, connectorKey, actionKey,
@@ -419,6 +432,7 @@ export async function executeConnectorAction(args: {
   let data: unknown = null;
   let errorText: string | undefined;
   let truncated = false;
+  let captured: Record<string, string> | undefined;
 
   try {
     const res = await fetchImpl(safeUrl.toString(), {
@@ -426,6 +440,14 @@ export async function executeConnectorAction(args: {
       signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     });
     status = res.status;
+
+    if (args.captureHeaders?.length) {
+      captured = {};
+      for (const name of args.captureHeaders) {
+        const value = res.headers?.get(name);
+        if (value) captured[name.toLowerCase()] = value;
+      }
+    }
 
     // `redirect: 'manual'` surfaces a 3xx as a real response — report it rather
     // than following it to who-knows-where.
@@ -485,5 +507,10 @@ export async function executeConnectorAction(args: {
       .catch(() => undefined);
   }
 
-  return { ok, status, data, durationMs, ...(errorText ? { error: errorText } : {}), ...(truncated ? { truncated } : {}) };
+  return {
+    ok, status, data, durationMs,
+    ...(errorText ? { error: errorText } : {}),
+    ...(truncated ? { truncated } : {}),
+    ...(captured && Object.keys(captured).length ? { headers: captured } : {}),
+  };
 }

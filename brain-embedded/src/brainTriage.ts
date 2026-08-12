@@ -10,6 +10,7 @@
  */
 
 import { announcesUntakenAction } from '@builderforce/agent-stall';
+import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 
@@ -595,14 +596,15 @@ export function computeBrainDiagnostics(
       }
       if (typeof u.completion === 'number') completionTokenTotal += u.completion;
     }
-    const finish = ev.finishReason ?? null;
     const emptyText = typeof ev.textChars === 'number' && ev.textChars === 0;
     // A "no-op" turn (empty text but tool calls requested) is normal; only count
-    // a turn as degenerate when it ended on `length` (truncated) or produced
-    // nothing AND asked for no tools.
+    // a turn as degenerate when the model was INTERRUPTED — truncated by the output
+    // ceiling, or its tool call was unparseable — or it produced nothing AND asked
+    // for no tools. Interruption is read through the shared classifier so a vendor
+    // that spells truncation `max_tokens` is not counted as a healthy turn.
     const toolCallsThisTurn = (ev.args as { toolCalls?: unknown } | undefined)?.toolCalls;
     const askedNoTools = typeof toolCallsThisTurn === 'number' ? toolCallsThisTurn === 0 : true;
-    if (finish === 'length' || (emptyText && askedNoTools)) emptyOrLengthFinishes += 1;
+    if (turnInterruption(ev.finishReason) || (emptyText && askedNoTools)) emptyOrLengthFinishes += 1;
     // A DOWNGRADE is the gateway answering with a model we did not ask for on THAT
     // turn — a context-exhaustion symptom. Compare against the per-turn
     // `requestedModel` the loop records, not the run's original ask: when the loop

@@ -19,6 +19,9 @@ export interface BrainTimelineLabels {
   empty: string;
   copy: string;
   copied: string;
+  /** Per-message "send this again" action — re-asks the model with the same text,
+   *  from a user turn or an assistant one. */
+  replay: string;
   apply: string;
   createFile: string;
   /** Heading for the change preview shown on an edit_file / write_file tool step. */
@@ -77,6 +80,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   empty: 'Ask BuilderForce to build or change something.',
   copy: 'Copy',
   copied: 'Copied',
+  replay: 'Send again',
   apply: 'Apply',
   createFile: 'Create file',
   preview: 'Preview',
@@ -156,8 +160,13 @@ export interface BrainTimelineProps {
   renderMessage?: (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => React.ReactNode;
   /** Render the live streaming assistant bubble. Defaults to <Markdown>. */
   renderStreaming?: (text: string) => React.ReactNode;
-  /** Per-assistant-message action row (copy / feedback / suggestions). */
+  /** Host-specific EXTRAS on an assistant message (feedback, export, suggestions).
+   *  Copy and "send again" are built in — see {@link MessageActions} — so a host never
+   *  re-implements them. */
   renderAssistantActions?: (msg: BrainMessage) => React.ReactNode;
+  /** Re-send a message's text as the next turn. When omitted the "send again" action
+   *  hides itself, so a read-only transcript offers only copy. */
+  onReplayMessage?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
   onInternalLink?: (href: string) => void;
   onApplyCode?: (code: string) => void;
   onCreateFile?: (path: string, content: string) => void;
@@ -191,15 +200,22 @@ function dotIcon(kind: TimelineNode['kind'], isError?: boolean): string {
   }
 }
 
-/** Copy `text` to the clipboard, flashing a "Copied" confirmation. Shared by every
- *  copyable panel on a tool step (Input / Output / preview). */
-function CopyButton({ text, labels }: { text: string; labels: BrainTimelineLabels }) {
+/**
+ * Copy `text` to the clipboard, flashing a "Copied" confirmation.
+ *
+ * THE clipboard button of this package — the tool step's Input / Output / preview
+ * panels wear it as a labelled chip, a message wears it as an icon. One
+ * implementation, because two would drift on the confirmation timing alone.
+ */
+function CopyButton({ text, labels, icon = false }: { text: string; labels: BrainTimelineLabels; icon?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
-      className="bf-tl__copy"
-      title={labels.copy}
+      className={icon ? 'bf-tl__act' : 'bf-tl__copy'}
+      title={copied ? labels.copied : labels.copy}
+      aria-label={copied ? labels.copied : labels.copy}
+      data-state={copied ? 'done' : undefined}
       onClick={(e) => {
         e.stopPropagation();
         void navigator.clipboard?.writeText(text).then(
@@ -211,8 +227,53 @@ function CopyButton({ text, labels }: { text: string; labels: BrainTimelineLabel
         );
       }}
     >
-      {copied ? labels.copied : labels.copy}
+      {icon ? <span aria-hidden>{copied ? '✓' : '⧉'}</span> : copied ? labels.copied : labels.copy}
     </button>
+  );
+}
+
+/**
+ * The action row every message carries: copy it, and send it again.
+ *
+ * It lives HERE rather than in each host's own action bar because all three surfaces
+ * (the web Brain panel, the Canvas dock, the VS Code webview) mount this same
+ * timeline — a host-side implementation would have had to be written three times and
+ * would have reached only whichever surface remembered to render it. Hosts still add
+ * their OWN extras through `renderAssistantActions`; those compose after these.
+ *
+ * "Send again" is deliberately offered on BOTH roles: replaying a user turn re-asks
+ * the question, and replaying an assistant turn feeds its answer back as the next
+ * prompt — which is how you ask the model to build on what it just said.
+ */
+function MessageActions({
+  message,
+  role,
+  text,
+  labels,
+  onReplay,
+}: {
+  message: BrainMessage;
+  role: 'user' | 'assistant';
+  text: string;
+  labels: BrainTimelineLabels;
+  onReplay?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
+}) {
+  if (!text.trim()) return null;
+  return (
+    <>
+      <CopyButton text={text} labels={labels} icon />
+      {onReplay && (
+        <button
+          type="button"
+          className="bf-tl__act"
+          title={labels.replay}
+          aria-label={labels.replay}
+          onClick={(e) => { e.stopPropagation(); onReplay(message, role); }}
+        >
+          <span aria-hidden>↻</span>
+        </button>
+      )}
+    </>
   );
 }
 
@@ -341,6 +402,7 @@ function BrainTimelineInner({
   renderMessage,
   renderStreaming,
   renderAssistantActions,
+  onReplayMessage,
   onInternalLink,
   onApplyCode,
   onCreateFile,
@@ -437,6 +499,9 @@ function BrainTimelineInner({
                     </div>
                   )}
                   {node.text && <div className="bf-tl__bubble bf-tl__bubble--user">{renderMsg(node.message, 'user', node.text)}</div>}
+                  <div className="bf-tl__actions bf-tl__actions--hover">
+                    <MessageActions message={node.message} role="user" text={node.text} labels={labels} onReplay={onReplayMessage} />
+                  </div>
                 </div>
               </li>
             );
@@ -473,7 +538,10 @@ function BrainTimelineInner({
                       anchorId={askUserAnchorId(node.message.id)}
                     />
                   )}
-                  {renderAssistantActions && <div className="bf-tl__actions">{renderAssistantActions(node.message)}</div>}
+                  <div className="bf-tl__actions">
+                    <MessageActions message={node.message} role="assistant" text={bodyText} labels={labels} onReplay={onReplayMessage} />
+                    {renderAssistantActions?.(node.message)}
+                  </div>
                   {prov && <ProvenanceChip prov={prov} labels={labels} />}
                 </div>
               </li>

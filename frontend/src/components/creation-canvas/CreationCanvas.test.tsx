@@ -501,13 +501,29 @@ describe('CreationCanvas', () => {
       }}
     />);
 
-    expect(screen.getByRole('img', { name: /In Progress: 95.*Review: 2/ })).toBeInTheDocument();
-    expect(screen.getByText('Distribution')).toBeInTheDocument();
+    // The flat legacy fields fold into TWO widgets — the ranked bars and the mix —
+    // which is exactly what this card drew before the dashboard became a widget list.
+    expect(screen.getAllByRole('img', { name: /In Progress: 95.*Review: 2/ })).toHaveLength(2);
     expect(screen.getByText('Current task status')).toBeInTheDocument();
     expect(screen.getByText('Status')).toBeInTheDocument();
-    expect(screen.getByText('Task count')).toBeInTheDocument();
+    // `yAxisLabel` names the folded series, and a single series names itself in the
+    // widget's sub-caption — once per widget.
+    expect(screen.getAllByText('Task count')).toHaveLength(2);
     expect(screen.getAllByText('In Review')).toHaveLength(2);
+    // The invented "Reach 212K / CTR 3.6% / Conversion 2.1%" placeholders are gone.
     expect(screen.queryByText('Reach')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty dashboard as empty instead of inventing placeholder KPIs', () => {
+    render(<CreationNode
+      id="blank-dashboard" type="creation" selected={false} dragging={false} zIndex={0}
+      selectable deletable draggable isConnectable positionAbsoluteX={0} positionAbsoluteY={0}
+      data={{ kind: 'dashboard', title: 'Performance dashboard' }}
+    />);
+
+    expect(screen.queryByText('212K')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reach')).not.toBeInTheDocument();
+    expect(screen.getByText('This dashboard has no widgets yet.')).toBeInTheDocument();
   });
 
   it('visualizes single-project quality diagnostics and recommendations', () => {
@@ -992,8 +1008,11 @@ describe('CreationCanvas', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save & collaborate' }));
     expect(screen.getByRole('dialog', { name: 'Create an account to save and collaborate' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create free account' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    // The gate's two ways in are the SHARED <GuestSignupCta> links — the same pair
+    // the Brain surface offers a guest who has spent their free turns — and each
+    // carries this canvas through auth so the board is still there afterwards.
+    expect(screen.getByRole('link', { name: 'Create a free account' })).toHaveAttribute('href', '/register?next=%2Fcreate%2Faccount-gate-test');
+    expect(screen.getByRole('link', { name: 'Sign In' })).toHaveAttribute('href', '/login?next=%2Fcreate%2Faccount-gate-test');
     fireEvent.click(screen.getByRole('button', { name: 'Not now — keep creating locally' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ask Brain about this canvas')).toBeEnabled();
@@ -1089,7 +1108,7 @@ describe('CreationCanvas', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument(), { timeout: 2_000 });
     fireEvent.click(screen.getByRole('button', { name: 'Add to project and assign' }));
     expect(screen.getByRole('dialog', { name: 'Create an account to deliver this mockup' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create free account' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Create a free account' })).toBeInTheDocument();
   });
 
   it('edits a website prototype live from the inspector', () => {

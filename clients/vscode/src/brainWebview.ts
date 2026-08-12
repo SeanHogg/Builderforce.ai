@@ -104,6 +104,7 @@ function buildLabels(): Record<string, string> {
     "tl.empty": t("Ask BuilderForce to build or change something."),
     "tl.copy": t("Copy"),
     "tl.copied": t("Copied"),
+    "tl.replay": t("Send again"),
     "tl.apply": t("Apply"),
     "tl.createFile": t("Create file"),
     "tl.preview": t("Preview"),

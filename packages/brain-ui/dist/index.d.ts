@@ -17,6 +17,9 @@ interface BrainTimelineLabels {
     empty: string;
     copy: string;
     copied: string;
+    /** Per-message "send this again" action — re-asks the model with the same text,
+     *  from a user turn or an assistant one. */
+    replay: string;
     apply: string;
     createFile: string;
     /** Heading for the change preview shown on an edit_file / write_file tool step. */
@@ -86,8 +89,13 @@ interface BrainTimelineProps {
     }) => React__default.ReactNode;
     /** Render the live streaming assistant bubble. Defaults to <Markdown>. */
     renderStreaming?: (text: string) => React__default.ReactNode;
-    /** Per-assistant-message action row (copy / feedback / suggestions). */
+    /** Host-specific EXTRAS on an assistant message (feedback, export, suggestions).
+     *  Copy and "send again" are built in — see {@link MessageActions} — so a host never
+     *  re-implements them. */
     renderAssistantActions?: (msg: BrainMessage) => React__default.ReactNode;
+    /** Re-send a message's text as the next turn. When omitted the "send again" action
+     *  hides itself, so a read-only transcript offers only copy. */
+    onReplayMessage?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
     onInternalLink?: (href: string) => void;
     onApplyCode?: (code: string) => void;
     onCreateFile?: (path: string, content: string) => void;
@@ -105,7 +113,7 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole
@@ -491,7 +499,8 @@ interface PromptOptionsMenuProps {
 }
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
- * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * runs in, whether it remembers, whether actions auto-apply, run shaping (effort,
+ * thinking), the model in use
  * and the model picker, plus account settings. One affordance, shared by every
  * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
  *

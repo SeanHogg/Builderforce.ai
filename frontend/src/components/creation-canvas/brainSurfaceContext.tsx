@@ -16,6 +16,7 @@
 import { createContext, useContext } from 'react';
 import type { Edge } from '@xyflow/react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import type { GuestSignupPrompt } from '@/components/GuestSignupCta';
 import type { CreationFlowNode } from './CreationNode';
 import type { BrainDockMode } from './brainDockPreferences';
 
@@ -41,6 +42,11 @@ export interface BrainSurfaceContextValue {
   edges: Edge[];
   collaborators: BrainSurfaceCollaborator[];
   joinedCollaborator: BrainSurfaceCollaborator | null;
+  /** Re-send a transcript message as the next canvas turn ("send again"). */
+  onReplayMessage: (message: BrainMessage, role: 'user' | 'assistant') => void;
+  /** The guest wall this conversation ran into, so BOTH placements offer the same
+   *  way forward. Null on every signed-in board. */
+  guestSignup: GuestSignupPrompt | null;
   /** Select the Brain Object and reveal the conversation, wherever it lives. */
   onOpen: (nodeId: string) => void;
   onModeChange: (mode: BrainDockMode) => void;

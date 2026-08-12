@@ -95,6 +95,9 @@
   --canvas-series-6: #46a4d9;
   --canvas-series-7: #9b6ad6;
   --canvas-series-8: #68b36b;
+  /* The "moving the right way" ink, shared by a KPI Object and a dashboard metric
+     tile so one trend does not read green on one card and grey on the other. */
+  --canvas-trend-up: #1bab75;
 
   /* Live collaborators. Four hues, assigned round-robin by join order. */
   --canvas-presence-1: #d946ef;
@@ -527,12 +530,90 @@
 .buildFocusBody > * { min-width:900px; }
 @media (min-width:960px) { .buildFocusBody > * { min-width:0; } }
 
-.kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }.kpis div { display:grid; gap:3px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }.kpis small,.charts small { color:var(--canvas-muted); }.kpis strong { font-size:17px; }.kpis em { color:#1bab75; font-size:8px; font-style:normal; }
-.charts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }.charts > div { min-height:85px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
-.funnel { display: flex; flex-direction: column; align-items: center; margin-top: 7px; }.funnel i { display: block; height: 13px; background: #3978f6; clip-path: polygon(8% 0,92% 0,82% 100%,18% 100%); }.funnel i:nth-child(1){width:100%}.funnel i:nth-child(2){width:80%;background:#27b4a4}.funnel i:nth-child(3){width:60%;background:#825de8}.funnel i:nth-child(4){width:40%;background:#f5a12e}
-.donut { width: 63px; height: 63px; margin: 5px auto 0; border-radius: 50%; background: conic-gradient(#3978f6 0 38%,#25b7a3 38% 65%,#7657df 65% 83%,#f4a126 83%); position: relative; }.donut:after { content:''; position:absolute; inset:14px; background:#fff; border-radius:50%; }
-.donutChart { display:grid; grid-template-columns:63px minmax(0,1fr); align-items:center; gap:8px; margin-top:5px; }.donutChart .donut { margin:0; }.donutLegend { display:grid; gap:3px; min-width:0; }.donutLegend span { display:grid; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:4px; min-width:0; font-size:8px; }.donutLegend span > i { width:7px; height:7px; border-radius:var(--radius-sm); }.donutLegend b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }.donutLegend em { font-style:normal; color:#75849a; }
-.chartTitle { display:block; margin-top:8px; font-size:11px; }.axisLabel { display:block; margin-top:6px; text-align:center; font-size:8px; }
+.kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }.kpis div { display:grid; gap:3px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }.kpis small { color:var(--canvas-muted); }.kpis strong { font-size:17px; }.kpis em { color:var(--canvas-trend-up); font-size:8px; font-style:normal; }
+/* An UNSET donut is an empty ring, not a decorative four-slice gradient: the old
+   default drew a convincing pie for an object that held no data at all. */
+.donut { width: 63px; height: 63px; margin: 5px auto 0; border-radius: 50%; background: var(--canvas-widget-border); position: relative; }.donut:after { content:''; position:absolute; inset:14px; background:#fff; border-radius:50%; }
+.donutChart { display:grid; grid-template-columns:63px minmax(0,1fr); align-items:center; gap:8px; margin-top:5px; }.donutChart .donut { margin:0; }.donutLegend { display:grid; gap:3px; min-width:0; }.donutLegend span { display:grid; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:4px; min-width:0; font-size:8px; }.donutLegend span > i { width:7px; height:7px; border-radius:var(--radius-sm); }.donutLegend b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }.donutLegend em { font-style:normal; color:var(--canvas-muted); }
+.axisLabel { display:block; margin-top:6px; text-align:center; font-size:8px; }
+
+/* ── Dashboard widgets ───────────────────────────────────────────────────────────
+   Drawn by DashboardWidgetView, which is mounted by BOTH the Object card and the
+   editor's live preview. Every hue is a board hue (`--canvas-*`): these marks sit on
+   the board's own paper, so inheriting the shell's chart tokens would flatten them —
+   see this file's palette header. */
+.dwGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; margin-top:8px; }
+.dwWidget { display:flex; flex-direction:column; gap:5px; min-width:0; min-height:85px; margin:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.dwWidget[data-span='full'] { grid-column:1 / -1; }
+.dwWidget figcaption { color:var(--canvas-muted); font-size:9px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwEmpty { margin:10px 0 0; padding:14px; border:1px dashed var(--canvas-line); border-radius:var(--radius-md); color:var(--canvas-muted); font-size:10px; text-align:center; }
+.dwEmptyWidget { margin:0; color:var(--canvas-muted); font-size:9px; }
+/* What a single series IS — a one-row legend without the pointless swatch. */
+.dwSeriesName { color:var(--canvas-muted); font-size:8px; }
+
+.dwMetric strong { display:block; font-size:17px; line-height:1.2; }
+.dwMetric em { color:var(--canvas-trend-up); font-size:8px; font-style:normal; }
+
+.dwBars,.dwFunnel { display:grid; gap:5px; }
+.dwBars > div,.dwFunnel > div,.dwStackRow { display:grid; grid-template-columns:minmax(0,58px) minmax(0,1fr) minmax(0,34px); align-items:center; gap:5px; font-size:9px; }
+.dwBars span,.dwFunnel span,.dwStackRow > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwBars b,.dwFunnel b,.dwStackRow b { text-align:right; font-weight:700; }
+.dwBars i { display:block; height:7px; border-radius:var(--radius-sm); }
+.dwFunnel i { display:block; height:12px; margin:0 auto; clip-path:polygon(6% 0,94% 0,86% 100%,14% 100%); }
+
+.dwColumns { display:flex; align-items:flex-end; gap:4px; }
+.dwColumns > div { display:flex; flex:1; flex-direction:column; justify-content:flex-end; align-items:center; gap:3px; min-width:0; height:76px; font-size:8px; }
+.dwColumns i { display:block; width:100%; border-radius:var(--radius-sm) var(--radius-sm) 0 0; }
+.dwColumns span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwColumns b { font-weight:700; }
+
+.dwPlot { display:flex; flex-direction:column; gap:4px; }
+.dwPlot svg { display:block; width:100%; height:56px; }
+.dwAxis { display:flex; justify-content:space-between; gap:4px; min-width:0; color:var(--canvas-muted); font-size:8px; }
+.dwAxis span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwLegend { display:flex; flex-wrap:wrap; gap:6px; font-size:8px; }
+.dwLegend span { display:inline-flex; align-items:center; gap:3px; }
+.dwLegend i { width:7px; height:7px; border-radius:var(--radius-sm); }
+
+.dwStack { display:grid; gap:5px; }
+.dwStackRow > div { display:flex; height:8px; overflow:hidden; border-radius:var(--radius-sm); background:var(--canvas-widget-border); }
+.dwStackRow i { display:block; height:100%; }
+
+.dwGauge { display:flex; flex-direction:column; align-items:center; }
+.dwGauge svg { width:100%; max-width:132px; height:auto; }
+.dwGauge strong { font-size:16px; }
+.dwGauge em { color:var(--canvas-muted); font-size:8px; font-style:normal; }
+
+.dwTable { overflow-x:auto; }
+.dwTable table { width:100%; border-collapse:collapse; font-size:9px; }
+.dwTable th,.dwTable td { padding:3px 5px; border-bottom:1px solid var(--canvas-line); text-align:right; white-space:nowrap; }
+.dwTable thead th { color:var(--canvas-muted); }
+.dwTable thead th:first-child,.dwTable tbody th { text-align:left; font-weight:600; }
+
+/* ── Dashboard editor ────────────────────────────────────────────────────────────
+   Panel chrome, not board marks — so it uses the SHELL's form tokens, exactly like
+   the resume editor whose field classes it reuses. */
+.dashboardEditor { display:flex; flex-direction:column; gap:8px; max-height:520px; margin-top:8px; overflow:auto; padding-right:4px; }
+.dashboardWidgetRow { position:relative; margin:10px 0 0; border:1px solid var(--border); border-radius:8px; padding:12px; }
+.dashboardWidgetRow legend { max-width:70%; overflow:hidden; padding:0 5px; font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.dashboardWidgetRow .resumeFieldGrid { grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); padding:0; }
+.dashboardWidgetRow .resumeAddEntry { grid-column:1 / -1; margin:0; }
+.dashboardWidgetRow[data-dragging] { opacity:.5; }
+.dashboardWidgetRow[data-drop-target] { outline:2px solid var(--canvas-brain-accent); outline-offset:2px; }
+.dashboardEditor select { width:100%; min-height:34px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:inherit; padding:6px 8px; font:inherit; }
+/* A native <option> paints on the OS menu, not on this panel, so it needs its own
+   opaque pair or it renders white-on-white in one of the two themes. */
+.dashboardEditor select option { background:var(--surface); color:var(--text-primary); }
+.dashboardSeriesRow { grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:flex-end; gap:9px; }
+.dashboardSeriesRow > label { flex:1 1 140px; min-width:0; }
+.dashboardSeriesRow > button { width:32px; min-height:32px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; cursor:pointer; }
+.dashboardAddWidget { display:flex; flex-direction:column; gap:6px; }
+.dashboardAddWidget > span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.dashboardAddWidget > div { display:flex; flex-wrap:wrap; gap:5px; }
+.dashboardAddWidget button { display:inline-flex; align-items:center; gap:5px; min-height:32px; border:1px dashed var(--border); border-radius:6px; background:transparent; color:inherit; padding:5px 9px; font-size:11px; cursor:pointer; }
+.dashboardAddWidget button:hover:not(:disabled),.dashboardAddWidget button:focus-visible { background:var(--surface-raised); }
+.dashboardAddWidget button:disabled { opacity:.4; cursor:not-allowed; }
+.dashboardAddWidget i { font-style:normal; }
 
 .evaluationBody { display:grid; grid-template-columns:1fr 1.35fr 1.35fr 1.35fr auto; align-items:center; gap:0; }.evaluationBody > div { min-height:62px; padding:5px 10px; border-right:1px solid #e7e2fa; box-sizing:border-box; }.evaluationBody b { font-size:9px; }.evaluationBody p { font-size:8px; }.evaluationBody button { margin-left:9px; border:0; border-radius:var(--radius-sm); padding:8px; background:#7357e7; color:var(--text-on-accent); font-family:inherit; font-size:8px; font-weight:650; }.verdict { color:#6941d7; font-size:17px; line-height:1.25; font-weight:700; }
 .node_evaluation { width:650px; }.node_agent { width:285px; }.node_staff { width:245px; }.node_chat { width:290px; height:auto; min-height:180px; border-color:var(--canvas-brain-border); background:var(--canvas-brain-surface); }
@@ -651,6 +732,23 @@
 .campaignStats small { display:block; margin-bottom:2px; color:var(--canvas-ink-soft); font-size:7px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
 .campaignStats b { color:var(--canvas-ink); font-size:11px; }
 .templateLogo { max-width:100%; max-height:34px; object-fit:contain; object-position:left center; }
+/* Social tiles. Colours come from the canvas palette vars (declared for BOTH themes
+   at the top of this file and again in the dark block), so these need no entry in the
+   theme override list below — unlike the literal-backed classes above them. */
+.socialGlyph { display:inline-block; min-width:12px; margin-right:5px; color:var(--canvas-accent-ink); font-size:9px; }
+.socialMetrics { display:flex; flex-wrap:wrap; gap:8px; margin-top:3px; color:var(--canvas-ink-soft); font-size:7px; }
+.socialMedia { display:block; width:100%; max-height:120px; margin:6px 0; border-radius:var(--radius-sm); object-fit:cover; }
+.socialTargets { display:grid; gap:4px; margin:7px 0 0; padding:0; list-style:none; }
+.socialTargets li { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 7px; border:1px solid var(--canvas-line); border-left-width:3px; border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.socialTargets li b { overflow:hidden; flex:1 1 auto; min-width:0; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.socialTargets li small,.socialTargets li a { color:var(--canvas-muted); font-size:7px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+.socialTargets li a { color:var(--canvas-accent-ink); text-decoration:underline; }
+/* Outcome is carried by the left edge, so a half-published campaign is readable at a
+   glance without reading five status words. */
+.socialTargets li[data-status="published"] { border-left-color:var(--canvas-positive-ink); }
+.socialTargets li[data-status="pending"] { border-left-color:var(--canvas-accent); }
+.socialTargets li[data-status="failed"] { border-left-color:var(--tone-danger-mark); }
+.socialTargets li[data-status="skipped"] { border-left-color:var(--canvas-line); }
 .pills,.inspectorPills { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }.pills span,.inspectorPills span,.inspectorPills button { padding:4px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fafcff; color:var(--canvas-muted); font-size:8px; }
 .chatHistory { box-sizing:border-box; height:100%; min-height:0; overflow:hidden; --bf-surface:var(--canvas-panel); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-border:var(--canvas-line); --bf-accent:var(--canvas-accent); }
 .chatHistory:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:2px; border-radius:var(--radius-md); }
@@ -683,7 +781,7 @@
 .resumeSharePanel button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
 .resumeSharePanel ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .resumeSharePanel li { display:flex; justify-content:space-between; gap:10px; align-items:center; color:var(--text-muted); font-size:11px; }
-.resumeLifecycleDialog { display:grid; gap:9px; margin:0 10px; padding:12px; border:1px solid color-mix(in srgb, var(--coral-bright) 55%, var(--border)); border-radius:var(--radius-md); background:var(--surface); box-shadow:var(--shadow-md); }
+.resumeLifecycleDialog { display:grid; gap:9px; margin:0 10px; padding:12px; border:1px solid color-mix(in srgb, var(--coral-bright) 55%, var(--border)); border-radius:var(--radius-md); background:var(--surface); box-shadow:var(--shadow-sm); }
 .resumeLifecycleDialog p { margin:0; color:var(--text-muted); font-size:12px; line-height:1.45; }
 .resumeLifecycleDialog > div { display:flex; justify-content:flex-end; gap:8px; }
 .resumeLifecycleDialog button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
@@ -757,7 +855,7 @@
 .resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { background:repeating-linear-gradient(to bottom,#fff 0,#fff calc(var(--resume-page-height) - 2px),#94a3b8 calc(var(--resume-page-height) - 2px),#94a3b8 var(--resume-page-height)); }
 .resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { margin-left:0; }
 .resumePageModes { display:flex; gap:4px; }
-.resumePageNumber { position:absolute; right:8px; z-index:1; padding:2px 5px; border-radius:3px; background:rgb(15 23 42 / 72%); color:#fff; font-size:9px; pointer-events:none; }
+.resumePageNumber { position:absolute; right:8px; z-index:1; padding:2px 5px; border-radius:var(--radius-sm); background:rgb(15 23 42 / 72%); color:#fff; font-size:9px; pointer-events:none; }
 .resumePreviewCanvas { position:relative; }
 .resumeSectionLayout > div { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:5px; }
 .resumeSectionLayout > div[data-dragging="true"] { opacity:.45; }
@@ -765,7 +863,7 @@
 .resumeSectionDragHandle { border:0; background:transparent; color:var(--canvas-muted); cursor:grab; }
 .resumeFieldDiffs { display:grid; gap:3px; margin:5px 0 0; padding:0; list-style:none; font-size:11px; }
 .resumeFieldDiffs li { display:grid; grid-template-columns:minmax(80px,.7fr) 1fr 1fr; gap:5px; align-items:start; }
-.resumeFieldDiffs del,.resumeFieldDiffs ins { overflow-wrap:anywhere; padding:2px 4px; border-radius:3px; }
+.resumeFieldDiffs del,.resumeFieldDiffs ins { overflow-wrap:anywhere; padding:2px 4px; border-radius:var(--radius-sm); }
 .resumeFieldDiffs del { background:rgb(239 68 68 / 10%); }
 .resumeFieldDiffs ins { background:rgb(34 197 94 / 12%); text-decoration:none; }
 .resumeUndoDelete { position:sticky; z-index:3; top:0; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-raised); box-shadow:var(--shadow-sm); }
@@ -1271,6 +1369,43 @@
   background:var(--canvas-panel-muted); color:var(--canvas-ink); font:650 11px inherit; font-family:inherit; cursor:pointer;
 }
 .driveMore:hover,.driveMore:focus-visible { background:var(--canvas-hover); outline:none; }
+/* ── Connected social accounts ───────────────────────────────────────────────
+   Shares the drive panel's frame for the same reason it shares the Files panel's:
+   they are all "things this workspace is connected to", and a third visual
+   language would read as a third feature. Only the pieces the drive panel has no
+   equivalent for are declared here — an account row with its own action, and the
+   compose form. */
+.socialAccountRow { display:flex; align-items:center; gap:6px; min-width:0; }
+.socialAccountRow > span { min-width:0; flex:1; }
+.socialAccountRow > button {
+  flex:none; padding:3px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted); font-size:9px; cursor:pointer;
+}
+.socialAccountRow > button:hover:not(:disabled),.socialAccountRow > button:focus-visible:not(:disabled) { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.socialAccountRow > button:disabled { opacity:.5; cursor:not-allowed; }
+.socialForm { display:grid; gap:8px; padding:10px; }
+.socialForm label { display:grid; gap:3px; min-width:0; color:var(--canvas-muted); font-size:10px; }
+.socialForm label > span { color:var(--canvas-ink-soft); font-weight:650; }
+.socialForm input,.socialForm textarea {
+  width:100%; box-sizing:border-box; min-height:30px; padding:6px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:11px;
+}
+.socialForm textarea { min-height:70px; resize:vertical; }
+.socialForm small { color:var(--canvas-ink-soft); font-size:9px; line-height:1.4; }
+.socialFormActions { display:flex; flex-wrap:wrap; gap:6px; }
+.socialFormActions button {
+  flex:1 1 8rem; min-height:32px; padding:6px 11px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:650 11px inherit; font-family:inherit; cursor:pointer;
+}
+.socialFormActions button:hover:not(:disabled),.socialFormActions button:focus-visible:not(:disabled) { background:var(--canvas-hover); outline:none; }
+.socialFormActions button:disabled { opacity:.5; cursor:not-allowed; }
+.socialTargetPicker { display:grid; gap:5px; margin:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.socialTargetPicker legend { padding:0 4px; color:var(--canvas-ink-soft); font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.socialTargetPicker label { display:flex; align-items:center; gap:6px; color:var(--canvas-ink); font-size:11px; }
+.socialTargetPicker input { width:auto; min-height:0; }
+
 .filesList { margin:0; padding:6px; list-style:none; display:grid; gap:3px; }
 .fileRow { display:flex; align-items:center; gap:4px; border-radius:var(--radius-md); }
 .fileRow:hover { background:var(--canvas-hover); }
@@ -1529,7 +1664,7 @@
 .scopeChip,
 .workflowStep,
 .kpis div,
-.charts > div,
+.dwWidget,
 .projectHealth div,
 .roadmap > div,
 .featureGrid span,
@@ -1602,7 +1737,7 @@
 .workflowStep small,
 .workflowStep code,
 .kpis small,
-.charts small,
+.dwWidget figcaption,
 .projectHealth small,
 .comparisonBody > small,
 .inspectorHint,

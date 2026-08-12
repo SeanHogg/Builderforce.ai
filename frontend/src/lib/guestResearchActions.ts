@@ -26,6 +26,7 @@ import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequestStream } from './apiClient';
 import { getStoredGuestToken } from './guestChatApi';
 import { ensureGuestToken } from './guestRoomApi';
+import { guestLimitFromBody, noteGuestLimit } from './guestLimit';
 
 /**
  * One authorized research call. Returns the tool RESULT the model should see — errors
@@ -45,7 +46,16 @@ async function research(path: string, body: unknown): Promise<unknown> {
       expectedErrors: [400, 401, 429, 503],
     });
     const data = (await res.json()) as Record<string, unknown>;
-    if (!res.ok) return { error: typeof data.error === 'string' ? data.error : `Research request failed (${res.status}).` };
+    if (!res.ok) {
+      // A spent research allowance is a guest wall like any other, but it never
+      // reaches the surface as a thrown error — it is deliberately handed back as a
+      // tool result so the turn survives. Announce it, so the canvas can offer the
+      // free account the message is about instead of leaving the model to say
+      // "sign up free to keep going" with nothing to click.
+      const refusal = guestLimitFromBody(data);
+      if (refusal) noteGuestLimit(refusal);
+      return { error: typeof data.error === 'string' ? data.error : `Research request failed (${res.status}).` };
+    }
     return data;
   } catch {
     return { error: 'The research request could not be completed.' };

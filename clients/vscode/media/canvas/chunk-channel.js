@@ -1,1 +1,1 @@
-import{ae as o,af as n}from"./chunk-mermaid.core.js";const e=(a,r)=>o.lang.round(n.parse(a)[r]);export{e as c};
+import{U as a,R as n}from"./chunk-mermaid.core.js";const t=(r,o)=>a.lang.round(n.parse(r)[o]);export{t as c};

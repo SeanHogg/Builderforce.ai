@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, sanitizeCreationObjectPatch } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch } from './creationObjectRegistry';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
@@ -193,5 +193,42 @@ describe('creation object registry', () => {
     expect(context).not.toHaveProperty('prompt');
     expect(context).not.toHaveProperty('secret');
     expect(context).not.toHaveProperty('accessToken');
+  });
+});
+
+/**
+ * Measured 2026-08-12 (ui 2026.7.213): a marketing turn created nine objects and eight
+ * were title-only — a dashboard with no KPIs, four KPIs with no value — and Brain
+ * reported success, telling the operator to populate them himself.
+ */
+describe('emptyShellProblem', () => {
+  it('rejects an artifact whose only authored field is its title', () => {
+    expect(emptyShellProblem('kpi', { title: 'Monthly Recurring Revenue (MRR)' }))
+      .toContain('empty shell');
+    expect(emptyShellProblem('dashboard', { title: 'SaaS Metrics Dashboard' }))
+      .toContain('empty shell');
+    // The error NAMES the fields to author, so the model can correct it in the same turn.
+    expect(emptyShellProblem('kpi', { title: 'MRR' })).toContain('value');
+  });
+
+  it('accepts an artifact that carries real content', () => {
+    expect(emptyShellProblem('kpi', { title: 'MRR', value: '42000', unit: 'USD/mo' })).toBeNull();
+    expect(emptyShellProblem('dashboard', { title: 'SaaS', kpis: [{ label: 'MRR' }] })).toBeNull();
+  });
+
+  it('treats blank and empty values as unauthored, not as content', () => {
+    expect(emptyShellProblem('kpi', { title: 'MRR', value: '   ', sources: [] })).toContain('empty shell');
+  });
+
+  it('leaves kinds whose shell IS the point alone', () => {
+    // A Builder workspace is seeded from a starter project; a Dataset is filled by an
+    // import; a Chat holds the conversation itself.
+    for (const kind of ['build', 'chat', 'dataset', 'frame'] as const) {
+      expect(emptyShellProblem(kind, { title: 'x' })).toBeNull();
+    }
+  });
+
+  it('does not stamp a metric Live before it has a number', () => {
+    expect(createDefaultCreationData('kpi').status).not.toBe('Live');
   });
 });

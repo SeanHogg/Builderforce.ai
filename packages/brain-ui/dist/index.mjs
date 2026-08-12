@@ -453,6 +453,7 @@ var DEFAULT_TIMELINE_LABELS = {
   empty: "Ask BuilderForce to build or change something.",
   copy: "Copy",
   copied: "Copied",
+  replay: "Send again",
   apply: "Apply",
   createFile: "Create file",
   preview: "Preview",
@@ -510,14 +511,16 @@ function dotIcon(kind, isError) {
       return "\u2022";
   }
 }
-function CopyButton({ text, labels }) {
+function CopyButton({ text, labels, icon = false }) {
   const [copied, setCopied] = useState3(false);
   return /* @__PURE__ */ jsx4(
     "button",
     {
       type: "button",
-      className: "bf-tl__copy",
-      title: labels.copy,
+      className: icon ? "bf-tl__act" : "bf-tl__copy",
+      title: copied ? labels.copied : labels.copy,
+      "aria-label": copied ? labels.copied : labels.copy,
+      "data-state": copied ? "done" : void 0,
       onClick: (e) => {
         e.stopPropagation();
         void navigator.clipboard?.writeText(text).then(
@@ -529,9 +532,35 @@ function CopyButton({ text, labels }) {
           }
         );
       },
-      children: copied ? labels.copied : labels.copy
+      children: icon ? /* @__PURE__ */ jsx4("span", { "aria-hidden": true, children: copied ? "\u2713" : "\u29C9" }) : copied ? labels.copied : labels.copy
     }
   );
+}
+function MessageActions({
+  message,
+  role,
+  text,
+  labels,
+  onReplay
+}) {
+  if (!text.trim()) return null;
+  return /* @__PURE__ */ jsxs4(Fragment2, { children: [
+    /* @__PURE__ */ jsx4(CopyButton, { text, labels, icon: true }),
+    onReplay && /* @__PURE__ */ jsx4(
+      "button",
+      {
+        type: "button",
+        className: "bf-tl__act",
+        title: labels.replay,
+        "aria-label": labels.replay,
+        onClick: (e) => {
+          e.stopPropagation();
+          onReplay(message, role);
+        },
+        children: /* @__PURE__ */ jsx4("span", { "aria-hidden": true, children: "\u21BB" })
+      }
+    )
+  ] });
 }
 function toolPreview(args) {
   if (!args || typeof args !== "object") return null;
@@ -615,6 +644,7 @@ function BrainTimelineInner({
   renderMessage,
   renderStreaming,
   renderAssistantActions,
+  onReplayMessage,
   onInternalLink,
   onApplyCode,
   onCreateFile,
@@ -680,7 +710,8 @@ function BrainTimelineInner({
                 ] })
               ] }),
               node.images.length > 0 && /* @__PURE__ */ jsx4("div", { className: "bf-tl__images", children: node.images.map((im, i) => /* @__PURE__ */ jsx4("img", { src: im.url, alt: im.name ?? "", className: "bf-tl__image" }, i)) }),
-              node.text && /* @__PURE__ */ jsx4("div", { className: "bf-tl__bubble bf-tl__bubble--user", children: renderMsg(node.message, "user", node.text) })
+              node.text && /* @__PURE__ */ jsx4("div", { className: "bf-tl__bubble bf-tl__bubble--user", children: renderMsg(node.message, "user", node.text) }),
+              /* @__PURE__ */ jsx4("div", { className: "bf-tl__actions bf-tl__actions--hover", children: /* @__PURE__ */ jsx4(MessageActions, { message: node.message, role: "user", text: node.text, labels, onReplay: onReplayMessage }) })
             ] })
           ] }, node.key);
         }
@@ -703,7 +734,10 @@ function BrainTimelineInner({
                   anchorId: askUserAnchorId(node.message.id)
                 }
               ),
-              renderAssistantActions && /* @__PURE__ */ jsx4("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) }),
+              /* @__PURE__ */ jsxs4("div", { className: "bf-tl__actions", children: [
+                /* @__PURE__ */ jsx4(MessageActions, { message: node.message, role: "assistant", text: bodyText, labels, onReplay: onReplayMessage }),
+                renderAssistantActions?.(node.message)
+              ] }),
               prov && /* @__PURE__ */ jsx4(ProvenanceChip, { prov, labels })
             ] })
           ] }, node.key);

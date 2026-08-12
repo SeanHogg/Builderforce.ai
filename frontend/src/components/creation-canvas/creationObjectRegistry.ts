@@ -40,7 +40,11 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'spreadsheet', label: 'Spreadsheet', icon: '▤', group: 'Data', createData: () => ({ kind: 'spreadsheet', title: 'Untitled spreadsheet', status: 'Draft' }) },
   { kind: 'chart', label: 'Chart', icon: '▥', group: 'Data', createData: () => ({ kind: 'chart', title: 'Data visualization', status: 'Connect a dataset' }) },
   { kind: 'map', label: 'Map', icon: '◍', group: 'Data', createData: () => ({ kind: 'map', title: 'Map', status: 'Plot a dataset' }) },
-  { kind: 'kpi', label: 'KPI', icon: '↗', group: 'Data', createData: () => ({ kind: 'kpi', title: 'Key metric', status: 'Live' }) },
+  // 'Live' was the default status on a KPI with no value, no target and no unit — the
+  // card asserted it was tracking something the moment it existed. Same defect the
+  // workflow above records: an empty card that reads as a configured one. A metric is
+  // Live once it HAS a number; before that it is what it is.
+  { kind: 'kpi', label: 'KPI', icon: '↗', group: 'Data', createData: () => ({ kind: 'kpi', title: 'Key metric', status: 'No value yet' }) },
   { kind: 'dashboard', label: 'Dashboard', icon: '▥', group: 'Insights', createData: () => ({ kind: 'dashboard', title: 'Performance dashboard' }) },
   { kind: 'report', label: 'Report', icon: '▤', group: 'Insights', createData: () => ({ kind: 'report', title: 'Live report', status: 'Draft' }) },
   { kind: 'evaluation', label: 'Evaluation', icon: '✦', group: 'Insights', createData: () => ({ kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' }) },
@@ -79,6 +83,15 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'email', label: 'Email', icon: '✉', group: 'Integrations', createData: () => ({ kind: 'email', title: 'Email', status: 'Pinned from inbox' }) },
   { kind: 'emailCampaign', label: 'Email campaign', icon: '◎', group: 'Integrations', createData: () => ({ kind: 'emailCampaign', title: 'New campaign', status: 'Draft', transport: 'platform' }) },
   { kind: 'emailTemplate', label: 'Email template', icon: '▤', group: 'Integrations', createData: () => ({ kind: 'emailTemplate', title: 'Email template', status: 'Draft', mergeFields: [] }) },
+  // The social trio, mirroring inbox/email/emailCampaign for the same reasons.
+  // A `socialFeed` is LIVE and merged across networks — it stores the FILTER it was
+  // created with, which is what makes "our LinkedIn posts this month" a reproducible
+  // object on the board rather than a one-off answer in chat.
+  { kind: 'socialFeed', label: 'Social feed', icon: '◈', group: 'Integrations', createData: () => ({ kind: 'socialFeed', title: 'Social feed', status: 'Connect an account', posts: [], filter: {} }) },
+  // One post, PINNED. It stops changing, which is the point: it can be annotated,
+  // connected to a task, and compared against what came after it.
+  { kind: 'socialPost', label: 'Social post', icon: '●', group: 'Integrations', createData: () => ({ kind: 'socialPost', title: 'Social post', status: 'Pinned from feed' }) },
+  { kind: 'socialCampaign', label: 'Social campaign', icon: '◎', group: 'Integrations', createData: () => ({ kind: 'socialCampaign', title: 'New social campaign', status: 'Draft', targets: [], variants: {} }) },
   { kind: 'task', label: 'Task', icon: '✓', group: 'Work', createData: () => ({ kind: 'task', title: 'Build approved mockup', status: 'Ready', role: 'Campaign Strategist' }) },
   { kind: 'prd', label: 'PRD', icon: '▤', group: 'Work', createData: () => ({ kind: 'prd', title: 'Product requirements', status: 'Draft' }) },
   { kind: 'release', label: 'Release', icon: '◆', group: 'Work', createData: () => ({ kind: 'release', title: 'Release plan', status: 'Planning' }) },
@@ -148,6 +161,10 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   // `email` object so it survives the next refresh.
   inbox: ['refresh', 'filter', 'pin'], email: ['reply', 'open'],
   emailCampaign: ['draft', 'send'], emailTemplate: ['edit', 'apply'],
+  // `refresh` re-reads every connected account; `pin` lifts one post out as its own
+  // `socialPost` object so it survives the next refresh.
+  socialFeed: ['refresh', 'filter', 'pin', 'connect'], socialPost: ['open', 'reshare'],
+  socialCampaign: ['draft', 'schedule', 'publish'],
   course: ['learn', 'export'],
   guidedTour: ['preview'],
 };
@@ -170,11 +187,15 @@ const MUTABLE_FIELDS = {
   dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType'],
   table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources'],
   spreadsheet: ['content', 'columns', 'rows', 'formulas', 'rowCount', 'highlightRules', 'summary'],
-  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'sources', 'summary', 'sourceDatasetId'],
+  // `widgets` is the dashboard's own model (see lib/canvasDashboard): an ordered list
+  // where the chart kind is a VALUE, so a dashboard can hold any number of charts of
+  // any type. `kpis` / `chartLabels` / `chartValues` remain the flat wire format the
+  // model and canvas_query_dataset author in, and are folded into widgets on read.
+  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'widgets', 'sources', 'summary', 'sourceDatasetId'],
   map: ['content', 'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapOutline', 'mapAttribution', 'sources', 'summary', 'sourceDatasetId'],
   kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId'],
-  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId'],
-  report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
+  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'widgets', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId'],
+  report: ['content', 'markdown', 'chartLabels', 'chartValues', 'widgets', 'sources'],
   evaluation: ['content', 'criteria', 'verdict', 'gaps', 'recommendations', 'sources', 'testResults', 'passRate', 'runCount', 'lastRunAt'],
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
   roadmap: ['content', 'items', 'milestones', 'sources'],
@@ -204,6 +225,12 @@ const MUTABLE_FIELDS = {
   email: ['content', 'messageId', 'connectionId', 'accountEmail', 'from', 'fromName', 'to', 'subject', 'receivedAt', 'bodyText', 'unread', 'hasAttachments', 'webUrl', 'summary'],
   emailCampaign: ['content', 'campaignId', 'audienceId', 'audienceName', 'templateId', 'subject', 'bodyHtml', 'transport', 'senderIdentityId', 'mailboxConnectionId', 'connectorConnectionId', 'fromName', 'recipients', 'sent', 'failed', 'opened', 'clicked', 'blockers'],
   emailTemplate: ['content', 'templateId', 'subject', 'bodyHtml', 'mergeFields', 'assetId', 'logoUrl'],
+  // `posts` is the last read, kept so the tile is not blank while it refreshes;
+  // `filter` is what makes the view reproducible on the next refresh, and
+  // `engagement`/`topPost` are the insight the tile leads with rather than a raw list.
+  socialFeed: ['content', 'filter', 'posts', 'accounts', 'networks', 'engagement', 'topPost', 'postCount', 'fetchedAt', 'summary'],
+  socialPost: ['content', 'postId', 'connectionId', 'network', 'accountName', 'authorName', 'text', 'permalink', 'publishedAt', 'metrics', 'mediaUrls', 'thumbnailUrl', 'summary'],
+  socialCampaign: ['content', 'campaignId', 'body', 'linkUrl', 'mediaUrls', 'variants', 'targets', 'posts', 'scheduledAt', 'publishedCount', 'failedCount', 'blockers'],
   task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
@@ -282,6 +309,69 @@ export function creationObjectMutableFields(kind: CreationObjectKind): readonly 
   return [...COMMON_MUTABLE_FIELDS, ...MUTABLE_FIELDS[kind]];
 }
 
+/**
+ * Kinds whose object is legitimately created EMPTY, with a reason each.
+ *
+ * The shell is the point for these: a Builder workspace is seeded from a starter
+ * project rather than authored, a Dataset is filled by an import, a Chat holds the
+ * conversation itself, and a Frame or Comment is pure canvas furniture. Everything
+ * NOT listed here is an artifact whose whole value is its content.
+ */
+const SHELL_IS_LEGITIMATE: ReadonlySet<CreationObjectKind> = new Set<CreationObjectKind>([
+  'build', 'chat', 'dataset', 'frame', 'comment', 'selection', 'timer', 'terminal',
+  'browser', 'url', 'file', 'repository', 'service', 'diagnostics', 'inbox', 'email',
+  // A social feed and a pinned post are READ from connected accounts, exactly as an
+  // inbox is — their content arrives from the network, never from an authored patch.
+  'socialFeed', 'socialPost',
+]);
+
+/** Identity and bookkeeping — present on an empty object, so authoring one of these
+ *  is not evidence that anything was actually written. */
+const NON_SUBSTANTIVE_FIELDS: ReadonlySet<string> = new Set<string>([
+  ...COMMON_MUTABLE_FIELDS, 'sources', 'fetchedAt', 'sourceDatasetId',
+]);
+
+/** The fields that, for this kind, carry the actual work. */
+export function creationObjectContentFields(kind: CreationObjectKind): readonly string[] {
+  return MUTABLE_FIELDS[kind].filter((field) => !NON_SUBSTANTIVE_FIELDS.has(field));
+}
+
+/**
+ * Why this authored patch would land as an EMPTY SHELL, or null when it carries work.
+ *
+ * ── THE DEFECT THIS EXISTS TO STOP ───────────────────────────────────────────────
+ * `canvas_add_object` accepted `{kind, title}` and answered `ok: true`. The Canvas
+ * system prompt has always said "do not create an empty shell", and three kinds
+ * enforced it (website, course, drawing) with a bespoke branch each — every other kind
+ * took a title and reported success.
+ *
+ * Measured 2026-08-12 (ui 2026.7.213): a marketing-campaign turn created nine objects
+ * and EIGHT of them were title-only — a targetMarket with no segments, an emailTemplate
+ * with no body, a dashboard with no KPIs, and four KPIs with no value, target or unit,
+ * each stamped "Live". Brain then reported success and told the operator "you can now
+ * populate these KPIs with your actual data" — the product had handed the work back and
+ * called it done. (Its sibling cause was a 700-token output ceiling on guest turns that
+ * truncated any call large enough to carry real content; see GUEST_CHAT_LIMITS.)
+ *
+ * Registry DATA rather than another branch per kind: the fields already exist in
+ * MUTABLE_FIELDS, so a new object kind is covered the moment it is declared.
+ */
+export function emptyShellProblem(kind: CreationObjectKind, authored: Record<string, unknown>): string | null {
+  if (SHELL_IS_LEGITIMATE.has(kind)) return null;
+  const contentFields = creationObjectContentFields(kind);
+  if (contentFields.length === 0) return null;
+  const written = contentFields.filter((field) => {
+    const value = authored[field];
+    if (value == null) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value as object).length > 0;
+    return true;
+  });
+  if (written.length > 0) return null;
+  return `A ${kind} with only a title is an empty shell — it hands the work back to the user instead of doing it. Send the authored content in fields: ${contentFields.slice(0, 12).join(', ')}.`;
+}
+
 /** Drop unknown and sensitive values before an LLM-authored patch reaches state. */
 export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unknown): Partial<CreationNodeData> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -301,7 +391,7 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
 const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
   'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'profile', 'highlightRules', 'sourceDatasetId',
-  'fileName', 'mimeType', 'fileSize', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues',
+  'fileName', 'mimeType', 'fileSize', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'widgets',
   // `mapOutline` is deliberately absent: a boundary polygon is thousands of coordinate
   // pairs, and the snapshot is the model's context budget. Brain needs to know WHAT is
   // plotted, not the shape of the coastline behind it.
@@ -342,6 +432,12 @@ const CONTEXT_FIELDS = [
   // it through the template tools rather than reading it out of the snapshot.
   'audienceId', 'audienceName', 'transport', 'recipients', 'failed', 'opened', 'clicked', 'blockers',
   'mergeFields', 'assetId', 'logoUrl',
+  // A social object's substance IS the posts and their engagement — Brain cannot say
+  // which message worked, or write the next one, from a title alone. `posts` carries
+  // the compact projection (no media bytes), and `safeContextValue` caps it again.
+  'posts', 'accounts', 'networks', 'engagement', 'topPost', 'postCount',
+  'network', 'accountName', 'authorName', 'text', 'permalink', 'publishedAt', 'metrics',
+  'body', 'linkUrl', 'mediaUrls', 'variants', 'targets', 'publishedCount', 'failedCount',
   'course', 'exportStandards', 'tour',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;

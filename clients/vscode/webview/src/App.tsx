@@ -31,6 +31,7 @@ import {
   type GlobalRunState,
   type EvermindRecallResult,
   type BrainTraceEvent,
+  type BrainMessage,
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
@@ -141,6 +142,7 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     empty: t('tl.empty', 'Ask BuilderForce to build or change something.'),
     copy: t('tl.copy', 'Copy'),
     copied: t('tl.copied', 'Copied'),
+    replay: t('tl.replay', 'Send again'),
     apply: t('tl.apply', 'Apply'),
     createFile: t('tl.createFile', 'Create file'),
     preview: t('tl.preview', 'Preview'),
@@ -1216,6 +1218,12 @@ function Chat({ init }: { init: InitData }) {
     void conv.send(answer, { addressedTo: recipient });
   }, [conv, recipient]);
 
+  // "Send again" on any transcript message — the same send path, so a replay queues
+  // behind a running turn exactly like a typed one would.
+  const replayMessage = useCallback((message: BrainMessage) => {
+    void conv.send(message.content, { addressedTo: recipient });
+  }, [conv, recipient]);
+
   // The question this chat is BLOCKED on, if any. A long transcript buries the
   // agent's card, so it is restated at the composer (and the session shows ❓ on its
   // tab + Sessions row) — one shared predicate, so banner and card never disagree.
@@ -1552,6 +1560,7 @@ function Chat({ init }: { init: InitData }) {
           assistantName="BuilderForce"
           labels={tlLabels}
           onAnswerQuestion={answerQuestion}
+          onReplayMessage={replayMessage}
         />
       </div>
 

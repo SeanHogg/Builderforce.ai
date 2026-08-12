@@ -2752,6 +2752,90 @@ const CATALOG: BuiltinTool[] = [
     run: (ctx) => replayRoute(ctx, 'GET', '/api/growth/campaigns'),
   },
 
+  // ---- CONNECTED SOCIAL ACCOUNTS + SOCIAL CAMPAIGNS -------------------------
+  //
+  // The same split as email, drawn in the same place. Reading a feed and drafting a
+  // campaign are safe to do speculatively; `social.publish` and
+  // `social_campaign.publish` speak in public as the brand and cannot be taken back,
+  // so they are absent from CLOUD_AGENT_PLATFORM_TOOLS and go through the
+  // manager-gated route rather than calling the service directly.
+  //
+  // Publishing is deliberately NOT a `connectors.call` on the X or LinkedIn manifest:
+  // that would leave every caller to know each network's own posting shape, and would
+  // skip the campaign ledger that makes a post idempotent and reportable.
+  {
+    tool: 'social.list_accounts', mutates: false,
+    description: 'List the social accounts connected to this workspace (X, LinkedIn, Facebook Pages, Instagram, TikTok) with the network, the connection name, whether it is `ready` to publish, and `missingFields` naming anything still needed (a Page id, an author URN, an Instagram account id). Call this FIRST when asked to read a feed or post to "our socials" — it is what tells you which accounts exist and whether you must ask. `requiresMedia` marks the networks that cannot publish text alone.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      if (!ctx.env) throw new Error('reading social accounts needs the platform environment');
+      const { listSocialAccounts } = await import('../social/socialService');
+      return { accounts: await listSocialAccounts(ctx.db, ctx.env, ctx.tenantId) };
+    },
+  },
+  {
+    tool: 'social.read_feed', mutates: false,
+    description: 'READ the workspace\'s own recent social posts, merged newest-first across every connected account, with engagement (likes, comments, shares, views) and a permalink each. Use it to answer "how are our posts doing", to find the best-performing message before writing more, or to check whether something already went out. Narrow with `networks` (comma list such as "x,linkedin"), `accounts` (connection ids) or `q` (free text). Per-account failures come back in `errors` rather than blanking the feed — an account listed there needs reconnecting.',
+    parameters: obj({ networks: S, accounts: S, q: S, limit: N }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading a social feed needs the platform environment');
+      const { readSocialFeed, socialFeedQueryFrom } = await import('../social/socialService');
+      // The SAME parser the REST route uses — a second copy is how "networks=x" comes
+      // to mean one thing on the canvas and another to an agent.
+      const query = socialFeedQueryFrom({
+        networks: a.networks != null ? str(a.networks) : null,
+        accounts: a.accounts != null ? str(a.accounts) : null,
+        q: a.q != null ? str(a.q) : null,
+        limit: a.limit != null ? num(a.limit) : null,
+      });
+      return readSocialFeed(ctx.db, ctx.env, ctx.tenantId, query, 'agent');
+    },
+  },
+  {
+    tool: 'social.publish', mutates: true,
+    description: 'Publish ONE post to ONE connected social account. THIS IS PUBLIC AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it to "test". Name the account with `connectionId`, or with `network` when the workspace has exactly one account on that network. Instagram and TikTok require `mediaUrls` (public https URLs they fetch themselves); the others accept text alone. To post the same announcement everywhere, build a social campaign instead so the per-account ledger and idempotency apply.',
+    parameters: obj({ text: S, connectionId: S, network: S, linkUrl: S, mediaUrls: { type: 'array', items: { type: 'string' } } }, ['text']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/social/publish', {
+      text: str(a.text),
+      ...(a.connectionId != null ? { connectionId: str(a.connectionId) } : {}),
+      ...(a.network != null ? { network: str(a.network) } : {}),
+      ...(a.linkUrl != null ? { linkUrl: str(a.linkUrl) } : {}),
+      ...(Array.isArray(a.mediaUrls) ? { mediaUrls: a.mediaUrls.map(String) } : {}),
+    }),
+  },
+  {
+    tool: 'social_campaign.create', mutates: true,
+    description: 'Draft a social campaign — one announcement, published to every connected account. Creating it does NOT publish it; the draft is reviewable and editable until social_campaign.publish. Omit `connectionIds` to target every ready account. Use `variants` for per-network copy ({"x":"280 characters","linkedin":"a paragraph"}) — an absent network falls back to `body`, so only write a variant where the wording should actually differ. Pass `scheduledAt` (ISO) to publish later. The returned campaign carries `blockers` naming anything that would stop it.',
+    parameters: obj({
+      name: S, body: S, linkUrl: S, scheduledAt: S, projectId: N,
+      mediaUrls: { type: 'array', items: { type: 'string' } },
+      connectionIds: { type: 'array', items: { type: 'string' } },
+      variants: { type: 'object' },
+    }, ['name', 'body']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/social/campaigns', {
+      name: str(a.name),
+      body: str(a.body),
+      ...(a.linkUrl != null ? { linkUrl: str(a.linkUrl) } : {}),
+      ...(Array.isArray(a.mediaUrls) ? { mediaUrls: a.mediaUrls.map(String) } : {}),
+      ...(Array.isArray(a.connectionIds) ? { connectionIds: a.connectionIds.map(String) } : {}),
+      ...(a.variants != null ? { variants: a.variants } : {}),
+      ...(a.scheduledAt != null ? { scheduledAt: str(a.scheduledAt) } : {}),
+      ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+    }),
+  },
+  {
+    tool: 'social_campaign.publish', mutates: true,
+    description: 'PUBLISH a social campaign to every account it targets. THIS IS PUBLIC AND CANNOT BE UNDONE — confirm with the user first. Each account is published at most once, so a retry is safe; a campaign with more targets than one batch finishes on the background sweep. Networks that need media and have none are SKIPPED rather than failed. Returns what published, what failed, and each post\'s permalink.',
+    parameters: obj({ campaignId: N }, ['campaignId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/social/campaigns/${num(a.campaignId)}/publish`),
+  },
+  {
+    tool: 'social_campaign.list', mutates: false,
+    description: 'List this workspace\'s social campaigns with their status, per-account posts and permalinks. The counters are maintained by the publisher, so they are what actually went out rather than what was intended.',
+    parameters: obj({ projectId: N }, []),
+    run: (ctx, a) => replayRoute(ctx, 'GET', a.projectId != null ? `/api/social/campaigns?projectId=${num(a.projectId)}` : '/api/social/campaigns'),
+  },
+
   // ---- Integrations + Platform migration (Jira/Monday/Rally/GitLab/Bitbucket/GitHub → BuilderForce) ----
   // The Brain can drive the whole "connect → test → migrate" flow: create a
   // credential, validate it, then discover→map→stage→commit a migration run.
@@ -3722,6 +3806,11 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'mailbox.list_connections', 'mailbox.list_messages', 'mailbox.get_message',
   'marketing.list_templates', 'marketing.create_template', 'marketing.list_assets',
   'campaign.list', 'campaign.create',
+  // Social accounts — READ AND DRAFT ONLY, for the same reason and along the same
+  // line. An autonomous run may read the workspace's own feed, see what performed,
+  // and draft a campaign; `social.publish` and `social_campaign.publish` speak in
+  // public as the brand with nobody in the loop to stop them, so they stay off.
+  'social.list_accounts', 'social.read_feed', 'social_campaign.list', 'social_campaign.create',
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',

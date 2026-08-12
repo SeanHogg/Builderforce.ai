@@ -227,6 +227,18 @@ export function summarizeTimings(actions: readonly CanvasAction[]): CanvasTiming
  * no way to show "a turn ran against one object while four were on the board",
  * and that single line is what would have explained the reported failure.
  */
+/** A single tool call or network round trip past this is a stall worth naming. */
+const SLOW_ACTION_MS = 30_000;
+
+/** A whole agent turn is allowed to be long — but not long AND empty-handed. */
+const SLOW_IDLE_TURN_MS = 30_000;
+
+/** Where the NEXT turn begins, so a turn's tool calls are the ones between them. */
+function nextTurnSeq(actions: readonly CanvasAction[], seq: number): number | null {
+  const next = actions.find((action) => action.kind === 'turn' && action.seq > seq);
+  return next ? next.seq : null;
+}
+
 export function journalGaps(
   actions: readonly CanvasAction[],
   context: { objectCount: number; scope: string; scopedObjectCount: number },
@@ -254,9 +266,22 @@ export function journalGaps(
     gaps.push(`${downgraded.length} of ${imports.length} imported file(s) could not be read and landed as plain attachments — their contents are not available to Brain.`);
   }
 
-  const slow = actions.filter((action) => (action.durationMs ?? 0) > 30_000);
+  // A `turn` is the WHOLE agent loop — research, several model iterations, and every
+  // tool call it made — so tens of seconds is what a productive turn costs, and
+  // flagging it beside a stalled fetch made healthy runs read as broken. A single
+  // tool or network round trip over 30s is the real stall, so the two are judged
+  // separately and a turn is only called out when it is long AND did no work.
+  const slow = actions.filter((action) => action.kind !== 'turn' && (action.durationMs ?? 0) > SLOW_ACTION_MS);
   if (slow.length) {
-    gaps.push(`${slow.length} action(s) took over 30s: ${[...new Set(slow.map((action) => action.label))].join(', ')}.`);
+    gaps.push(`${slow.length} action(s) took over ${Math.round(SLOW_ACTION_MS / 1000)}s: ${[...new Set(slow.map((action) => action.label))].join(', ')}.`);
+  }
+
+  const idleTurns = actions.filter((action) => action.kind === 'turn'
+    && (action.durationMs ?? 0) > SLOW_IDLE_TURN_MS
+    && !actions.some((other) => other.kind === 'tool' && other.seq > action.seq
+      && other.seq < (nextTurnSeq(actions, action.seq) ?? Number.POSITIVE_INFINITY)));
+  if (idleTurns.length) {
+    gaps.push(`${idleTurns.length} Brain turn(s) ran over ${Math.round(SLOW_IDLE_TURN_MS / 1000)}s without calling a single tool — time spent generating prose, not doing the requested work.`);
   }
 
   return gaps;

@@ -10,6 +10,7 @@ import {
   type ChatCompletionMessage,
   type EvermindRecallResult,
   type ChatMode,
+  turnInterruption,
 } from '@seanhogg/builderforce-brain-embedded';
 import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
@@ -167,6 +168,22 @@ const MAX_NARROW_SEARCHES = 2;
  * this prevents the user-facing handoff from ending in the middle of a sentence. */
 const CANVAS_RESPONSE_TOKENS = 3_200;
 
+/** An INTERRUPTED turn — truncated by the output ceiling, or a tool call the
+ * provider could not parse — is retried with the instruction that matches the
+ * interruption. Two per turn: enough to clear a one-off, few enough that a model
+ * which cannot author inside the ceiling fails over instead of looping. */
+const MAX_INTERRUPTED_TURN_RECOVERIES = 2;
+
+/** Truncation is an OUTPUT-SIZE failure, so the recovery is to author smaller —
+ * the opposite of "answer again", which would truncate identically. The canvas
+ * itself is the durable place for length, so splitting across calls costs nothing. */
+const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at the output limit before it finished, so nothing you sent could be used. Produce less in one step: make ONE canvas_* tool call at a time with the fields that matter, keep prose short, and split a long artifact across several calls or several objects rather than sending it all at once.';
+
+/** The model DID choose to act; the arguments were unparseable. Telling it to
+ * "answer" here would discard a correct intent, so the directive keeps the action
+ * and constrains only the encoding. */
+const MALFORMED_TOOL_CALL_DIRECTIVE = 'Your previous tool call could not be parsed and was discarded. Make the same call again with strictly valid JSON arguments: no comments, no trailing commas, no unescaped newlines or quotes inside string values, and no placeholder text. Send one tool call.';
+
 const RESEARCH_TOOL_NAMES = new Set(['builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode']);
 
 function isNarrowSearchResult(value: unknown): boolean {
@@ -286,7 +303,13 @@ function snapshotHasTabularRows(snapshot: string): boolean {
 
 /** Imperative canvas turns must not degrade into a prose-only answer. */
 function requestsCanvasMutation(prompt: string): boolean {
-  const verb = '(?:create|build|design|redesign|improve|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate|research|compare|show|provide|run|launch|start|plan|organi[sz]e|schedule|send)';
+  // VISUAL verbs are first-class instructions, not conversation. "draw me a coniferous
+  // landscape at <address>" was classified as small talk because `draw` was absent here,
+  // so the no-tool-call recovery never armed for the one request shape the canvas most
+  // obviously exists to serve, and a prose apology counted as a completed turn
+  // (measured 2026-08-12, ui 2026.7.213).
+  const verb = '(?:create|build|design|redesign|improve|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate|research|compare|show|provide|run|launch|start|plan|organi[sz]e|schedule|send'
+    + '|draw|sketch|illustrate|render|paint|visuali[sz]e|mock\\s?up|diagram|chart|graph|map)';
   // A request is routinely phrased as a WANT rather than an order — "I want to connect
   // my email and run a marketing campaign" is an instruction, not small talk, and the
   // clause-boundary matcher below cannot see it because the verb sits after "to".
@@ -391,15 +414,47 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       role: 'system',
       content: 'For a Twilio AI journey request, inspect the whole board before authoring and update/reuse matching Twilio objects instead of duplicating them. Produce one coherent, reusable customer journey: a specific persona and before/after outcome; an executable workflow where a visible LLM/agent decision directly leads to a real action on the existing twilio connector; approval, failure, and production-readiness details; a lightweight architecture diagram; an evidence-based quality evaluation covering creativity, long-term end-user impact, market potential, and technical feasibility; a concise live-demo script; measurable success evidence; an Idea-to-Real website handoff that uses the existing BuilderForce Embedded install path at /embedded and documents the host script, chosen customer-site capability, identity/events, and acceptance test; and one guidedTour object whose targetObjectId values point at the actual objects created or reused, including the embed handoff. Never create a connector object: Canvas exposes the canonical Twilio connection settings when the workflow needs them. Never invent a second embed SDK or iframe contract: use the existing BuilderForce Embedded capability and its generated workspace key/snippets. Prefer one strong workflow over separate generic SMS and Voice workflows unless the user explicitly asks for multiple channels. Do not name the experience after a contest or create competition-application artifacts unless the user explicitly asks for them.',
     },
+    // PICTURES, AND THE CAPABILITIES THE MODEL DENIES HAVING.
+    //
+    // Named separately from the enormous authoring block above because that block's only
+    // visual instruction — "for kind 'drawing' supply fields.points with at least two
+    // {x,y} points" — aimed every picture request at the one tool that cannot serve one.
+    // Measured 2026-08-12 (ui 2026.7.213), "draw me a coniferous landscape at <address>":
+    // two refused `canvas_add_object` drawing calls, zero image calls, and the session
+    // ending on "I cannot generate images" and "I cannot open a map" — both false, with
+    // `canvas_add_image`, `builtin_geo_geocode` and `builtin_web_fetch` in the tool list.
+    // A model that has been handed a capability must never disclaim it, and a model that
+    // has been refused one must relay the refusal it was actually given.
+    {
+      role: 'system',
+      content: 'PICTURES. A request to draw, sketch, render, illustrate, paint, mock up, "show me what it looks like", or otherwise produce a picture is a request for REAL PIXELS: call canvas_add_image — mode "generate" to create the picture, mode "find" to search real photography. Do that FIRST, before writing any note or plan about the subject, and do it without asking permission. Kind "drawing" holds vector {x,y} points you author yourself and kind "chart" holds plotted values; neither can hold a picture, neither is a fallback for one, and offering one to the user as though it were is a failure. NEVER tell the user you are unable to generate, render, view, look up or picture something. If a capability is gated, the tool result states the exact reason — relay THAT reason and what clears it, and never invent a limitation of your own. A street address, place, landmark or region IS resolvable: builtin_geo_geocode returns its coordinates and bounding box, and builtin_web_search plus builtin_web_fetch read what is published about it. Look it up before you say you cannot.',
+    },
+    // SOCIAL, AND THE POSTS A MODEL MUST NOT INVENT.
+    //
+    // Named separately for the same reason PICTURES is: the authoring block above tells
+    // the model to answer with authored objects, and "how are our socials doing?" is the
+    // one shape of request where an authored object is a LIE — the numbers exist, in the
+    // tenant's connected accounts, and a plausible-looking invented feed is worse than
+    // no answer. The publish half is the mirror image: it reaches the public and cannot
+    // be taken back, so drafting and publishing are two separate, explicit acts.
+    {
+      role: 'system',
+      content: 'SOCIAL. A request to see, review, analyse or report on social media, posts, channels or engagement is a request for the workspace\'s REAL accounts: call canvas_add_social_feed (or canvas_refresh_social_feed when a feed tile is already on the board) and answer from what it returns. Never invent posts, follower counts or engagement numbers, and never build a chart of made-up social metrics — the tool reads X, LinkedIn, Facebook, Instagram and TikTok directly. Use canvas_pin_social_post to lift one post out for discussion. A request to announce, promote or "post about" something is canvas_create_social_campaign: it drafts one announcement, with per-network variants where the wording should differ, and puts it on the board WITHOUT publishing. Publishing is a separate, explicit act — canvas_publish_social_campaign — that is public and cannot be undone: confirm with the user first, and never call it speculatively or to test. Instagram and TikTok cannot publish text alone; if there is no image or video URL, say so rather than letting those networks be skipped silently. If no account is connected the tool says so and names where to connect one — relay that instead of inventing a limitation.',
+    },
     // ANONYMOUS CANVAS. The blocks above describe the full product, including tools
     // that only exist for a signed-in tenant (`canvas_read_project_prds`,
-    // `canvas_create_project_prd`, a connected mailbox, server-side image work). On a
-    // guest board those are neither advertised nor accepted, so without this the model
-    // is reading instructions about tools it does not have — which is how "connect my
-    // email" produced a bare refusal instead of the one useful answer available.
+    // `canvas_create_project_prd`, a connected mailbox). On a guest board those are
+    // neither advertised nor accepted, so without this the model is reading instructions
+    // about tools it does not have — which is how "connect my email" produced a bare
+    // refusal instead of the one useful answer available.
+    //
+    // `canvas_add_image` is deliberately NOT in that list any more. It is advertised on
+    // every board and gates itself with the reason (see the guest-gated set in
+    // `@builderforce/creation-canvas-contract`), because a stripped image tool is what
+    // made the model invent a drawing-tool limitation instead of naming the account.
     ...(options.persistence === 'local' ? [{
       role: 'system',
-      content: 'This is an ANONYMOUS canvas: it is saved on this device and has no account behind it. You still have the full local authoring, layout, dataset, diagnostics and web-research tools, and you must use them. What you do NOT have is anything that reads a tenant: a connected mailbox or inbox, canonical project PRDs, tenant domain data, and server-side image search or generation. When the user asks for one of those — connecting an email account, sending from their mailbox, reading their company data — do BOTH of these in the same turn: say in one sentence that it needs a free account and where the connection is made, and then build the part you CAN build on the canvas now (the campaign plan, the audience definition, the message drafts, the workflow) with canvas_add_object. Never answer a request like that with a refusal alone, and never claim you connected something you did not.',
+      content: 'This is an ANONYMOUS canvas: it is saved on this device and has no account behind it. You still have the full local authoring, layout, dataset, diagnostics and web-research tools, and you must use them. What you do NOT have is anything that reads a tenant: a connected mailbox or inbox, connected social accounts, canonical project PRDs, and tenant domain data. Server-side work such as image generation IS in your tool list and will tell you itself when it needs an account — call it and relay what it says rather than guessing in advance. When a request needs an account — connecting an email account, sending from their mailbox, reading their company data, producing a real image — do BOTH of these in the same turn: say in one sentence that it needs a free account and where it is unlocked, and then build the part you CAN build on the canvas now (the campaign plan, the audience definition, the message drafts, the planting layout, the workflow) with canvas_add_object. Never answer a request like that with a refusal alone, never describe it as a technical limitation, and never claim you connected or created something you did not.',
     } satisfies ChatCompletionMessage] : []),
     // ANSWER DISCIPLINE. Cheap free-pool models handed a labelled transcript reproduce
     // the previous assistant line verbatim instead of answering (measured 2026-08-12:
@@ -438,6 +493,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let executiveRequestRecoveryUsed = false;
   let imperativeMutationRecoveryUsed = false;
   let degenerateAnswerRecoveryUsed = false;
+  let interruptedTurnRecoveries = 0;
   let authoringDirectiveIssued = false;
   let narrowSearches = 0;
   let lastToolError = '';
@@ -479,6 +535,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     activeModelStrict = true;
     imperativeMutationRecoveryUsed = false;
     degenerateAnswerRecoveryUsed = false;
+    interruptedTurnRecoveries = 0;
     options.onModelFallback?.(fallback);
     messages.push({ role: 'system', content: `${directive} Continue on ${fallback}, which already emitted valid tool calls in this turn.` });
     return true;
@@ -551,6 +608,38 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       activeModelStrict = false;
     }
     if (!result.toolCalls.length) {
+      // An INTERRUPTED turn is not a turn the model chose to end. Truncation at the
+      // output ceiling drops the tool call it was mid-way through emitting (its JSON
+      // never closes), and an unparseable call is discarded by the provider — both
+      // arrive here looking exactly like "the model declined to act", and both used
+      // to be answered with "you repeated yourself, answer again", which reproduces
+      // the same failure. Handled FIRST, with the directive that matches the actual
+      // interruption: author smaller, or re-encode the call.
+      const interruption = turnInterruption(result.finishReason);
+      if (interruption && interruptedTurnRecoveries < MAX_INTERRUPTED_TURN_RECOVERIES) {
+        interruptedTurnRecoveries += 1;
+        options.onTrace?.({
+          ts: new Date().toISOString(), category: 'error',
+          label: interruption === 'truncated' ? 'response truncated' : 'malformed tool call',
+          isError: true,
+          result: { finishReason: result.finishReason, model: result.resolvedModel ?? null, attempt: interruptedTurnRecoveries },
+        });
+        messages.push({
+          role: 'system',
+          content: interruption === 'truncated' ? TRUNCATED_TURN_DIRECTIVE : MALFORMED_TOOL_CALL_DIRECTIVE,
+        });
+        finalText = '';
+        continue;
+      }
+      if (interruption && switchToProvenModel(
+        result.resolvedModel,
+        interruption === 'truncated'
+          ? 'The prior model kept running past the output limit without finishing and has been disabled for this session. Author the requested artifact in small steps.'
+          : 'The prior model kept emitting tool calls the provider could not parse and has been disabled for this session.',
+      )) {
+        finalText = '';
+        continue;
+      }
       // A DEGENERATE turn — the model returned nothing at all, or reproduced an
       // earlier assistant message instead of answering. Neither is an answer, and
       // neither is caught by the intent-based recoveries below (a plain question

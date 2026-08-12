@@ -19,11 +19,19 @@
  * and instructs the model to call.
  *
  * ── THE RULE ─────────────────────────────────────────────────────────────────────
- * Every `canvas_*` tool the canvas declares must appear EXACTLY ONCE in
- * `packages/creation-canvas-contract/src/canvasTools.ts`, in either the guest-safe set
- * or the account-required set — and the contract may not name a tool the canvas does
- * not declare. Adding a canvas tool is therefore a two-line change, and forgetting the
- * second line fails the build instead of the product.
+ * 1. Every `canvas_*` tool the canvas declares must appear EXACTLY ONCE in
+ *    `packages/creation-canvas-contract/src/canvasTools.ts`, in the guest-safe, the
+ *    guest-gated, or the account-required set — and the contract may not name a tool
+ *    the canvas does not declare. Adding a canvas tool is therefore a two-line change,
+ *    and forgetting the second line fails the build instead of the product.
+ * 2. A tool DESCRIPTION travels in the tool list, so a guest-advertised tool may only
+ *    name other guest-advertised tools. `canvas_add_object`'s description said "For an
+ *    actual image, NEVER use this tool; use canvas_add_image" while `canvas_add_image`
+ *    was account-required and therefore absent from every guest board — the model was
+ *    being redirected to a tool it had not been given. It duly improvised: two refused
+ *    drawing calls and "I cannot generate images" to a user who had asked for a picture
+ *    (measured 2026-08-12, ui 2026.7.213). This is the `canvas_*` half of the same
+ *    contract `check-prompt-tool-names.mjs` enforces for `builtin_*` names.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,12 +46,21 @@ for (const file of [CANVAS_FILE, CONTRACT_FILE]) {
   }
 }
 
-/** Tool names the canvas actually declares, read from the action definitions. */
+/**
+ * Tool names the canvas declares, each with the DESCRIPTION it advertises.
+ *
+ * A declaration is `name: 'canvas_x',` followed by its `description:` and then
+ * `parameters:`, so the span between the name and the parameters is exactly the
+ * description — no separate string parser needed, and a template literal is covered.
+ */
 function declaredCanvasTools() {
   const text = fs.readFileSync(CANVAS_FILE, 'utf8');
-  const names = new Set();
-  for (const m of text.matchAll(/^\s*name:\s*'(canvas_[a-z0-9_]+)',$/gm)) names.add(m[1]);
-  return names;
+  const declarations = new Map();
+  for (const m of text.matchAll(/^\s*name:\s*'(canvas_[a-z0-9_]+)',$/gm)) {
+    const end = text.indexOf('parameters:', m.index);
+    declarations.set(m[1], end === -1 ? '' : text.slice(m.index + m[0].length, end));
+  }
+  return declarations;
 }
 
 /** Tool names the shared contract classifies, per set. */
@@ -54,33 +71,51 @@ function classifiedCanvasTools() {
     if (!block) return null;
     return [...block[1].matchAll(/'(canvas_[a-z0-9_]+)'/g)].map((m) => m[1]);
   };
-  return { guestSafe: read('GUEST_SAFE_CANVAS_TOOLS'), accountRequired: read('ACCOUNT_REQUIRED_CANVAS_TOOLS') };
+  return {
+    guestSafe: read('GUEST_SAFE_CANVAS_TOOLS'),
+    guestGated: read('GUEST_GATED_CANVAS_TOOLS'),
+    accountRequired: read('ACCOUNT_REQUIRED_CANVAS_TOOLS'),
+  };
 }
 
-const declared = declaredCanvasTools();
-const { guestSafe, accountRequired } = classifiedCanvasTools();
+const declarations = declaredCanvasTools();
+const declared = new Set(declarations.keys());
+const { guestSafe, guestGated, accountRequired } = classifiedCanvasTools();
 
-if (declared.size === 0 || guestSafe === null || accountRequired === null) {
+if (declared.size === 0 || guestSafe === null || guestGated === null || accountRequired === null) {
   console.error('check-canvas-tool-contract: could not parse the canvas actions or the contract — the parse is stale, not the code.');
   process.exit(1);
 }
 
+const classified = [...guestSafe, ...guestGated, ...accountRequired];
+/** Advertised to an anonymous board: guest-safe outright, or gated but present. */
+const guestAdvertised = new Set([...guestSafe, ...guestGated]);
 const failures = [];
 
-const duplicates = [...guestSafe, ...accountRequired].filter((name, index, all) => all.indexOf(name) !== index);
+const duplicates = classified.filter((name, index, all) => all.indexOf(name) !== index);
 for (const name of new Set(duplicates)) {
-  failures.push(`${name} is classified twice — a tool is either guest-safe or account-required, never both.`);
+  failures.push(`${name} is classified twice — a tool is guest-safe, guest-gated, or account-required, never more than one.`);
 }
 
 for (const name of declared) {
-  if (!guestSafe.includes(name) && !accountRequired.includes(name)) {
-    failures.push(`${name} is advertised by the canvas but classified nowhere. Add it to GUEST_SAFE_CANVAS_TOOLS (local document / public API only) or ACCOUNT_REQUIRED_CANVAS_TOOLS (reads or writes a tenant resource) in packages/creation-canvas-contract/src/canvasTools.ts.`);
+  if (!classified.includes(name)) {
+    failures.push(`${name} is advertised by the canvas but classified nowhere. Add it to GUEST_SAFE_CANVAS_TOOLS (local document / public API only), GUEST_GATED_CANVAS_TOOLS (needs a tenant, but refuses a guest with the account gate in the browser), or ACCOUNT_REQUIRED_CANVAS_TOOLS (reads or writes a tenant resource) in packages/creation-canvas-contract/src/canvasTools.ts.`);
   }
 }
 
-for (const name of [...guestSafe, ...accountRequired]) {
+for (const name of classified) {
   if (!declared.has(name)) {
     failures.push(`${name} is classified in the contract but no longer declared by the canvas. Remove it.`);
+  }
+}
+
+// RULE 2 — a description may not redirect the model to a tool this session lacks.
+for (const [name, description] of declarations) {
+  if (!guestAdvertised.has(name)) continue;
+  const referenced = new Set([...description.matchAll(/canvas_[a-z0-9_]+/g)].map((m) => m[0]));
+  for (const other of referenced) {
+    if (other === name || !declared.has(other) || guestAdvertised.has(other)) continue;
+    failures.push(`${name} is advertised to anonymous boards but its description names ${other}, which is account-required and absent there. Either reclassify ${other} as guest-gated so it can state its own reason, or stop naming it in a guest-visible description.`);
   }
 }
 
@@ -88,7 +123,8 @@ if (failures.length) {
   console.error('check-canvas-tool-contract FAILED:\n');
   for (const failure of failures) console.error(`  • ${failure}`);
   console.error('\nA tool the canvas advertises but the gateway strips is invisible: the model plans around it and silently returns prose.');
+  console.error('A tool a description names but the session lacks is worse: the model improvises a limitation and tells the user the product cannot do it.');
   process.exit(1);
 }
 
-console.log(`check-canvas-tool-contract: ${declared.size} canvas tools classified (${guestSafe.length} guest-safe, ${accountRequired.length} account-required).`);
+console.log(`check-canvas-tool-contract: ${declared.size} canvas tools classified (${guestSafe.length} guest-safe, ${guestGated.length} guest-gated, ${accountRequired.length} account-required); ${guestAdvertised.size} guest-visible descriptions cross-checked.`);

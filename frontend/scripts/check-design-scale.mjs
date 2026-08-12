@@ -202,10 +202,19 @@ const COLOUR_EXEMPT = [
   // rendered into an exported PDF. "Executive taupe" is taupe because the template is
   // taupe; it does not become something else when the viewer picks dark mode.
   /^lib\/canvasResume\.ts$/,
+  // The VIDEO RÉSUMÉ template catalog, on exactly the same grounds. Each entry's
+  // four-colour palette is the film's own art direction — persisted onto the
+  // object, editable by its author, and burned into an exported MP4 that plays
+  // in a player which has never heard of our themes.
+  /^lib\/videoResumeTemplates\.ts$/,
 
   // ---- Consumers that never read a stylesheet ---------------------------
   // xterm renders to its own canvas from a plain JS theme object.
   /^components\/Terminal\.tsx$/,
+  // Frames painted into a `<canvas>` 2D context and encoded into the video file.
+  // `context.fillStyle` takes a colour, and `var(--x)` is not one — it paints
+  // nothing and the caption disappears from the export.
+  /^lib\/canvasVideoRender\.ts$/,
   // `theme-color` is a meta tag the browser chrome reads before any CSS exists.
   /^app\/layout\.tsx$/,
   // The two candidate inks of a luminance test — arguments to arithmetic, not

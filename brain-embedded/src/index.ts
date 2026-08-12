@@ -31,6 +31,12 @@ export type {
   AssembledToolCall,
 } from './streamChatCompletion';
 
+// ONE reading of `finish_reason`: a turn cut off by the output ceiling, or one whose
+// tool call the provider could not parse, is an INTERRUPTED action — not a spoken
+// answer — and every consumer that judges a turn must agree on that.
+export { turnInterruption, isTruncatedTurn, isMalformedToolCall } from './finishReason';
+export type { TurnInterruption } from './finishReason';
+
 // Actionable chat errors: the gateway's structured entitlement fields survive the
 // fetch boundary, and ONE classifier turns any failure into the fix a user can take
 // (reconnect / upgrade / add a card). Consumed by the run store AND the banner UI.

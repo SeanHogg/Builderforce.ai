@@ -25,6 +25,7 @@ vi.mock('./guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 vi.mock('./guestChatApi', () => ({ getStoredGuestToken: mocks.getStoredGuestToken }));
 
 const { GUEST_RESEARCH_ACTIONS } = await import('./guestResearchActions');
+const { onGuestLimit } = await import('./guestLimit');
 
 const action = (name: string) => GUEST_RESEARCH_ACTIONS.find((a) => a.name === name)!;
 
@@ -70,6 +71,24 @@ describe('builtin_web_search', () => {
     ));
     expect(await action('builtin_web_search').run({ query: 'anything' }))
       .toEqual({ error: "You've used your 40 free research lookups for today. Sign up free to keep going." });
+  });
+
+  it('announces a spent allowance so the surface can offer the account it talks about', async () => {
+    const walls: unknown[] = [];
+    const stop = onGuestLimit((refusal) => walls.push(refusal));
+    mocks.apiRequestStream.mockResolvedValue(response(
+      { error: 'spent', code: 'guest_research_limit_reached', reason: 'guest', limit: 40, terminal: true },
+      false, 429,
+    ));
+
+    await action('builtin_web_search').run({ query: 'anything' });
+    expect(walls).toEqual([{ allowance: 'research', reason: 'guest', limit: 40 }]);
+
+    // An ordinary failure is not a wall — it must not arm a sign-up CTA.
+    mocks.apiRequestStream.mockResolvedValue(response({ error: 'Upstream unavailable' }, false, 503));
+    await action('builtin_web_search').run({ query: 'anything' });
+    expect(walls).toHaveLength(1);
+    stop();
   });
 
   it('refuses without a guest token instead of calling the API unauthenticated', async () => {

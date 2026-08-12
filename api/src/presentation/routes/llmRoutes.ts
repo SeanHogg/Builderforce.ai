@@ -1139,8 +1139,14 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   // leads the free pool, which is exactly how a Canvas session bricked itself on
   // 2026-08-12. `applyExcludedModels` never empties the chain, so the cheapest
   // cascade is still guaranteed to produce a candidate.
-  if (typeof body.max_tokens !== 'number' || body.max_tokens > GUEST_CHAT_LIMITS.maxTokensPerRequest) {
-    body.max_tokens = GUEST_CHAT_LIMITS.maxTokensPerRequest;
+  // A tool-carrying turn AUTHORS its artifact inside the tool call, so it needs room to
+  // finish one. Clamping it to the chat-bubble budget truncated the arguments mid-JSON
+  // and the turn arrived as no tool call at all — see GUEST_CHAT_LIMITS.
+  const guestMaxTokens = isAgenticToolTurn(bodyAny)
+    ? GUEST_CHAT_LIMITS.maxToolTokensPerRequest
+    : GUEST_CHAT_LIMITS.maxTokensPerRequest;
+  if (typeof body.max_tokens !== 'number' || body.max_tokens > guestMaxTokens) {
+    body.max_tokens = guestMaxTokens;
   }
 
   const requiredKey = c.env.OPENROUTER_API_KEY;

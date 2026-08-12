@@ -153,6 +153,54 @@
 
 .bf-tl__actions {
   margin-top: 6px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* A user turn carries actions too, but it is not a reply — so they stay out of the
+   way until the turn is pointed at or tabbed into. */
+.bf-tl__actions--hover {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.bf-tl__item:hover .bf-tl__actions--hover,
+.bf-tl__item:focus-within .bf-tl__actions--hover {
+  opacity: 1;
+}
+/* No hover to reveal them with: on touch they are simply always there. */
+@media (hover: none) {
+  .bf-tl__actions--hover { opacity: 1; }
+}
+
+/* Per-message icon action (copy / send again). */
+.bf-tl__act {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bf-text-muted, #8a8a8a);
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.bf-tl__act:hover,
+.bf-tl__act:focus-visible {
+  color: var(--bf-text, #e6e6e6);
+  border-color: var(--bf-border, rgba(128, 128, 128, 0.3));
+  background: var(--bf-surface, rgba(128, 128, 128, 0.1));
+}
+.bf-tl__act[data-state='done'] {
+  color: var(--bf-accent, #7aa2f7);
 }
 
 /* ---- per-reply model/account provenance chip ---- */

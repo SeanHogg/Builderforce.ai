@@ -218,8 +218,29 @@ export const GUEST_CHAT_LIMITS = {
    *  visitorIds still hits this. Higher than the per-visitor cap so a shared
    *  office/NAT IP doesn't lock out honest visitors too soon. */
   ipMessagesDailyLimit: 50,
-  /** Output-token ceiling per guest request (clamped down, never rejected). */
+  /** Output-token ceiling per guest CHAT request (clamped down, never rejected).
+   *  Sized for a conversational reply — a paragraph or two in a bubble. */
   maxTokensPerRequest: 700,
+  /**
+   * Output-token ceiling for a guest turn that carries TOOLS — a Creation Canvas
+   * authoring turn rather than a chat reply.
+   *
+   * These are not the same budget and treating them as one is what made the canvas
+   * look broken for a logged-out visitor. A canvas artifact is authored INSIDE the
+   * tool call: `canvas_add_object` for a website carries its pages, sections, headings
+   * and copy as JSON arguments, which is comfortably over a thousand tokens. Clamped to
+   * 700 the model was cut off mid-argument — `finish_reason: "length"`, no parseable
+   * tool call, and a turn that had generated for twenty seconds arrived as nothing.
+   * Measured 2026-08-12 (ui 2026.7.213): one truncated completion, and the calls that
+   * DID survive were the ones small enough to fit — `{x, y, kind, title}` — which is
+   * why every object landed as an empty shell.
+   *
+   * Matches the canvas client's own `CANVAS_RESPONSE_TOKENS`, so the ceiling stops
+   * being the thing that decides whether an artifact can be authored. The real guest
+   * cost control is unchanged and is where it belongs: `messagesDailyLimit` (10 turns
+   * per visitor per day) and `ipMessagesDailyLimit`.
+   */
+  maxToolTokensPerRequest: 3_200,
 } as const;
 
 /**

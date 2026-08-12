@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACCOUNT_REQUIRED_CANVAS_TOOLS,
+  CANVAS_IMAGE_TOOL,
   CREATION_CANVAS_TOOLS,
+  GUEST_GATED_CANVAS_TOOLS,
   GUEST_SAFE_CANVAS_TOOLS,
 } from '@builderforce/creation-canvas-contract';
 import type { ChatCompletionRequest } from '../llm/LlmProxyService';
@@ -104,9 +106,33 @@ describe('restrictGuestTools', () => {
     expect(body.tools).toEqual([tool('canvas_add_object')]);
   });
 
+  /**
+   * A guest-GATED tool must survive the gateway. It is not a tenant call — the browser
+   * answers it with the account gate — and stripping it is what left an anonymous board
+   * with no route to pixels at all: the model fell back to `canvas_add_object` kind
+   * "drawing", was refused for having no {x,y} points, and told a user who had asked for
+   * a picture that it "cannot generate images" (2026-08-12, ui 2026.7.213). Absent, the
+   * model invents a limitation; present, it reports the real one.
+   */
+  it('admits guest-gated canvas tools so the refusal is the real one', () => {
+    const body = {
+      messages: [{ role: 'user', content: 'draw me a coniferous backyard landscape' }],
+      tools: [...GUEST_GATED_CANVAS_TOOLS.map((name) => tool(name)), tool('canvas_add_object')],
+      tool_choice: 'auto',
+    } as ChatCompletionRequest;
+
+    restrictGuestTools(body);
+
+    expect((body.tools as Array<{ function: { name: string } }>).map((t) => t.function.name))
+      .toEqual([...GUEST_GATED_CANVAS_TOOLS, 'canvas_add_object']);
+    expect(GUEST_GATED_CANVAS_TOOLS).toContain(CANVAS_IMAGE_TOOL);
+  });
+
   it('classifies every canvas tool exactly once', () => {
     expect(new Set(CREATION_CANVAS_TOOLS).size).toBe(CREATION_CANVAS_TOOLS.length);
-    expect(CREATION_CANVAS_TOOLS.length).toBe(GUEST_SAFE_CANVAS_TOOLS.length + ACCOUNT_REQUIRED_CANVAS_TOOLS.length);
+    expect(CREATION_CANVAS_TOOLS.length).toBe(
+      GUEST_SAFE_CANVAS_TOOLS.length + GUEST_GATED_CANVAS_TOOLS.length + ACCOUNT_REQUIRED_CANVAS_TOOLS.length,
+    );
   });
 
   it('keeps ordinary guest chat tool-free', () => {

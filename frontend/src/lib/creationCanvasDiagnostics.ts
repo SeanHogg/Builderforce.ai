@@ -3,6 +3,7 @@ import {
   type DiagnosticsContext,
 } from './diagnosticsReport';
 import { journalGaps, summarizeTimings, type CanvasAction } from './canvasActionJournal';
+import { isMalformedToolCall, isTruncatedTurn } from '@seanhogg/builderforce-brain-embedded';
 
 /**
  * The Creation Canvas handover report.
@@ -202,10 +203,17 @@ export function buildCreationCanvasDiagnosticsReport(
   });
   const runtime = asRecord(input.brainRuntime);
   const completions = Array.isArray(runtime.completions) ? runtime.completions : [];
-  const truncated = completions.map(asRecord).filter((completion) => str(completion.finishReason) === 'length');
+  const truncated = completions.map(asRecord).filter((completion) => isTruncatedTurn(str(completion.finishReason)));
   if (truncated.length) {
     const last = truncated[truncated.length - 1]!;
     gaps.push(`Brain output hit the model length limit on ${truncated.length} completion(s); the last truncated completion used ${str(last.resolvedModel) || '(unknown model)'}. Its answer or requested tool sequence may be incomplete.`);
+  }
+  // An unparseable tool call is an ATTEMPTED action, not an answer — it reads as
+  // "the model never called a tool" unless the report says otherwise.
+  const malformed = completions.map(asRecord).filter((completion) => isMalformedToolCall(str(completion.finishReason)));
+  if (malformed.length) {
+    const last = malformed[malformed.length - 1]!;
+    gaps.push(`The model emitted a tool call the provider could not parse on ${malformed.length} completion(s); the last was ${str(last.resolvedModel) || '(unknown model)'}. Those turns attempted a Canvas action rather than answering.`);
   }
   const timings = summarizeTimings(actions);
   const timingRows = timings.map((row) => `  ${row.label} · n=${row.count}${row.pending ? ` · pending=${row.pending}` : ''}${row.failed ? ` · FAILED=${row.failed}` : ''} · p50=${row.p50Ms == null ? 'n/a' : `${row.p50Ms}ms`} · max=${row.maxMs == null ? 'n/a' : `${row.maxMs}ms`}`);

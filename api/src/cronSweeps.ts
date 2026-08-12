@@ -40,6 +40,7 @@ import { runReleaseDigest } from './application/email/releaseDigest';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { runCampaignSendSweep } from './application/marketing/campaignEngine';
+import { runSocialCampaignSweep } from './application/social/socialCampaignService';
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runCustomDomainSweep } from './application/ide/customDomain';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
@@ -237,6 +238,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runCampaignSendSweep(env, buildDatabase(env));
       return r.sent > 0 || r.failed > 0
         ? `campaigns=${r.campaigns} sent=${r.sent} failed=${r.failed}`
+        : null;
+    },
+  },
+  {
+    key: 'social-publish',
+    cadence: 'frequent',
+    description: 'Publish due scheduled social campaigns, and advance any still mid-publish.',
+    run: async ({ env }) => {
+      const r = await runSocialCampaignSweep(env, buildDatabase(env));
+      return r.published > 0 || r.failed > 0
+        ? `campaigns=${r.campaigns} published=${r.published} failed=${r.failed}`
         : null;
     },
   },

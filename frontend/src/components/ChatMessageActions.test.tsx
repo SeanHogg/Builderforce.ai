@@ -10,20 +10,16 @@ vi.mock('./brain/BrainMessageExport', () => ({ BrainMessageExport: () => null })
 describe('ChatMessageActions', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('puts icon-only Markdown and Copy actions on the assistant reply', () => {
-    const onCopy = vi.fn();
+  it('puts an icon-only Markdown download on the assistant reply', () => {
     render(
       <ChatMessageActions
-        onCopy={onCopy}
         assistantContent={'# Answer\n\nUseful detail.'}
         chatTitle="Research answer"
       />,
     );
 
     const markdown = screen.getByRole('button', { name: 'brain.messageActions.downloadMarkdown' });
-    const copy = screen.getByRole('button', { name: 'brain.messageActions.copy' });
     expect(markdown).toHaveTextContent('');
-    expect(copy).toHaveTextContent('');
 
     fireEvent.click(markdown);
     expect(downloadText).toHaveBeenCalledWith(
@@ -33,13 +29,21 @@ describe('ChatMessageActions', () => {
     );
     expect(screen.getByRole('button', { name: 'brain.messageActions.downloaded' }))
       .toHaveAttribute('data-state', 'complete');
-
-    fireEvent.click(copy);
-    expect(onCopy).toHaveBeenCalledOnce();
   });
 
-  it('changes the Copy icon accessible label after copying', () => {
-    render(<ChatMessageActions onCopy={vi.fn()} copied assistantContent="Answer" />);
-    expect(screen.getByRole('button', { name: 'brain.messageActions.copied' })).toBeTruthy();
+  /**
+   * Copy moved into the shared <BrainTimeline>, so every surface that mounts the
+   * transcript has it — the Canvas dock and the VS Code webview previously had none.
+   * This bar must NOT offer a second one beside it.
+   */
+  it('no longer renders its own copy action', () => {
+    render(<ChatMessageActions assistantContent="Answer" />);
+    expect(screen.queryByRole('button', { name: 'brain.messageActions.copy' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'brain.messageActions.copied' })).toBeNull();
+  });
+
+  it('hides feedback when the host passes no handler', () => {
+    render(<ChatMessageActions assistantContent="Answer" />);
+    expect(screen.queryByRole('button', { name: 'brain.messageActions.thumbsUp' })).toBeNull();
   });
 });

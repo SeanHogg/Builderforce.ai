@@ -105,10 +105,12 @@ __export(src_exports, {
   isEffort: () => isEffort,
   isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  isMalformedToolCall: () => isMalformedToolCall,
   isRouterTool: () => isRouterTool,
   isRunning: () => isRunning,
   isStepMessage: () => isStepMessage,
   isTicketRecordingTool: () => isTicketRecordingTool,
+  isTruncatedTurn: () => isTruncatedTurn,
   lastConsolidationIndex: () => lastConsolidationIndex,
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
   mcpActionsFrom: () => mcpActionsFrom,
@@ -155,6 +157,7 @@ __export(src_exports, {
   toolNamesMentionedIn: () => toolNamesMentionedIn,
   toolSpecsFor: () => toolSpecsFor,
   traceWithPersistedSteps: () => traceWithPersistedSteps,
+  turnInterruption: () => turnInterruption,
   turnOptimizationDirective: () => turnOptimizationDirective,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
@@ -441,6 +444,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (model) body.model = model;
   if (model && opts.modelStrict) body.strict = true;
   if (opts.routingMode) body.routingMode = opts.routingMode;
+  if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
@@ -611,6 +615,24 @@ function useBrainConfig() {
   const ctx = (0, import_react.useContext)(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/finishReason.ts
+var TRUNCATED_REASONS = /* @__PURE__ */ new Set(["length", "max_tokens", "maxtokens", "model_length", "output_limit"]);
+var MALFORMED_TOOL_CALL_REASONS = /* @__PURE__ */ new Set(["malformed_function_call", "malformed_tool_call", "invalid_tool_call"]);
+var normalise = (finishReason) => (finishReason ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+function turnInterruption(finishReason) {
+  const reason = normalise(finishReason);
+  if (!reason) return null;
+  if (TRUNCATED_REASONS.has(reason)) return "truncated";
+  if (MALFORMED_TOOL_CALL_REASONS.has(reason)) return "malformed-tool-call";
+  return null;
+}
+function isTruncatedTurn(finishReason) {
+  return turnInterruption(finishReason) === "truncated";
+}
+function isMalformedToolCall(finishReason) {
+  return turnInterruption(finishReason) === "malformed-tool-call";
 }
 
 // src/effort.ts
@@ -1957,11 +1979,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
       }
       if (typeof u.completion === "number") completionTokenTotal += u.completion;
     }
-    const finish = ev.finishReason ?? null;
     const emptyText = typeof ev.textChars === "number" && ev.textChars === 0;
     const toolCallsThisTurn = ev.args?.toolCalls;
     const askedNoTools = typeof toolCallsThisTurn === "number" ? toolCallsThisTurn === 0 : true;
-    if (finish === "length" || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
+    if (turnInterruption(ev.finishReason) || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
     const a = ev.args;
     const asked = typeof a?.requestedModel === "string" && a.requestedModel !== "default" ? a.requestedModel : req;
     const resolved = a?.model;
@@ -3415,7 +3436,6 @@ function useBrainConversation(options) {
   const reloadMessages = (0, import_react6.useCallback)(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = (0, import_react6.useState)(false);
   const [localError, setLocalError] = (0, import_react6.useState)("");
-  const [copiedMessageId, setCopiedMessageId] = (0, import_react6.useState)(null);
   const [feedbackMap, setFeedbackMap] = (0, import_react6.useState)({});
   const [pendingAttachments, setPendingAttachments] = (0, import_react6.useState)([]);
   const [uploading, setUploading] = (0, import_react6.useState)(false);
@@ -3594,14 +3614,6 @@ ${refs}`;
     }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const copyMessage = (0, import_react6.useCallback)(async (msg) => {
-    try {
-      await navigator.clipboard.writeText(msg.content);
-      setCopiedMessageId(msg.id);
-      setTimeout(() => setCopiedMessageId((cur) => cur === msg.id ? null : cur), 2e3);
-    } catch {
-    }
-  }, []);
   const submitFeedback = (0, import_react6.useCallback)(async (msg, value) => {
     const current = feedbackMap[msg.id];
     const next = current === value ? null : value;
@@ -3674,13 +3686,11 @@ ${refs}`;
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
-    copiedMessageId,
     feedbackMap,
     pendingAttachments,
     uploading,
     send,
     stop,
-    copyMessage,
     submitFeedback,
     attach,
     removeAttachment,
@@ -4193,10 +4203,12 @@ function formatChatDiagnostics(d) {
   isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isMalformedToolCall,
   isRouterTool,
   isRunning,
   isStepMessage,
   isTicketRecordingTool,
+  isTruncatedTurn,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
   mcpActionsFrom,
@@ -4243,6 +4255,7 @@ function formatChatDiagnostics(d) {
   toolNamesMentionedIn,
   toolSpecsFor,
   traceWithPersistedSteps,
+  turnInterruption,
   turnOptimizationDirective,
   useBrainActions,
   useBrainChats,

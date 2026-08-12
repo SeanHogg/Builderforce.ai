@@ -216,6 +216,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (model) body.model = model;
   if (model && opts.modelStrict) body.strict = true;
   if (opts.routingMode) body.routingMode = opts.routingMode;
+  if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
@@ -386,6 +387,24 @@ function useBrainConfig() {
   const ctx = useContext(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/finishReason.ts
+var TRUNCATED_REASONS = /* @__PURE__ */ new Set(["length", "max_tokens", "maxtokens", "model_length", "output_limit"]);
+var MALFORMED_TOOL_CALL_REASONS = /* @__PURE__ */ new Set(["malformed_function_call", "malformed_tool_call", "invalid_tool_call"]);
+var normalise = (finishReason) => (finishReason ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+function turnInterruption(finishReason) {
+  const reason = normalise(finishReason);
+  if (!reason) return null;
+  if (TRUNCATED_REASONS.has(reason)) return "truncated";
+  if (MALFORMED_TOOL_CALL_REASONS.has(reason)) return "malformed-tool-call";
+  return null;
+}
+function isTruncatedTurn(finishReason) {
+  return turnInterruption(finishReason) === "truncated";
+}
+function isMalformedToolCall(finishReason) {
+  return turnInterruption(finishReason) === "malformed-tool-call";
 }
 
 // src/effort.ts
@@ -1732,11 +1751,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
       }
       if (typeof u.completion === "number") completionTokenTotal += u.completion;
     }
-    const finish = ev.finishReason ?? null;
     const emptyText = typeof ev.textChars === "number" && ev.textChars === 0;
     const toolCallsThisTurn = ev.args?.toolCalls;
     const askedNoTools = typeof toolCallsThisTurn === "number" ? toolCallsThisTurn === 0 : true;
-    if (finish === "length" || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
+    if (turnInterruption(ev.finishReason) || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
     const a = ev.args;
     const asked = typeof a?.requestedModel === "string" && a.requestedModel !== "default" ? a.requestedModel : req;
     const resolved = a?.model;
@@ -3190,7 +3208,6 @@ function useBrainConversation(options) {
   const reloadMessages = useCallback4(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = useState5(false);
   const [localError, setLocalError] = useState5("");
-  const [copiedMessageId, setCopiedMessageId] = useState5(null);
   const [feedbackMap, setFeedbackMap] = useState5({});
   const [pendingAttachments, setPendingAttachments] = useState5([]);
   const [uploading, setUploading] = useState5(false);
@@ -3369,14 +3386,6 @@ ${refs}`;
     }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const copyMessage = useCallback4(async (msg) => {
-    try {
-      await navigator.clipboard.writeText(msg.content);
-      setCopiedMessageId(msg.id);
-      setTimeout(() => setCopiedMessageId((cur) => cur === msg.id ? null : cur), 2e3);
-    } catch {
-    }
-  }, []);
   const submitFeedback = useCallback4(async (msg, value) => {
     const current = feedbackMap[msg.id];
     const next = current === value ? null : value;
@@ -3449,13 +3458,11 @@ ${refs}`;
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
-    copiedMessageId,
     feedbackMap,
     pendingAttachments,
     uploading,
     send,
     stop,
-    copyMessage,
     submitFeedback,
     attach,
     removeAttachment,
@@ -3967,10 +3974,12 @@ export {
   isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isMalformedToolCall,
   isRouterTool,
   isRunning,
   isStepMessage,
   isTicketRecordingTool,
+  isTruncatedTurn,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
   mcpActionsFrom,
@@ -4017,6 +4026,7 @@ export {
   toolNamesMentionedIn,
   toolSpecsFor,
   traceWithPersistedSteps,
+  turnInterruption,
   turnOptimizationDirective,
   useBrainActions,
   useBrainChats,

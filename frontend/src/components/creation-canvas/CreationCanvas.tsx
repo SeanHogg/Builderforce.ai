@@ -19,13 +19,14 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasDrivePanel } from './CanvasDrivePanel';
+import { CanvasSocialPanel } from './CanvasSocialPanel';
 import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
 import { BrainDock } from './BrainDock';
@@ -66,19 +67,25 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { isAwaitingApprovalExecution, type LlmError } from '@/lib/builderforceApi';
+import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
+import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
+import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { ApiRequestError } from '@/lib/apiClient';
 import { resolveCanvasImage, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
+import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
+import { isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { appendCanvasVideoSource, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { appendCanvasVideoSource, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { getStoredTenantToken } from '@/lib/auth';
+import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
@@ -143,7 +150,6 @@ import type { ProjectModality } from '@/lib/modality';
 import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseLms';
 import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
-import { signInHref } from '@/lib/auth';
 import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 
@@ -210,6 +216,19 @@ const INSPECTOR_MIN_WIDTH = 270;
 const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare', 'build']);
+
+/**
+ * ONE shape for every "this needs a free account" tool answer.
+ *
+ * `error` is deliberate rather than a softer `message`: it is the field the canvas tool
+ * loop keeps as `lastToolError`, so a turn that ends without a reply still tells the
+ * user the real reason instead of "I couldn't prepare any canvas changes from that
+ * request". `requiresAccount` distinguishes a gate from a genuine failure for anything
+ * reading the trace. The account prompt is already open by the time the model reads it.
+ */
+function accountGateResult(tool: string, reason: string): { requiresAccount: true; tool: string; error: string } {
+  return { requiresAccount: true, tool, error: reason };
+}
 const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   website: ['publish'], video: ['generate'], build: ['open'],
   // `build` compiles the authored steps into a real workflow definition; `run`
@@ -338,6 +357,10 @@ export async function persistCanonicalProjectPrd(
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
 }
+
+/** Social-campaign fields the SERVER owns — see `syncSocialCampaign`. Editing one on
+ *  the tile has to write through, or the board shows one message and publishes another. */
+const SERVER_OWNED_CAMPAIGN_FIELDS = ['body', 'linkUrl', 'mediaUrls', 'variants', 'scheduledAt'] as const;
 
 export function associateBrainWithArtifacts(current: Edge[], brainId: string, artifactIds: Iterable<string>, label = 'Brain context'): Edge[] {
   if (!brainId) return current;
@@ -555,10 +578,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const tCommands = useTranslations('canvasCommands');
   const tFiles = useTranslations('creationCanvas.files');
   const tDrive = useTranslations('creationCanvas.drive');
+  const tSocial = useTranslations('creationCanvas.social');
   const tImport = useTranslations('creationCanvas.import');
   /** The import engine is a plain module, so it is handed the catalog rather
    * than reaching for one — every string it produces stays translated. */
   const importLabel = useCallback<ImportTranslator>((key, values) => tImport(key as never, values as never), [tImport]);
+  /**
+   * The guest wall this board has run into, or null while it has not. Set from the
+   * refused turn itself and cleared by the next turn that succeeds, so the CTA is
+   * exactly as live as the block it answers — a visitor who signs up in another
+   * tab and comes back to a working canvas is not still being sold an account.
+   */
+  const [guestLimit, setGuestLimit] = useState<GuestLimitRefusal | null>(null);
   /**
    * The one place a failed AI turn becomes words. Known failures the visitor can
    * act on are said in their own language; anything else keeps the underlying
@@ -569,16 +600,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (error instanceof GuestAiUnavailableError) return t('noticeGuestAiUnavailable');
     // A guest who has spent their free turns: the gateway sends `guest_limit_reached`
     // with the cap on the body (GUEST_CHAT_LIMITS), and its own English prose. Say it
-    // in the visitor's language and point at the way forward instead of the wall.
-    const code = (error as LlmError | undefined)?.code;
-    if (code === 'guest_limit_reached') {
-      const limit = Number((error as LlmError).body?.limit);
-      return (error as LlmError).body?.reason === 'ip'
-        ? t('noticeGuestLimitDevice')
-        : t('noticeGuestLimitReached', { limit: Number.isFinite(limit) ? limit : 0 });
+    // in the visitor's language, and ARM the conversion CTA in the same step — the
+    // sentence alone told a blocked visitor to sign up while offering nothing to
+    // click. Every turn site routes through here, so no path can say the words and
+    // forget the button.
+    const refusal = guestLimitRefusal(error);
+    if (refusal) {
+      setGuestLimit(refusal);
+      // Same event the account-gate modal files, so conversion is counted once
+      // wherever the visitor met the wall.
+      trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action: 'guest_limit' } });
+      if (refusal.reason === 'ip') return t('noticeGuestLimitDevice');
+      if (refusal.reason === 'room') return t('noticeGuestLimitRoom', { limit: refusal.limit ?? 0 });
+      return t('noticeGuestLimitReached', { limit: refusal.limit ?? 0 });
     }
     return error instanceof Error && error.message ? error.message : t(fallbackKey);
-  }, [t]);
+  }, [sessionId, t]);
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
@@ -849,6 +886,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
+  const [socialOpen, setSocialOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
   const nativeFullscreenRef = useRef(false);
@@ -879,6 +917,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
   const isComposingPrompt = prompt.trim().length > 0;
+  // "IS THIS BOARD SAVED?" AND "DOES THIS PERSON HAVE AN ACCOUNT?" ARE DIFFERENT
+  // QUESTIONS, AND `persistence` ONLY ANSWERS THE FIRST.
+  //
+  // It is derived from the session id alone (`isLocalCreationSession` — a `local-…`
+  // prefix), so a SIGNED-IN user working on an unsaved board reads as anonymous. Used
+  // as a stand-in for "no account" it told a paying user to create an account before
+  // they could generate an image, when their own credentials would have authorized the
+  // call: image generation posts to `/llm/v1/images/generations` with the tenant token
+  // and never touches the session row.
+  //
+  // Keep the two separate at the source. `persistence` still gates anything that needs
+  // a SAVED SESSION to point at (durable object actions, branches, comparisons); this
+  // answers only "will a tenant request from this browser authenticate?".
+  //
+  // Read from the token store rather than from `useAuth`, for two reasons: it is the
+  // exact value `apiRequest` authorizes with (so it cannot disagree with the call it is
+  // predicting), and the canvas mounts in surfaces that have no AuthProvider above them
+  // — the VS Code webview, the embed, and the component tests.
+  const [hasAccount, setHasAccount] = useState(false);
+  const [claimingDraft, setClaimingDraft] = useState(false);
+  useEffect(() => { setHasAccount(!!getStoredTenantToken()); }, []);
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
@@ -1560,11 +1619,49 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * button rather than one that silently does nothing.
    */
   const cardsEditable = canEdit && !lockBlocked;
+
+  /**
+   * A social campaign's copy lives on the SERVER, not on the tile.
+   *
+   * The tile is a view of a saved campaign, and publishing reads the saved copy — so an
+   * edit that stopped at the card would show one message on the board and publish a
+   * different one. Editing these fields therefore writes through, and the returned
+   * campaign (whose blockers and target count may have changed) is what lands back on
+   * the tile. Everything else about a campaign object is a read-only reflection.
+   */
+  const syncSocialCampaign = useCallback(async (campaignId: number, nodeId: string, patch: Partial<CreationNodeData>) => {
+    try {
+      const { campaign } = await socialApi.updateCampaign(campaignId, {
+        ...(typeof patch.body === 'string' ? { body: patch.body } : {}),
+        ...(typeof patch.linkUrl === 'string' ? { linkUrl: patch.linkUrl } : {}),
+        ...(Array.isArray(patch.mediaUrls) ? { mediaUrls: patch.mediaUrls.map(String) } : {}),
+        ...(patch.variants && typeof patch.variants === 'object'
+          ? { variants: patch.variants as Partial<Record<SocialNetwork, string>> }
+          : {}),
+        ...(patch.scheduledAt !== undefined
+          ? { scheduledAt: patch.scheduledAt ? String(patch.scheduledAt) : null }
+          : {}),
+      });
+      setNodes((current) => current.map((node) => node.id === nodeId
+        ? { ...node, data: { ...node.data, ...socialCampaignNodeData(campaign) } as CreationNodeData }
+        : node));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : tSocial('campaignUpdateFailed'));
+    }
+  }, [setNodes, tSocial]);
+
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!cardsEditable) return;
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
     setNotice(t('noticeSavingChanges'));
-  }, [cardsEditable, setNodes]);
+    const target = nodes.find((node) => node.id === nodeId);
+    const campaignId = Number(target?.data.campaignId);
+    if (target?.data.kind === 'socialCampaign'
+      && Number.isInteger(campaignId)
+      && SERVER_OWNED_CAMPAIGN_FIELDS.some((field) => field in patch)) {
+      void syncSocialCampaign(campaignId, nodeId, patch);
+    }
+  }, [cardsEditable, nodes, setNodes, syncSocialCampaign]);
 
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
     if (!selectedId) return;
@@ -1937,6 +2034,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return next;
   }), []);
 
+  /**
+   * A guest wall is the answer to something they just asked, and the answer — the
+   * refusal and the account that clears it — lives on the Brain surface. Reveal it,
+   * or a visitor with Brain closed gets a one-line notice and no way forward.
+   */
+  useEffect(() => { if (guestLimit) openBrainDock(); }, [guestLimit, openBrainDock]);
+
   const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => {
     setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
     setInspectorFocus(null); setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]);
@@ -2001,6 +2105,80 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
   }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
+
+  /**
+   * Read the connected social accounts and BUILD the feed tile — without adding it.
+   *
+   * Shared by `canvas_add_social_feed` (which stages it as a reviewable proposal) and
+   * the social panel (which commits it immediately). One builder, so the tile a model
+   * puts on the board and the one a person puts there are identical — the alternative
+   * is two shapes that drift, and a refresh that works on only one of them.
+   */
+  const buildSocialFeedNode = useCallback(async (
+    filter: SocialFeedFilter,
+    opts: { title?: string; x?: number; y?: number } = {},
+  ): Promise<{ ok: true; node: CreationFlowNode; read: Awaited<ReturnType<typeof socialApi.feed>> } | { ok: false; error: string }> => {
+    let read: Awaited<ReturnType<typeof socialApi.feed>>;
+    try {
+      read = await socialApi.feed(filter);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : tSocial('feedFailed') };
+    }
+    if (read.accounts.length === 0) {
+      // Actionable rather than a bare failure: the fix is one panel away.
+      return { ok: false, error: tSocial('noAccountsHint') };
+    }
+    const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+    const node = newNode('socialFeed', nextCanvasObjectPosition(
+      [...nodes, ...stagedNodes],
+      { ...(opts.x != null ? { x: opts.x } : {}), ...(opts.y != null ? { y: opts.y } : {}) },
+      typeof window !== 'undefined' && window.innerWidth <= 760,
+      'socialFeed',
+    ));
+    node.data = {
+      ...node.data,
+      title: opts.title?.trim().slice(0, 160) || tSocial('feedTitle'),
+      subtitle: describeSocialFilter(filter, {
+        all: tSocial('filterAll'),
+        networks: (list) => tSocial('filterNetworks', { networks: list }),
+        search: (term) => tSocial('filterSearch', { term }),
+      }),
+      status: tSocial('postCount', { count: read.items.length }),
+      filter,
+      ...socialFeedPatch(read),
+    };
+    node.style = { width: 460, height: 560 };
+    return { ok: true, node, read };
+  }, [nodes, tSocial]);
+
+  /** The panel's "put it on the board" — a committed add, not a proposal. */
+  const addSocialFeedToBoard = useCallback(async (filter: SocialFeedFilter) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const built = await buildSocialFeedNode(filter);
+    if (!built.ok) { setNotice(built.error); return; }
+    setNodes((current) => [...current, built.node]);
+    setSelectedId(built.node.id); setSelectedIds([built.node.id]);
+    setNotice(t('objectAdded', { title: built.node.data.title }));
+  }, [buildSocialFeedNode, canEdit, setNodes, t]);
+
+  const addSocialCampaignToBoard = useCallback((campaign: SocialCampaign) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const data = socialCampaignNodeData(campaign);
+    setNodes((current) => {
+      // A campaign already on the board is UPDATED, never duplicated — publishing from
+      // the panel must move the tile that is there rather than stack a second one.
+      const existing = current.find((node) => node.data.kind === 'socialCampaign' && Number(node.data.campaignId) === campaign.id);
+      if (existing) {
+        return current.map((node) => node.id === existing.id ? { ...node, data: { ...node.data, ...data } as CreationNodeData } : node);
+      }
+      const node = newNode('socialCampaign', nextCanvasObjectPosition(
+        current, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'socialCampaign',
+      ));
+      node.data = { ...node.data, ...data } as CreationNodeData;
+      node.style = { width: 440, height: 460 };
+      return [...current, node];
+    });
+  }, [canEdit, setNodes, t]);
 
   // The shell recorder writes through the canonical Builder workspace store, then
   // announces the durable artifact to the board that started it. Hidden cached
@@ -3309,6 +3487,237 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }, {
     /**
+     * "Show me our social feed" — the whole point of a connected account on the board.
+     *
+     * A dedicated action rather than `canvas_add_object` with authored fields, for the
+     * same reason `canvas_add_inbox` is: a model cannot invent what a company actually
+     * posted or how it performed. This READS the connected accounts and puts what is
+     * really there on the board, and it stores the FILTER alongside the posts, which is
+     * what makes the tile a live, reproducible view rather than a screenshot.
+     */
+    name: 'canvas_add_social_feed',
+    description: 'Put a LIVE SOCIAL FEED from the workspace\'s connected accounts (X, LinkedIn, Facebook, Instagram, TikTok) onto the canvas, merged newest-first with real engagement numbers. Use this whenever the user asks to see, show, review or analyse their social media, posts, or channel performance — it reads their real accounts rather than inventing posts. Narrow with networks (e.g. ["x","linkedin"]) or query (free text). The filter is saved with the tile so it can be refreshed later and still mean the same thing.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        networks: { type: 'array', items: { type: 'string' }, description: 'Restrict to these networks: x, linkedin, facebook, instagram, tiktok.' },
+        title: { type: 'string', description: 'Tile title, e.g. "Launch week posts". Defaults to a description of the filter.' },
+        query: { type: 'string', description: 'Free-text filter across post text and author.' },
+        limit: { type: 'number', description: 'Up to 50. Defaults to 25.' },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { networks?: string[]; title?: string; query?: string; limit?: number; x?: number; y?: number };
+      const filter: SocialFeedFilter = {
+        ...(Array.isArray(args.networks) && args.networks.length ? { networks: args.networks.filter(isSocialNetworkName) } : {}),
+        ...(args.query ? { q: args.query } : {}),
+        ...(args.limit ? { limit: args.limit } : {}),
+      };
+      const built = await buildSocialFeedNode(filter, {
+        ...(args.title ? { title: args.title } : {}),
+        ...(args.x != null ? { x: args.x } : {}),
+        ...(args.y != null ? { y: args.y } : {}),
+      });
+      if (!built.ok) return { error: built.error };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add social feed “${built.node.data.title}”`, node: built.node });
+      return {
+        ok: true, proposed: true,
+        object: { id: built.node.id, kind: 'socialFeed', title: built.node.data.title },
+        accounts: built.read.accounts.map((account) => `${account.networkLabel} · ${account.name}`),
+        total: built.read.items.length,
+        engagement: totalEngagement(built.read.items),
+        posts: built.read.items.map(socialPostProjection),
+        ...(built.read.errors.length ? { accountErrors: built.read.errors } : {}),
+      };
+    },
+  }, {
+    name: 'canvas_refresh_social_feed',
+    description: 'Re-read the social accounts behind a feed already on the canvas, using the filter that tile was created with, and return what is there now. Use this when asked to refresh, re-check or "look again at" a social feed on the board — it updates the tile in place rather than adding a second one.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: { objectId: { type: 'string', description: 'The social feed object. Omit when the canvas holds exactly one.' } },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const objectId = (raw as { objectId?: string }).objectId;
+      const feeds = nodes.filter((node) => node.data.kind === 'socialFeed');
+      const target = objectId ? feeds.find((node) => node.id === objectId) : feeds.length === 1 ? feeds[0] : undefined;
+      if (!target) return { error: feeds.length ? 'Say which social feed to refresh.' : 'There is no social feed on this canvas yet.' };
+
+      let read: Awaited<ReturnType<typeof socialApi.feed>>;
+      try {
+        read = await socialApi.feed((target.data.filter as SocialFeedFilter) ?? {});
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'Those accounts could not be read.' };
+      }
+      const patch = socialFeedPatch(read);
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Refresh social feed ${target.id}`, objectId: target.id, patch });
+      return {
+        ok: true, proposed: true, objectId: target.id,
+        total: read.items.length, engagement: totalEngagement(read.items),
+        posts: read.items.map(socialPostProjection),
+        ...(read.errors.length ? { accountErrors: read.errors } : {}),
+      };
+    },
+  }, {
+    /** Lifting one post out of a live view is what makes it durable: a `socialPost`
+     *  object stops changing, so it can be annotated, connected to a task, and
+     *  compared against whatever was published after it. */
+    name: 'canvas_pin_social_post',
+    description: 'Pin ONE post from a social feed on the canvas as its own object, with its text, media and engagement at the time it was read. Use this when a specific post needs to be discussed, annotated, or connected to work — unlike the live feed tile, a pinned post does not change when the account does.',
+    parameters: {
+      type: 'object', required: ['postId'], additionalProperties: false,
+      properties: {
+        postId: { type: 'string', description: 'The post id, as listed by the feed tile.' },
+        objectId: { type: 'string', description: 'Which feed it came from. Omit when the canvas holds exactly one.' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { postId?: string; objectId?: string };
+      const feeds = nodes.filter((node) => node.data.kind === 'socialFeed');
+      const source = args.objectId ? feeds.find((node) => node.id === args.objectId) : feeds.length === 1 ? feeds[0] : undefined;
+      if (!source) return { error: feeds.length ? 'Say which social feed the post is in.' : 'There is no social feed on this canvas yet.' };
+
+      const posts = (Array.isArray(source.data.posts) ? source.data.posts : []) as SocialFeedItem[];
+      const post = posts.find((item) => String(item.id) === String(args.postId));
+      if (!post) return { error: 'That post is not in this feed — refresh it, or pin one of the posts it lists.' };
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('socialPost', nextCanvasObjectPosition(
+        [...nodes, ...stagedNodes],
+        { x: source.position.x + 500, y: source.position.y },
+        typeof window !== 'undefined' && window.innerWidth <= 760,
+        'socialPost',
+      ));
+      node.data = { ...node.data, ...socialPostNodeData(post) };
+      node.style = { width: 420, height: 420 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Pin ${post.network} post`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${source.data.title} to the pinned post`, edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } } });
+      return { ok: true, proposed: true, object: { id: node.id, kind: 'socialPost', title: node.data.title }, post: socialPostProjection(post) };
+    },
+  }, {
+    /**
+     * Drafting is separate from publishing, deliberately.
+     *
+     * A campaign object on the board is reviewable — its copy, its targets and its
+     * blockers are visible — and `canvas_publish_social_campaign` is the single,
+     * explicit act that makes it public. Collapsing the two would mean a model could
+     * post to a company's channels as a side effect of being asked to "write" a post.
+     */
+    name: 'canvas_create_social_campaign',
+    description: 'Draft a SOCIAL CAMPAIGN on the canvas — one announcement to be published to every connected account. This does NOT publish it; the tile shows the copy, each target account and any blockers, and canvas_publish_social_campaign is what makes it public. Use `variants` for per-network copy ({"x":"280 characters","linkedin":"a paragraph"}); an absent network falls back to `body`. Instagram and TikTok need `mediaUrls` (public https URLs) or they are skipped. Pass `scheduledAt` (ISO) to publish it later automatically.',
+    parameters: {
+      type: 'object', required: ['name', 'body'], additionalProperties: false,
+      properties: {
+        name: { type: 'string', description: 'Campaign name, for the board and the report.' },
+        body: { type: 'string', description: 'The shared copy every network gets unless a variant overrides it.' },
+        variants: { type: 'object', description: 'Per-network copy keyed by network id.' },
+        linkUrl: { type: 'string', description: 'Destination URL appended to networks with no link field.' },
+        mediaUrls: { type: 'array', items: { type: 'string' }, description: 'Public https image or video URLs the networks fetch themselves.' },
+        networks: { type: 'array', items: { type: 'string' }, description: 'Restrict targets to these networks. Omit to target every ready account.' },
+        scheduledAt: { type: 'string', description: 'ISO instant to publish at. Omit to leave it a draft.' },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as {
+        name?: string; body?: string; variants?: Record<string, string>; linkUrl?: string;
+        mediaUrls?: string[]; networks?: string[]; scheduledAt?: string; x?: number; y?: number;
+      };
+      let accounts: Awaited<ReturnType<typeof socialApi.accounts>>;
+      try {
+        accounts = await socialApi.accounts();
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'The connected accounts could not be read.' };
+      }
+      const wanted = (args.networks ?? []).filter(isSocialNetworkName);
+      const targets = accounts.accounts
+        .filter((account) => account.ready && (wanted.length === 0 || wanted.includes(account.network)))
+        .map((account) => account.id);
+      if (targets.length === 0) {
+        // Actionable rather than a bare failure: the fix is not on this board.
+        return { error: 'No connected social account is ready to publish. Connect one from the social panel on this canvas first.' };
+      }
+
+      let created: Awaited<ReturnType<typeof socialApi.createCampaign>>;
+      try {
+        created = await socialApi.createCampaign({
+          name: String(args.name ?? '').trim(),
+          body: String(args.body ?? '').trim(),
+          connectionIds: targets,
+          ...(args.variants ? { variants: args.variants as Partial<Record<SocialNetwork, string>> } : {}),
+          ...(args.linkUrl ? { linkUrl: args.linkUrl } : {}),
+          ...(Array.isArray(args.mediaUrls) ? { mediaUrls: args.mediaUrls.map(String) } : {}),
+          ...(args.scheduledAt ? { scheduledAt: args.scheduledAt } : {}),
+          ...(sessionId ? { sessionId } : {}),
+        });
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That campaign could not be drafted.' };
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('socialCampaign', nextCanvasObjectPosition(
+        [...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'socialCampaign',
+      ));
+      node.data = { ...node.data, ...socialCampaignNodeData(created.campaign) };
+      node.style = { width: 440, height: 460 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add social campaign “${created.campaign.name}”`, node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'socialCampaign', title: created.campaign.name },
+        campaignId: created.campaign.id,
+        targets: created.campaign.targets,
+        accounts: created.campaign.posts.map((post) => `${post.network} · ${post.accountName}`),
+        blockers: created.campaign.blockers,
+        scheduled: created.campaign.scheduledAtISO,
+      };
+    },
+  }, {
+    name: 'canvas_publish_social_campaign',
+    description: 'PUBLISH a social campaign that is on the canvas to every account it targets. THIS IS PUBLIC AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it to "test" a campaign. Each account is published at most once, so a retry is safe; networks that need media and have none are skipped rather than failed. The tile updates in place with each account\'s outcome and permalink.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: { objectId: { type: 'string', description: 'The social campaign object. Omit when the canvas holds exactly one.' } },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const objectId = (raw as { objectId?: string }).objectId;
+      const campaigns = nodes.filter((node) => node.data.kind === 'socialCampaign');
+      const target = objectId ? campaigns.find((node) => node.id === objectId) : campaigns.length === 1 ? campaigns[0] : undefined;
+      if (!target) return { error: campaigns.length ? 'Say which social campaign to publish.' : 'There is no social campaign on this canvas yet.' };
+      const campaignId = Number(target.data.campaignId);
+      if (!Number.isInteger(campaignId)) return { error: 'That campaign tile is not bound to a saved campaign.' };
+
+      let batch: Awaited<ReturnType<typeof socialApi.publishCampaign>>;
+      try {
+        batch = await socialApi.publishCampaign(campaignId);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That campaign could not be published.' };
+      }
+      if (batch.campaign) {
+        proposalBuffer.current.push({
+          id: crypto.randomUUID(), type: 'object.update',
+          label: `Publish social campaign ${target.id}`, objectId: target.id,
+          patch: socialCampaignNodeData(batch.campaign),
+        });
+      }
+      return {
+        ok: true, proposed: true, objectId: target.id,
+        published: batch.published, failed: batch.failed, skipped: batch.skipped,
+        remaining: batch.remaining, status: batch.status, results: batch.results,
+      };
+    },
+  }, {
+    /**
      * The diagnostics catalog, on the board (PRD 21 §11.4.5).
      *
      * `/tools/<id>` is the REFERENCE page for a diagnostic — where you read what
@@ -3430,7 +3839,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: true,
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
-      if (persistence !== 'server') return { error: 'Image search and generation require a saved Canvas session' };
+      // ADVERTISED ON EVERY BOARD, EXECUTED WITH ANY ACCOUNT. Stripping this tool from
+      // an anonymous canvas removed the only route to pixels, and a model cannot report
+      // a tool it was never given — it improvises. See the guest-gated set in
+      // `@builderforce/creation-canvas-contract`. Gated on CREDENTIALS, not on whether
+      // the board is saved: search and generation are stateless posts that carry the
+      // tenant token, so a signed-in user on an unsaved board gets real pixels. Read the
+      // token here rather than closing over `hasAccount`, so a sign-in mid-session is
+      // reflected on the very next call instead of on the next memo rebuild.
+      if (!getStoredTenantToken()) {
+        requireAccount('image', t('gateImageTitle'), t('gateImageBody'));
+        return accountGateResult(CANVAS_IMAGE_TOOL, CANVAS_IMAGE_ACCOUNT_GATE);
+      }
       const args = raw as { query?: string; mode?: CanvasImageResolveMode; title?: string; x?: number; y?: number };
       const query = typeof args.query === 'string' ? args.query.trim().slice(0, 2_000) : '';
       const mode = args.mode === 'find' || args.mode === 'generate' || args.mode === 'auto' ? args.mode : null;
@@ -3504,9 +3924,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
       let authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
       if (args.kind === 'resume') authored = initializeResumeFromPatch(typeof authored.title === 'string' ? authored.title : node.data.title, authored);
-      if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
-        return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
-      }
+      // A REQUEST FOR PIXELS ROUTED HERE IS A MISROUTE, NOT A MALFORMED CALL.
+      //
+      // "draw me a coniferous landscape at <address>" arrives as kind "drawing" with no
+      // points, or kind "image" with no pixels — both because those are the kinds whose
+      // NAMES match the request. The old refusal described the drawing schema and
+      // offered a chart instead; the model relayed it as "a technical limitation with
+      // the drawing tool" and told the user the product cannot draw (2026-08-12, ui
+      // 2026.7.213). Name the tool that would actually work. On an anonymous board it
+      // is advertised and self-gating, so this redirect is correct on both surfaces.
+      const wantsPixels = args.kind === 'image' && !authored.outputUrl;
+      const emptyDrawing = args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2);
+      if (wantsPixels || emptyDrawing) return { error: canvasImageToolRedirect(args.kind) };
       // A Course seeds the worked "Build an LLM" sample so a human dragging one
       // out of the palette gets something real to read. That default is a TRAP
       // for a generated object: a course titled "Recruiting and Hiring" with no
@@ -3520,6 +3949,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const problem = authoredWebsiteProblem(authored);
         if (problem) return { error: `${problem} Do not create an empty website shell or rely on renderer defaults.` };
       }
+      // The general form of the three rules above: an artifact whose only authored
+      // field is its title is not a deliverable. Registry-driven, so every kind is
+      // covered rather than the three that happened to get a bespoke branch.
+      const shellProblem = emptyShellProblem(args.kind, authored as Record<string, unknown>);
+      if (shellProblem) return { error: shellProblem };
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
@@ -3635,7 +4069,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       if (persistence === 'local' && ACCOUNT_REQUIRED_OBJECT_ACTIONS.has(args.action)) {
         requireAccount(args.action, `Create an account to ${args.action}`, `Your ${target.data.title} remains saved on this device. Create a free account to ${args.action} it with durable tenant resources, permissions, and history.`);
-        return { requiresAccount: true, action: args.action, objectId: target.id, message: 'The account creation prompt is open. The local canvas remains unchanged.' };
+        return {
+          ...accountGateResult('canvas_invoke_object_action', `"${args.action}" needs a free Builderforce account: it creates or changes a durable tenant resource, which an anonymous canvas has none of. The account prompt is now open and the canvas is unchanged. Say that in one sentence and keep building what this canvas can hold; never claim the action ran.`),
+          action: args.action, objectId: target.id,
+        };
       }
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.action', label: `${args.action} ${target.data.title}`, objectId: target.id, action: args.action });
@@ -3933,6 +4370,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // Recorded as a failed turn instead — visible to the user, invisible to the model.
         const unanswered = turnUnanswered.current;
         turnUnanswered.current = null;
+        // A turn that ran at all means the allowance is no longer spent (a new day,
+        // or they took the account) — retire the conversion CTA the refusal armed.
+        setGuestLimit(null);
         const changes = [...proposalBuffer.current];
         const changedKinds = new Set(changes.flatMap((change) => {
           if (change.type === 'object.add') return [change.node.data.kind];
@@ -5156,10 +5596,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     [currentUserId, members],
   );
   /**
+   * "Send again" on a transcript message — the same path a typed prompt takes, so a
+   * replay is scoped, queued and narrated identically to the original turn. Read
+   * through the ref so the callback identity never changes: <BrainTimeline> is
+   * memoized, and a fresh closure here would re-parse the whole transcript per token.
+   */
+  const replayBrainMessage = useCallback((message: BrainMessage) => {
+    evaluateCanvasRef.current(message.content);
+  }, []);
+  /**
    * Exactly one surface renders the conversation. When it is inline, the Brain Object
    * reads this and becomes the chat; the edge dock is not rendered at all. Feeding both
    * placements from ONE value is what guarantees the board can never show two.
    */
+  /**
+   * The conversion CTA a refused guest turn arms. Built once and handed to BOTH
+   * Brain placements, so the button appears wherever the visitor is reading the
+   * refusal — and returns them to THIS canvas, which is the promise the copy makes.
+   */
+  const guestSignupPrompt = useMemo<GuestSignupPrompt | null>(() => (guestLimit === null ? null : {
+    next: `/create/${sessionId}`,
+    onAccept: () => trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: 'guest_limit' } }),
+  }), [guestLimit, sessionId]);
   const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
     open: brainSurfaceOpen,
     canOpen: !presentMode,
@@ -5173,13 +5631,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     edges,
     collaborators: brainCollaborators,
     joinedCollaborator,
+    onReplayMessage: replayBrainMessage,
+    guestSignup: guestSignupPrompt,
     onOpen: (nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock(); },
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
   }), [
     brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRunStartedAt,
-    brainSurfaceOpen, brainTrace, edges, joinedCollaborator, nodes, openBrainDock, presentMode, thinking, updateBrainDock,
+    brainSurfaceOpen, brainTrace, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, presentMode,
+    replayBrainMessage, thinking, updateBrainDock,
   ]);
 
   /**
@@ -5372,18 +5833,45 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </div>
       </div>
 
+      {/* THE GATE ASKS FOR WHAT IS ACTUALLY MISSING. Every caller writes signup-framed
+          copy because `persistence === 'local'` was read as "no account" — so a
+          signed-in user on an unsaved board was told to create the account they were
+          already using, and the only button offered took them to /register. What they
+          are actually missing is a SAVED SESSION for the action to point at, and
+          `claimLocalDraft` already turns this board into one. One branch here rather
+          than eight rewritten call sites: the callers say which action needs it, the
+          gate decides how to ask. */}
       {accountGate && <div className={styles.accountGateBackdrop} role="presentation">
         <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
           <button type="button" className={styles.accountGateClose} aria-label={t('closeAccountPrompt')} onClick={() => setAccountGate(null)}>×</button>
           <span className={styles.accountGateIcon} aria-hidden><Icon name="sparkles" size={20} /></span>
           <small>{t('keepMomentum')}</small>
-          <h2 id="canvas-account-gate-title">{accountGate.title}</h2>
-          <p>{accountGate.description}</p>
+          <h2 id="canvas-account-gate-title">{hasAccount ? t('gateSignedInTitle') : accountGate.title}</h2>
+          <p>{hasAccount ? t('gateSignedInBody', { action: accountGate.action }) : accountGate.description}</p>
           <div className={styles.accountGateBenefits}><span>{`✓ ${t('gateBenefitKeep')}`}</span><span>{`✓ ${t('gateBenefitUnlock')}`}</span><span>{`✓ ${t('gateBenefitCollaborate')}`}</span></div>
-          <div className={styles.accountGateActions}>
-            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: accountGate.action } }); canvasNavigate(`/register?next=${encodeURIComponent(`/create/${sessionId}`)}`); }}>{t('createFreeAccount')}</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => { canvasNavigate(signInHref(`/create/${sessionId}`)); }}>{t('signIn')}</button>
-          </div>
+          {hasAccount ? (
+            <div className={styles.accountGateActions}>
+              <button type="button" className={styles.primaryButton} disabled={claimingDraft} onClick={() => {
+                trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: accountGate.action } });
+                setClaimingDraft(true);
+                void claimLocalDraft(sessionId)
+                  .then((claimed) => { if (claimed) canvasNavigate(`/create/${claimed.sessionId}`); else setNotice(t('noticeSaveToAccountFailed')); })
+                  .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveToAccountFailed')))
+                  .finally(() => { setClaimingDraft(false); setAccountGate(null); });
+              }}>{claimingDraft ? t('noticeSavingToAccount') : t('gateSaveToAccount')}</button>
+            </div>
+          ) : (
+            // The SAME pair of buttons the Brain surface offers a guest who ran out
+            // of free turns — one component, so the two never drift on wording or
+            // on carrying this canvas through sign-up.
+            <GuestSignupCta
+              layout="actions"
+              prompt={{
+                next: `/create/${sessionId}`,
+                onAccept: () => trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: accountGate.action } }),
+              }}
+            />
+          )}
           <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>{t('notNowKeepLocal')}</button>
         </section>
       </div>}
@@ -5480,6 +5968,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 onClick={() => setFilesOpen((value) => !value)}
                 label={tFiles('title')}
               ><CanvasFilesIcon /></CanvasRailToggle>
+              {/* Connected cloud storage and connected social accounts. Both panels
+                  existed only on the phone rail, so on a desktop board there was no
+                  way to open either — the Drive panel shipped unreachable. */}
+              <CanvasRailToggle
+                pressed={driveOpen}
+                onClick={() => setDriveOpen((value) => !value)}
+                label={tDrive('title')}
+              ><CanvasDriveIcon /></CanvasRailToggle>
+              <CanvasRailToggle
+                pressed={socialOpen}
+                onClick={() => setSocialOpen((value) => !value)}
+                label={tSocial('title')}
+              ><CanvasSocialIcon /></CanvasRailToggle>
               <CanvasRailToggle
                 pressed={outlineOpen}
                 onClick={() => setOutlineOpen((value) => !value)}
@@ -5504,6 +6005,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
           <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
           <button type="button" onClick={() => setDriveOpen((value) => !value)} aria-pressed={driveOpen} aria-label={tDrive('title')}><CanvasDriveIcon /></button>
+          <button type="button" onClick={() => setSocialOpen((value) => !value)} aria-pressed={socialOpen} aria-label={tSocial('title')}><CanvasSocialIcon /></button>
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
@@ -5537,6 +6039,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
           onClose={() => setDriveOpen(false)}
           returnTo={`/create/${sessionId}`}
+        />}
+        {socialOpen && <CanvasSocialPanel
+          onAddFeed={addSocialFeedToBoard}
+          onAddCampaign={addSocialCampaignToBoard}
+          onClose={() => setSocialOpen(false)}
         />}
         {outlineOpen && <CanvasOutlinePanel
           nodes={nodes}
@@ -5654,6 +6161,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           edges={edges}
           collaborators={members.filter((member) => member.userId !== currentUserId)}
           joinedCollaborator={joinedCollaborator}
+          onReplayMessage={replayBrainMessage}
+          guestSignup={guestSignupPrompt}
         />}
         {composer}
         {/* The way back to a closed Brain. An inline Brain that still has its Object on

@@ -160,6 +160,7 @@ import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
 import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRoutes } from './presentation/routes/campaignRoutes';
 import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
 import { createDriveRoutes }        from './presentation/routes/driveRoutes';
+import { createSocialRoutes }       from './presentation/routes/socialRoutes';
 import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
@@ -680,6 +681,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // and the identity a campaign can send from.
   app.route('/api/mailbox',  createMailboxRoutes(db));
   app.route('/api/drive',    createDriveRoutes(db));
+  // Connected social accounts — the feed the canvas renders and the accounts a
+  // social campaign publishes to. Accounts themselves are connector connections,
+  // so connecting one still happens through /api/connectors.
+  app.route('/api/social',   createSocialRoutes(db));
   app.route('/api/youtube',  createYouTubeRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
