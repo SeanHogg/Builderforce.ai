@@ -4,7 +4,7 @@ import { isUrlAllowed, normalizeWebUrl } from '../../domain/webSearch/urlPolicy'
 import { tokenize } from '../../domain/webSearch/textIndex';
 import type { CrawlerHttpPort, WebSearchStore } from './ports';
 
-export interface AddCrawlSourceInput { seedUrl: string; allowedDomains?: string[]; blockedDomains?: string[]; maxDepth?: number; crawlDelayMs?: number }
+export interface AddCrawlSourceInput { seedUrl: string; allowedDomains?: string[]; blockedDomains?: string[]; maxDepth?: number; crawlDelayMs?: number; perDomainConcurrency?: number }
 
 async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -23,6 +23,7 @@ export class WebCrawlerService {
       seedUrl, allowedDomains, blockedDomains: input.blockedDomains ?? [],
       maxDepth: Math.max(0, Math.min(10, Math.floor(input.maxDepth ?? 2))),
       crawlDelayMs: Math.max(100, Math.min(86_400_000, Math.floor(input.crawlDelayMs ?? 1000))),
+      perDomainConcurrency: Math.max(1, Math.min(16, Math.floor(input.perDomainConcurrency ?? 1))),
     });
   }
 
@@ -53,7 +54,7 @@ export class WebCrawlerService {
       if (!robots.allowed) { await this.store.markBlocked(item, 'robots.txt'); return { status: 'blocked', url: item.url }; }
       const response = await this.http.fetch(item.normalizedUrl);
       if (response.status < 200 || response.status >= 300) {
-        await this.store.markFailed(item, `HTTP ${response.status}`, response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429);
+        await this.store.markFailed(item, `HTTP ${response.status}`, item.attempts >= 4 || (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429));
         return { status: 'failed', url: item.url };
       }
       if (!response.contentType.includes('text/html') && !response.contentType.includes('application/xhtml+xml')) {
@@ -67,7 +68,7 @@ export class WebCrawlerService {
       const discovered = await this.store.enqueueLinks(item, extracted.outboundLinks);
       return { status: stored.duplicate ? 'duplicate' : 'indexed', url: item.url, documentId: stored.id, changed: stored.changed, discovered };
     } catch (error) {
-      await this.store.markFailed(item, error instanceof Error ? error.message : 'crawl failed', false);
+      await this.store.markFailed(item, error instanceof Error ? error.message : 'crawl failed', item.attempts >= 4);
       return { status: 'failed', url: item.url };
     }
   }
@@ -80,4 +81,3 @@ export class WebCrawlerService {
     return { processed: results.filter((result) => result.status !== 'idle').length, results };
   }
 }
-

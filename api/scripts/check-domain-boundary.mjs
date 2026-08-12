@@ -41,7 +41,7 @@ if (files.length === 0) {
 /** `import … from './identity'` / `'./identity.js'` — sibling modules only. A
  *  deeper path is not a domain edge, it is a layering question `check-layering.mjs`
  *  already owns. */
-const SIBLING_IMPORT = /^\s*import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+'\.\/([a-zA-Z0-9_]+)(?:\.js)?'/gm;
+const SIBLING_IMPORT = /^\s*import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'\.\/([a-zA-Z0-9_]+)(?:\.js)?'/gm;
 
 /**
  * Tenancy anchors. This guard's original note said it plainly: "a foreign key to

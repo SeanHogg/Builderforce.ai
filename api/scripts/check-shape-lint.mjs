@@ -111,6 +111,13 @@ const ADJUDICATED = new Map([
       'provider LICENSED, and the terms — attribution, territory, expiry, per-seat caps — ' +
       'are the reason the row exists. Using one copies it into `artifacts`.',
   ],
+  [
+    'web_search_documents',
+    'a mutable search-index record for externally crawled content, not a tenant-made ' +
+      'artifact. Its identity is a canonical URL and content hash; crawl freshness, HTTP ' +
+      'state, duplicate detection and term-frequency rows control recrawling and retrieval. ' +
+      'An `artifacts` row instead identifies an owned creation and its stored rendition.',
+  ],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

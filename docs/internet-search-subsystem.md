@@ -21,7 +21,7 @@ No new independently operated database, auth system, or LLM gateway is introduce
 4. **Hybrid seam:** semantic retrieval is an optional `SemanticIndex` port. Lexical-only operation is valid; Vectorize plus the existing embedding gateway is the production adapter planned for phase 3.
 5. **Safety first:** every URL is canonicalized, checked against allow/block policy and the shared SSRF/DNS guard, robots rules are cached and enforced, redirects are revalidated, bodies and crawl depth are bounded, and active content is never executed.
 6. **Tenant isolation:** crawl configuration, frontier rows, documents, index terms, and API queries are tenant scoped. A shared global corpus can be introduced later as a separate policy decision.
-7. **Incremental rollout:** the built-in search tool queries the owned index first and preserves the existing vendor search as a fallback until the corpus has coverage.
+7. **Demand-driven indexing:** the built-in search tool queries the owned index first. A miss creates a durable research request, uses the existing vendor/SearXNG search only to discover public seed URLs, queues those URLs, and starts bounded crawler work. The request becomes complete when a linked page is indexed; later equivalent queries read the owned corpus.
 
 ## Delivery phases
 
@@ -33,4 +33,3 @@ No new independently operated database, auth system, or LLM gateway is introduce
 ## Operational dependencies
 
 Run migration `0456_web_search.sql`. No Cloudflare resource must be provisioned for lexical search. Phase 3 will require a Vectorize index whose dimensions match the selected embedding model and metadata indexes created before ingestion. Queue bindings are deferred until crawl volume warrants dedicated consumers.
-

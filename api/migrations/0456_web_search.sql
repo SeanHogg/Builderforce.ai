@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS web_search_sources (
   blocked_domains JSONB NOT NULL DEFAULT '[]'::jsonb,
   max_depth INTEGER NOT NULL DEFAULT 2 CHECK (max_depth BETWEEN 0 AND 10),
   crawl_delay_ms INTEGER NOT NULL DEFAULT 1000 CHECK (crawl_delay_ms BETWEEN 100 AND 86400000),
+  per_domain_concurrency INTEGER NOT NULL DEFAULT 1 CHECK (per_domain_concurrency BETWEEN 1 AND 16),
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -85,3 +86,27 @@ CREATE TABLE IF NOT EXISTS web_search_terms (
 );
 CREATE INDEX IF NOT EXISTS idx_web_search_terms_lookup ON web_search_terms (tenant_id, term, document_id);
 
+CREATE TABLE IF NOT EXISTS web_search_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  query TEXT NOT NULL,
+  normalized_query TEXT NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','discovering','crawling','completed','failed')),
+  result_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  requested_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (tenant_id, normalized_query)
+);
+CREATE INDEX IF NOT EXISTS idx_web_search_requests_status ON web_search_requests (tenant_id, status, requested_at);
+
+CREATE TABLE IF NOT EXISTS web_search_request_urls (
+  tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  request_id UUID NOT NULL REFERENCES web_search_requests(id) ON DELETE CASCADE,
+  frontier_id BIGINT NOT NULL REFERENCES web_search_frontier(id) ON DELETE CASCADE,
+  status VARCHAR(16) NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','indexed','failed','blocked')),
+  PRIMARY KEY (tenant_id, request_id, frontier_id)
+);
+CREATE INDEX IF NOT EXISTS idx_web_search_request_urls_frontier ON web_search_request_urls (tenant_id, frontier_id, request_id);

@@ -1,20 +1,20 @@
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../database/connection';
-import { webSearchDocuments, webSearchFrontier, webSearchRobots, webSearchSources, webSearchTerms } from '../database/schema';
+import { webSearchDocuments, webSearchFrontier, webSearchRequestUrls, webSearchRequests, webSearchRobots, webSearchSources, webSearchTerms } from '../database/schema';
 import { termFrequencies } from '../../domain/webSearch/textIndex';
 import { isUrlAllowed, normalizeWebUrl } from '../../domain/webSearch/urlPolicy';
 import type { CrawlSource, FrontierItem, IndexedDocument, SearchCandidate, SearchFilters, WebSearchStore } from '../../application/webSearch/ports';
 
 function sourceRow(row: typeof webSearchSources.$inferSelect): CrawlSource {
-  return { id: row.id, tenantId: row.tenantId, seedUrl: row.seedUrl, allowedDomains: row.allowedDomains, blockedDomains: row.blockedDomains, maxDepth: row.maxDepth, crawlDelayMs: row.crawlDelayMs, enabled: row.enabled };
+  return { id: row.id, tenantId: row.tenantId, seedUrl: row.seedUrl, allowedDomains: row.allowedDomains, blockedDomains: row.blockedDomains, maxDepth: row.maxDepth, crawlDelayMs: row.crawlDelayMs, perDomainConcurrency: row.perDomainConcurrency, enabled: row.enabled };
 }
 
 export class PostgresWebSearchStore implements WebSearchStore {
   constructor(private readonly db: Db) {}
 
   async addSource(tenantId: number, input: Omit<CrawlSource, 'id' | 'tenantId' | 'enabled'>): Promise<CrawlSource> {
-    const [row] = await this.db.insert(webSearchSources).values({ tenantId, seedUrl: input.seedUrl, allowedDomains: input.allowedDomains, blockedDomains: input.blockedDomains, maxDepth: input.maxDepth, crawlDelayMs: input.crawlDelayMs })
-      .onConflictDoUpdate({ target: [webSearchSources.tenantId, webSearchSources.seedUrl], set: { allowedDomains: input.allowedDomains, blockedDomains: input.blockedDomains, maxDepth: input.maxDepth, crawlDelayMs: input.crawlDelayMs, enabled: true, updatedAt: new Date() } }).returning();
+    const [row] = await this.db.insert(webSearchSources).values({ tenantId, seedUrl: input.seedUrl, allowedDomains: input.allowedDomains, blockedDomains: input.blockedDomains, maxDepth: input.maxDepth, crawlDelayMs: input.crawlDelayMs, perDomainConcurrency: input.perDomainConcurrency })
+      .onConflictDoUpdate({ target: [webSearchSources.tenantId, webSearchSources.seedUrl], set: { allowedDomains: input.allowedDomains, blockedDomains: input.blockedDomains, maxDepth: input.maxDepth, crawlDelayMs: input.crawlDelayMs, perDomainConcurrency: input.perDomainConcurrency, enabled: true, updatedAt: new Date() } }).returning();
     if (!row) throw new Error('Could not create crawl source.');
     const normalized = normalizeWebUrl(input.seedUrl);
     await this.db.insert(webSearchFrontier).values({ tenantId, sourceId: row.id, url: input.seedUrl, normalizedUrl: normalized, domain: new URL(normalized).hostname, depth: 0, priority: 100 })
@@ -29,6 +29,7 @@ export class PostgresWebSearchStore implements WebSearchStore {
         WHERE f.tenant_id = ${tenantId} AND s.enabled = TRUE
           AND (f.status = 'queued' OR (f.status = 'leased' AND f.lease_expires_at < NOW()))
           AND f.next_fetch_at <= NOW() AND f.attempts < 4
+          AND (SELECT COUNT(*) FROM web_search_frontier active WHERE active.tenant_id = f.tenant_id AND active.domain = f.domain AND active.status = 'leased' AND active.lease_expires_at >= NOW()) < s.per_domain_concurrency
         ORDER BY f.priority DESC, f.next_fetch_at ASC, f.id ASC LIMIT 1 FOR UPDATE SKIP LOCKED
       )
       UPDATE web_search_frontier f SET status = 'leased', attempts = attempts + 1,
@@ -44,9 +45,11 @@ export class PostgresWebSearchStore implements WebSearchStore {
   async markFailed(item: FrontierItem, error: string, terminal: boolean): Promise<void> {
     const retryMinutes = Math.min(1440, 2 ** item.attempts);
     await this.db.update(webSearchFrontier).set({ status: terminal ? 'failed' : 'queued', lastError: error.slice(0, 2000), leaseExpiresAt: null, nextFetchAt: new Date(Date.now() + retryMinutes * 60_000), updatedAt: new Date() }).where(and(eq(webSearchFrontier.id, item.id), eq(webSearchFrontier.tenantId, item.tenantId)));
+    if (terminal) await this.setRequestUrlTerminal(item.tenantId, item.id, 'failed', error);
   }
   async markBlocked(item: FrontierItem, reason: string): Promise<void> {
     await this.db.update(webSearchFrontier).set({ status: 'blocked', lastError: reason.slice(0, 2000), leaseExpiresAt: null, updatedAt: new Date() }).where(and(eq(webSearchFrontier.id, item.id), eq(webSearchFrontier.tenantId, item.tenantId)));
+    await this.setRequestUrlTerminal(item.tenantId, item.id, 'blocked', reason);
   }
 
   async storeDocument(item: FrontierItem, doc: IndexedDocument): Promise<{ id: string; changed: boolean; duplicate: boolean }> {
@@ -66,7 +69,12 @@ export class PostgresWebSearchStore implements WebSearchStore {
       const values = [...terms].map((term) => ({ tenantId: item.tenantId, documentId: stored.id, term, titleFrequency: title.get(term) ?? 0, headingFrequency: heading.get(term) ?? 0, bodyFrequency: body.get(term) ?? 0 }));
       for (let offset = 0; offset < values.length; offset += 500) await this.db.insert(webSearchTerms).values(values.slice(offset, offset + 500));
     }
-    await this.db.update(webSearchFrontier).set({ status: 'fetched', lastError: null, leaseExpiresAt: null, updatedAt: new Date() }).where(eq(webSearchFrontier.id, item.id));
+    await this.db.update(webSearchFrontier).set({ status: 'fetched', lastError: null, leaseExpiresAt: null, updatedAt: new Date() }).where(and(eq(webSearchFrontier.id, item.id), eq(webSearchFrontier.tenantId, item.tenantId)));
+    await this.db.update(webSearchRequestUrls).set({ status: 'indexed' }).where(and(eq(webSearchRequestUrls.tenantId, item.tenantId), eq(webSearchRequestUrls.frontierId, item.id)));
+    await this.db.execute(sql`UPDATE web_search_requests r SET status = 'completed', completed_at = NOW(), updated_at = NOW(), last_error = NULL,
+      result_count = (SELECT COUNT(*)::int FROM web_search_request_urls u WHERE u.tenant_id = ${item.tenantId} AND u.request_id = r.id AND u.status = 'indexed')
+      WHERE r.tenant_id = ${item.tenantId}
+        AND EXISTS (SELECT 1 FROM web_search_request_urls u WHERE u.tenant_id = ${item.tenantId} AND u.request_id = r.id AND u.frontier_id = ${item.id})`);
     await this.db.update(webSearchFrontier).set({ nextFetchAt: new Date(Date.now() + item.source.crawlDelayMs) }).where(and(eq(webSearchFrontier.tenantId, item.tenantId), eq(webSearchFrontier.domain, item.domain), eq(webSearchFrontier.status, 'queued')));
     return { id: stored.id, changed, duplicate: duplicateOf !== null };
   }
@@ -104,5 +112,34 @@ export class PostgresWebSearchStore implements WebSearchStore {
     const normalized = normalizeWebUrl(url); const [row] = await this.db.select().from(webSearchDocuments).where(and(eq(webSearchDocuments.tenantId, tenantId), eq(webSearchDocuments.canonicalUrl, normalized))).limit(1);
     return row ? { id: row.id, canonicalUrl: row.canonicalUrl, title: row.title, text: row.text, headings: row.headings, domain: row.domain, language: row.language, publishedAt: row.publicationTimestamp, crawledAt: row.crawlTimestamp, wordCount: row.wordCount, terms: [] } : null;
   }
-}
 
+  async queueResearch(tenantId: number, query: string, urls: string[]): Promise<{ id: string; status: string; queuedUrls: number }> {
+    const normalizedQuery = query.trim().toLowerCase().replace(/\s+/g, ' ');
+    const [request] = await this.db.insert(webSearchRequests).values({ tenantId, query, normalizedQuery, status: urls.length ? 'crawling' : 'discovering', startedAt: new Date() })
+      .onConflictDoUpdate({ target: [webSearchRequests.tenantId, webSearchRequests.normalizedQuery], set: { query, status: urls.length ? 'crawling' : 'discovering', resultCount: 0, lastError: null, requestedAt: new Date(), startedAt: new Date(), completedAt: null, updatedAt: new Date() } }).returning();
+    if (!request) throw new Error('Could not queue research request.');
+    let queuedUrls = 0;
+    for (const raw of [...new Set(urls)].slice(0, 20)) {
+      let seedUrl: string; try { seedUrl = normalizeWebUrl(raw); } catch { continue; }
+      const host = new URL(seedUrl).hostname;
+      const source = await this.addSource(tenantId, { seedUrl, allowedDomains: [host], blockedDomains: [], maxDepth: 0, crawlDelayMs: 1000, perDomainConcurrency: 1 });
+      const [frontier] = await this.db.select({ id: webSearchFrontier.id }).from(webSearchFrontier).where(and(eq(webSearchFrontier.tenantId, tenantId), eq(webSearchFrontier.normalizedUrl, seedUrl))).limit(1);
+      if (!frontier) continue;
+      await this.db.insert(webSearchRequestUrls).values({ tenantId, requestId: request.id, frontierId: frontier.id }).onConflictDoUpdate({ target: [webSearchRequestUrls.tenantId, webSearchRequestUrls.requestId, webSearchRequestUrls.frontierId], set: { status: 'queued' } });
+      await this.db.update(webSearchFrontier).set({ sourceId: source.id, status: 'queued', nextFetchAt: new Date(), lastError: null }).where(eq(webSearchFrontier.id, frontier.id));
+      queuedUrls++;
+    }
+    return { id: request.id, status: queuedUrls ? 'crawling' : 'discovering', queuedUrls };
+  }
+  async failResearch(tenantId: number, requestId: string, error: string): Promise<void> { await this.db.update(webSearchRequests).set({ status: 'failed', lastError: error.slice(0, 2000), completedAt: new Date(), updatedAt: new Date() }).where(and(eq(webSearchRequests.tenantId, tenantId), eq(webSearchRequests.id, requestId))); }
+  async getResearch(tenantId: number, requestId: string) { const [row] = await this.db.select().from(webSearchRequests).where(and(eq(webSearchRequests.id, requestId), eq(webSearchRequests.tenantId, tenantId))).limit(1); return row ? { id: row.id, query: row.query, status: row.status, resultCount: row.resultCount, lastError: row.lastError } : null; }
+
+  private async setRequestUrlTerminal(tenantId: number, frontierId: number, status: 'failed' | 'blocked', error: string): Promise<void> {
+    await this.db.update(webSearchRequestUrls).set({ status }).where(and(eq(webSearchRequestUrls.tenantId, tenantId), eq(webSearchRequestUrls.frontierId, frontierId)));
+    await this.db.execute(sql`UPDATE web_search_requests r SET status = 'failed', completed_at = NOW(), updated_at = NOW(), last_error = ${error.slice(0, 2000)}
+      WHERE r.tenant_id = ${tenantId}
+        AND EXISTS (SELECT 1 FROM web_search_request_urls own WHERE own.tenant_id = ${tenantId} AND own.request_id = r.id AND own.frontier_id = ${frontierId})
+        AND NOT EXISTS (SELECT 1 FROM web_search_request_urls pending WHERE pending.tenant_id = ${tenantId} AND pending.request_id = r.id AND pending.status = 'queued')
+        AND NOT EXISTS (SELECT 1 FROM web_search_request_urls found WHERE found.tenant_id = ${tenantId} AND found.request_id = r.id AND found.status = 'indexed')`);
+  }
+}

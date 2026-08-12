@@ -53,6 +53,7 @@ const TENANT_INDEPENDENT = new Map([
   ['email_otp_challenges', 'PRE-TENANT: a signup challenge is issued before the account exists. Scoped by (user_ref, purpose), which is narrower than tenant, not looser. Absorbed `email_verification_codes`, which was baselined here for the same reason.'],
   ['marketing_sessions', 'PRE-TENANT: an anonymous visitor IS the row, and it is written on their first prompt — before an account, and therefore before a tenant, exists. Scoped by the opaque `visitor_id`, which is narrower than tenant. Moved out of the baseline (0434) because it is a decision, not an omission.'],
   ['marketing_session_prompts', 'PRE-TENANT: the prompts behind a `marketing_sessions` row, written on the same pre-signup path and scoped by the same `visitor_id` (0434).'],
+  ['web_search_robots', 'a cache of the public robots.txt policy for a DNS domain. The policy and its expiry are identical for every tenant; tenant-owned crawl sources and frontier rows remain tenant-scoped.'],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

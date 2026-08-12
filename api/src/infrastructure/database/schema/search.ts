@@ -9,6 +9,7 @@ export const webSearchSources = pgTable('web_search_sources', {
   blockedDomains: jsonb('blocked_domains').$type<string[]>().notNull().default([]),
   maxDepth: integer('max_depth').notNull().default(2),
   crawlDelayMs: integer('crawl_delay_ms').notNull().default(1000),
+  perDomainConcurrency: integer('per_domain_concurrency').notNull().default(1),
   enabled: boolean('enabled').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -56,3 +57,16 @@ export const webSearchTerms = pgTable('web_search_terms', {
   headingFrequency: integer('heading_frequency').notNull().default(0), bodyFrequency: integer('body_frequency').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.tenantId, t.documentId, t.term] }), index('idx_web_search_terms_lookup').on(t.tenantId, t.term, t.documentId)]);
 
+export const webSearchRequests = pgTable('web_search_requests', {
+  id: uuid('id').primaryKey().defaultRandom(), tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  query: text('query').notNull(), normalizedQuery: text('normalized_query').notNull(), status: varchar('status', { length: 16 }).notNull().default('queued'),
+  resultCount: integer('result_count').notNull().default(0), lastError: text('last_error'), requestedAt: timestamp('requested_at').notNull().defaultNow(),
+  startedAt: timestamp('started_at'), completedAt: timestamp('completed_at'), updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [unique('uq_web_search_requests_query').on(t.tenantId, t.normalizedQuery), index('idx_web_search_requests_status').on(t.tenantId, t.status, t.requestedAt)]);
+
+export const webSearchRequestUrls = pgTable('web_search_request_urls', {
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  requestId: uuid('request_id').notNull().references(() => webSearchRequests.id, { onDelete: 'cascade' }),
+  frontierId: bigint('frontier_id', { mode: 'number' }).notNull().references(() => webSearchFrontier.id, { onDelete: 'cascade' }),
+  status: varchar('status', { length: 16 }).notNull().default('queued'),
+}, (t) => [primaryKey({ columns: [t.tenantId, t.requestId, t.frontierId] }), index('idx_web_search_request_urls_frontier').on(t.tenantId, t.frontierId, t.requestId)]);

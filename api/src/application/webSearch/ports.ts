@@ -2,7 +2,7 @@ import type { ExtractedWebDocument } from '../../domain/webSearch/htmlExtraction
 
 export interface CrawlSource {
   id: string; tenantId: number; seedUrl: string; allowedDomains: string[]; blockedDomains: string[];
-  maxDepth: number; crawlDelayMs: number; enabled: boolean;
+  maxDepth: number; crawlDelayMs: number; perDomainConcurrency: number; enabled: boolean;
 }
 export interface FrontierItem { id: number; tenantId: number; source: CrawlSource; url: string; normalizedUrl: string; domain: string; depth: number; attempts: number }
 export interface IndexedDocument extends ExtractedWebDocument {
@@ -27,6 +27,9 @@ export interface WebSearchStore {
   putRobots(origin: string, body: string, status: number, expiresAt: Date): Promise<void>;
   searchCandidates(tenantId: number, terms: string[], filters: SearchFilters): Promise<{ candidates: SearchCandidate[]; stats: SearchCorpusStats }>;
   openDocument(tenantId: number, url: string): Promise<SearchCandidate | null>;
+  queueResearch(tenantId: number, query: string, urls: string[]): Promise<{ id: string; status: string; queuedUrls: number }>;
+  failResearch(tenantId: number, requestId: string, error: string): Promise<void>;
+  getResearch(tenantId: number, requestId: string): Promise<{ id: string; query: string; status: string; resultCount: number; lastError: string | null } | null>;
 }
 
 export interface CrawledResponse { url: string; status: number; contentType: string; body: string; headers: Headers }
@@ -34,4 +37,3 @@ export interface CrawlerHttpPort { fetch(url: string, options?: { accept?: strin
 
 export interface SemanticMatch { documentId: string; score: number }
 export interface SemanticIndex { search(tenantId: number, query: string, limit: number): Promise<SemanticMatch[]> }
-

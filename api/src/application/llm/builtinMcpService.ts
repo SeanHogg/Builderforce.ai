@@ -55,9 +55,9 @@ import type { Env } from '../../env';
 import { integrationCredentials } from '../../infrastructure/database/schema';
 import { fetchWebDocumentCached } from '../web/webFetch';
 import { geocodeBatch, MAX_BATCH } from '../web/geocode';
-import { resolveWebSearchBacking } from '../runtime/webSearchCredential';
-import { normalizeSearchQuery, searchWeb } from '../runtime/cloudWeb';
+import { normalizeSearchQuery } from '../runtime/cloudWeb';
 import { buildInternetSearch } from '../webSearch/factory';
+import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
 import { encryptCredentials } from '../integrations/credentialCrypto';
 import { MigrationService, type ImportMode } from '../migration/MigrationService';
 import { createMigrationStore } from '../migration/migrationStore';
@@ -2865,6 +2865,16 @@ const CATALOG: BuiltinTool[] = [
       return indexed ?? fetchWebDocumentCached(ctx.env, url);
     },
   },
+  {
+    tool: 'web.research_status', mutates: false,
+    description: 'Check a demand-driven web research request returned by web.search. Returns discovering/crawling/completed/failed plus the number of indexed results. When completed, repeat web.search to retrieve the owned-index result.',
+    parameters: obj({ request_id: S }, ['request_id']),
+    run: async (ctx, a) => {
+      const request = await buildInternetSearch(ctx.db).search.getResearch(ctx.tenantId, str(a.request_id));
+      if (!request) return { ok: false, error: 'Research request not found.' };
+      return { ok: true, request };
+    },
+  },
 
   // ---- Web search — the ENTRY POINT to research. `web.fetch` can only read a URL the
   //       model was already given; without search, "research X and collect the data"
@@ -2877,21 +2887,18 @@ const CATALOG: BuiltinTool[] = [
   //       per-query metering, failed-query invalidation) is the shared `searchWeb`. ----
   {
     tool: 'web.search', mutates: false,
-    description: 'Search the public web and return ranked results ({ title, url, snippet }) plus `coverage` and `attribution`. Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory. When `coverage` is "encyclopedic" the index is narrower than a full web engine: still cite what you found, and note that connecting a Tavily, Exa, or Linkup key under Settings → Integrations (or pointing the deployment at a self-hosted SearXNG instance) widens it to the open web.',
+    description: 'Search the owned web index and return ranked, citation-ready results. On an index miss, automatically create a durable research request, discover public seed URLs, and start the robots-respecting crawler; the response includes `research_request` for web.research_status and also returns discovery results immediately. Use web.open_page for full cleaned content. Repeat the search after completion to read the newly owned index result. Do not answer research requests from model memory.',
     parameters: obj({ query: { ...S, description: 'What to search for, phrased as a search engine query.' }, max_results: N, freshness: S, language: S, domains: { type: 'array', items: S } }, ['query']),
     run: async (ctx, a) => {
       const query = normalizeSearchQuery(str(a.query));
       if (!query) return { ok: false, error: 'A search query is required.' };
       if (!ctx.env) return { ok: false, error: 'Web search is unavailable on this surface.' };
-      const local = await buildInternetSearch(ctx.db).search.search(ctx.tenantId, {
+      return searchOwnedThenDiscover({ db: ctx.db, env: ctx.env, tenantId: ctx.tenantId, executionCtx: ctx.executionCtx, request: {
         query, limit: a.max_results != null ? num(a.max_results) : 10,
         freshness: a.freshness != null ? str(a.freshness) : undefined,
         language: a.language != null ? str(a.language) : undefined,
         domains: Array.isArray(a.domains) ? a.domains.map((value) => str(value)).filter(Boolean) : undefined,
-      });
-      if (local.results.length) return { ok: true, ...local, attribution: 'Builderforce owned web index' };
-      const backing = await resolveWebSearchBacking(ctx.env, ctx.db, ctx.tenantId);
-      return searchWeb(ctx.env, { ...backing, meter: { db: ctx.db, tenantId: ctx.tenantId } }, query);
+      } });
     },
   },
 

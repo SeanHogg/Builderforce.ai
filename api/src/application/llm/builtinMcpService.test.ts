@@ -194,6 +194,9 @@ describe('listBuiltinTools', () => {
     expect(names).toContain('builtin_agents_list');
     expect(names).toContain('builtin_boards_list');
     expect(names).toContain('builtin_cron_list');
+    expect(names).toContain('builtin_web_search');
+    expect(names).toContain('builtin_web_open_page');
+    expect(names).toContain('builtin_web_research_status');
     for (const t of tools) {
       expect(t.name).toMatch(/^builtin_[a-z0-9_]+$/); // flat, no dots
       expect(t.parameters).toMatchObject({ type: 'object' });

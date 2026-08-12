@@ -39,5 +39,7 @@ export class InternetSearchService {
     if (!document) return null;
     return { title: document.title, url: document.canonicalUrl, domain: document.domain, content: document.text, headings: document.headings, language: document.language, published_at: document.publishedAt?.toISOString() ?? null, crawled_at: document.crawledAt.toISOString(), source: { type: 'crawled_web', citationUrl: document.canonicalUrl } };
   }
+  queueResearch(tenantId: number, query: string, urls: string[]) { return this.store.queueResearch(tenantId, query, urls); }
+  failResearch(tenantId: number, requestId: string, error: string) { return this.store.failResearch(tenantId, requestId, error); }
+  getResearch(tenantId: number, requestId: string) { return this.store.getResearch(tenantId, requestId); }
 }
-
