@@ -32,6 +32,7 @@ import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
 import { ideProxy, readProxyChoice } from '../../application/llm/LlmProxyService';
+import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
   GEOMETRY_RESPONSE_SCHEMAS,
   GEOMETRY_SYSTEM_PROMPTS,
@@ -98,6 +99,39 @@ function stripFence(text: string): string {
   return (fenced ? fenced[1]! : text).trim();
 }
 
+const RESUME_IMPORT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'txt', 'md', 'markdown', 'json', 'png', 'jpg', 'jpeg', 'webp']);
+const RESUME_IMPORT_MAX_BYTES = 20 * 1024 * 1024;
+const RESUME_EXTRACTION_PROMPT = `Extract this resume into one JSON Resume object. Return JSON only.
+Rules:
+- Copy facts exactly; never invent employers, dates, credentials, metrics, contact details, or skills.
+- Use empty arrays or omit fields when the source does not provide them.
+- Preserve every supported item and bullet.
+- Shape: { basics: { name, label, image, email, phone, url, summary, location: { address, postalCode, city, countryCode, region } }, work: [{ id, name, position, url, startDate, endDate, summary, highlights }], education: [{ id, institution, url, area, studyType, startDate, endDate, score, courses }], skills: [{ id, name, level, keywords }], volunteer: [], projects: [], awards: [], certificates: [], publications: [], languages: [], interests: [], references: [] }.`;
+
+function parsedJsonObject(raw: string): Record<string, unknown> | null {
+  const clean = stripFence(raw);
+  try {
+    const parsed = JSON.parse(clean) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try {
+      const parsed = JSON.parse(clean.slice(start, end + 1)) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    } catch { return null; }
+  }
+}
+
+function bytesBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+  }
+  return btoa(binary);
+}
+
 export function createCreativeRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -111,6 +145,51 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
       return c.json({ results: await findStockImages(c.env, query, limit) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Stock image search failed' }, 503);
+    }
+  });
+
+  /** Parse text, Office/PDF files, and photographed scans into canonical JSON Resume. */
+  router.post('/resume/import', async (c) => {
+    const form = await c.req.formData();
+    const file = form.get('file');
+    const extractedText = String(form.get('text') ?? '').trim().slice(0, 80_000);
+    if (!(file instanceof File)) return c.json({ error: 'A resume file is required' }, 400);
+    const extension = (file.name.split('.').pop() ?? '').toLowerCase();
+    if (!RESUME_IMPORT_EXTENSIONS.has(extension)) return c.json({ error: 'Unsupported resume file type' }, 415);
+    if (!file.size || file.size > RESUME_IMPORT_MAX_BYTES) return c.json({ error: 'Resume files must be between 1 byte and 20MB' }, 413);
+    const fileBytes = await file.arrayBuffer();
+
+    let sourceFileKey: string | null = null;
+    if (c.env.UPLOADS) {
+      sourceFileKey = `${c.get('tenantId')}/${c.get('userId')}/resumes/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension || 'bin'}`;
+      await c.env.UPLOADS.put(sourceFileKey, fileBytes, {
+        httpMetadata: { contentType: file.type || 'application/octet-stream' },
+        customMetadata: { originalName: file.name, tenantId: String(c.get('tenantId')), purpose: 'resume-source' },
+      });
+    }
+
+    const dataUrl = extractedText ? null : `data:${file.type || 'application/octet-stream'};base64,${bytesBase64(fileBytes)}`;
+    const content: unknown = extractedText
+      ? `${RESUME_EXTRACTION_PROMPT}\n\nSOURCE RESUME:\n${extractedText}`
+      : extension === 'pdf' || extension === 'doc' || extension === 'docx'
+        ? [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'file', file: { filename: file.name, file_data: dataUrl } }]
+        : [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }];
+    try {
+      const { proxy } = await tenantProxyForPlan(c.env, c.get('tenantId'));
+      const result = await proxy.complete({
+        messages: [{ role: 'user', content } as never],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+        max_tokens: 6000,
+        useCase: extractedText ? 'resume_structured_extraction' : 'resume_ocr',
+      });
+      if (result.response.status >= 400) return c.json({ error: 'Resume extraction is unavailable', sourceFileKey }, 502);
+      const choice = await readProxyChoice(result);
+      const document = parsedJsonObject(choice.content);
+      if (!document) return c.json({ error: 'Resume extraction returned invalid structured data', sourceFileKey }, 502);
+      return c.json({ document, sourceFileKey, provider: result.resolvedVendor, model: result.resolvedModel });
+    } catch (error) {
+      return c.json({ error: 'Resume extraction failed', detail: error instanceof Error ? error.message : String(error), sourceFileKey }, 502);
     }
   });
 
