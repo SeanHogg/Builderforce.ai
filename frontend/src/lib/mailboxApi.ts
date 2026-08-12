@@ -92,6 +92,22 @@ export interface MailboxAutomationRule {
 
 export type MailboxAutomationRuleInput = Pick<MailboxAutomationRule, 'name' | 'enabled' | 'fromContains' | 'subjectContains' | 'agentRef' | 'responseMode' | 'instructions'>;
 
+export interface MailboxAutomationExecution {
+  id: number;
+  connectionId: number;
+  ruleId: number;
+  messageId: string;
+  sender: string;
+  subject: string;
+  status: 'processing' | 'draft' | 'pending_approval' | 'sent' | 'failed' | 'rejected' | string;
+  draftText: string | null;
+  approvalId: string | null;
+  providerSentId: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const MAILBOX = '/api/mailbox';
 
 /** Serialize a filter into the query string the server's ONE parser reads.
@@ -167,6 +183,11 @@ export const mailboxApi = {
   getMessage: (connectionId: number, messageId: string): Promise<MailboxMessage> =>
     apiRequest(`${MAILBOX}/connections/${connectionId}/messages/${encodeURIComponent(messageId)}`),
 
+  setUnread: (connectionId: number, messageId: string, unread: boolean): Promise<{ unread: boolean }> =>
+    apiRequest(`${MAILBOX}/connections/${connectionId}/messages/${encodeURIComponent(messageId)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread }),
+    }),
+
   send: (connectionId: number, message: { to: string; subject: string; html: string; replyTo?: string }): Promise<{ sent: true; id: string; accountEmail: string }> =>
     apiRequest(`${MAILBOX}/connections/${connectionId}/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(message),
@@ -187,6 +208,15 @@ export const mailboxApi = {
 
   deleteRule: (ruleId: number): Promise<void> =>
     apiRequest(`${MAILBOX}/rules/${ruleId}`, { method: 'DELETE' }),
+
+  listAutomation: (connectionId?: number): Promise<{ executions: MailboxAutomationExecution[] }> =>
+    apiRequest(`${MAILBOX}/automation${connectionId == null ? '' : `?connectionId=${connectionId}`}`),
+
+  runAutomation: (): Promise<{ rules: number; matched: number; drafted: number; approvals: number; sent: number; failed: number }> =>
+    apiRequest(`${MAILBOX}/automation/run`, { method: 'POST' }),
+
+  sendAutomationDraft: (executionId: number): Promise<{ ok: true; sentId: string }> =>
+    apiRequest(`${MAILBOX}/automation/${executionId}/send`, { method: 'POST' }),
 };
 
 /**

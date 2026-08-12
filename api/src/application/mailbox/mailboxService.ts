@@ -432,6 +432,22 @@ export async function sendFromMailbox(
   }
 }
 
+/** Update read/unread state in the provider; no local shadow can drift. */
+export async function setMailboxMessageRead(
+  db: Db, env: Env, tenantId: number, connectionId: number, messageId: string, read: boolean,
+): Promise<{ ok: true } | { ok: false; status: 404 | 409 | 502 | 503; error: string }> {
+  const token = await freshMailboxToken(db, env, tenantId, connectionId);
+  if (!token.ok) return { ok: false, status: token.status === 'revoked' ? 409 : 503, error: token.error };
+  try {
+    await token.provider.setRead(token.accessToken, messageId, read);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof MailboxProviderError) return { ok: false, status: error.status === 404 ? 404 : 502, error: error.message };
+    reportCaughtError(error, { source: 'application/mailbox/mailboxService.ts', operation: 'setMailboxMessageRead' });
+    return { ok: false, status: 503, error: 'The mailbox provider could not update this message.' };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Triage — "evaluate these emails"
 // ---------------------------------------------------------------------------

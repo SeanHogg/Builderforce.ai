@@ -752,21 +752,21 @@ finishes the behavior against the acceptance gate here or records a product-appr
 | R-032 | Parse and structure contact basics | Hired canonical resume schema | JSON Resume preserves typed basics; extracted documents seed name/summary heuristically and expose typed contact/location fields | **PARTIAL** | Name, label, email, phone, location, URLs and summary are typed fields. |
 | R-033 | Edit work experience | Hired `SectionEditor` | Canvas structured editor supports add/edit/remove/reorder for company, position, dates, work mode, description and highlights | **PORTED** | Add/edit/remove/reorder jobs, dates and highlights. |
 | R-034 | Edit education | Hired `SectionEditor` | Canvas structured editor supports add/edit/remove/reorder for institution, degree, area, dates, score and courses | **PORTED** | Add/edit/remove/reorder institutions, study, dates and score. |
-| R-035 | Edit volunteer experience | Hired renderer/section schema | None | **MISSING** | Structured volunteer entries render and export. |
+| R-035 | Edit volunteer experience | Hired renderer/section schema | Canvas structured editor provides volunteer organization, position, URL, dates, summary and highlights with add/remove/reorder; canonical renderer/export includes the section | **PORTED** | Structured volunteer entries render and export. |
 | R-036 | Edit skills | Hired renderer/section schema | Canvas structured editor supports named skill groups, levels, keywords, add/remove and ordering | **PORTED** | Structured skills can be grouped and reordered. |
-| R-037 | Edit languages | Hired renderer/section schema | None | **MISSING** | Language and fluency fields render and export. |
-| R-038 | Edit projects and media | Hired renderer supports project media | None | **MISSING** | Structured projects support URL, role, dates, highlights and media. |
-| R-039 | Edit awards, certificates and publications | Hired renderer/section schema | None | **MISSING** | Each section has structured CRUD and ordering. |
-| R-040 | Edit interests and references | Hired renderer/section schema | None | **MISSING** | Each section has structured CRUD and privacy-safe export behavior. |
+| R-037 | Edit languages | Hired renderer/section schema | Canvas structured editor provides language/fluency CRUD and ordering; canonical renderer/export includes the section | **PORTED** | Language and fluency fields render and export. |
+| R-038 | Edit projects and media | Hired renderer supports project media | Canvas supports project name, entity, type, URL, dates, description, roles, keywords and highlights with ordering; media attachment UI remains | **PARTIAL** | Structured projects support URL, role, dates, highlights and media. |
+| R-039 | Edit awards, certificates and publications | Hired renderer/section schema | All three sections now have structured fields, add/remove/reorder controls and canonical rendering/export | **PORTED** | Each section has structured CRUD and ordering. |
+| R-040 | Edit interests and references | Hired renderer/section schema | Both sections now have structured CRUD, ordering and canonical rendering/export; per-reference privacy suppression remains | **PARTIAL** | Each section has structured CRUD and privacy-safe export behavior. |
 | R-041 | Reorder sections | Hired sortable sections and document blocks | Generic object ordering only | **MISSING** | Drag and keyboard reorder persist per résumé/template. |
-| R-042 | Collapse/expand sections while editing | Hired collapse context | None | **MISSING** | Collapse is view preference and does not alter export. |
+| R-042 | Collapse/expand sections while editing | Hired collapse context | Every structured section is an independent collapsible editor detail; collapse state does not mutate the résumé or export | **PORTED** | Collapse is view preference and does not alter export. |
 | R-043 | Hide/show sections | Template descriptor `enabled` | None | **MISSING** | Visibility toggles persist without deleting content. |
 | R-044 | Inline edit and double-click text | Hired `DocumentStage` | Canvas edit mode exposes typed basics/work/education/skills plus an advanced rich-text editor; remaining typed sections and double-click-on-preview remain | **PARTIAL** | Typed résumé fields and free text both edit in place. |
 | R-045 | AI rewrite selected content | Hired AI Rewrite action | Brain can propose generic object updates | **PARTIAL** | Selection-scoped rewrite previews a résumé-field patch. |
 | R-046 | AI create a hook/summary | Hired AI Hook action | Generic Brain prompt only | **PARTIAL** | Dedicated action targets summary/headline and is reversible. |
 | R-047 | ATS/job-tailor workflow | Hired match/tailor handlers | Not natively ported | **MISSING** | JD + source résumé returns scored, editable derivative with cited changes. |
-| R-048 | Export PDF | Hired WYSIWYG browser-print renderer | Resume advertises PDF; generic print path exists | **PARTIAL** | Export uses the exact selected résumé template and pagination. |
-| R-049 | Export DOCX | Hired service/export path | Builderforce offers DOCX from Markdown | **PARTIAL** | DOCX preserves résumé hierarchy, links, sections and selected design semantics. |
+| R-048 | Export PDF | Hired WYSIWYG browser-print renderer | `canvasResumeRenderer` now supplies identical template-tagged HTML/CSS to Canvas preview, standalone HTML and the A4 browser-print/PDF path | **PORTED** | Export uses the exact selected résumé template and pagination. |
+| R-049 | Export DOCX | Hired service/export path | DOCX preserves Markdown hierarchy and now receives the selected template accent, font, density and one/two-column semantics; hyperlink/media fidelity remains | **PARTIAL** | DOCX preserves résumé hierarchy, links, sections and selected design semantics. |
 | R-050 | Export HTML/Markdown/copy | Hired has export/download helpers | Builderforce exposes all four | **PORTED** | Keep existing Canvas implementation; feed it canonical résumé content. |
 | R-051 | Public share URL/slug | Hired public résumé and slug validation | Canvas shares sessions, not résumé public views | **MISSING** | Résumé-specific public view has stable slug, privacy and revocation. |
 | R-052 | Embedded résumé view | Hired embed endpoint | No résumé embed surface | **MISSING** | Tokenized embed uses the same renderer and privacy policy. |
@@ -824,7 +824,7 @@ Renderer parity is independently required; copying IDs is not completion.
 
 | ID | Renderer/editor capability | Current status | Acceptance evidence |
 |---|---|---|---|
-| RR-001 | One canonical renderer for edit preview, public view and PDF | **MISSING** | Snapshot tests prove identical descriptor/content input across all surfaces. |
+| RR-001 | One canonical renderer for edit preview, public view and PDF | **PARTIAL** | Snapshot tests prove identical descriptor/content input across all surfaces. |
 | RR-002 | Hero and print document modes | **PARTIAL** | Both modes render all 12 descriptors. |
 | RR-003 | Letter, Legal and A4 page sizes | **MISSING** | Preview and exported PDF dimensions match. |
 | RR-004 | Portrait and landscape orientation | **MISSING** | Toggle persists and export matches. |
@@ -846,7 +846,7 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-020 | Avatar, contact buttons, summary and video hero controls | **MISSING** | Each flag is independently test-covered. |
 | RR-021 | Section layouts: timeline, grid, cards and list | **MISSING** | Canonical fixtures cover every layout. |
 | RR-022 | Date sorting and highlights/media flags | **MISSING** | Order and optional detail match renderer rules. |
-| RR-023 | Print/PDF from preview overlay | **PARTIAL** | Existing PDF action invokes the canonical résumé renderer, not Markdown print. |
+| RR-023 | Print/PDF from preview overlay | **PORTED** | Existing PDF action invokes the canonical résumé renderer, not Markdown print. |
 | RR-024 | Escape/close preview and responsive preview chrome | **MISSING** | Keyboard and 360px tests pass. |
 
 ### 8.4 Studio landing, template discovery and project chrome

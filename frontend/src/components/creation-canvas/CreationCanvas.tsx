@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -690,6 +690,33 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
+  const [promptHeight, setPromptHeight] = useState(34);
+  const promptResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
+  const clampPromptHeight = useCallback((height: number) => Math.min(240, Math.max(34, height)), []);
+  const handlePromptResizeStart = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    promptResizeRef.current = { pointerId: event.pointerId, startY: event.clientY, startHeight: promptHeight };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }, [promptHeight]);
+  const handlePromptResizeMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const resize = promptResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    setPromptHeight(clampPromptHeight(resize.startHeight + resize.startY - event.clientY));
+  }, [clampPromptHeight]);
+  const handlePromptResizeEnd = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (promptResizeRef.current?.pointerId !== event.pointerId) return;
+    promptResizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
+  const handlePromptResizeKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 32 : 16;
+    if (event.key === 'ArrowUp') setPromptHeight((height) => clampPromptHeight(height + step));
+    else if (event.key === 'ArrowDown') setPromptHeight((height) => clampPromptHeight(height - step));
+    else if (event.key === 'Home') setPromptHeight(34);
+    else if (event.key === 'End') setPromptHeight(240);
+    else return;
+    event.preventDefault();
+  }, [clampPromptHeight]);
   const [twilioPromptSelected, setTwilioPromptSelected] = useState(false);
   const [thinking, setThinking] = useState(false);
   // When the in-flight turn began. Shared with every Brain surface (dock strip,
@@ -5126,7 +5153,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       />
       {promptStarter}
     </div>
-    <ChatInput
+    <div className={styles.promptComposerShell} style={{ '--canvas-prompt-height': `${promptHeight}px` } as CSSProperties}>
+      <div
+        role="separator"
+        tabIndex={0}
+        className={styles.promptResizeHandle}
+        aria-label={t('resizePrompt')}
+        aria-orientation="horizontal"
+        aria-valuemin={34}
+        aria-valuemax={240}
+        aria-valuenow={promptHeight}
+        onPointerDown={handlePromptResizeStart}
+        onPointerMove={handlePromptResizeMove}
+        onPointerUp={handlePromptResizeEnd}
+        onPointerCancel={handlePromptResizeEnd}
+        onLostPointerCapture={() => { promptResizeRef.current = null; }}
+        onKeyDown={handlePromptResizeKeyDown}
+      >
+        <span aria-hidden="true">↕</span>
+      </div>
+      <ChatInput
       className={styles.composer}
       value={prompt}
       onChange={setPrompt}
@@ -5157,7 +5203,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       onMemoryChange={setMemoryMode}
       memoryUnavailableReason={evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined}
       showVoice
-    />
+      />
+    </div>
   </div>;
 
   return (

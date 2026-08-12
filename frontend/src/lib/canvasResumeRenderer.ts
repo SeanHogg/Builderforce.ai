@@ -1,4 +1,4 @@
-import { markdownToHtml } from './richText';
+import { escapeHtml, markdownToHtml } from './richText';
 import {
   RESUME_TEMPLATES,
   activeResumeRevision,
@@ -62,5 +62,5 @@ export function renderedCanvasResume(data: CreationNodeData): RenderedCanvasResu
 }
 
 export function resumeHtmlFile(title: string, rendered: RenderedCanvasResume): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title.replace(/[<>&"]/g, '')}</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff}${RESUME_DOCUMENT_STYLES}</style></head><body>${rendered.html}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff}${RESUME_DOCUMENT_STYLES}</style></head><body>${rendered.html}</body></html>`;
 }

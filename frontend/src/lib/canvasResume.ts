@@ -73,7 +73,11 @@ export interface CanvasResumeDocument extends Record<string, unknown> {
   interests?: Array<Record<string, unknown>>;
   references?: Array<Record<string, unknown>>;
   projects?: Array<Record<string, unknown>>;
+  builderforceLayout?: { sectionOrder?: string[]; hiddenSections?: string[] };
 }
+
+export const RESUME_SECTION_ORDER = ['summary', 'work', 'education', 'skills', 'volunteer', 'projects', 'awards', 'certificates', 'publications', 'languages', 'interests', 'references'] as const;
+export type ResumeSectionId = (typeof RESUME_SECTION_ORDER)[number];
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const stringValue = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
@@ -102,32 +106,53 @@ export function renderResumeMarkdown(document: CanvasResumeDocument): string {
     : '';
   const contact = [basics.email, basics.phone, basics.url, location].map(stringValue).filter(Boolean);
   if (contact.length) lines.push(contact.join(' · '));
-  if (stringValue(basics.summary)) lines.push('', '## Summary', stringValue(basics.summary));
+  const sectionChunks = new Map<string, string[]>();
+  if (stringValue(basics.summary)) sectionChunks.set('summary', ['## Summary', stringValue(basics.summary)]);
 
-  const addEntries = (heading: string, rows: unknown, render: (row: Record<string, unknown>) => string[]) => {
+  const addEntries = (id: ResumeSectionId, heading: string, rows: unknown, render: (row: Record<string, unknown>) => string[]) => {
     if (!Array.isArray(rows) || !rows.length) return;
     const rendered = rows.flatMap((row) => row && typeof row === 'object' && !Array.isArray(row) ? render(row as Record<string, unknown>) : []);
-    if (rendered.length) lines.push('', `## ${heading}`, ...rendered);
+    if (rendered.length) sectionChunks.set(id, [`## ${heading}`, ...rendered]);
   };
-  addEntries('Experience', document.work, (row) => {
+  addEntries('work', 'Experience', document.work, (row) => {
     const heading = [stringValue(row.position), stringValue(row.name)].filter(Boolean).join(' — ');
     return [heading ? `### ${heading}` : '', dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.summary), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter((item, index, rows) => item || index === rows.length - 1);
   });
-  addEntries('Education', document.education, (row) => {
+  addEntries('education', 'Education', document.education, (row) => {
     const heading = [stringValue(row.institution), stringValue(row.studyType), stringValue(row.area)].filter(Boolean).join(' — ');
     return [heading ? `### ${heading}` : '', dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.score) ? `Score: ${stringValue(row.score)}` : '', ...stringArray(row.courses).map((item) => `- ${item}`), ''].filter((item, index, rows) => item || index === rows.length - 1);
   });
-  addEntries('Skills', document.skills, (row) => {
+  addEntries('skills', 'Skills', document.skills, (row) => {
     const keywords = stringArray(row.keywords);
     const label = stringValue(row.name);
     return [label && keywords.length ? `- **${label}**: ${keywords.join(', ')}` : label ? `- ${label}` : keywords.length ? `- ${keywords.join(', ')}` : ''].filter(Boolean);
   });
-  addEntries('Projects', document.projects, (row) => [`### ${stringValue(row.name)}`, stringValue(row.description), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter(Boolean));
-  addEntries('Volunteer', document.volunteer, (row) => [`### ${[stringValue(row.position), stringValue(row.organization)].filter(Boolean).join(' — ')}`, dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.summary), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter(Boolean));
-  addEntries('Certifications', document.certificates, (row) => [`- ${[stringValue(row.name), stringValue(row.issuer), stringValue(row.date)].filter(Boolean).join(' — ')}`]);
-  addEntries('Awards', document.awards, (row) => [`- ${[stringValue(row.title), stringValue(row.awarder), stringValue(row.date)].filter(Boolean).join(' — ')}`, stringValue(row.summary)].filter(Boolean));
-  addEntries('Publications', document.publications, (row) => [`- ${[stringValue(row.name), stringValue(row.publisher), stringValue(row.releaseDate)].filter(Boolean).join(' — ')}`, stringValue(row.summary)].filter(Boolean));
-  addEntries('Languages', document.languages, (row) => [`- ${[stringValue(row.language), stringValue(row.fluency)].filter(Boolean).join(' — ')}`]);
+  addEntries('projects', 'Projects', document.projects, (row) => [
+    `### ${stringValue(row.name)}`,
+    [stringValue(row.entity), stringValue(row.type), dateRange(row)].filter(Boolean).join(' · '),
+    stringValue(row.description),
+    ...stringArray(row.roles).map((item) => `- ${item}`),
+    ...stringArray(row.highlights).map((item) => `- ${item}`),
+    ...(stringArray(row.keywords).length ? [`*${stringArray(row.keywords).join(' · ')}*`] : []),
+    '',
+  ].filter(Boolean));
+  addEntries('volunteer', 'Volunteer', document.volunteer, (row) => [`### ${[stringValue(row.position), stringValue(row.organization)].filter(Boolean).join(' — ')}`, dateRange(row) ? `*${dateRange(row)}*` : '', stringValue(row.summary), ...stringArray(row.highlights).map((item) => `- ${item}`), ''].filter(Boolean));
+  addEntries('certificates', 'Certifications', document.certificates, (row) => [`- ${[stringValue(row.name), stringValue(row.issuer), stringValue(row.date)].filter(Boolean).join(' — ')}`]);
+  addEntries('awards', 'Awards', document.awards, (row) => [`- ${[stringValue(row.title), stringValue(row.awarder), stringValue(row.date)].filter(Boolean).join(' — ')}`, stringValue(row.summary)].filter(Boolean));
+  addEntries('publications', 'Publications', document.publications, (row) => [`- ${[stringValue(row.name), stringValue(row.publisher), stringValue(row.releaseDate)].filter(Boolean).join(' — ')}`, stringValue(row.summary)].filter(Boolean));
+  addEntries('languages', 'Languages', document.languages, (row) => [`- ${[stringValue(row.language), stringValue(row.fluency)].filter(Boolean).join(' — ')}`]);
+  addEntries('interests', 'Interests', document.interests, (row) => {
+    const keywords = stringArray(row.keywords);
+    return [`- ${stringValue(row.name)}${keywords.length ? `: ${keywords.join(', ')}` : ''}`];
+  });
+  addEntries('references', 'References', document.references, (row) => [`### ${stringValue(row.name)}`, stringValue(row.reference), ''].filter(Boolean));
+  const configured = Array.isArray(document.builderforceLayout?.sectionOrder) ? document.builderforceLayout.sectionOrder : [];
+  const order = [...configured.filter((id): id is ResumeSectionId => RESUME_SECTION_ORDER.includes(id as ResumeSectionId)), ...RESUME_SECTION_ORDER].filter((id, index, all) => all.indexOf(id) === index);
+  const hidden = new Set(document.builderforceLayout?.hiddenSections ?? []);
+  for (const id of order) {
+    const chunk = sectionChunks.get(id);
+    if (chunk?.length && !hidden.has(id)) lines.push('', ...chunk);
+  }
   while (lines.length && !lines.at(-1)?.trim()) lines.pop();
   return lines.join('\n');
 }

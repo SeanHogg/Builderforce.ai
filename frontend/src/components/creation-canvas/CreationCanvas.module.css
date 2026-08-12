@@ -1043,8 +1043,11 @@
    whatever board is left — and it never moves when Brain floats, docks, or closes.
    The 300px reserve keeps it clear of the zoom rail and the minimap. */
 .composerDock { position:absolute; z-index:16; right:calc(300px + var(--brain-dock-right, 0px)); bottom:16px; left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+.promptComposerShell { position:relative; width:100%; }
+.promptResizeHandle { position:absolute; z-index:2; top:-7px; left:50%; width:42px; height:17px; display:grid; place-items:center; padding:0; transform:translateX(-50%); touch-action:none; user-select:none; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-muted); box-shadow:0 2px 6px var(--canvas-shadow); font:700 13px/1 var(--font-sans); cursor:ns-resize; }
+.promptResizeHandle:hover,.promptResizeHandle:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
 .composer { width:100%; --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-header); --chat-input-border:var(--canvas-brain-border); }
-.composer textarea { box-sizing:border-box; height:34px; min-height:34px; padding:4px 2px; font-size:14px; line-height:1.35; }
+.composer textarea { box-sizing:border-box; height:var(--canvas-prompt-height, 34px); min-height:34px; max-height:240px; padding:4px 2px; overflow-y:auto; font-size:14px; line-height:1.35; }
 .composer:global(.bf-prompt-panel__actions) { flex-wrap:nowrap!important; width:100%; overflow:visible; }
 .composer:global(.bf-chat-auto-mode) { width:32px; min-width:32px; padding:0!important; justify-content:center; }
 .composer:global(.bf-chat-auto-mode) > span { display:none; }

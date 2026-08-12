@@ -4,12 +4,29 @@ import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import type { CanvasResumeDocument, CanvasResumeEducation, CanvasResumeSkill, CanvasResumeWork } from '@/lib/canvasResume';
 
-type SectionName = 'work' | 'education' | 'skills';
+type SectionName = 'work' | 'education' | 'skills' | 'volunteer' | 'languages' | 'projects' | 'awards' | 'certificates' | 'publications' | 'interests' | 'references';
+
+const ADDITIONAL_SECTIONS = [
+  { id: 'volunteer', titleKey: 'volunteer', addKey: 'addVolunteer', entryKey: 'volunteerEntry', titleField: 'organization', fields: [['organization', false], ['position', false], ['url', false], ['startDate', false], ['endDate', false], ['summary', true], ['highlights', true]] },
+  { id: 'languages', titleKey: 'languages', addKey: 'addLanguage', entryKey: 'languageEntry', titleField: 'language', fields: [['language', false], ['fluency', false]] },
+  { id: 'projects', titleKey: 'projects', addKey: 'addProject', entryKey: 'projectEntry', titleField: 'name', fields: [['name', false], ['entity', false], ['type', false], ['url', false], ['startDate', false], ['endDate', false], ['description', true], ['roles', true], ['keywords', true], ['highlights', true]] },
+  { id: 'awards', titleKey: 'awards', addKey: 'addAward', entryKey: 'awardEntry', titleField: 'title', fields: [['title', false], ['awarder', false], ['date', false], ['summary', true]] },
+  { id: 'certificates', titleKey: 'certificates', addKey: 'addCertificate', entryKey: 'certificateEntry', titleField: 'name', fields: [['name', false], ['issuer', false], ['date', false], ['url', false]] },
+  { id: 'publications', titleKey: 'publications', addKey: 'addPublication', entryKey: 'publicationEntry', titleField: 'name', fields: [['name', false], ['publisher', false], ['releaseDate', false], ['url', false], ['summary', true]] },
+  { id: 'interests', titleKey: 'interests', addKey: 'addInterest', entryKey: 'interestEntry', titleField: 'name', fields: [['name', false], ['keywords', true]] },
+  { id: 'references', titleKey: 'references', addKey: 'addReference', entryKey: 'referenceEntry', titleField: 'name', fields: [['name', false], ['reference', true]] },
+] as const satisfies ReadonlyArray<{
+  id: SectionName; titleKey: string; addKey: string; entryKey: string; titleField: string;
+  fields: ReadonlyArray<readonly [string, boolean]>;
+}>;
+
+const ARRAY_FIELDS = new Set(['highlights', 'keywords', 'roles']);
 
 const values = (value: string): string[] => value.split(/\n|,/).map((item) => item.trim()).filter(Boolean);
 
 export function ResumeStructuredEditor({ document, onChange }: { document: CanvasResumeDocument; onChange: (document: CanvasResumeDocument) => void }) {
   const t = useTranslations('creationCanvas.resumeEditor');
+  const translate = t as unknown as (key: string, values?: Record<string, string | number>) => string;
   const basics = document.basics ?? {};
   const updateBasics = (field: string, value: string) => onChange({ ...document, basics: { ...basics, [field]: value } });
   const updateLocation = (field: string, value: string) => onChange({ ...document, basics: { ...basics, location: { ...(basics.location ?? {}), [field]: value } } });
@@ -29,7 +46,8 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
   const add = (section: SectionName) => {
     const row = section === 'work' ? { id: crypto.randomUUID(), highlights: [] }
       : section === 'education' ? { id: crypto.randomUUID(), courses: [] }
-        : { id: crypto.randomUUID(), keywords: [] };
+        : section === 'skills' ? { id: crypto.randomUUID(), keywords: [] }
+          : { id: crypto.randomUUID() };
     onChange({ ...document, [section]: [...((document[section] as unknown[] | undefined) ?? []), row] });
   };
   const actions = (section: SectionName, index: number, length: number) => <div className={styles.resumeEntryActions}>
@@ -37,7 +55,7 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
     <button type="button" disabled={index === length - 1} aria-label={t('moveDown')} onClick={() => move(section, index, 1)}>↓</button>
     <button type="button" aria-label={t('removeEntry')} onClick={() => remove(section, index)}>×</button>
   </div>;
-  const field = (label: string, value: unknown, onValue: (value: string) => void, options: { wide?: boolean; multiline?: boolean } = {}) => <label className={options.wide ? styles.resumeFieldWide : undefined}>
+  const field = (label: string, value: unknown, onValue: (value: string) => void, options: { wide?: boolean; multiline?: boolean; key?: string } = {}) => <label key={options.key} className={options.wide ? styles.resumeFieldWide : undefined}>
     <span>{label}</span>{options.multiline
       ? <textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onValue(event.target.value)} />
       : <input value={typeof value === 'string' ? value : ''} onChange={(event) => onValue(event.target.value)} />}
@@ -91,5 +109,22 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
       </div></fieldset>)}
       <button type="button" className={styles.resumeAddEntry} onClick={() => add('skills')}>{t('addSkill')}</button>
     </details>
+
+    {ADDITIONAL_SECTIONS.map((definition) => {
+      const rows = (document[definition.id] as Array<Record<string, unknown>> | undefined) ?? [];
+      return <details key={definition.id}><summary>{translate(definition.titleKey)}</summary>
+        {rows.map((row, index) => <fieldset key={typeof row.id === 'string' ? row.id : index}>
+          <legend>{typeof row[definition.titleField] === 'string' && row[definition.titleField] ? String(row[definition.titleField]) : translate(definition.entryKey, { number: index + 1 })}</legend>
+          {actions(definition.id, index, rows.length)}
+          <div className={styles.resumeFieldGrid}>{definition.fields.map(([key, multiline]) => field(
+            translate(key),
+            ARRAY_FIELDS.has(key) && Array.isArray(row[key]) ? (row[key] as string[]).join('\n') : row[key],
+            (value) => replace(definition.id, index, { ...row, [key]: ARRAY_FIELDS.has(key) ? values(value) : value }),
+            { wide: multiline, multiline, key },
+          ))}</div>
+        </fieldset>)}
+        <button type="button" className={styles.resumeAddEntry} onClick={() => add(definition.id)}>{translate(definition.addKey)}</button>
+      </details>;
+    })}
   </div>;
 }

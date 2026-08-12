@@ -37,6 +37,7 @@ import {
   readMailboxMessage,
   saveMailboxConnection,
   setMailboxSending,
+  setMailboxMessageRead,
   sendFromMailbox,
   toTriageMessages,
 } from '../../application/mailbox/mailboxService';
@@ -44,10 +45,14 @@ import {
   createMailboxAutomationRule,
   deleteMailboxAutomationRule,
   listMailboxAutomationRules,
+  listMailboxAutomationExecutions,
   MAILBOX_RESPONSE_MODES,
+  runMailboxAutomationSweep,
+  sendMailboxAutomationExecution,
   updateMailboxAutomationRule,
   type MailboxAutomationRuleInput,
 } from '../../application/mailbox/mailboxAutomationService';
+import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 /** Where the connect flow sends the browser back to when it is not told. */
@@ -222,6 +227,18 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     return c.json(result.message);
   });
 
+  r.patch('/connections/:id/messages/:messageId', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
+    const body = await c.req.json<{ unread?: boolean }>().catch(() => ({} as { unread?: boolean }));
+    if (typeof body.unread !== 'boolean') return c.json({ error: 'unread must be a boolean.' }, 400);
+    const result = await setMailboxMessageRead(
+      db, c.env as Env, c.get('tenantId') as number, id, c.req.param('messageId'), !body.unread,
+    );
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ unread: body.unread });
+  });
+
   // POST /connections/:id/send — individual correspondence from the webmail
   // composer. Campaign sends remain on /api/growth and retain their suppression
   // and unsubscribe ledger.
@@ -255,6 +272,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'Invalid response mode.' }, 400);
     }
     const rule = await createMailboxAutomationRule(db, c.get('tenantId') as number, id, body);
+    if (rule?.enabled) c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
     return rule ? c.json(rule, 201) : c.json({ error: 'Mailbox connection not found.' }, 404);
   });
 
@@ -267,6 +285,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'Invalid response mode.' }, 400);
     }
     const rule = await updateMailboxAutomationRule(db, c.get('tenantId') as number, ruleId, body);
+    if (rule?.enabled) c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
     return rule ? c.json(rule) : c.json({ error: 'Rule not found.' }, 404);
   });
 
@@ -276,6 +295,26 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     return (await deleteMailboxAutomationRule(db, c.get('tenantId') as number, ruleId))
       ? c.body(null, 204)
       : c.json({ error: 'Rule not found.' }, 404);
+  });
+
+  r.get('/automation', async (c) => {
+    const connectionId = c.req.query('connectionId') ? Number(c.req.query('connectionId')) : undefined;
+    if (connectionId !== undefined && !Number.isInteger(connectionId)) return c.json({ error: 'Invalid connection id.' }, 400);
+    return c.json({ executions: await listMailboxAutomationExecutions(db, c.get('tenantId') as number, connectionId) });
+  });
+
+  r.post('/automation/run', manager, async (c) => {
+    const result = await runMailboxAutomationSweep(c.env as Env, db, c.get('tenantId') as number);
+    return c.json(result);
+  });
+
+  r.post('/automation/:executionId/send', manager, async (c) => {
+    const executionId = Number(c.req.param('executionId'));
+    if (!Number.isInteger(executionId)) return c.json({ error: 'Invalid execution id.' }, 400);
+    const result = await sendMailboxAutomationExecution(
+      c.env as Env, db, c.get('tenantId') as number, executionId,
+    );
+    return result.ok ? c.json(result) : c.json({ error: result.error }, 409);
   });
 
   return r;

@@ -114,6 +114,7 @@ export interface MailboxProvider {
   accountInfo(accessToken: string): Promise<{ email: string; displayName: string }>;
   listMessages(accessToken: string, query: MailboxQuery): Promise<MailboxMessage[]>;
   getMessage(accessToken: string, messageId: string): Promise<MailboxMessage | null>;
+  setRead(accessToken: string, messageId: string, read: boolean): Promise<void>;
   sendMessage(accessToken: string, message: OutgoingMessage): Promise<{ id: string }>;
 }
 
@@ -412,10 +413,9 @@ const googleMailbox: MailboxProvider = {
   label: 'Gmail',
   authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenUrl: 'https://oauth2.googleapis.com/token',
-  // Read + send only. `gmail.readonly` deliberately over `https://mail.google.com/`,
-  // which would also grant delete.
+  // Modify permits read/unread + labels without granting permanent deletion.
   scopes: [
-    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.modify',
     'https://www.googleapis.com/auth/gmail.send',
     'https://www.googleapis.com/auth/userinfo.email',
   ],
@@ -478,6 +478,15 @@ const googleMailbox: MailboxProvider = {
     if (res.status === 404) return null;
     if (!res.ok) return providerError('Gmail get', res);
     return gmailToMessage(await res.json() as Record<string, unknown>);
+  },
+
+  async setRead(accessToken, messageId, read) {
+    const res = await fetch(`${GMAIL_BASE}/messages/${encodeURIComponent(messageId)}/modify`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(read ? { removeLabelIds: ['UNREAD'] } : { addLabelIds: ['UNREAD'] }),
+    });
+    if (!res.ok) return providerError('Gmail modify', res);
   },
 
   async sendMessage(accessToken, message) {
@@ -575,9 +584,9 @@ const microsoftMailbox: MailboxProvider = {
   // is not ours, and pinning our own would make every external mailbox unconnectable.
   authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
   tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-  // Mail.Read (not ReadWrite) + Mail.Send. `offline_access` is what yields the
+  // Mail.ReadWrite enables read/unread state; delete is never exposed. `offline_access` is what yields the
   // refresh token; without it Graph returns a 1-hour token and nothing else.
-  scopes: ['offline_access', 'openid', 'email', 'profile', 'Mail.Read', 'Mail.Send', 'User.Read'],
+  scopes: ['offline_access', 'openid', 'email', 'profile', 'Mail.ReadWrite', 'Mail.Send', 'User.Read'],
   clientIdKey: 'MICROSOFT_CLIENT_ID',
   clientSecretKey: 'MICROSOFT_CLIENT_SECRET',
   extraAuthParams: { response_mode: 'query', prompt: 'select_account' },
@@ -628,6 +637,15 @@ const microsoftMailbox: MailboxProvider = {
     if (res.status === 404) return null;
     if (!res.ok) return providerError('Graph get', res);
     return graphToMessage(await res.json() as GraphMessage);
+  },
+
+  async setRead(accessToken, messageId, read) {
+    const res = await fetch(`${GRAPH_BASE}/messages/${encodeURIComponent(messageId)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isRead: read }),
+    });
+    if (!res.ok) return providerError('Graph update message', res);
   },
 
   async sendMessage(accessToken, message) {

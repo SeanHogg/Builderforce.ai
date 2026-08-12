@@ -842,6 +842,25 @@ describe('CreationCanvas', () => {
     expect(starter.closest('[data-placement="top"]')).not.toBeNull();
   });
 
+  it('lets the user resize the canvas prompt from its handle', () => {
+    render(<CreationCanvas sessionId="brain-prompt-resize-test" persistence="local" />);
+
+    const prompt = screen.getByLabelText('Ask Brain about this canvas');
+    const shell = prompt.closest('[style*="--canvas-prompt-height"]');
+    const handle = screen.getByRole('separator', { name: 'Resize prompt area' });
+    expect(shell).toHaveStyle({ '--canvas-prompt-height': '34px' });
+    expect(prompt).toHaveAttribute('rows', '1');
+
+    fireEvent.pointerDown(handle, { pointerId: 1, clientY: 500 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 430 });
+    expect(shell).toHaveStyle({ '--canvas-prompt-height': '104px' });
+    expect(handle).toHaveAttribute('aria-valuenow', '104');
+    fireEvent.pointerUp(handle, { pointerId: 1, clientY: 430 });
+
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    expect(shell).toHaveStyle({ '--canvas-prompt-height': '88px' });
+  });
+
   it('moves Brain into its Object rather than putting a second chat on the board', () => {
     render(<CreationCanvas sessionId="brain-inline-test" persistence="local" />);
 

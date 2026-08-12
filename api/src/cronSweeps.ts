@@ -40,6 +40,7 @@ import { runReleaseDigest } from './application/email/releaseDigest';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { runCampaignSendSweep } from './application/marketing/campaignEngine';
+import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runCustomDomainSweep } from './application/ide/customDomain';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
@@ -236,6 +237,18 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runCampaignSendSweep(env, buildDatabase(env));
       return r.sent > 0 || r.failed > 0
         ? `campaigns=${r.campaigns} sent=${r.sent} failed=${r.failed}`
+        : null;
+    },
+  },
+  {
+    key: 'mailbox-automation',
+    cadence: 'frequent',
+    description: 'Evaluate unread connected-mailbox messages against AI response rules.',
+    dispatches: true,
+    run: async ({ env }) => {
+      const result = await runMailboxAutomationSweep(env, buildDatabase(env));
+      return result.matched > 0 || result.failed > 0
+        ? `rules=${result.rules} matched=${result.matched} drafted=${result.drafted} approvals=${result.approvals} sent=${result.sent} failed=${result.failed}`
         : null;
     },
   },

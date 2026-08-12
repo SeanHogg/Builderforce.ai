@@ -56,6 +56,10 @@ import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import {
+  rejectMailboxAutomationApproval,
+  sendMailboxAutomationExecution,
+} from '../../application/mailbox/mailboxAutomationService';
 
 /** The role a `task.execution` approval was created for (set on the metadata when
  *  the gated run is role-attributed), or null. Drives the §5.8 approvals→sign-off bridge. */
@@ -67,6 +71,14 @@ function parseApprovalRoleKey(metadata: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function parseMailboxAutomationExecutionId(metadata: string | null): number | null {
+  if (!metadata) return null;
+  try {
+    const value = Number((JSON.parse(metadata) as { mailboxAutomationExecutionId?: unknown }).mailboxAutomationExecutionId);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  } catch { return null; }
 }
 
 type ApprovalHonoEnv = HonoEnv & {
@@ -378,6 +390,23 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             force: true,
           },
         ).catch(() => null);
+      }
+    }
+
+    // A mailbox reply approval owns a persisted draft. Approval is the only
+    // transition that may send it; retries are idempotent because the execution
+    // records its provider receipt before this route returns.
+    if (existing.actionType === 'mailbox.reply') {
+      const mailboxExecutionId = parseMailboxAutomationExecutionId(existing.metadata);
+      if (body.status === 'approved' && mailboxExecutionId != null) {
+        const sent = await sendMailboxAutomationExecution(env as Env, db, tenantId, mailboxExecutionId);
+        if (!sent.ok) {
+          reportCaughtError(new Error(sent.error), {
+            source: 'presentation/routes/approvalRoutes.ts', operation: 'sendApprovedMailboxReply',
+          });
+        }
+      } else if (body.status === 'rejected') {
+        await rejectMailboxAutomationApproval(db, tenantId, id);
       }
     }
 

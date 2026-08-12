@@ -36,7 +36,7 @@ export function extractHtmlDocument(html: string, fetchedUrl: string): Extracted
   const outbound = new Set<string>();
   for (const tag of html.match(/<a\b[^>]*href\s*=\s*["'][^"']+["'][^>]*>/gi) ?? []) {
     const href = attr(tag, 'href'); if (!href) continue;
-    try { outbound.add(normalizeWebUrl(href, fetchedUrl)); } catch { /* non-http link */ }
+    try { outbound.add(normalizeWebUrl(href, fetchedUrl)); } catch { continue; }
     if (outbound.size >= 500) break;
   }
   const htmlTag = /<html\b[^>]*>/i.exec(html)?.[0] ?? '';
@@ -46,4 +46,3 @@ export function extractHtmlDocument(html: string, fetchedUrl: string): Extracted
   const metadata: Record<string, unknown> = { description: meta(html, 'description') ?? meta(html, 'og:description'), sourceType: meta(html, 'og:type') ?? 'web_page' };
   return { canonicalUrl, title, text, headings, language: language ?? null, publicationTimestamp: published, author, outboundLinks: [...outbound], metadata };
 }
-

@@ -171,3 +171,24 @@ export const mailboxAutomationRules = pgTable('mailbox_automation_rules', {
   index('idx_mailbox_automation_rules_connection').on(t.tenantId, t.connectionId, t.enabled),
 ]);
 
+/** One idempotent evaluation of one provider message against one rule. */
+export const mailboxAutomationExecutions = pgTable('mailbox_automation_executions', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  connectionId: integer('connection_id').notNull().references(() => mailboxConnections.id, { onDelete: 'cascade' }),
+  ruleId:       integer('rule_id').notNull().references(() => mailboxAutomationRules.id, { onDelete: 'cascade' }),
+  messageId:    varchar('message_id', { length: 512 }).notNull(),
+  sender:       varchar('sender', { length: 500 }).notNull(),
+  subject:      varchar('subject', { length: 500 }).notNull().default(''),
+  status:       varchar('status', { length: 24 }).notNull().default('processing'),
+  draftText:    text('draft_text'),
+  approvalId:   varchar('approval_id', { length: 64 }),
+  providerSentId: varchar('provider_sent_id', { length: 512 }),
+  error:        text('error'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_mailbox_automation_execution_message').on(t.tenantId, t.ruleId, t.messageId),
+  index('idx_mailbox_automation_executions_tenant').on(t.tenantId, t.createdAt),
+]);
+

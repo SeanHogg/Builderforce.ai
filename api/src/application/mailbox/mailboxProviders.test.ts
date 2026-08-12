@@ -144,18 +144,18 @@ describe('the provider registry', () => {
     expect(isMailboxProviderName('yahoo')).toBe(false);
   });
 
-  it('requests READ + SEND scopes only — never delete', () => {
+  it('requests read-state + send scopes — never permanent delete', () => {
     // A tenant connecting a mailbox to run a campaign has not agreed to let us
     // delete their mail.
     const google = getMailboxProvider('google')!;
-    expect(google.scopes).toContain('https://www.googleapis.com/auth/gmail.readonly');
+    expect(google.scopes).toContain('https://www.googleapis.com/auth/gmail.modify');
     expect(google.scopes).toContain('https://www.googleapis.com/auth/gmail.send');
     expect(google.scopes).not.toContain('https://mail.google.com/');
 
     const microsoft = getMailboxProvider('microsoft')!;
-    expect(microsoft.scopes).toContain('Mail.Read');
+    expect(microsoft.scopes).toContain('Mail.ReadWrite');
     expect(microsoft.scopes).toContain('Mail.Send');
-    expect(microsoft.scopes).not.toContain('Mail.ReadWrite');
+    expect(microsoft.scopes).not.toContain('Mail.ReadWrite.Shared');
   });
 
   it('asks for the params that actually yield a refresh token', () => {

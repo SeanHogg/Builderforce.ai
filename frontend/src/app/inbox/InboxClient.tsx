@@ -10,6 +10,7 @@ import {
   mailboxApi,
   type MailboxAutomationRule,
   type MailboxAutomationRuleInput,
+  type MailboxAutomationExecution,
   type MailboxConnection,
   type MailboxFilter,
   type MailboxMessage,
@@ -45,6 +46,7 @@ export function InboxClient() {
   const [reply, setReply] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rules, setRules] = useState<MailboxAutomationRule[]>([]);
+  const [executions, setExecutions] = useState<MailboxAutomationExecution[]>([]);
   const [ruleDraft, setRuleDraft] = useState<MailboxAutomationRuleInput>(EMPTY_RULE);
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [newAgentName, setNewAgentName] = useState('');
@@ -83,12 +85,20 @@ export function InboxClient() {
 
   useEffect(() => { void loadMessages(); }, [loadMessages]);
   useEffect(() => {
-    if (connectionId == null) { setRules([]); return; }
-    void mailboxApi.listRules(connectionId).then((result) => setRules(result.rules)).catch(() => setRules([]));
+    if (connectionId == null) { setRules([]); setExecutions([]); return; }
+    void Promise.all([mailboxApi.listRules(connectionId), mailboxApi.listAutomation(connectionId)])
+      .then(([ruleResult, executionResult]) => { setRules(ruleResult.rules); setExecutions(executionResult.executions); })
+      .catch(() => { setRules([]); setExecutions([]); });
   }, [connectionId]);
 
   const openMessage = async (message: MailboxMessage) => {
     setSelected(message); setReply(''); setError('');
+    if (message.unread && connectionId != null) {
+      void mailboxApi.setUnread(connectionId, message.id, false).then(() => {
+        setMessages((current) => current.map((item) => item.id === message.id ? { ...item, unread: false } : item));
+        setSelected((current) => current?.id === message.id ? { ...current, unread: false } : current);
+      }).catch(() => undefined);
+    }
     if (!message.bodyText && connectionId != null) {
       try { setSelected(await mailboxApi.getMessage(connectionId, message.id)); }
       catch (cause) { setError(cause instanceof Error ? cause.message : t('loadFailed')); }
@@ -149,6 +159,16 @@ export function InboxClient() {
     finally { setBusy(false); }
   };
 
+  const runAutomation = async () => {
+    setBusy(true); setError('');
+    try {
+      const result = await mailboxApi.runAutomation();
+      if (connectionId != null) setExecutions((await mailboxApi.listAutomation(connectionId)).executions);
+      setNotice(t('automationResult', result));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t('automationFailed')); }
+    finally { setBusy(false); }
+  };
+
   if (!loading && connections.length === 0) return <main className={styles.shell}>
     <div className={styles.empty}><div><h2>{t('connectTitle')}</h2><p>{t('connectBody')}</p><Link className={styles.primary} href="/growth">{t('connectAction')}</Link></div></div>
   </main>;
@@ -188,7 +208,7 @@ export function InboxClient() {
         {!selected ? <div className={styles.empty}>{t('selectMessage')}</div> : <>
           <header className={styles.readingHeader}><h2>{selected.subject || t('noSubject')}</h2><div className={styles.senderLine}>
             <span className={styles.avatar}>{(selected.fromName || selected.from).slice(0, 1).toUpperCase()}</span><div><strong>{selected.fromName || selected.from}</strong><div className={styles.meta}>{t('fromAddress', { email: selected.from })} · {new Date(selected.receivedAtISO).toLocaleString()}</div></div>
-          </div></header>
+          </div><div className={styles.actions}><button className={styles.button} onClick={async () => { if (connectionId == null) return; const unread = !selected.unread; await mailboxApi.setUnread(connectionId, selected.id, unread); setSelected({ ...selected, unread }); setMessages((current) => current.map((item) => item.id === selected.id ? { ...item, unread } : item)); }}>{selected.unread ? t('markRead') : t('markUnread')}</button>{selected.webUrl && <a className={styles.button} href={selected.webUrl} target="_blank" rel="noreferrer noopener">{t('openProvider')}</a>}</div></header>
           <div className={styles.body}>{selected.bodyText || selected.snippet}</div>
           <section className={styles.reply} aria-label={t('reply')}>
             <div className={styles.replyTop}><strong>{t('reply')}</strong>{matchingRule && <span className={styles.meta}>{t('matchedRule', { name: matchingRule.name })}</span>}</div>
@@ -199,14 +219,16 @@ export function InboxClient() {
       </article>
     </div>
     {rulesOpen && <><button className={styles.drawerBackdrop} aria-label={t('close')} onClick={() => setRulesOpen(false)} /><aside className={styles.drawer} aria-label={t('rules')}>
-      <div className={styles.drawerHeader}><div><h2>{t('rules')}</h2><p className={styles.meta}>{connection?.accountEmail}</p></div><button className={styles.button} onClick={() => setRulesOpen(false)}>{t('close')}</button></div>
+      <div className={styles.drawerHeader}><div><h2>{t('rules')}</h2><p className={styles.meta}>{connection?.accountEmail}</p></div><div className={styles.actions}><button className={styles.primary} disabled={busy} onClick={() => void runAutomation()}>{t('runNow')}</button><button className={styles.button} onClick={() => setRulesOpen(false)}>{t('close')}</button></div></div>
       {rules.map((rule) => <div className={styles.rule} key={rule.id}><div className={styles.row}><strong>{rule.name}</strong><label className={styles.meta}><input type="checkbox" checked={rule.enabled} onChange={async (event) => { const updated = await mailboxApi.updateRule(rule.id, { enabled: event.target.checked }); setRules((current) => current.map((item) => item.id === rule.id ? updated : item)); }} /> {t('enabled')}</label></div><p className={styles.meta}>{rule.fromContains ? t('fromContainsValue', { value: rule.fromContains }) : t('anySender')} · {t(`mode.${rule.responseMode}`)}</p><button className={styles.button} onClick={async () => { await mailboxApi.deleteRule(rule.id); setRules((current) => current.filter((item) => item.id !== rule.id)); }}>{t('delete')}</button></div>)}
+      {executions.length > 0 && <section><h3>{t('automationActivity')}</h3>{executions.slice(0, 20).map((execution) => <div className={styles.rule} key={execution.id}><div className={styles.row}><strong>{execution.subject || t('noSubject')}</strong><span className={styles.meta}>{t(`executionStatus.${['processing', 'draft', 'pending_approval', 'sent', 'failed', 'rejected'].includes(execution.status) ? execution.status : 'failed'}`)}</span></div><p className={styles.meta}>{execution.sender} · {new Date(execution.createdAt).toLocaleString()}</p>{execution.draftText && <p className={styles.body}>{execution.draftText}</p>}{execution.error && <p className={styles.error}>{execution.error}</p>}<div className={styles.actions}>{execution.status === 'draft' && <button className={styles.primary} onClick={async () => { await mailboxApi.sendAutomationDraft(execution.id); setExecutions((current) => current.map((item) => item.id === execution.id ? { ...item, status: 'sent' } : item)); }}>{t('sendDraft')}</button>}{execution.status === 'pending_approval' && <Link className={styles.button} href="/workforce?tab=approvals">{t('reviewApproval')}</Link>}</div></div>)}</section>}
       <div className={styles.rule}><strong>{t('newRule')}</strong><div className={styles.ruleGrid}>
         <label className={`${styles.field} ${styles.fieldWide}`}>{t('ruleName')}<input className={styles.control} value={ruleDraft.name} onChange={(event) => setRuleDraft((current) => ({ ...current, name: event.target.value }))} /></label>
         <label className={styles.field}>{t('fromContains')}<input className={styles.control} value={ruleDraft.fromContains} onChange={(event) => setRuleDraft((current) => ({ ...current, fromContains: event.target.value }))} /></label>
         <label className={styles.field}>{t('subjectContains')}<input className={styles.control} value={ruleDraft.subjectContains} onChange={(event) => setRuleDraft((current) => ({ ...current, subjectContains: event.target.value }))} /></label>
         <label className={styles.field}>{t('agent')}<select className={styles.control} value={ruleDraft.agentRef ?? ''} onChange={(event) => setRuleDraft((current) => ({ ...current, agentRef: event.target.value || null }))}><option value="">{t('chooseAgent')}</option>{agents.map((agent) => <option key={String(agent.id)} value={String(agent.id)}>{agent.name}</option>)}</select></label>
-        <label className={styles.field}>{t('responseMode')}<select className={styles.control} value={ruleDraft.responseMode} onChange={(event) => setRuleDraft((current) => ({ ...current, responseMode: event.target.value as MailboxAutomationRuleInput['responseMode'] }))}>{(['draft', 'approval'] as const).map((mode) => <option key={mode} value={mode}>{t(`mode.${mode}`)}</option>)}</select></label>
+        <label className={styles.field}>{t('responseMode')}<select className={styles.control} value={ruleDraft.responseMode} onChange={(event) => setRuleDraft((current) => ({ ...current, responseMode: event.target.value as MailboxAutomationRuleInput['responseMode'] }))}>{(['draft', 'approval', 'automatic'] as const).map((mode) => <option key={mode} value={mode}>{t(`mode.${mode}`)}</option>)}</select></label>
+        {ruleDraft.responseMode === 'automatic' && <p className={`${styles.error} ${styles.fieldWide}`}>{t('automaticWarning')}</p>}
         <label className={`${styles.field} ${styles.fieldWide}`}>{t('instructions')}<textarea className={styles.textarea} value={ruleDraft.instructions} onChange={(event) => setRuleDraft((current) => ({ ...current, instructions: event.target.value }))} /></label>
       </div><div className={styles.actions}><button className={styles.primary} disabled={busy || !ruleDraft.name.trim()} onClick={() => void saveRule()}>{t('saveRule')}</button></div></div>
       <div className={styles.rule}><strong>{t('createAgent')}</strong><p className={styles.meta}>{t('createAgentHelp')}</p><div className={styles.actions}><input className={styles.control} value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder={t('agentName')} /><button className={styles.button} disabled={busy || !newAgentName.trim()} onClick={() => void createAgent()}>{t('create')}</button></div></div>

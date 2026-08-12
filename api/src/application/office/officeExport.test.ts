@@ -88,6 +88,17 @@ describe('markdownToDocx', () => {
     // Content is escaped, so a stray & or < in the chat can't corrupt the part.
     expect(strFromU8(unzipSync(markdownToDocx('a & b < c'))['word/document.xml'] as Uint8Array)).toContain('a &amp; b &lt; c');
   });
+
+  it('applies resume template semantics to Word output', () => {
+    const bytes = markdownToDocx('# Ada\n\n## Experience\n\n- Built engines', 'Ada', {
+      accent: '#047857', font: 'mono', density: 'compact', columns: 2,
+    });
+    const xml = strFromU8(unzipSync(bytes)['word/document.xml'] as Uint8Array);
+    expect(xml).toContain('w:color w:val="047857"');
+    expect(xml).toContain('w:ascii="Consolas"');
+    expect(xml).toContain('<w:cols w:num="2" w:space="720"/>');
+    expect(xml).toContain('<w:sz w:val="35"/>');
+  });
 });
 
 describe('markdownToPptx', () => {

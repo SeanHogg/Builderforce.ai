@@ -87,6 +87,8 @@ describe('Canvas resume lineage', () => {
       work: [{ id: 'work-1', name: 'Analytical Engines', position: 'Programmer', startDate: '1842', highlights: ['Published the first algorithm'], securityClearance: 'custom' }],
       education: [{ institution: 'Self-directed', area: 'Mathematics' }],
       skills: [{ name: 'Computing', keywords: ['Algorithms'] }],
+      interests: [{ name: 'Mathematics', keywords: ['Number theory'] }],
+      references: [{ name: 'Charles Babbage', reference: 'Exceptional analytical work.' }],
       customSection: [{ preserved: true }],
     });
     expect(document).not.toBeNull();
@@ -94,6 +96,8 @@ describe('Canvas resume lineage', () => {
     expect(document?.work?.[0]?.securityClearance).toBe('custom');
     expect(renderResumeMarkdown(document!)).toContain('## Experience');
     expect(renderResumeMarkdown(document!)).toContain('Published the first algorithm');
+    expect(renderResumeMarkdown(document!)).toContain('## Interests');
+    expect(renderResumeMarkdown(document!)).toContain('Exceptional analytical work.');
   });
 
   it('renders an empty canonical document without hanging or inventing content', () => {
