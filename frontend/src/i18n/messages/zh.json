@@ -13617,6 +13617,8 @@
       "pageView_paged": "分页",
       "pageView_spread": "双页",
       "closePreview": "关闭简历预览",
+      "pageNumber": "第 {page} 页，共 {count} 页",
+      "dragSection": "拖动{section}重新排序",
       "avatarUrl": "头像或照片网址",
       "videoUrl": "视频简历网址",
       "projectMedia": "项目媒体网址（每行一个）",
@@ -13693,7 +13695,12 @@
       "moveClipEarlier": "将 {name} 前移",
       "moveClipLater": "将 {name} 后移",
       "splitClip": "在播放头处分割 {name}",
-      "emptyTrack": "没有片段"
+      "emptyTrack": "没有片段",
+      "videoResumeTemplates": "视频简历模板",
+      "searchVideoTemplates": "搜索视频简历模板",
+      "allProfessions": "所有职业",
+      "scenes": "场景",
+      "storyboard": "分镜"
     },
     "comparison": {
       "promptTitle": "共享比较提示词",

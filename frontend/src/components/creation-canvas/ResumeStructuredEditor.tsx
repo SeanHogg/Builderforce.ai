@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import { RESUME_SECTION_ORDER, type CanvasResumeDocument, type CanvasResumeEducation, type CanvasResumeSkill, type CanvasResumeWork, type ResumeSectionId } from '@/lib/canvasResume';
+import { useDragReorder } from '@/lib/useDragReorder';
 
 type SectionName = 'work' | 'education' | 'skills' | 'volunteer' | 'languages' | 'projects' | 'awards' | 'certificates' | 'publications' | 'interests' | 'references';
 
@@ -41,6 +42,7 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
     ...document,
     builderforceLayout: { ...document.builderforceLayout, sectionOrder: [...sectionOrder], hiddenSections: [...hiddenSections] },
   });
+  const sectionDrag = useDragReorder(sectionOrder, (next) => updateLayout(next, hiddenSections));
   const moveSection = (index: number, delta: number) => {
     const next = [...sectionOrder];
     const destination = index + delta;
@@ -106,7 +108,8 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
   return <div className={styles.resumeStructuredEditor}>
     {deletedEntry && <div className={styles.resumeUndoDelete} role="status"><span>{t('entryDeleted')}</span><button type="button" onClick={undoDelete}>{t('undoDelete')}</button><button type="button" aria-label={t('dismissUndo')} onClick={() => setDeletedEntry(null)}>×</button></div>}
     <details><summary>{t('sectionLayout')}</summary><div className={styles.resumeSectionLayout}>
-      {sectionOrder.map((section, index) => <div key={section}>
+      {sectionOrder.map((section, index) => <div key={section} {...sectionDrag.dropTargetProps(section)} data-dragging={sectionDrag.draggingKey === section || undefined} data-drop-target={sectionDrag.dropKey === section || undefined}>
+        <button type="button" className={styles.resumeSectionDragHandle} aria-label={t('dragSection', { section: translate(SECTION_LABEL_KEYS[section]) })} {...sectionDrag.dragHandleProps(section)}>⠿</button>
         <label><input type="checkbox" checked={!hiddenSections.has(section)} onChange={() => toggleSection(section)} /> <span>{translate(SECTION_LABEL_KEYS[section])}</span></label>
         <div className={styles.resumeEntryActions}>
           <button type="button" disabled={index === 0} aria-label={t('moveSectionUp', { section: translate(SECTION_LABEL_KEYS[section]) })} onClick={() => moveSection(index, -1)}>↑</button>

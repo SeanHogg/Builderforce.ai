@@ -21,6 +21,7 @@ import { useCanvasMediaCapture } from '@/hooks/useCanvasMediaCapture';
 import { renderCanvasVideo } from '@/lib/canvasVideoRender';
 import { youtubeApi, type YouTubeConnection } from '@/lib/youtubeApi';
 import styles from './CanvasVideoEditor.module.css';
+import { VIDEO_RESUME_TEMPLATES, videoResumeTemplatePatch, type VideoResumeScene } from '@/lib/videoResumeTemplates';
 
 const TRACKS: readonly CanvasVideoTrackKind[] = ['visual', 'music', 'voiceover', 'sfx'];
 
@@ -66,6 +67,9 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
   const [youtubePrivacy, setYoutubePrivacy] = useState<'private' | 'unlisted' | 'public'>('unlisted');
   const capture = useCanvasMediaCapture();
   const editable = !!onEdit;
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateProfession, setTemplateProfession] = useState('all');
+  const storyboard = Array.isArray(data.videoStoryboard) ? data.videoStoryboard.filter((scene): scene is VideoResumeScene => !!scene && typeof scene === 'object' && !Array.isArray(scene) && typeof (scene as VideoResumeScene).id === 'string') : [];
 
   useEffect(() => {
     if (!data.renderedVideoStorageKey) return;
@@ -189,6 +193,9 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     {capture.error && capture.error !== 'cancelled' && <p role="alert" className={styles.status}>{t(capture.error === 'unsupported' ? 'captureUnsupported' : 'captureFailed')}</p>}
     {problem && <p role="alert" className={styles.status}>{problem}</p>}
     {busy && <p role="status" className={styles.status}>{busy}{busy === t('rendering') ? ` · ${Math.round(renderProgress * 100)}%` : ''}</p>}
+
+    <details className={styles.videoTemplates} open={!timeline.clips.length && !storyboard.length}><summary>{t('videoResumeTemplates')}</summary><div className={styles.templateFilters}><input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder={t('searchVideoTemplates')} /><select value={templateProfession} onChange={(event) => setTemplateProfession(event.target.value)}><option value="all">{t('allProfessions')}</option>{[...new Set(VIDEO_RESUME_TEMPLATES.map((template) => template.profession))].sort().map((profession) => <option key={profession}>{profession}</option>)}</select></div><div className={styles.templateGrid}>{VIDEO_RESUME_TEMPLATES.filter((template) => templateProfession === 'all' || template.profession === templateProfession).filter((template) => `${template.label} ${template.profession} ${template.scenes.map((scene) => scene.title).join(' ')}`.toLowerCase().includes(templateSearch.trim().toLowerCase())).map((template) => <button type="button" key={template.id} aria-pressed={data.videoResumeTemplateId === template.id} disabled={!editable} onClick={() => onEdit?.(videoResumeTemplatePatch(template))}><span style={{ background: `linear-gradient(135deg,${template.colors[0]},${template.colors[1]})` }} /><strong>{template.label}</strong><small>{template.profession} · {template.duration}s · {template.scenes.length} {t('scenes')}</small></button>)}</div></details>
+    {!!storyboard.length && <section className={styles.storyboard} aria-label={t('storyboard')}><header><strong>{t('storyboard')}</strong><span>{storyboard.reduce((sum, scene) => sum + scene.duration, 0)}s</span></header>{storyboard.map((scene, index) => <article key={scene.id}><b>{index + 1}</b><div><strong>{scene.title}</strong>{scene.subtitle && <small>{scene.subtitle}</small>}</div><label>{t('length')}<input type="number" min="1" value={scene.duration} disabled={!editable} onChange={(event) => onEdit?.({ videoStoryboard: storyboard.map((item) => item.id === scene.id ? { ...item, duration: Math.max(1, Number(event.target.value)) } : item) })} /></label></article>)}</section>}
 
     {typeof data.renderedVideoStorageKey === 'string' && !!data.renderedVideoStorageKey && <section className={styles.publish} aria-label={t('youtubePublishing')}>
       <header><strong>{t('youtubePublishing')}</strong><span>{data.youtubeUrl ? t('uploadedYouTube') : t('readyToPublish')}</span></header>

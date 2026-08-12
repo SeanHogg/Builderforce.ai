@@ -13618,6 +13618,8 @@
       "pageView_paged": "Paged",
       "pageView_spread": "Spread",
       "closePreview": "Close résumé preview",
+      "pageNumber": "Page {page} of {count}",
+      "dragSection": "Drag {section} to reorder",
       "avatarUrl": "Avatar or headshot URL",
       "videoUrl": "Video résumé URL",
       "projectMedia": "Project media URLs (one per line)",
@@ -13694,7 +13696,12 @@
       "moveClipEarlier": "Move {name} earlier",
       "moveClipLater": "Move {name} later",
       "splitClip": "Split {name} at playhead",
-      "emptyTrack": "No clips"
+      "emptyTrack": "No clips",
+      "videoResumeTemplates": "Video résumé templates",
+      "searchVideoTemplates": "Search video résumé templates",
+      "allProfessions": "All professions",
+      "scenes": "scenes",
+      "storyboard": "Storyboard"
     },
     "comparison": {
       "promptTitle": "Shared comparison prompt",

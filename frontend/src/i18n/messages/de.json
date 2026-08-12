@@ -13617,6 +13617,8 @@
       "pageView_paged": "Seitenweise",
       "pageView_spread": "Doppelseite",
       "closePreview": "Lebenslaufvorschau schließen",
+      "pageNumber": "Seite {page} von {count}",
+      "dragSection": "{section} zum Sortieren ziehen",
       "avatarUrl": "Avatar- oder Porträt-URL",
       "videoUrl": "Video-Lebenslauf-URL",
       "projectMedia": "Projektmedien-URLs (eine pro Zeile)",
@@ -13693,7 +13695,12 @@
       "moveClipEarlier": "{name} nach vorne verschieben",
       "moveClipLater": "{name} nach hinten verschieben",
       "splitClip": "{name} am Abspielkopf teilen",
-      "emptyTrack": "Keine Clips"
+      "emptyTrack": "Keine Clips",
+      "videoResumeTemplates": "Video-Lebenslauf-Vorlagen",
+      "searchVideoTemplates": "Video-Lebenslauf-Vorlagen suchen",
+      "allProfessions": "Alle Berufe",
+      "scenes": "Szenen",
+      "storyboard": "Storyboard"
     },
     "comparison": {
       "promptTitle": "Gemeinsamer Vergleichsprompt",

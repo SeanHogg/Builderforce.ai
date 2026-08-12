@@ -751,6 +751,12 @@
 .resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { background:repeating-linear-gradient(to bottom,#fff 0,#fff calc(var(--resume-page-height) - 2px),#94a3b8 calc(var(--resume-page-height) - 2px),#94a3b8 var(--resume-page-height)); }
 .resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { margin-left:0; }
 .resumePageModes { display:flex; gap:4px; }
+.resumePageNumber { position:absolute; right:8px; z-index:1; padding:2px 5px; border-radius:3px; background:rgb(15 23 42 / 72%); color:#fff; font-size:9px; pointer-events:none; }
+.resumePreviewCanvas { position:relative; }
+.resumeSectionLayout > div { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:5px; }
+.resumeSectionLayout > div[data-dragging="true"] { opacity:.45; }
+.resumeSectionLayout > div[data-drop-target="true"] { outline:2px solid var(--canvas-accent); outline-offset:2px; }
+.resumeSectionDragHandle { border:0; background:transparent; color:var(--canvas-muted); cursor:grab; }
 .resumeFieldDiffs { display:grid; gap:3px; margin:5px 0 0; padding:0; list-style:none; font-size:11px; }
 .resumeFieldDiffs li { display:grid; grid-template-columns:minmax(80px,.7fr) 1fr 1fr; gap:5px; align-items:start; }
 .resumeFieldDiffs del,.resumeFieldDiffs ins { overflow-wrap:anywhere; padding:2px 4px; border-radius:3px; }

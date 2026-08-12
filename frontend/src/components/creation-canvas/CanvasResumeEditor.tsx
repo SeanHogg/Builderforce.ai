@@ -56,6 +56,22 @@ function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: 
   </section>;
 }
 
+function ResumePreview({ html, page, zoom, mode, onClose }: { html: string; page: { width: number; height: number }; zoom: number; mode: CanvasResumeFamily['previewMode']; onClose: () => void }) {
+  const t = useTranslations('creationCanvas.resumeEditor');
+  const documentRef = useRef<HTMLDivElement>(null);
+  const [pageCount, setPageCount] = useState(1);
+  useEffect(() => {
+    const element = documentRef.current;
+    if (!element) return;
+    const calculate = () => setPageCount(Math.max(1, Math.ceil(element.scrollHeight / (page.height * 96 / 25.4))));
+    calculate();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(calculate); observer.observe(element);
+    return () => observer.disconnect();
+  }, [html, page.height]);
+  return <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={onClose} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={mode}><style>{RESUME_DOCUMENT_STYLES}</style><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * zoom / 100}mm`, minHeight: `${page.height * pageCount * zoom / 100}mm`, '--resume-page-height': `${page.height * zoom / 100}mm` } as CSSProperties}><div ref={documentRef} style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: html }} />{mode !== 'continuous' && Array.from({ length: pageCount }, (_, index) => <span key={index} className={styles.resumePageNumber} style={{ top: `calc(var(--resume-page-height) * ${index + 1} - 22px)` }}>{t('pageNumber', { page: index + 1, count: pageCount })}</span>)}</div></div></div>;
+}
+
 type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
 
 export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions }) {
@@ -271,7 +287,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
       {active.structuredStale && <p role="status" className={styles.resumeStaleWarning}>{t('structuredStale')}</p>}
     </div>}
-    {view === 'preview' && <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={() => setView(active.kind === 'derived' ? 'edit' : 'compare')} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={family.previewMode}><style>{RESUME_DOCUMENT_STYLES}</style><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * family.viewZoom / 100}mm`, minHeight: `${page.height * family.viewZoom / 100}mm`, '--resume-page-height': `${page.height * family.viewZoom / 100}mm` } as CSSProperties}><div style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${family.viewZoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: rendered.html }} /></div></div></div>}
+    {view === 'preview' && <ResumePreview html={rendered.html} page={page} zoom={family.viewZoom} mode={family.previewMode} onClose={() => setView(active.kind === 'derived' ? 'edit' : 'compare')} />}
     {view === 'compare' && <div className={styles.resumeCompareShell}>
       {active.id !== original.id && <aside className={styles.resumeDiffSummary}>
         <strong>{t('changesFromOriginal', { count: differences.length })}</strong>

@@ -13617,6 +13617,8 @@
       "pageView_paged": "Paginada",
       "pageView_spread": "Doble página",
       "closePreview": "Cerrar vista previa del currículum",
+      "pageNumber": "Página {page} de {count}",
+      "dragSection": "Arrastrar {section} para reordenar",
       "avatarUrl": "URL del avatar o retrato",
       "videoUrl": "URL del videocurrículum",
       "projectMedia": "URL de medios del proyecto (una por línea)",
@@ -13693,7 +13695,12 @@
       "moveClipEarlier": "Mover {name} antes",
       "moveClipLater": "Mover {name} después",
       "splitClip": "Dividir {name} en el cabezal",
-      "emptyTrack": "Sin clips"
+      "emptyTrack": "Sin clips",
+      "videoResumeTemplates": "Plantillas de videocurrículum",
+      "searchVideoTemplates": "Buscar plantillas de videocurrículum",
+      "allProfessions": "Todas las profesiones",
+      "scenes": "escenas",
+      "storyboard": "Guion gráfico"
     },
     "comparison": {
       "promptTitle": "Prompt compartido de comparación",

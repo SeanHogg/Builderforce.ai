@@ -13617,6 +13617,8 @@
       "pageView_paged": "Paginé",
       "pageView_spread": "Double page",
       "closePreview": "Fermer l’aperçu du CV",
+      "pageNumber": "Page {page} sur {count}",
+      "dragSection": "Faire glisser {section} pour réorganiser",
       "avatarUrl": "URL de l’avatar ou du portrait",
       "videoUrl": "URL du CV vidéo",
       "projectMedia": "URL des médias du projet (une par ligne)",
@@ -13693,7 +13695,12 @@
       "moveClipEarlier": "Déplacer {name} plus tôt",
       "moveClipLater": "Déplacer {name} plus tard",
       "splitClip": "Scinder {name} à la tête de lecture",
-      "emptyTrack": "Aucun clip"
+      "emptyTrack": "Aucun clip",
+      "videoResumeTemplates": "Modèles de CV vidéo",
+      "searchVideoTemplates": "Rechercher des modèles de CV vidéo",
+      "allProfessions": "Toutes les professions",
+      "scenes": "scènes",
+      "storyboard": "Storyboard"
     },
     "comparison": {
       "promptTitle": "Prompt de comparaison partagé",

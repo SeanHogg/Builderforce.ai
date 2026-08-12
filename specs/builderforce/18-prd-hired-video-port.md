@@ -804,21 +804,21 @@ Builderforce; the generic `video` node and timeline do not load these scene/them
 
 | Template asset | Intended résumé story | Builderforce status |
 |---|---|---|
-| `video-resume-professional` | General professional introduction, achievements, skills and close | **MISSING** |
-| `video-resume-minimal` | Minimal visual résumé | **MISSING** |
-| `video-resume-candidate-intro` | Candidate introduction | **MISSING** |
-| `video-resume-hook-led` | Hook-first pitch | **MISSING** |
-| `video-resume-story-led` | Narrative/story-first pitch | **MISSING** |
-| `video-resume-pivot-led` | Career-pivot narrative | **MISSING** |
-| `video-resume-gig-rapid-deploy` | Gig/rapid-availability pitch | **MISSING** |
-| `video-resume-campaign-staff` | Political/campaign staff pitch | **MISSING** |
-| `video-resume-government-clearance` | Government-cleared candidate | **MISSING** |
-| `video-resume-security-cleared` | Security-cleared candidate | **MISSING** |
-| `video-resume-law-enforcement` | Law-enforcement candidate | **MISSING** |
-| `video-resume-legal-bar` | Legal/bar-qualified candidate | **MISSING** |
-| `video-resume-medical-credentialed` | Medical/credentialed candidate | **MISSING** |
-| `video-resume-trade-licensed` | Licensed-trade candidate | **MISSING** |
-| `video-resume-beauty-portfolio` | Beauty/portfolio candidate | **MISSING** |
+| `video-resume-professional` | General professional introduction, achievements, skills and close | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-minimal` | Minimal visual résumé | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-candidate-intro` | Candidate introduction | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-hook-led` | Hook-first pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-story-led` | Narrative/story-first pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-pivot-led` | Career-pivot narrative | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-gig-rapid-deploy` | Gig/rapid-availability pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-campaign-staff` | Political/campaign staff pitch | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-government-clearance` | Government-cleared candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-security-cleared` | Security-cleared candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-law-enforcement` | Law-enforcement candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-legal-bar` | Legal/bar-qualified candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-medical-credentialed` | Medical/credentialed candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-trade-licensed` | Licensed-trade candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
+| `video-resume-beauty-portfolio` | Beauty/portfolio candidate | **PORTED** — First-party storyboard, duration, palette, profession metadata and scene timing are selectable and editable in the Canvas video studio. |
 
 Renderer parity is independently required; copying IDs is not completion.
 
@@ -829,11 +829,11 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-003 | Letter, Legal and A4 page sizes | **PORTED** | Revision persists the size; true-size preview, standalone HTML and PDF `@page` use it. |
 | RR-004 | Portrait and landscape orientation | **PORTED** | Revision persists orientation; preview dimensions and PDF `@page` match. |
 | RR-005 | One- and two-column/sidebar layouts | **PORTED** | Canonical renderer routes each descriptor's complete named sections into main/sidebar across preview, HTML and PDF. |
-| RR-006 | Page-break guides and page numbers | **PARTIAL** — True-size preview paints persisted page-height boundaries in paged/spread modes; computed page-number labels remain. | True-size editor displays computed boundaries. |
+| RR-006 | Page-break guides and page numbers | **PORTED** — ResizeObserver-backed pagination computes page count from the true-size rendered artifact; paged/spread modes paint exact page-height boundaries and label every page. | True-size editor displays computed boundaries. |
 | RR-007 | Continuous and paged/spread view modes | **PARTIAL** — Localized persisted toggles change preview presentation without mutating résumé content; true facing-page flow remains. | Toggle changes only editor presentation, not content. |
 | RR-008 | Zoom control bound to the document sheet | **PORTED** | Family persists 40–125% preview zoom; print dimensions remain physical page dimensions. |
 | RR-009 | Move blocks up/down | **PORTED** — Focusable up/down actions persist section order and entry order in the canonical structured document. | Buttons and keyboard action update persisted order. |
-| RR-010 | Drag blocks from palette and reorder in flow | **MISSING** | Drop indicator and keyboard alternative are tested. |
+| RR-010 | Drag blocks from palette and reorder in flow | **PARTIAL** — Native pointer drag reorders canonical entity-section blocks in flow with dragged/drop-target states, alongside the existing keyboard buttons; dragging newly added free-form palette blocks remains. | Drop indicator and keyboard alternative are tested. |
 | RR-011 | Detach block to free position / return to flow | **MISSING** | Round-trip retains content and coordinates. |
 | RR-012 | Delete block with undo | **PORTED** — Deleting any structured entity entry captures its section, index and complete typed record; the sticky Undo action restores it at the prior position. | Canvas undo restores block and typed data. |
 | RR-013 | Add text, heading, divider and entity-section blocks | **PARTIAL** — Entity-aware add controls exist for every canonical repeatable résumé section and singleton sections cannot be duplicated; free text/heading/divider palette blocks remain. | Palette is entity-aware and prevents duplicate singleton sections. |
