@@ -859,9 +859,9 @@ Renderer parity is independently required; copying IDs is not completion.
 | S-004 | New-project split button | Object palette + create actions | **REPLACE** |
 | S-005 | Guided creation wizard | Canvas prompt starters/templates exist; no media-kind Studio wizard | **PARTIAL** |
 | S-006 | Template catalog with thumbnails | Builderforce has 11 Canvas packs, not Hired catalog | **PARTIAL** |
-| S-007 | Filter templates by category | Canvas palette groups templates but lacks Hired filters | **PARTIAL** |
-| S-008 | Filter templates by media kind | No equivalent catalog filter | **MISSING** |
-| S-009 | Search templates | No equivalent in Canvas template picker | **MISSING** |
+| S-007 | Filter templates by category | Canvas template catalog has a localized category filter spanning marketplace packs and object packs | **PORTED** |
+| S-008 | Filter templates by media kind | Catalog derives the complete object/media-kind vocabulary from installed packs and filters packs containing that kind | **PORTED** |
+| S-009 | Search templates | Localized search covers translated name, description, media kinds and object titles while composing with both filters | **PORTED** |
 | S-010 | Audience/profession template discovery | No Canvas equivalent | **MISSING** |
 | S-011 | Deep-link directly to template/content type/capture/subject | Canvas can deep-link to sessions; Studio seed params absent | **MISSING** |
 | S-012 | Owned/purchased/creator templates | Canvas server templates exist; commerce/ownership states differ | **PARTIAL** |
