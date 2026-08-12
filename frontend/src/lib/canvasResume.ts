@@ -390,8 +390,16 @@ export function updateResumeFamilySettings(
 /** The source and current master are protected; only ordinary derived revisions can be removed. */
 export function deleteResumeRevision(family: CanvasResumeFamily, revisionId: string): CanvasResumeFamily {
   if (revisionId === family.originalRevisionId || revisionId === family.masterRevisionId) return family;
-  if (!family.revisions.some((revision) => revision.id === revisionId)) return family;
-  const revisions = family.revisions.filter((revision) => revision.id !== revisionId);
+  const removed = family.revisions.find((revision) => revision.id === revisionId);
+  if (!removed) return family;
+  // Preserve a valid lineage graph when an intermediate revision is removed.
+  // Direct descendants inherit its parent rather than retaining a dangling ID.
+  const replacementParentId = removed.sourceRevisionId ?? family.originalRevisionId;
+  const revisions = family.revisions
+    .filter((revision) => revision.id !== revisionId)
+    .map((revision) => revision.sourceRevisionId === revisionId
+      ? { ...revision, sourceRevisionId: replacementParentId }
+      : revision);
   return {
     ...family,
     revisions,

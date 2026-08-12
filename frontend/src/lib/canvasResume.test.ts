@@ -84,6 +84,18 @@ describe('Canvas resume lineage', () => {
     expect(deleted.activeRevisionId).toBe('original');
   });
 
+  it('reparents descendants when an intermediate revision is deleted', () => {
+    const original = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
+    const first = deriveResume(original, 'First', { idFactory: ids('first') });
+    const second = deriveResume(first, 'Second', { idFactory: ids('second') });
+    const third = deriveResume(second, 'Third', { idFactory: ids('third') });
+    const selectedFirst = selectResumeRevision(third, 'first');
+    const deleted = deleteResumeRevision(selectedFirst, 'first');
+    expect(deleted.revisions.map((revision) => revision.id)).toEqual(['original', 'second', 'third']);
+    expect(deleted.revisions.find((revision) => revision.id === 'second')?.sourceRevisionId).toBe('original');
+    expect(deleted.revisions.find((revision) => revision.id === 'third')?.sourceRevisionId).toBe('second');
+  });
+
   it('detaches a derived revision into an independent immutable family', () => {
     const original = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
     const derived = updateActiveResume(deriveResume(original, 'Tailored', { idFactory: ids('derived') }), { templateId: 'risk-asphalt', document: { basics: { name: 'Tailored' } } });

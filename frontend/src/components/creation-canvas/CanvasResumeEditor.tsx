@@ -41,6 +41,7 @@ import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
 type ResumeView = 'edit' | 'preview' | 'compare';
 type ImportStage = 'review' | 'uploading' | 'extracting' | 'ocr' | 'structuring' | 'ready';
+type PendingLifecycleAction = { kind: 'promote' | 'delete'; revisionId: string } | null;
 
 function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: ImportStage; onImport: () => void; onCancel: () => void }) {
   const t = useTranslations('creationCanvas.resumeEditor');
@@ -92,6 +93,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importStage, setImportStage] = useState<ImportStage>('review');
   const [excludedBulletSuggestions, setExcludedBulletSuggestions] = useState<string[]>([]);
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState<PendingLifecycleAction>(null);
 
   useEffect(() => {
     if (!sharesOpen || !shareActions) return;
@@ -201,7 +203,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         {family.revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.kind === 'original' ? t('originalPrefix', { title: revision.title }) : revision.title}{revision.id === family.masterRevisionId ? ` · ${t('master')}` : ''}</option>)}
       </select></label>
       <span className={styles.resumeImmutable} data-original={active.kind === 'original' || undefined}>{active.kind === 'original' ? t('immutableOriginal') : t('editableVersion')}</span>
-      <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => commit(promoteResumeToMaster(family, active.id))}>{t('makeMaster')}</button>
+      <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => setPendingLifecycleAction({ kind: 'promote', revisionId: active.id })}>{t('makeMaster')}</button>
       <label><span>{t('privacy')}</span><select value={family.privacy} disabled={!onEdit} onChange={(event) => commit(updateResumeFamilySettings(family, { privacy: event.target.value as CanvasResumeFamily['privacy'] }))}>
         {(['private', 'recruiter_only', 'connections', 'public', 'draft'] as const).map((privacy) => <option key={privacy} value={privacy}>{t(`privacy_${privacy}`)}</option>)}
       </select></label>
@@ -221,7 +223,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       <button type="button" disabled={!onEdit} onClick={createVersion}>{t('createFromOriginal')}</button>
       <button type="button" disabled={!onEdit} onClick={() => input.current?.click()}>{t('importAsVersion')}</button>
       {active.kind === 'derived' && <button type="button" disabled={!onEdit} onClick={() => commit(restoreResumeAsNew(family, active.id, t('restoredVersion', { title: active.title })))}>{t('restoreAsNew')}</button>}
-      {active.kind === 'derived' && <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => commit(deleteResumeRevision(family, active.id))}>{t('deleteVersion')}</button>}
+      {active.kind === 'derived' && <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => setPendingLifecycleAction({ kind: 'delete', revisionId: active.id })}>{t('deleteVersion')}</button>}
       {active.kind === 'derived' && <button type="button" disabled={!onDetach} onClick={() => {
         const detached = detachResumeRevision(family, active.id);
         if (detached) onDetach?.({ title: active.title, ...resumeNodePatch(detached), status: t('statusOriginal') });
@@ -231,6 +233,25 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         if (title && title !== active.title) commit(updateActiveResume(family, { title }));
       }} /></label>}
     </div>
+    {pendingLifecycleAction && (() => {
+      const revision = family.revisions.find((item) => item.id === pendingLifecycleAction.revisionId);
+      if (!revision) return null;
+      const descendantCount = family.revisions.filter((item) => item.sourceRevisionId === revision.id).length;
+      const promote = pendingLifecycleAction.kind === 'promote';
+      return <section className={styles.resumeLifecycleDialog} role="dialog" aria-modal="true" aria-labelledby="resume-lifecycle-title">
+        <strong id="resume-lifecycle-title">{promote ? t('confirmMasterTitle') : t('confirmDeleteTitle')}</strong>
+        <p>{promote
+          ? t('confirmMasterBody', { title: revision.title })
+          : t('confirmDeleteBody', { title: revision.title, count: descendantCount })}</p>
+        <div>
+          <button type="button" autoFocus onClick={() => setPendingLifecycleAction(null)}>{t('cancelLifecycleAction')}</button>
+          <button type="button" onClick={() => {
+            commit(promote ? promoteResumeToMaster(family, revision.id) : deleteResumeRevision(family, revision.id));
+            setPendingLifecycleAction(null);
+          }}>{promote ? t('confirmMakeMaster') : t('confirmDeleteVersion')}</button>
+        </div>
+      </section>;
+    })()}
     <div className={styles.resumeControls}>
       <div role="tablist" aria-label={t('viewMode')}>
         {(['edit', 'preview', 'compare'] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={view === mode} disabled={mode === 'edit' && active.kind === 'original'} onClick={() => setView(mode)}>{t(mode)}</button>)}

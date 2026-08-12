@@ -1,3 +1,57 @@
+## RESOLVED 2026-08-12 - A Canvas session could END ITSELF, and a poisoned transcript could never recover
+
+Follow-up diagnostics on the same session (ui 2026.7.212) after the tool-vocabulary fix. The tools
+were right this time - 17 guest-safe, correctly scoped - and the failure notice was correctly recorded
+as `system` rather than `assistant`. Three defects remained, and the operator named the first one
+exactly: *"this is a free run and in free you can't select a model."*
+
+**1 - The session bricked itself, and told the user to do the one thing they cannot do.** After a model
+failed to execute a Canvas command twice, it went onto a session-scoped `disabledModels` list. The next
+turn hit `if (!options.model && options.disabledModels?.length) throw` and died in **30ms without ever
+reaching a model**, with the message "Automatic model routing is disabled for this session… Select a
+different model to continue." On the free plan there is no model picker, and on a guest board the
+gateway DELETES any pin the client sends (`llmRoutes.handleGuestChat`), so the advice named an action
+that was impossible twice over. One weak turn permanently ended the session. Automatic routing is never
+refused now; the list became a routing HINT.
+
+**2 - The disable was recorded even when there was nothing to switch to.** `switchToProvenModel` added
+the model to the failed set and fired `onModelDisabled` BEFORE checking whether a replacement existed.
+The record's only purpose is to route around the model later, so recording it with no alternative is
+pure cost - it is what turned a weak turn into defect 1. It now resolves the fallback FIRST and retires
+nothing it cannot replace; with no alternative it releases the pin instead, so the next iteration asks
+the gateway to choose again rather than re-pinning the model that just failed.
+
+**3 - `excludeModels`, so a retry can actually land somewhere else.** Even unblocked, every retry
+re-selected the same model: the guest path strips `model`/`modelStrict`, so the client's strict re-pin
+was discarded and the free pool's head answered again. The gateway now accepts `excludeModels` on the
+request - listed in STANDARD_BODY_FIELDS so it is stripped before vendor dispatch, applied by
+`applyExcludedModels` after the candidate chain is built, and **never allowed to empty the chain**,
+because a weak model is strictly better than no model. It deliberately SURVIVES the guest sanitiser:
+a guest cannot pin, so this is the only way an anonymous caller can route around a failure. Supersession
+is followed, so a retired id still excludes its live successor.
+
+**4 - An already-poisoned transcript could never recover.** The previous fix stopped NEW notices from
+being stored as assistant turns, but the reported session already held three of them from older builds -
+including `Brain: Brain: I couldn't prepare any canvas changes from that request.` Every request
+re-sent them as example assistant answers, and the free model duly produced the same thing, which the
+new echo guard then (correctly) rejected twice, which retired the model, which triggered defect 1. The
+notices are quarantined by CONTENT now (`RUNTIME_NOTICE_PREFIXES` + `isRuntimeNotice`), with leading
+speaker labels peeled first - matching only the bare form would have let the relabelled copies through,
+and those are precisely the poisoned ones.
+
+The chain mattered more than any single link: a weak model produced one bad turn, the transcript stored
+it, the stored copy caused the next bad turn, two bad turns retired the only model, and retiring it
+ended the session. Each step was defensible on its own.
+
+Tests: `applyExcludedModels` (5 new, incl. the never-empty invariant and the strip-before-dispatch
+contract), the routing/retirement contract rewritten in `creationCanvasAi.test.ts` (a model with no
+replacement is no longer retired - the old test asserted the behaviour that caused this), and the
+older-build quarantine in `canvasTranscript.test.ts`. api llm+guest 950 passing, frontend
+creation-canvas+lib 1,355 passing, both packages typecheck, canvas-tool / prompt-tool / layering /
+silent-catch guards green.
+
+---
+
 ## RESOLVED 2026-08-12 - The three red frontend guards, and the ratchets tightened behind them
 
 Logged during the Canvas tool-execution fix and blocked then: the résumé slice owned the exact files

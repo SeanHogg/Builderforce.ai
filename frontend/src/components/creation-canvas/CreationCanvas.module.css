@@ -683,6 +683,11 @@
 .resumeSharePanel button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
 .resumeSharePanel ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .resumeSharePanel li { display:flex; justify-content:space-between; gap:10px; align-items:center; color:var(--text-muted); font-size:11px; }
+.resumeLifecycleDialog { display:grid; gap:9px; margin:0 10px; padding:12px; border:1px solid color-mix(in srgb, var(--coral-bright) 55%, var(--border)); border-radius:var(--radius-md); background:var(--surface); box-shadow:var(--shadow-md); }
+.resumeLifecycleDialog p { margin:0; color:var(--text-muted); font-size:12px; line-height:1.45; }
+.resumeLifecycleDialog > div { display:flex; justify-content:flex-end; gap:8px; }
+.resumeLifecycleDialog button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeLifecycleDialog button:last-child { border-color:var(--coral-bright); color:var(--coral-bright); font-weight:700; }
 .resumeImportReview { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); }
 .resumeImportReview > div { display:grid; gap:4px; min-width:0; }
 .resumeImportReview > div:last-child { display:flex; flex-wrap:wrap; gap:6px; }
