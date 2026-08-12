@@ -166,6 +166,28 @@ describe('CanvasResumeEditor', () => {
     expect(onTailor.mock.calls[0]?.[0]).toContain('"name": "Ada"');
   });
 
+  it('sends field-scoped, approval-gated rewrite and hook requests', () => {
+    const original = createResumeFamily({
+      title: 'Uploaded', markdown: '# Ada',
+      document: { basics: { name: 'Ada', label: 'Engineer', summary: 'Builds reliable systems.' }, skills: [{ name: 'TypeScript' }] },
+      idFactory: () => 'original',
+    });
+    const family = deriveResume(original, 'Product version', { idFactory: () => 'derived' });
+    const onTailor = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onTailor={onTailor} />);
+    fireEvent.click(screen.getByText('AI writing tools'));
+    fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'Make it more direct.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite summary' }));
+    expect(onTailor.mock.calls.at(-1)?.[0]).toContain('TARGET FIELD: basics.summary');
+    expect(onTailor.mock.calls.at(-1)?.[0]).toContain('Present the proposed field change for user approval');
+    expect(onTailor.mock.calls.at(-1)?.[0]).toContain('Make it more direct.');
+
+    fireEvent.change(screen.getByLabelText('Target field'), { target: { value: 'basics.label' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create headline hook' }));
+    expect(onTailor.mock.calls.at(-1)?.[0]).toContain('TARGET FIELD: basics.label');
+    expect(onTailor.mock.calls.at(-1)?.[0]).toContain('COMPLETE updated JSON Resume document');
+  });
+
   it('persists page presentation mode and closes preview with Escape', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', idFactory: () => 'original' });
     const family = deriveResume(original, 'Editable', { idFactory: () => 'derived' });

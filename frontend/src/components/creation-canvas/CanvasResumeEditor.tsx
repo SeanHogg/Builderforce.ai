@@ -35,7 +35,7 @@ import {
 } from '@/lib/canvasResume';
 import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
 import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
-import { analyzeResumeAgainstJob, resumeTailorPrompt } from '@/lib/canvasResumeAts';
+import { analyzeResumeAgainstJob, resumeFieldRewritePrompt, resumeTailorPrompt, type ResumeAiField } from '@/lib/canvasResumeAts';
 import { applyResumeBulletConsolidation, suggestResumeBulletConsolidation } from '@/lib/canvasResumeConsolidate';
 import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
@@ -86,6 +86,8 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const [error, setError] = useState('');
   const [mergeSections, setMergeSections] = useState<ResumeDiffSection[]>([]);
   const [jobDescription, setJobDescription] = useState('');
+  const [aiField, setAiField] = useState<ResumeAiField>('basics.summary');
+  const [aiDirection, setAiDirection] = useState('');
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [sharesOpen, setSharesOpen] = useState(false);
   const [shares, setShares] = useState<CanvasResumeShare[]>([]);
@@ -281,6 +283,17 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         </button>;
       })}
     </section>}
+    <details className={styles.resumeAtsPanel}>
+      <summary>{t('aiWritingTools')}</summary>
+      <label><span>{t('aiTargetField')}</span><select value={aiField} onChange={(event) => setAiField(event.target.value as ResumeAiField)}>
+        <option value="basics.summary">{t('aiFieldSummary')}</option>
+        <option value="basics.label">{t('aiFieldHeadline')}</option>
+      </select></label>
+      <label><span>{t('aiDirection')}</span><textarea value={aiDirection} placeholder={t('aiDirectionPlaceholder')} onChange={(event) => setAiDirection(event.target.value)} /></label>
+      <button type="button" disabled={!onTailor || !active.document} onClick={() => onTailor?.(resumeFieldRewritePrompt(active, aiField, aiDirection))}>
+        {aiField === 'basics.summary' ? t('rewriteSelectedField') : t('createResumeHook')}
+      </button>
+    </details>
     <details className={styles.resumeAtsPanel}>
       <summary>{t('tailorForJob')}</summary>
       <label><span>{t('jobDescription')}</span><textarea value={jobDescription} placeholder={t('jobDescriptionPlaceholder')} onChange={(event) => setJobDescription(event.target.value)} /></label>

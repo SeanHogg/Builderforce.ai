@@ -60,3 +60,31 @@ ${JSON.stringify(revision.document ?? {}, null, 2).slice(0, 30_000)}
 JOB DESCRIPTION:
 ${jobDescription.trim().slice(0, 12_000)}`;
 }
+
+export type ResumeAiField = 'basics.summary' | 'basics.label';
+
+/** A field-scoped Brain contract used by Studio's Rewrite and Hook actions. */
+export function resumeFieldRewritePrompt(
+  revision: CanvasResumeRevision,
+  field: ResumeAiField,
+  instruction = '',
+): string {
+  const current = field === 'basics.summary' ? revision.document?.basics?.summary : revision.document?.basics?.label;
+  const action = field === 'basics.summary' ? 'rewrite the professional summary' : 'create a concise professional headline or hook';
+  return `Act as the Recruiter and ${action} for the selected résumé "${revision.title}".
+
+TARGET FIELD: ${field}
+CURRENT VALUE: ${current?.trim() || '(empty)'}
+USER DIRECTION: ${instruction.trim() || 'Improve clarity, specificity, and impact while preserving the candidate’s voice.'}
+
+NON-NEGOTIABLE:
+- Use the canonical source résumé below as the only candidate evidence.
+- Do not invent or infer employers, dates, credentials, skills, metrics, responsibilities, achievements, or seniority.
+- Change only ${field}. Preserve every other canonical field byte-for-byte in meaning and structure.
+- Present the proposed field change for user approval before applying it.
+- After approval, call canvas_update_object on the selected resume object with fields.resumeDocument containing the COMPLETE updated JSON Resume document. Canvas will create a reversible derived version and protect Original automatically.
+- Set fields.title to a concise version name describing this ${field === 'basics.summary' ? 'summary rewrite' : 'headline hook'}.
+
+CANONICAL SOURCE RÉSUMÉ JSON:
+${JSON.stringify(revision.document ?? {}, null, 2).slice(0, 30_000)}`;
+}

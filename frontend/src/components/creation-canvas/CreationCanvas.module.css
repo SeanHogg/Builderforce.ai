@@ -789,6 +789,7 @@
 .resumeAtsPanel summary { cursor:pointer; padding:10px 12px; font-weight:750; }
 .resumeAtsPanel > label { display:flex; flex-direction:column; gap:5px; padding:0 10px 10px; }
 .resumeAtsPanel > label span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeAtsPanel select { min-height:34px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:6px 8px; }
 .resumeAtsPanel textarea { min-height:130px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:8px; resize:vertical; font:inherit; }
 .resumeAtsPanel > button { margin:0 10px 10px; border:1px solid #7c3aed; border-radius:var(--radius-sm); background:#7c3aed; color:#fff; padding:8px 11px; cursor:pointer; }
 .resumeAtsPanel > button:disabled { cursor:not-allowed; opacity:.45; }
