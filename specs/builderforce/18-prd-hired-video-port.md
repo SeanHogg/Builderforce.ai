@@ -1,6 +1,6 @@
 # PRD 18 — hired.video → Builderforce.ai port
 
-**Status:** In progress · **Port audit:** 2026-08-11 · **Owner:** platform · **Created:** 2026-08-07
+**Status:** In progress · **Port audit:** 2026-08-12 · **Owner:** platform · **Created:** 2026-08-07
 **Companion to:** [PRD 19 — burnrateos.com consolidation](./19-prd-burnrateos-consolidation.md)
 **Goal:** absorb the whole of `C:\code\hired\hired.video` into Builderforce.ai so
 `hired.video` traffic can be redirected at `builderforce.ai` with nothing lost, and so
@@ -18,6 +18,27 @@ The headline capability that has to work on day one of Phase 1:
 
 > A Recruiter agent is given a résumé and a job description, and returns a
 > **tailored résumé** — as a real Canvas object the user can edit and export to PDF/DOCX.
+
+### 2026-08-12 implementation checkpoint
+
+The requested résumé journey is implemented in Canvas: one object can retain an immutable uploaded
+Original plus multiple named derived résumés; users can select, compare, merge, restore, promote,
+detach, duplicate and safely delete versions; preview any of 12 live-rendered document templates;
+and export the selected revision/design as PDF, DOCX, HTML or Markdown. The video résumé Studio now
+offers all 15 Hired.VIDEO starters with profession/search discovery, editable/reorderable scenes,
+transitions, captions, chapters, teleprompter copy and the shared multi-track timeline. Built-in
+document and video templates display Hired.VIDEO first-party attribution.
+
+This does **not** mean the whole Hired Studio migration is complete. The granular §8 inventory remains
+authoritative: image/drawing, animation, game, comic, CAD/3D, advanced positioned-widget editing,
+audio/publishing profiles and other rows still marked **MISSING**, **DECLARED** or **PARTIAL** remain
+work. The global completion gate therefore remains open.
+
+Validation at this checkpoint: 31 focused résumé/video-template tests pass, native TypeScript and
+targeted ESLint pass, and all five locale catalogs parse. The attached frontend deployment failure
+identified Next's `no-html-link-for-pages` rule for `/inbox`; current source uses `next/link` and the
+exact component passes ESLint. A later full optimized build was intentionally stopped at the user's
+request and is not recorded as a completed validation run.
 
 ---
 
@@ -1125,7 +1146,7 @@ generic kind cards and is therefore **DECLARED**, not template parity.
 | Display/social ads | `ad-iab-mpu-300x250`, `ad-iab-large-rect-336x280`, `ad-iab-leaderboard-728x90`, `ad-iab-half-page-300x600`, `ad-iab-skyscraper-160x600`, `ad-iab-billboard-970x250`, `ad-iab-mobile-banner-320x50`, `ad-iab-large-mobile-320x100`, `ad-og-link-card-1200x630`, `ad-social-reel-9x16`, `ad-meta-in-feed-4x5`, `ad-pinterest-pin-2x3`, `ad-youtube-bumper-6s`, `ad-outdoor-billboard-4x1` | **MISSING** |
 | Linear comics | `comic-hero`, `comic-noir`, `comic-scifi`, `comic-fantasy`, `comic-romance`, `comic-slice`, `comic-manga`, `comic-horror`, `comic-comedy`, `comic-retro80s`, `comic-webtoon`, `comic-adventure` | **MISSING** |
 | Interactive comics | `icomic-branching-pitch`, `icomic-choose-path`, `icomic-case-study` | **MISSING** |
-| Declarative résumé designs | The 12 IDs in §8.3 | **MISSING** |
+| Declarative résumé designs | The 12 IDs in §8.3 | **PORTED** — selectable live thumbnails, canonical preview/public/export renderer, Hired.VIDEO attribution and descriptor semantics are implemented; any remaining renderer refinements stay itemized in R/RR rows. |
 
 Every catalog entry is complete only when it has: localized name/description, real thumbnail,
 category and media-kind filters, preview/details, a seed that produces editable runtime state,
@@ -1141,7 +1162,7 @@ this gate.
 | X-003 | Export creates a child rendition without replacing editable source | Canvas deliverables attach to object | **PORTED** |
 | X-004 | Download/result appears in Canvas Files library | Implemented | **PORTED** |
 | X-005 | Free/Pro output-profile gating | No Hired profile registry in Canvas | **MISSING** |
-| X-006 | Video profiles: H.264, H.265, ProRes, DNxHD, VP9 | Only generic video export | **PARTIAL** |
+| X-006 | Video profiles: H.264, H.265, ProRes, DNxHD, VP9 | Browser video renderer exists; explicit codec/profile selection beyond the default output remains | **PARTIAL** |
 | X-007 | Podcast profiles: MP3+chapters, M4A, Opus, WAV, video MP4 | — | **MISSING** |
 | X-008 | Voice profiles: MP3, WAV, Opus | — | **MISSING** |
 | X-009 | Animation profiles: GIF, WebP, APNG, transparent MP4 | — | **MISSING** |
@@ -1150,11 +1171,11 @@ this gate.
 | X-012 | Image profiles: PNG, JPEG, WebP, layered PSD | Generic generated image file only | **PARTIAL** |
 | X-013 | CAD profiles: SVG, PDF, DXF, PNG, STL, STEP | SVG/PDF actions declared only | **DECLARED** |
 | X-014 | CAD 3D profiles: STL, STEP, PNG | — | **MISSING** |
-| X-015 | Document profiles: PDF and PNG | PDF/DOCX/HTML/Markdown exist; template render/PNG absent | **PARTIAL** |
+| X-015 | Document profiles: PDF and PNG | Canonical template renderer drives PDF; DOCX/HTML/Markdown are also available, while PNG document export remains | **PARTIAL** |
 | X-016 | Copy public share link | Canvas share link exists | **PORTED** |
 | X-017 | Copy editor link | Session URL provides equivalent | **REPLACE** |
 | X-018 | Publish history with view/republish | — | **MISSING** |
-| X-019 | YouTube, LinkedIn and profile destinations | — | **MISSING** |
+| X-019 | YouTube, LinkedIn and profile destinations | Canvas exposes YouTube publication for video output; LinkedIn and profile destinations remain | **PARTIAL** |
 | X-020 | Podcast RSS/Apple/Spotify destinations | — | **MISSING** |
 | X-021 | Voice marketplace/profile audio destinations | — | **MISSING** |
 | X-022 | Animation Giphy/Tenor/CDN destinations | — | **MISSING** |
