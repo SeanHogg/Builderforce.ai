@@ -51,7 +51,7 @@ export async function deleteYouTubeConnection(db: Db, tenantId: number, userId: 
   await db.delete(connections).where(and(eq(connections.id, connectionId), eq(connections.tenantId, tenantId), eq(connections.userId, userId), eq(connections.capability, 'youtube')));
 }
 
-async function freshYouTubeToken(db: Db, env: Env, tenantId: number, userId: string, connectionId: number): Promise<string> {
+export async function freshYouTubeToken(db: Db, env: Env, tenantId: number, userId: string, connectionId: number): Promise<string> {
   const [row] = await db.select({ connection: connections, credential: credentials }).from(connections)
     .innerJoin(credentials, and(eq(credentials.connectionId, connections.id), eq(credentials.tenantId, tenantId), eq(credentials.purpose, 'oauth')))
     .where(and(eq(connections.id, connectionId), eq(connections.tenantId, tenantId), eq(connections.userId, userId), eq(connections.capability, 'youtube'))).limit(1);
