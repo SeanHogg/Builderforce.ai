@@ -147,7 +147,7 @@ async function claimMessage(
     tenantId: rule.tenantId, connectionId: rule.connectionId, ruleId: rule.id,
     messageId: message.id, sender: message.from.slice(0, 500), subject: message.subject.slice(0, 500),
   }).onConflictDoNothing({
-    target: [mailboxAutomationExecutions.tenantId, mailboxAutomationExecutions.ruleId, mailboxAutomationExecutions.messageId],
+    target: [mailboxAutomationExecutions.tenantId, mailboxAutomationExecutions.connectionId, mailboxAutomationExecutions.messageId],
   }).returning();
   return row ?? null;
 }
@@ -202,7 +202,7 @@ export async function runMailboxAutomationSweep(
             const approvalId = crypto.randomUUID();
             await db.insert(approvals).values({
               id: approvalId, tenantId: rule.tenantId, kind: 'approval', actionType: 'mailbox.reply',
-              description: `Send AI reply to ${addressOf(message.from)} — ${message.subject || '(no subject)'}`,
+              description: `Send AI reply to ${addressOf(message.from)} — ${message.subject || '(no subject)'}\n\nDraft reply:\n${draftText.slice(0, 3000)}`,
               requestedBy: `agent:${rule.agentRef}`, cloudAgentRef: rule.agentRef,
               metadata: JSON.stringify({ mailboxAutomationExecutionId: execution.id }),
             });
@@ -228,6 +228,10 @@ export async function runMailboxAutomationSweep(
           reportCaughtError(error, { source: 'application/mailbox/mailboxAutomationService.ts', operation: 'runMailboxAutomationSweep' });
           summary.failed += 1;
         }
+        // Rules are ordered by id. Like an Outlook "stop processing" rule, the
+        // first match owns this message so overlapping conditions cannot send
+        // multiple AI replies to the same person.
+        break;
       }
     }
   }

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
-import type { CanvasResumeDocument, CanvasResumeEducation, CanvasResumeSkill, CanvasResumeWork } from '@/lib/canvasResume';
+import { RESUME_SECTION_ORDER, type CanvasResumeDocument, type CanvasResumeEducation, type CanvasResumeSkill, type CanvasResumeWork, type ResumeSectionId } from '@/lib/canvasResume';
 
 type SectionName = 'work' | 'education' | 'skills' | 'volunteer' | 'languages' | 'projects' | 'awards' | 'certificates' | 'publications' | 'interests' | 'references';
 
@@ -21,6 +21,10 @@ const ADDITIONAL_SECTIONS = [
 }>;
 
 const ARRAY_FIELDS = new Set(['highlights', 'keywords', 'roles']);
+const SECTION_LABEL_KEYS: Record<ResumeSectionId, string> = {
+  summary: 'summary', work: 'experience', education: 'education', skills: 'skills', volunteer: 'volunteer', projects: 'projects',
+  awards: 'awards', certificates: 'certificates', publications: 'publications', languages: 'languages', interests: 'interests', references: 'references',
+};
 
 const values = (value: string): string[] => value.split(/\n|,/).map((item) => item.trim()).filter(Boolean);
 
@@ -28,6 +32,25 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
   const t = useTranslations('creationCanvas.resumeEditor');
   const translate = t as unknown as (key: string, values?: Record<string, string | number>) => string;
   const basics = document.basics ?? {};
+  const configuredOrder = document.builderforceLayout?.sectionOrder ?? [];
+  const sectionOrder = [...configuredOrder.filter((id): id is ResumeSectionId => RESUME_SECTION_ORDER.includes(id as ResumeSectionId)), ...RESUME_SECTION_ORDER].filter((id, index, all) => all.indexOf(id) === index);
+  const hiddenSections = new Set(document.builderforceLayout?.hiddenSections ?? []);
+  const updateLayout = (sectionOrder: readonly string[], hiddenSections: ReadonlySet<string>) => onChange({
+    ...document,
+    builderforceLayout: { ...document.builderforceLayout, sectionOrder: [...sectionOrder], hiddenSections: [...hiddenSections] },
+  });
+  const moveSection = (index: number, delta: number) => {
+    const next = [...sectionOrder];
+    const destination = index + delta;
+    if (destination < 0 || destination >= next.length) return;
+    [next[index], next[destination]] = [next[destination]!, next[index]!];
+    updateLayout(next, hiddenSections);
+  };
+  const toggleSection = (section: ResumeSectionId) => {
+    const next = new Set(hiddenSections);
+    if (next.has(section)) next.delete(section); else next.add(section);
+    updateLayout(sectionOrder, next);
+  };
   const updateBasics = (field: string, value: string) => onChange({ ...document, basics: { ...basics, [field]: value } });
   const updateLocation = (field: string, value: string) => onChange({ ...document, basics: { ...basics, location: { ...(basics.location ?? {}), [field]: value } } });
   const replace = <T extends Record<string, unknown>>(section: SectionName, index: number, row: T) => {
@@ -62,6 +85,15 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
   </label>;
 
   return <div className={styles.resumeStructuredEditor}>
+    <details><summary>{t('sectionLayout')}</summary><div className={styles.resumeSectionLayout}>
+      {sectionOrder.map((section, index) => <div key={section}>
+        <label><input type="checkbox" checked={!hiddenSections.has(section)} onChange={() => toggleSection(section)} /> <span>{translate(SECTION_LABEL_KEYS[section])}</span></label>
+        <div className={styles.resumeEntryActions}>
+          <button type="button" disabled={index === 0} aria-label={t('moveSectionUp', { section: translate(SECTION_LABEL_KEYS[section]) })} onClick={() => moveSection(index, -1)}>↑</button>
+          <button type="button" disabled={index === sectionOrder.length - 1} aria-label={t('moveSectionDown', { section: translate(SECTION_LABEL_KEYS[section]) })} onClick={() => moveSection(index, 1)}>↓</button>
+        </div>
+      </div>)}
+    </div></details>
     <details open><summary>{t('basics')}</summary><div className={styles.resumeFieldGrid}>
       {field(t('name'), basics.name, (value) => updateBasics('name', value))}
       {field(t('headline'), basics.label, (value) => updateBasics('label', value))}

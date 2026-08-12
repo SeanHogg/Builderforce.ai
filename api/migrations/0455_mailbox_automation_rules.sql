@@ -40,6 +40,6 @@ CREATE TABLE IF NOT EXISTS mailbox_automation_executions (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mailbox_automation_execution_message
-  ON mailbox_automation_executions(tenant_id, rule_id, message_id);
+  ON mailbox_automation_executions(tenant_id, connection_id, message_id);
 CREATE INDEX IF NOT EXISTS idx_mailbox_automation_executions_tenant
   ON mailbox_automation_executions(tenant_id, created_at DESC);

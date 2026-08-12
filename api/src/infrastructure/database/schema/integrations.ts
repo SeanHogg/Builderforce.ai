@@ -188,7 +188,7 @@ export const mailboxAutomationExecutions = pgTable('mailbox_automation_execution
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_mailbox_automation_execution_message').on(t.tenantId, t.ruleId, t.messageId),
+  uniqueIndex('uq_mailbox_automation_execution_message').on(t.tenantId, t.connectionId, t.messageId),
   index('idx_mailbox_automation_executions_tenant').on(t.tenantId, t.createdAt),
 ]);
 

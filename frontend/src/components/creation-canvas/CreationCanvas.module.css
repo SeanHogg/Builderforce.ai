@@ -744,6 +744,10 @@
 .resumeEntryActions button { width:25px; height:25px; border:1px solid var(--border); border-radius:5px; background:var(--surface); color:inherit; cursor:pointer; }
 .resumeEntryActions button:disabled { opacity:.35; cursor:not-allowed; }
 .resumeAddEntry { margin:0 10px 10px; border:1px dashed var(--border); border-radius:6px; background:transparent; color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeSectionLayout { display:grid; gap:5px; padding:0 10px 10px; }
+.resumeSectionLayout > div { position:relative; display:flex; align-items:center; justify-content:space-between; min-height:34px; border:1px solid var(--border); border-radius:6px; padding:4px 7px; }
+.resumeSectionLayout label { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:650; }
+.resumeSectionLayout .resumeEntryActions { position:static; background:transparent; }
 .resumeRawEditor > .docEditor { border:0; border-top:1px solid var(--border); border-radius:0 0 8px 8px; }
 .resumeStaleWarning { margin:0; border-radius:7px; background:color-mix(in srgb, #d97706 12%, transparent); color:#92400e; padding:8px 10px; font-size:12px; }
 @media (max-width:800px) { .resumeCompare { grid-template-columns:1fr; } }
