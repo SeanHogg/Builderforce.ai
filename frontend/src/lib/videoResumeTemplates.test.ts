@@ -5,6 +5,7 @@ describe('Hired video resume templates', () => {
   it('ports every first-party template ID with internally consistent scene timing', () => {
     expect(VIDEO_RESUME_TEMPLATES).toHaveLength(15);
     expect(new Set(VIDEO_RESUME_TEMPLATES.map((template) => template.id)).size).toBe(15);
+    expect(VIDEO_RESUME_TEMPLATES.every((template) => template.firstParty && template.creator === 'Hired.VIDEO')).toBe(true);
     for (const template of VIDEO_RESUME_TEMPLATES) {
       expect(template.scenes.reduce((sum, scene) => sum + scene.duration, 0)).toBe(template.duration);
       expect(template.colors).toHaveLength(4);

@@ -733,6 +733,7 @@
 .resumeTemplateGallery > button:disabled { cursor:not-allowed; opacity:.6; }
 .resumeTemplateGallery strong { overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .resumeTemplateGallery small { color:var(--text-muted); font-size:9px; }
+.resumeTemplateGallery em { color:#7c3aed; font-size:8px; font-style:normal; font-weight:750; text-transform:uppercase; }
 .resumeTemplateGallery i { position:absolute; top:9px; right:9px; border-radius:var(--radius-full); background:#7c3aed; color:#fff; padding:2px 5px; font-size:8px; font-style:normal; }
 .resumeTemplateThumbnail { display:block; height:138px; overflow:hidden; border:1px solid var(--border); background:#dbe1e8; pointer-events:none; }
 .resumeTemplateThumbnail > span { display:block; width:210mm; transform:scale(.155); transform-origin:top left; }

@@ -1,12 +1,14 @@
 export type VideoResumeScene = { id: string; duration: number; title: string; subtitle?: string; items?: string[]; transition?: 'cut' | 'fade' | 'slide' | 'zoom' };
-export type VideoResumeTemplate = { id: string; label: string; profession: string; duration: number; colors: [string, string, string, string]; scenes: VideoResumeScene[] };
+export type VideoResumeTemplate = { id: string; label: string; profession: string; duration: number; colors: [string, string, string, string]; scenes: VideoResumeScene[]; creator?: string; firstParty?: boolean };
 
 const standardScenes = (open: string, credentials: string, recent: string, bring: string, ask: string): VideoResumeScene[] => [
   { id: 'open', duration: 5, title: open }, { id: 'credentials', duration: 13, title: credentials }, { id: 'recent', duration: 13, title: recent }, { id: 'bring', duration: 13, title: bring }, { id: 'ask', duration: 16, title: ask },
 ];
 
 /** Hired Studio's complete first-party video-résumé starter catalog. */
-export const VIDEO_RESUME_TEMPLATES: readonly VideoResumeTemplate[] = [
+const HIRED_TEMPLATE_ATTRIBUTION = { creator: 'Hired.VIDEO', firstParty: true } as const;
+
+const HIRED_VIDEO_RESUME_TEMPLATES: readonly VideoResumeTemplate[] = [
   { id: 'video-resume-professional', label: 'Professional', profession: 'General', duration: 28, colors: ['#7c3aed','#2563eb','#e2e8f0','#c4b5fd'], scenes: [{id:'intro',duration:7,title:'Your Name',subtitle:'Your Title · Company'},{id:'achievement',duration:7,title:'Key Achievements'},{id:'skills',duration:7,title:'Core Skills'},{id:'closing',duration:7,title:"Let's Connect"}] },
   { id: 'video-resume-minimal', label: 'Minimal', profession: 'General', duration: 20, colors: ['#18181b','#3f3f46','#ffffff','#a1a1aa'], scenes: [{id:'intro',duration:5,title:'Your Name'},{id:'achievement',duration:5,title:'Highlights'},{id:'skills',duration:5,title:'Skills'},{id:'closing',duration:5,title:'Open to opportunities'}] },
   { id: 'video-resume-hook-led', label: 'Hook-led', profession: 'Product / design', duration: 60, colors: ['#0f172a','#1e293b','#f8fafc','#38bdf8'], scenes: [{id:'hook',duration:5,title:'Lead with your strongest measurable result.'},{id:'context',duration:12,title:'The Problem'},{id:'approach',duration:15,title:'What I Did'},{id:'result',duration:10,title:'The Result'},{id:'pivot',duration:12,title:"What I'm Looking For"},{id:'close',duration:6,title:"Let's talk."}] },
@@ -23,6 +25,8 @@ export const VIDEO_RESUME_TEMPLATES: readonly VideoResumeTemplate[] = [
   { id: 'video-resume-medical-credentialed', label: 'Medical credentialed', profession: 'Healthcare', duration: 60, colors: ['#0e7490','#67e8f9','#083344','#ecfeff'], scenes: standardScenes('Licensed nurse. 5 years bedside.','Licensure & credentials','Bedside experience','What I bring','Open to step-down ICU / CVICU roles.') },
   { id: 'video-resume-trade-licensed', label: 'Licensed trade', profession: 'Skilled trades', duration: 60, colors: ['#7c2d12','#fbbf24','#451a03','#fef3c7'], scenes: standardScenes('Journeyman electrician. 9 years on the tools.','License & affiliation','Recent jobs','What I bring','Open to journeyman / foreman roles.') },
 ] as const;
+
+export const VIDEO_RESUME_TEMPLATES: readonly VideoResumeTemplate[] = HIRED_VIDEO_RESUME_TEMPLATES.map((template) => ({ ...template, ...HIRED_TEMPLATE_ATTRIBUTION }));
 
 export function videoResumeTemplatePatch(template: VideoResumeTemplate) {
   return { videoResumeTemplateId: template.id, videoStoryboard: template.scenes, accent: template.colors[0], duration: template.duration, status: 'Storyboard ready' };

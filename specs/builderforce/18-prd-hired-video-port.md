@@ -796,11 +796,12 @@ fields and print-parity work stay explicitly partial below.
 | `software-engineer-graphite` | Developer graphite; mono; two-column skills/projects sidebar | **PORTED** — Skills/projects/credentials route to the descriptor sidebar with mono styling. |
 | `healthcare-clinical-blue` | Clinical blue; compact two-column credentials sidebar | **PORTED** — Credentials/skills/education/languages route to the compact clinical sidebar. |
 | `sales-growth-emerald` | Sales; emerald; achievement-led caps headings | **PORTED** — Emerald palette, caps headings and one-column descriptor render through the shared pipeline. |
-| `actor-headshot-hero` | Headshot/video hero; credits first; special skills/dialects/representation | **PARTIAL** — ID and hero presentation render; headshot/video and canonical credits remain |
-| `director-filmography-serif` | Filmography/festivals/press first; spacious serif print design | **PARTIAL** — Enabled-section filtering and filmography/festival/press ordering are ported; item media projection remains. |
+| `actor-headshot-hero` | Headshot/video hero; credits first; special skills/dialects/representation | **PORTED** — hero avatar/video, contact/summary controls, credits-first enabled order, project media and specialty sections render from canonical fields |
+| `director-filmography-serif` | Filmography/festivals/press first; spacious serif print design | **PORTED** — enabled-section filtering, filmography/festival/press ordering and project media projection render in the serif design. |
 
-The separate Hired data bundle contains **15 video-résumé compositions**. All are absent from
-Builderforce; the generic `video` node and timeline do not load these scene/theme definitions.
+The separate Hired data bundle contains **15 video-résumé compositions**. Builderforce now loads
+all 15 into the Canvas video Studio with profession/search discovery, palette, duration, scene timing,
+editable storyboard fields and Hired.VIDEO first-party attribution.
 
 | Template asset | Intended résumé story | Builderforce status |
 |---|---|---|
@@ -858,14 +859,14 @@ Renderer parity is independently required; copying IDs is not completion.
 | S-003 | Anonymous work survives sign-in | `ResumeWorkBridge`/session adoption behavior | **PORTED** |
 | S-004 | New-project split button | Object palette + create actions | **REPLACE** |
 | S-005 | Guided creation wizard | Canvas prompt starters/templates exist; no media-kind Studio wizard | **PARTIAL** |
-| S-006 | Template catalog with thumbnails | Builderforce has 11 Canvas packs, not Hired catalog | **PARTIAL** |
+| S-006 | Template catalog with thumbnails | Searchable Canvas pack catalog plus 15 video-résumé starter swatches and 12 live-rendered résumé design thumbnails | **PORTED** |
 | S-007 | Filter templates by category | Canvas template catalog has a localized category filter spanning marketplace packs and object packs | **PORTED** |
 | S-008 | Filter templates by media kind | Catalog derives the complete object/media-kind vocabulary from installed packs and filters packs containing that kind | **PORTED** |
 | S-009 | Search templates | Localized search covers translated name, description, media kinds and object titles while composing with both filters | **PORTED** |
-| S-010 | Audience/profession template discovery | No Canvas equivalent | **MISSING** |
+| S-010 | Audience/profession template discovery | Video résumé catalog filters the complete starter set by profession and free-text scene/audience terms; résumé designs label their target industry | **PORTED** |
 | S-011 | Deep-link directly to template/content type/capture/subject | Canvas can deep-link to sessions; Studio seed params absent | **MISSING** |
 | S-012 | Owned/purchased/creator templates | Canvas server templates exist; commerce/ownership states differ | **PARTIAL** |
-| S-013 | First-party badge and creator attribution | No Hired template metadata UI | **MISSING** |
+| S-013 | First-party badge and creator attribution | Every built-in video and document résumé template carries `creator: Hired.VIDEO`, `firstParty: true`, and renders localized first-party attribution in its gallery | **PORTED** |
 | S-014 | Template preview/details/related templates | No Hired catalog detail flow | **MISSING** |
 | S-015 | Apply template with source résumé selection | No résumé template flow | **MISSING** |
 | S-016 | Recent projects grid | Canvas session list exists outside this runtime | **REPLACE** |

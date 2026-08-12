@@ -37,6 +37,8 @@ export interface ResumeTemplateDefinition {
   density: 'compact' | 'comfortable' | 'spacious';
   headingStyle: ResumeHeadingStyle;
   industry: string;
+  creator?: string;
+  firstParty?: boolean;
   sidebar: ResumeSectionId[];
   hero?: { enabled: boolean; layout: ResumeHeroLayout; showAvatar: boolean; showContactButtons: boolean; showSummary: boolean; showVideo: boolean };
   sections?: Partial<Record<ResumeSectionId, ResumeSectionRule>>;
@@ -49,7 +51,7 @@ const BASE_SECTIONS: Partial<Record<ResumeSectionId, ResumeSectionRule>> = {
   skills: { layout: 'grid', columns: 3 }, languages: { layout: 'grid', columns: 3 }, projects: { layout: 'cards' }, awards: { layout: 'list' }, certificates: { layout: 'list' }, publications: { layout: 'list' }, interests: { layout: 'grid', columns: 3 }, references: { layout: 'list' },
 };
 
-export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
+const CANONICAL_RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
   { id: 'hired-default', labelKey: 'template_hired-default', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'plain', industry: 'General', sidebar: [], hero: { enabled: true, layout: 'split', showAvatar: true, showContactButtons: true, showSummary: true, showVideo: true }, sections: BASE_SECTIONS },
   { id: 'payroll-iron-gray', labelKey: 'template_payroll-iron-gray', mode: 'print', columns: 2, accent: '#475569', paper: '#ffffff', ink: '#1e293b', font: 'serif', density: 'compact', headingStyle: 'divider', industry: 'Payroll / Finance', sidebar: ['skills', 'education', 'certificates', 'languages'] },
   { id: 'risk-asphalt', labelKey: 'template_risk-asphalt', mode: 'print', columns: 2, accent: '#27272a', paper: '#ffffff', ink: '#18181b', font: 'sans', density: 'comfortable', headingStyle: 'caps', industry: 'Risk / Consulting', sidebar: ['skills', 'languages', 'certificates'] },
@@ -63,6 +65,8 @@ export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
   { id: 'actor-headshot-hero', labelKey: 'template_actor-headshot-hero', mode: 'hero', columns: 1, accent: '#404040', paper: '#ffffff', ink: '#171717', font: 'serif', density: 'compact', headingStyle: 'caps', industry: 'Acting', sidebar: [] },
   { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Film directing', sidebar: [] },
 ] as const;
+
+export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = CANONICAL_RESUME_TEMPLATES.map((template) => ({ ...template, creator: 'Hired.VIDEO', firstParty: true }));
 
 export function normalizedResumeTemplate(template: ResumeTemplateDefinition): ResumeTemplateDefinition & { hero: NonNullable<ResumeTemplateDefinition['hero']>; sections: NonNullable<ResumeTemplateDefinition['sections']>; enabledSections: ResumeSectionId[] } {
   const hero = template.hero ?? (template.mode === 'hero'

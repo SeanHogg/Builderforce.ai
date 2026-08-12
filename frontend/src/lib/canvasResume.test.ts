@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeResumeRevision,
+  RESUME_TEMPLATES,
   createResumeFamily,
   deriveResume,
   deleteResumeRevision,
@@ -25,6 +26,10 @@ const ids = (...values: string[]) => {
 };
 
 describe('Canvas resume lineage', () => {
+  it('attributes the built-in résumé catalog to Hired.VIDEO', () => {
+    expect(RESUME_TEMPLATES).toHaveLength(12);
+    expect(RESUME_TEMPLATES.every((template) => template.firstParty && template.creator === 'Hired.VIDEO')).toBe(true);
+  });
   it('validates and migrates Hired v1.0-v1.2 template descriptors', () => {
     const descriptor = resumeTemplateFromDescriptor({
       id: 'actor-headshot-hero', name: 'Actor', version: '1.2', documentMode: 'hero',

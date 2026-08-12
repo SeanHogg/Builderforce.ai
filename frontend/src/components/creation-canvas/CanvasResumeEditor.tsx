@@ -279,6 +279,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         return <button key={item.id} type="button" aria-pressed={selected} disabled={!onEdit} onClick={() => changePresentation({ templateId: item.id })}>
           <span className={styles.resumeTemplateThumbnail}><style>{RESUME_DOCUMENT_STYLES}</style><span dangerouslySetInnerHTML={{ __html: thumbnail.html }} /></span>
           <strong>{t(item.labelKey)}</strong><small>{item.industry} · {item.columns === 2 ? t('twoColumns') : t('oneColumn')}</small>
+          <em>{item.firstParty ? t('firstPartyTemplate') : item.creator}</em>
           {family.defaultTemplateId === item.id && <i>{t('defaultTemplate')}</i>}
         </button>;
       })}
