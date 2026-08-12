@@ -100,7 +100,7 @@ type CreateSessionBody = { title?: string; description?: string; initialPrompt?:
 type PatchSessionBody = { title?: string; description?: string | null; folder?: string | null; status?: string; preview?: unknown; mode?: string };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
-type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] };
+type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[]; anchor?: unknown };
 type CanvasCommand = { type?: string; [key: string]: unknown };
 type CommandsBody = { commands?: CanvasCommand[]; atomic?: boolean };
 type PinBody = { pinned?: boolean };
@@ -176,6 +176,24 @@ function cleanTitle(raw: unknown, fallback = 'Untitled session'): string {
 
 function cleanRole(raw: unknown): SessionRole | null {
   return typeof raw === 'string' && raw in ROLE_RANK ? raw as SessionRole : null;
+}
+
+export type CreationCommentAnchor = {
+  kind: 'resume-field'; revisionId: string; section: string; entryId?: string; field?: string;
+};
+
+/** Bound, semantic anchors only; never persist arbitrary client JSON beside a comment. */
+export function cleanCommentAnchor(raw: unknown): CreationCommentAnchor | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const value = raw as Record<string, unknown>;
+  if (value.kind !== 'resume-field' || typeof value.revisionId !== 'string' || !value.revisionId.trim()
+    || typeof value.section !== 'string' || !value.section.trim()) return null;
+  const bounded = (candidate: unknown, max: number) => typeof candidate === 'string' && candidate.trim() ? candidate.trim().slice(0, max) : undefined;
+  return {
+    kind: 'resume-field', revisionId: value.revisionId.trim().slice(0, 128), section: value.section.trim().slice(0, 64),
+    ...(bounded(value.entryId, 128) ? { entryId: bounded(value.entryId, 128) } : {}),
+    ...(bounded(value.field, 64) ? { field: bounded(value.field, 64) } : {}),
+  };
 }
 
 /**
@@ -1189,6 +1207,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       parentCommentId: creationSessionComments.parentCommentId,
       body: creationSessionComments.body,
       mentions: creationSessionComments.mentions,
+      anchor: creationSessionComments.anchor,
       createdBy: creationSessionComments.createdBy,
       authorName: users.displayName,
       resolvedAt: creationSessionComments.resolvedAt,
@@ -1229,9 +1248,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         .where(and(eq(creationSessionMembers.sessionId, access.session.id), inArray(creationSessionMembers.userId, requestedMentions)))
       : [];
     const userId = c.get('userId') as string;
+    const anchor = cleanCommentAnchor(body.anchor);
+    if (body.anchor !== undefined && !anchor) return c.json({ error: 'Invalid comment anchor' }, 400);
     const [created] = await db.insert(creationSessionComments).values({
       sessionId: access.session.id, objectId, parentCommentId, body: content,
-      mentions: memberMentions.map((member) => member.userId), createdBy: userId,
+      mentions: memberMentions.map((member) => member.userId), anchor, createdBy: userId,
     }).returning();
     await db.update(creationSessions).set({ lastActivityAt: new Date(), updatedAt: new Date(), updatedBy: userId })
       .where(and(eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId)));

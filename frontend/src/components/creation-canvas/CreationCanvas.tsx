@@ -4939,6 +4939,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // the Recruiter receives the intended résumé, not the previous canvas scope.
     window.setTimeout(() => evaluateCanvasRef.current(`Target Canvas resume object ID: ${nodeId}\n\n${request}`), 0);
   }, []);
+  const detachResumeFromNode = useCallback((nodeId: string, detachedData: Partial<CreationNodeData>) => {
+    const detachedId = crypto.randomUUID();
+    setNodes((current) => {
+      const source = current.find((node) => node.id === nodeId);
+      if (!source) return current;
+      return [...current, { ...source, id: detachedId, selected: true, position: { x: source.position.x + 64, y: source.position.y + 64 }, data: { ...source.data, ...detachedData } }];
+    });
+    setSelectedId(detachedId);
+    setSelectedIds([detachedId]);
+  }, [setNodes]);
   /**
    * The same treatment for `runWorkflow`, which needed it just as badly and was
    * missed.
@@ -4974,11 +4984,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
+  }), [canRun, cardsEditable, detachResumeFromNode, exportFromNode, openBuiltinAgentSurfaceFromNode, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -5986,7 +5996,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         /></label>
       </>}
       {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'guidedTour', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
-      </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
+      </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} data={node.data} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
         <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />
@@ -6369,12 +6379,16 @@ function EvermindInspector({ node, persistence, onAttach, onExpand, onTrain }: {
   </>;
 }
 
-function ActivityInspector({ sessionId, objectId, persistence, role, members }: { sessionId: string; objectId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
+function ActivityInspector({ sessionId, objectId, data, persistence, role, members }: { sessionId: string; objectId: string; data: CreationNodeData; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
   const t = useTranslations('creationCanvas');
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(persistence === 'local' ? 'Save this session to collaborate.' : t('noticeLoadingActivity'));
+  const resumeFamily = data.kind === 'resume' ? resumeFamilyFromNode(data) : null;
+  const resumeRevision = resumeFamily ? activeResumeRevision(resumeFamily) : null;
+  const [resumeSection, setResumeSection] = useState('basics');
+  const [resumeField, setResumeField] = useState('summary');
   const canComment = role !== 'viewer';
 
   const reload = useCallback(async () => {
@@ -6400,7 +6414,8 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
     const normalized = body.toLowerCase();
     const mentions = members.filter((member) => member.displayName && normalized.includes(`@${member.displayName.toLowerCase()}`)).map((member) => member.userId);
     setStatus('Posting comment…');
-    void creationSessionsApi.comments.create(sessionId, { body, objectId, mentions }).then(() => {
+    const anchor: CreationSessionComment['anchor'] = resumeRevision ? { kind: 'resume-field', revisionId: resumeRevision.id, section: resumeSection, ...(resumeField ? { field: resumeField } : {}) } : null;
+    void creationSessionsApi.comments.create(sessionId, { body, objectId, mentions, ...(anchor ? { anchor } : {}) }).then(() => {
       setDraft('');
       setStatus('Comment posted');
       void reload();
@@ -6416,6 +6431,10 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
 
   return <div className={styles.activityPanel}>
     <section className={styles.commentComposer}>
+      {resumeRevision && <div className={styles.commentAnchorFields}>
+        <label>{t('resumeCommentSection')}<select value={resumeSection} onChange={(event) => setResumeSection(event.target.value)}>{['basics', 'work', 'education', 'skills', 'volunteer', 'projects', 'awards', 'certificates', 'publications', 'languages', 'interests', 'references'].map((section) => <option key={section} value={section}>{t(`resumeCommentSection_${section}`)}</option>)}</select></label>
+        <label>{t('resumeCommentField')}<input value={resumeField} onChange={(event) => setResumeField(event.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64))} placeholder={t('resumeCommentFieldPlaceholder')} /></label>
+      </div>}
       <label>{t('commentOnObject')}<textarea rows={3} value={draft} disabled={!canComment} onChange={(event) => setDraft(event.target.value)} placeholder={canComment ? t('commentPlaceholder') : t('viewOnlyAccess')} /></label>
       <button className={styles.fullButton} disabled={!canComment || !draft.trim()} onClick={submit}>{t('postComment')}</button>
     </section>
@@ -6424,6 +6443,7 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
       {comments.map((comment) => <article key={comment.id} className={comment.resolvedAt ? styles.commentResolved : ''}>
         <header><b>{comment.authorName || t('collaborator')}</b><time>{new Date(comment.createdAt).toLocaleString()}</time></header>
         <p>{comment.body}</p>
+        {comment.anchor?.kind === 'resume-field' && <small className={styles.commentAnchor}>{t('resumeCommentAnchor', { section: t(`resumeCommentSection_${comment.anchor.section}`), field: comment.anchor.field || t('resumeCommentWholeSection') })}</small>}
         {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? t('reopen') : t('resolve')}</button>}
       </article>)}
     </section>

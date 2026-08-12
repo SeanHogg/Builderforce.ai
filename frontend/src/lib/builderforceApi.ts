@@ -8082,6 +8082,7 @@ export interface CreationSessionComment {
   parentCommentId: string | null;
   body: string;
   mentions: string[];
+  anchor: { kind: 'resume-field'; revisionId: string; section: string; entryId?: string; field?: string } | null;
   createdBy: string | null;
   authorName: string | null;
   resolvedAt: string | null;
@@ -8214,7 +8215,7 @@ export const creationSessionsApi = {
   comments: {
     list: (id: string, objectId?: string) =>
       request<{ comments: CreationSessionComment[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/comments${objectId ? `?objectId=${encodeURIComponent(objectId)}` : ''}`),
-    create: (id: string, body: { body: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] }) =>
+    create: (id: string, body: { body: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[]; anchor?: CreationSessionComment['anchor'] }) =>
       request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments`, { method: 'POST', body: JSON.stringify(body) }),
     resolve: (id: string, commentId: string, resolved: boolean) =>
       request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),

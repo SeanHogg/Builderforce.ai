@@ -730,18 +730,18 @@ finishes the behavior against the acceptance gate here or records a product-appr
 | R-010 | Auto-name from embedded JSON title or filename | Hired does both | Résumé import uses `basics.name` when present and falls back to the filename stem | **PORTED** | Structured résumé name wins, filename is fallback. |
 | R-011 | Choose public/private privacy at creation | Hired resume privacy | Canvas résumé family independently persists private, recruiter-only, connections, public or draft visibility; enforcement on public/embed routes remains | **PARTIAL** | Résumé artifact privacy is independently persisted. |
 | R-012 | Mark first résumé as master automatically | Hired service promotes first upload | `createResumeFamily` makes the imported source both active and master | **PORTED** | First source is master; later imports do not silently replace it. |
-| R-013 | Import into an existing résumé with confirmation | Hired `targetResumeId` overwrite flow | Generic document editing mutates in place | **MISSING** | Confirmation snapshots current résumé, then imports into a new version. |
-| R-014 | Preserve a named pre-import version | Hired creates “Before résumé import” | Canvas has session snapshots, not résumé versions | **PARTIAL** | A résumé-domain version is created automatically before replacement. |
+| R-013 | Import into an existing résumé with confirmation | Hired `targetResumeId` overwrite flow | Canvas résumé import asks for confirmation and appends the parsed source as a new active derived revision instead of replacing the family | **PORTED** | Confirmation snapshots current résumé, then imports into a new version. |
+| R-014 | Preserve a named pre-import version | Hired creates “Before résumé import” | Existing active revision is retained unchanged in the family and the imported revision points back to it with a named `Imported · …` head | **PORTED** | A résumé-domain version is created automatically before replacement. |
 | R-015 | Keep uploaded original immutable | Required product invariant | `updateActiveResume` rejects original mutation and the editor disables original editing/template changes | **PORTED** | Original source/revision cannot be overwritten or deleted while derivatives exist. |
 | R-016 | Ask Brain/Recruiter “create me a new résumé” | Hired resume editor tools | `canvas_update_object` accepts canonical `resumeDocument` and automatically creates a protected derivative; dedicated Recruiter flow/evals remain | **PARTIAL** | Recruiter creates a structured derived résumé on the same Canvas. |
 | R-017 | Derive from original without replacing it | Hired parent/variation APIs | Canvas résumé family persists original, active and source revision IDs; new versions default to the original | **PORTED** | Derived résumé stores source résumé + exact source revision IDs. |
-| R-018 | Name and rename a derived résumé | Hired variation title | Canvas object title is editable | **PARTIAL** | Rename persists on the résumé artifact and its version list. |
+| R-018 | Name and rename a derived résumé | Hired variation title | Derived version exposes an explicit persisted version-name field; Canvas object projection follows the active revision | **PORTED** | Rename persists on the résumé artifact and its version list. |
 | R-019 | See Original and all derived résumés together | Hired master résumé groups | Canvas résumé header lists every family revision, with Original labeled and master marked | **PORTED** | Canvas resume header lists lineage with Original pinned first. |
 | R-020 | Switch back to Original in one action | Hired master/variant model | Revision selector changes only the active rendition and synchronizes exported `markdown`/`content` | **PORTED** | “Original” switches the active rendition without changing other Canvas state. |
 | R-021 | Compare original vs generated résumé | Hired merge analysis/preview APIs | Compare mode renders both templates side by side and `compareResumeDocuments` reports canonical changed sections, counts and basics-field differences; bullet-level highlighting remains | **PARTIAL** | Side-by-side and field/bullet diff use the canonical résumé schema. |
 | R-022 | Restore an old résumé version without destroying head | Hired version restore | “Restore as new” derives a new head from the selected revision and retains all prior revisions | **PORTED** | Restore creates a new résumé head version and preserves both states. |
 | R-023 | Promote a variant to master | Hired `promoteVariantToMaster` | Canvas exposes “Make master” and persists master/active IDs; confirmation and audit event remain | **PARTIAL** | Promotion is explicit, confirmed, atomic and audited. |
-| R-024 | Detach a variant from its parent | Hired `detachFromParent` | No résumé lineage model | **MISSING** | User can copy a variant into an independent résumé. |
+| R-024 | Detach a variant from its parent | Hired `detachFromParent` | Canvas “Detach as résumé” clones the selected canonical revision and design into a new independent object with a new protected Original/master identity | **PORTED** | User can copy a variant into an independent résumé. |
 | R-025 | Clone a résumé | Hired `cloneResume` | Canvas duplicates generic objects | **PARTIAL** | Clone includes structured content, template and metadata with a new identity. |
 | R-026 | Archive/unarchive a résumé | Hired archive APIs | Canvas résumé family has a persisted archive timestamp and archive/unarchive control; filtering archived objects from libraries remains | **PARTIAL** | Archive hides without deleting; family and versions remain recoverable. |
 | R-027 | Delete with lineage-aware confirmation | Hired delete/promote tests | Revision deletion now protects Original and Master and returns active state to Master; explanatory confirmation and whole-family rules remain | **PARTIAL** | Deletion explains descendants and protects the last original/master. |
@@ -826,12 +826,12 @@ Renderer parity is independently required; copying IDs is not completion.
 |---|---|---|---|
 | RR-001 | One canonical renderer for edit preview, public view and PDF | **PARTIAL** | Snapshot tests prove identical descriptor/content input across all surfaces. |
 | RR-002 | Hero and print document modes | **PARTIAL** | Both modes render all 12 descriptors. |
-| RR-003 | Letter, Legal and A4 page sizes | **MISSING** | Preview and exported PDF dimensions match. |
-| RR-004 | Portrait and landscape orientation | **MISSING** | Toggle persists and export matches. |
-| RR-005 | One- and two-column/sidebar layouts | **PARTIAL** | Sidebar assignment is visible in preview and PDF. |
+| RR-003 | Letter, Legal and A4 page sizes | **PORTED** | Revision persists the size; true-size preview, standalone HTML and PDF `@page` use it. |
+| RR-004 | Portrait and landscape orientation | **PORTED** | Revision persists orientation; preview dimensions and PDF `@page` match. |
+| RR-005 | One- and two-column/sidebar layouts | **PORTED** | Canonical renderer routes each descriptor's complete named sections into main/sidebar across preview, HTML and PDF. |
 | RR-006 | Page-break guides and page numbers | **MISSING** | True-size editor displays computed boundaries. |
 | RR-007 | Continuous and paged/spread view modes | **MISSING** | Toggle changes only editor presentation, not content. |
-| RR-008 | Zoom control bound to the document sheet | **MISSING** | Zoom persists as a view preference and never affects print dimensions. |
+| RR-008 | Zoom control bound to the document sheet | **PORTED** | Family persists 40–125% preview zoom; print dimensions remain physical page dimensions. |
 | RR-009 | Move blocks up/down | **MISSING** | Buttons and keyboard action update persisted order. |
 | RR-010 | Drag blocks from palette and reorder in flow | **MISSING** | Drop indicator and keyboard alternative are tested. |
 | RR-011 | Detach block to free position / return to flow | **MISSING** | Round-trip retains content and coordinates. |
@@ -839,12 +839,12 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-013 | Add text, heading, divider and entity-section blocks | **MISSING** | Palette is entity-aware and prevents duplicate singleton sections. |
 | RR-014 | Empty-section state without fake content | **PARTIAL** | Empty sections remain editable and omit themselves from export when hidden. |
 | RR-015 | Apply template to live document | **PORTED** | Content survives every template switch. |
-| RR-016 | Set current template as résumé default | **MISSING** | Default persists on the résumé and opens everywhere. |
-| RR-017 | Template gallery thumbnails and selected/default states | **MISSING** | All 12 render real thumbnails with accessible selection. |
+| RR-016 | Set current template as résumé default | **PORTED** | Family persists an explicit default template independently of current revision selection. |
+| RR-017 | Template gallery thumbnails and selected/default states | **PORTED** | All 12 use the canonical live renderer for accessible thumbnails with selected/default states. |
 | RR-018 | Template JSON validation/version compatibility | **MISSING** | Invalid descriptors fail safely; v1.0–v1.2 fixtures migrate. |
-| RR-019 | Theme palette, font family, heading style and density | **PARTIAL** | Every descriptor field visibly affects preview and export. |
+| RR-019 | Theme palette, font family, heading style and density | **PORTED** | All four heading treatments plus template palette, font and density are canonical renderer attributes/styles shared by preview/export. |
 | RR-020 | Avatar, contact buttons, summary and video hero controls | **MISSING** | Each flag is independently test-covered. |
-| RR-021 | Section layouts: timeline, grid, cards and list | **MISSING** | Canonical fixtures cover every layout. |
+| RR-021 | Section layouts: timeline, grid, cards and list | **PARTIAL** | Canonical renderer applies timeline/grid/cards/list rules from the built-in descriptor mapping; custom descriptor editing remains. |
 | RR-022 | Date sorting and highlights/media flags | **MISSING** | Order and optional detail match renderer rules. |
 | RR-023 | Print/PDF from preview overlay | **PORTED** | Existing PDF action invokes the canonical résumé renderer, not Markdown print. |
 | RR-024 | Escape/close preview and responsive preview chrome | **MISSING** | Keyboard and 360px tests pass. |

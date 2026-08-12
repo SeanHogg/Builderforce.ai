@@ -12,6 +12,7 @@ import {
   activeResumeRevision,
   createResumeFamily,
   deleteResumeRevision,
+  detachResumeRevision,
   deriveResume,
   originalResumeRevision,
   promoteResumeToMaster,
@@ -23,18 +24,21 @@ import {
   resumeNodePatch,
   selectResumeRevision,
   updateActiveResume,
+  updateActiveResumePresentation,
   updateResumeFamilySettings,
   type CanvasResumeFamily,
   type CanvasResumeDocument,
   type ResumeTemplateId,
+  type ResumeOrientation,
+  type ResumePageSize,
 } from '@/lib/canvasResume';
-import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision } from '@/lib/canvasResumeRenderer';
+import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
 import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
 import { analyzeResumeAgainstJob, resumeTailorPrompt } from '@/lib/canvasResumeAts';
 
 type ResumeView = 'edit' | 'preview' | 'compare';
 
-export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void }) {
+export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;
@@ -45,6 +49,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationN
   const [error, setError] = useState('');
   const [mergeSections, setMergeSections] = useState<ResumeDiffSection[]>([]);
   const [jobDescription, setJobDescription] = useState('');
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   const commit = (next: CanvasResumeFamily) => onEdit?.({
     ...resumeNodePatch(next),
@@ -71,7 +76,14 @@ export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationN
       if (!markdown) { setError(t('importUnreadable')); return; }
       const embeddedName = typeof document?.basics?.name === 'string' ? document.basics.name.trim() : '';
       const title = embeddedName || file.name.replace(/\.[^.]+$/, '');
-      onEdit({ ...resumeNodePatch(createResumeFamily({ title, markdown, ...(document ? { document } : {}) })), fileName: file.name, mimeType: file.type, fileSize: file.size, status: t('statusOriginal') });
+      if (family) {
+        if (!window.confirm(t('confirmImportVersion', { file: file.name, title: activeResumeRevision(family).title }))) return;
+        let next = deriveResume(family, t('importedVersion', { title }), { fromRevisionId: family.activeRevisionId });
+        next = updateActiveResume(next, document ? { document } : { markdown, structuredStale: !!activeResumeRevision(next).document });
+        onEdit({ ...resumeNodePatch(next), fileName: file.name, mimeType: file.type, fileSize: file.size, status: t('statusDerived') });
+      } else {
+        onEdit({ ...resumeNodePatch(createResumeFamily({ title, markdown, ...(document ? { document } : {}) })), fileName: file.name, mimeType: file.type, fileSize: file.size, status: t('statusOriginal') });
+      }
       setView('preview');
     } catch {
       setError(t('importUnreadable'));
@@ -94,6 +106,8 @@ export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationN
   const originalRendered = renderCanvasResumeRevision(original);
   const differences = original.document && active.document ? compareResumeDocuments(original.document, active.document).filter((difference) => difference.changed) : [];
   const ats = active.document && jobDescription.trim() ? analyzeResumeAgainstJob(active.document, jobDescription) : null;
+  const page = resumePageDimensions(active.pageSize, active.orientation);
+  const changePresentation = (patch: Parameters<typeof updateActiveResumePresentation>[1]) => commit(updateActiveResumePresentation(family, patch));
   const createVersion = () => {
     const next = deriveResume(family, newTitle || t('untitledVersion'), { fromRevisionId: family.originalRevisionId });
     setNewTitle('');
@@ -102,6 +116,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationN
   };
 
   return <div className={`${styles.resumeStudio} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
+    <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json" onChange={importResume} />
     <div className={styles.resumeSourceBar}>
       <label><span>{t('version')}</span><select value={active.id} onChange={(event) => commit(selectResumeRevision(family, event.target.value))}>
         {family.revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.kind === 'original' ? t('originalPrefix', { title: revision.title }) : revision.title}{revision.id === family.masterRevisionId ? ` · ${t('master')}` : ''}</option>)}
@@ -117,17 +132,46 @@ export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationN
     <div className={styles.resumeVersionCreator}>
       <input value={newTitle} placeholder={t('versionNamePlaceholder')} aria-label={t('versionName')} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createVersion(); }} />
       <button type="button" disabled={!onEdit} onClick={createVersion}>{t('createFromOriginal')}</button>
+      <button type="button" disabled={!onEdit} onClick={() => input.current?.click()}>{t('importAsVersion')}</button>
       {active.kind === 'derived' && <button type="button" disabled={!onEdit} onClick={() => commit(restoreResumeAsNew(family, active.id, t('restoredVersion', { title: active.title })))}>{t('restoreAsNew')}</button>}
       {active.kind === 'derived' && <button type="button" disabled={!onEdit || active.id === family.masterRevisionId} onClick={() => commit(deleteResumeRevision(family, active.id))}>{t('deleteVersion')}</button>}
+      {active.kind === 'derived' && <button type="button" disabled={!onDetach} onClick={() => {
+        const detached = detachResumeRevision(family, active.id);
+        if (detached) onDetach?.({ title: active.title, ...resumeNodePatch(detached), status: t('statusOriginal') });
+      }}>{t('detachVersion')}</button>}
+      {active.kind === 'derived' && <label className={styles.resumeRename}><span>{t('renameVersion')}</span><input key={active.id} defaultValue={active.title} disabled={!onEdit} onBlur={(event) => {
+        const title = event.currentTarget.value.trim();
+        if (title && title !== active.title) commit(updateActiveResume(family, { title }));
+      }} /></label>}
     </div>
     <div className={styles.resumeControls}>
       <div role="tablist" aria-label={t('viewMode')}>
         {(['edit', 'preview', 'compare'] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={view === mode} disabled={mode === 'edit' && active.kind === 'original'} onClick={() => setView(mode)}>{t(mode)}</button>)}
       </div>
-      <label><span>{t('template')}</span><select value={active.templateId} disabled={!onEdit || active.kind === 'original'} onChange={(event) => commit(updateActiveResume(family, { templateId: event.target.value as ResumeTemplateId }))}>
+      <label><span>{t('template')}</span><select value={active.templateId} disabled={!onEdit} onChange={(event) => changePresentation({ templateId: event.target.value as ResumeTemplateId })}>
         {RESUME_TEMPLATES.map((item) => <option key={item.id} value={item.id}>{t(item.labelKey)}</option>)}
       </select></label>
+      <button type="button" aria-expanded={galleryOpen} onClick={() => setGalleryOpen((open) => !open)}>{t('browseTemplates')}</button>
+      <button type="button" disabled={!onEdit || family.defaultTemplateId === active.templateId} onClick={() => commit(updateResumeFamilySettings(family, { defaultTemplateId: active.templateId }))}>{family.defaultTemplateId === active.templateId ? t('defaultTemplate') : t('setDefaultTemplate')}</button>
+      <label><span>{t('pageSize')}</span><select value={active.pageSize} disabled={!onEdit} onChange={(event) => changePresentation({ pageSize: event.target.value as ResumePageSize })}>
+        {(['letter', 'legal', 'a4'] as const).map((size) => <option key={size} value={size}>{t(`pageSize_${size}`)}</option>)}
+      </select></label>
+      <label><span>{t('orientation')}</span><select value={active.orientation} disabled={!onEdit} onChange={(event) => changePresentation({ orientation: event.target.value as ResumeOrientation })}>
+        {(['portrait', 'landscape'] as const).map((orientation) => <option key={orientation} value={orientation}>{t(`orientation_${orientation}`)}</option>)}
+      </select></label>
+      <label><span>{t('zoom', { zoom: family.viewZoom })}</span><input aria-label={t('zoomControl')} type="range" min="40" max="125" step="5" value={family.viewZoom} disabled={!onEdit} onChange={(event) => commit(updateResumeFamilySettings(family, { viewZoom: Number(event.target.value) }))} /></label>
     </div>
+    {galleryOpen && <section className={styles.resumeTemplateGallery} aria-label={t('templateGallery')}>
+      {RESUME_TEMPLATES.map((item) => {
+        const thumbnail = renderCanvasResumeRevision({ ...active, templateId: item.id });
+        const selected = active.templateId === item.id;
+        return <button key={item.id} type="button" aria-pressed={selected} disabled={!onEdit} onClick={() => changePresentation({ templateId: item.id })}>
+          <span className={styles.resumeTemplateThumbnail}><style>{RESUME_DOCUMENT_STYLES}</style><span dangerouslySetInnerHTML={{ __html: thumbnail.html }} /></span>
+          <strong>{t(item.labelKey)}</strong><small>{item.industry} · {item.columns === 2 ? t('twoColumns') : t('oneColumn')}</small>
+          {family.defaultTemplateId === item.id && <i>{t('defaultTemplate')}</i>}
+        </button>;
+      })}
+    </section>}
     <details className={styles.resumeAtsPanel}>
       <summary>{t('tailorForJob')}</summary>
       <label><span>{t('jobDescription')}</span><textarea value={jobDescription} placeholder={t('jobDescriptionPlaceholder')} onChange={(event) => setJobDescription(event.target.value)} /></label>
@@ -146,7 +190,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor }: { data: CreationN
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
       {active.structuredStale && <p role="status" className={styles.resumeStaleWarning}>{t('structuredStale')}</p>}
     </div>}
-    {view === 'preview' && <div className={styles.resumePreviewViewport}><style>{RESUME_DOCUMENT_STYLES}</style><div dangerouslySetInnerHTML={{ __html: rendered.html }} /></div>}
+    {view === 'preview' && <div className={styles.resumePreviewViewport}><style>{RESUME_DOCUMENT_STYLES}</style><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * family.viewZoom / 100}mm`, minHeight: `${page.height * family.viewZoom / 100}mm` }}><div style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${family.viewZoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: rendered.html }} /></div></div>}
     {view === 'compare' && <div className={styles.resumeCompareShell}>
       {active.id !== original.id && <aside className={styles.resumeDiffSummary}>
         <strong>{t('changesFromOriginal', { count: differences.length })}</strong>

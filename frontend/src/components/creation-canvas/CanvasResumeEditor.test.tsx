@@ -37,6 +37,25 @@ describe('CanvasResumeEditor', () => {
     expect(screen.getByText('Protected original')).toBeTruthy();
   });
 
+  it('previews every template and persists default, page, orientation, and zoom settings', () => {
+    const family = createResumeFamily({ title: 'Uploaded', markdown: '# Original', idFactory: () => 'original' });
+    const onEdit = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Browse templates' }));
+    expect(screen.getByRole('region', { name: 'Résumé template gallery' }).querySelectorAll('button')).toHaveLength(12);
+    fireEvent.click(screen.getByRole('button', { name: /Executive · Taupe/ }));
+    let patch = onEdit.mock.calls.at(-1)?.[0] as { resumeFamily: CanvasResumeFamily };
+    expect(activeResumeRevision(patch.resumeFamily).templateId).toBe('executive-taupe');
+
+    onEdit.mockClear();
+    const selected = patch.resumeFamily;
+    const { unmount } = render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(selected) }} onEdit={onEdit} />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set as default' }).at(-1)!);
+    patch = onEdit.mock.calls.at(-1)?.[0] as { resumeFamily: CanvasResumeFamily };
+    expect(patch.resumeFamily.defaultTemplateId).toBe('executive-taupe');
+    unmount();
+  });
+
   it('adds an additional canonical section without flattening the document', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' }, customExtension: { retained: true } }, idFactory: () => 'original' });
     const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });
@@ -48,6 +67,29 @@ describe('CanvasResumeEditor', () => {
     const patch = onEdit.mock.calls.at(-1)?.[0] as { resumeFamily: CanvasResumeFamily };
     expect(activeResumeRevision(patch.resumeFamily).document?.projects).toHaveLength(1);
     expect(activeResumeRevision(patch.resumeFamily).document?.customExtension).toEqual({ retained: true });
+  });
+
+  it('detaches a selected derivative as an independent résumé family', () => {
+    const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' } }, idFactory: () => 'original' });
+    const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });
+    const onDetach = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onDetach={onDetach} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Detach as résumé' }));
+    const detached = onDetach.mock.calls[0]?.[0]?.resumeFamily as CanvasResumeFamily;
+    expect(detached.revisions).toHaveLength(1);
+    expect(activeResumeRevision(detached)).toMatchObject({ kind: 'original', sourceRevisionId: null, title: 'Portfolio' });
+  });
+
+  it('renames a derived version without changing its content or source', () => {
+    const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', idFactory: () => 'original' });
+    const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });
+    const onEdit = vi.fn();
+    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    const input = screen.getByLabelText('Current version name');
+    fireEvent.change(input, { target: { value: 'Leadership résumé' } });
+    fireEvent.blur(input);
+    const next = onEdit.mock.calls.at(-1)?.[0]?.resumeFamily as CanvasResumeFamily;
+    expect(activeResumeRevision(next)).toMatchObject({ title: 'Leadership résumé', markdown: '# Ada', sourceRevisionId: 'original' });
   });
 
   it('hides a section without deleting its canonical content', () => {

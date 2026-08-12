@@ -1561,6 +1561,8 @@ export const creationSessionComments = pgTable('creation_session_comments', {
   parentCommentId: uuid('parent_comment_id'),
   body:            text('body').notNull(),
   mentions:        jsonb('mentions').notNull().default(sql`'[]'::jsonb`),
+  /** Stable semantic location, e.g. {kind:'resume-field',revisionId,section,entryId,field}. */
+  anchor:          jsonb('anchor'),
   createdBy:       varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   resolvedBy:      varchar('resolved_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   resolvedAt:      timestamp('resolved_at'),

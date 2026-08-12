@@ -29,6 +29,8 @@ export interface RelatedArticlesProps {
   heading?: string;
   /** Max cards to show. */
   limit?: number;
+  /** The parent already owns the marketing column and horizontal gutter. */
+  embedded?: boolean;
 }
 
 export default function RelatedArticles({
@@ -37,6 +39,7 @@ export default function RelatedArticles({
   relatedToSlug,
   heading = 'Related reading',
   limit = 3,
+  embedded = false,
 }: RelatedArticlesProps) {
   let posts: BlogPost[] = [];
   if (slugs && slugs.length) posts = getPostsBySlugs(slugs);
@@ -47,13 +50,25 @@ export default function RelatedArticles({
   if (posts.length === 0) return null;
 
   return (
-    <section className="related-articles" aria-label={heading}>
+    <section
+      className={`related-articles${embedded ? ' related-articles--embedded' : ''}`}
+      aria-label={heading}
+    >
       <style>{`
         .related-articles {
           max-width: var(--marketing-max);
           margin: 0 auto;
           padding: 8px var(--marketing-gutter) 56px;
           width: 100%;
+        }
+        .related-articles--embedded {
+          max-width: none;
+          margin-top: var(--space-10);
+          padding-inline: 0;
+        }
+        .related-articles-route-head {
+          margin: 0 0 6px;
+          text-align: center;
         }
         .related-articles-head {
           font-family: var(--font-display);
@@ -68,10 +83,11 @@ export default function RelatedArticles({
           color: var(--text-secondary);
           margin: 0 0 20px;
         }
+        .related-articles--embedded .related-articles-sub { text-align: center; }
         @media (max-width: 640px) { .related-articles { padding-block: 8px 40px; } }
       `}</style>
-      <h2 className="related-articles-head">
-        <span className="related-accent">⟩</span>{heading}
+      <h2 className={embedded ? 'ui-eyebrow related-articles-route-head' : 'related-articles-head'}>
+        {!embedded && <span className="related-accent">⟩</span>}{heading}
       </h2>
       <p className="related-articles-sub">
         Deeper dives from the Builderforce blog on the topics covered here.

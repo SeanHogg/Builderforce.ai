@@ -16,6 +16,9 @@ export const RESUME_TEMPLATE_IDS = [
 ] as const;
 
 export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
+export type ResumePageSize = 'letter' | 'legal' | 'a4';
+export type ResumeOrientation = 'portrait' | 'landscape';
+export type ResumeHeadingStyle = 'underlined' | 'divider' | 'caps' | 'plain';
 
 export interface ResumeTemplateDefinition {
   id: ResumeTemplateId;
@@ -27,21 +30,24 @@ export interface ResumeTemplateDefinition {
   ink: string;
   font: 'sans' | 'serif' | 'mono';
   density: 'compact' | 'comfortable' | 'spacious';
+  headingStyle: ResumeHeadingStyle;
+  industry: string;
+  sidebar: ResumeSectionId[];
 }
 
 export const RESUME_TEMPLATES: readonly ResumeTemplateDefinition[] = [
-  { id: 'hired-default', labelKey: 'template_hired-default', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable' },
-  { id: 'payroll-iron-gray', labelKey: 'template_payroll-iron-gray', mode: 'print', columns: 2, accent: '#475569', paper: '#ffffff', ink: '#1e293b', font: 'serif', density: 'compact' },
-  { id: 'risk-asphalt', labelKey: 'template_risk-asphalt', mode: 'print', columns: 2, accent: '#27272a', paper: '#ffffff', ink: '#18181b', font: 'sans', density: 'comfortable' },
-  { id: 'executive-taupe', labelKey: 'template_executive-taupe', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious' },
-  { id: 'intern-education-first', labelKey: 'template_intern-education-first', mode: 'print', columns: 1, accent: '#1d4ed8', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable' },
-  { id: 'hospitality-amber', labelKey: 'template_hospitality-amber', mode: 'print', columns: 1, accent: '#b45309', paper: '#ffffff', ink: '#292524', font: 'sans', density: 'comfortable' },
-  { id: 'creative-minimal', labelKey: 'template_creative-minimal', mode: 'print', columns: 1, accent: '#525252', paper: '#ffffff', ink: '#171717', font: 'mono', density: 'spacious' },
-  { id: 'software-engineer-graphite', labelKey: 'template_software-engineer-graphite', mode: 'print', columns: 2, accent: '#047857', paper: '#ffffff', ink: '#172033', font: 'mono', density: 'comfortable' },
-  { id: 'healthcare-clinical-blue', labelKey: 'template_healthcare-clinical-blue', mode: 'print', columns: 2, accent: '#1d4ed8', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'compact' },
-  { id: 'sales-growth-emerald', labelKey: 'template_sales-growth-emerald', mode: 'print', columns: 1, accent: '#047857', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable' },
-  { id: 'actor-headshot-hero', labelKey: 'template_actor-headshot-hero', mode: 'hero', columns: 1, accent: '#404040', paper: '#ffffff', ink: '#171717', font: 'serif', density: 'compact' },
-  { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious' },
+  { id: 'hired-default', labelKey: 'template_hired-default', mode: 'hero', columns: 1, accent: '#7c3aed', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'plain', industry: 'General', sidebar: [] },
+  { id: 'payroll-iron-gray', labelKey: 'template_payroll-iron-gray', mode: 'print', columns: 2, accent: '#475569', paper: '#ffffff', ink: '#1e293b', font: 'serif', density: 'compact', headingStyle: 'divider', industry: 'Payroll / Finance', sidebar: ['skills', 'education', 'certificates', 'languages'] },
+  { id: 'risk-asphalt', labelKey: 'template_risk-asphalt', mode: 'print', columns: 2, accent: '#27272a', paper: '#ffffff', ink: '#18181b', font: 'sans', density: 'comfortable', headingStyle: 'caps', industry: 'Risk / Consulting', sidebar: ['skills', 'languages', 'certificates'] },
+  { id: 'executive-taupe', labelKey: 'template_executive-taupe', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Executive', sidebar: [] },
+  { id: 'intern-education-first', labelKey: 'template_intern-education-first', mode: 'print', columns: 1, accent: '#1d4ed8', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'underlined', industry: 'New graduate', sidebar: [] },
+  { id: 'hospitality-amber', labelKey: 'template_hospitality-amber', mode: 'print', columns: 1, accent: '#b45309', paper: '#ffffff', ink: '#292524', font: 'sans', density: 'comfortable', headingStyle: 'caps', industry: 'Hospitality', sidebar: [] },
+  { id: 'creative-minimal', labelKey: 'template_creative-minimal', mode: 'print', columns: 1, accent: '#525252', paper: '#ffffff', ink: '#171717', font: 'mono', density: 'spacious', headingStyle: 'plain', industry: 'Creative', sidebar: [] },
+  { id: 'software-engineer-graphite', labelKey: 'template_software-engineer-graphite', mode: 'print', columns: 2, accent: '#047857', paper: '#ffffff', ink: '#172033', font: 'mono', density: 'comfortable', headingStyle: 'plain', industry: 'Software engineering', sidebar: ['skills', 'projects', 'certificates', 'languages'] },
+  { id: 'healthcare-clinical-blue', labelKey: 'template_healthcare-clinical-blue', mode: 'print', columns: 2, accent: '#1d4ed8', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'compact', headingStyle: 'underlined', industry: 'Healthcare', sidebar: ['certificates', 'skills', 'education', 'languages'] },
+  { id: 'sales-growth-emerald', labelKey: 'template_sales-growth-emerald', mode: 'print', columns: 1, accent: '#047857', paper: '#ffffff', ink: '#172033', font: 'sans', density: 'comfortable', headingStyle: 'caps', industry: 'Sales / Business development', sidebar: [] },
+  { id: 'actor-headshot-hero', labelKey: 'template_actor-headshot-hero', mode: 'hero', columns: 1, accent: '#404040', paper: '#ffffff', ink: '#171717', font: 'serif', density: 'compact', headingStyle: 'caps', industry: 'Acting', sidebar: [] },
+  { id: 'director-filmography-serif', labelKey: 'template_director-filmography-serif', mode: 'print', columns: 1, accent: '#78716c', paper: '#ffffff', ink: '#292524', font: 'serif', density: 'spacious', headingStyle: 'divider', industry: 'Film directing', sidebar: [] },
 ] as const;
 
 export interface CanvasResumeLocation extends Record<string, unknown> {
@@ -177,6 +183,8 @@ export interface CanvasResumeRevision {
   document?: CanvasResumeDocument;
   structuredStale?: boolean;
   templateId: ResumeTemplateId;
+  pageSize: ResumePageSize;
+  orientation: ResumeOrientation;
   sourceRevisionId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -187,6 +195,8 @@ export interface CanvasResumeFamily {
   privacy: 'public' | 'recruiter_only' | 'connections' | 'private' | 'draft';
   archivedAt: string | null;
   watched: boolean;
+  defaultTemplateId: ResumeTemplateId;
+  viewZoom: number;
   originalRevisionId: string;
   activeRevisionId: string;
   masterRevisionId: string;
@@ -205,11 +215,13 @@ export function createResumeFamily(args: { title: string; markdown: string; docu
     markdown: args.markdown.trim(),
     ...(args.document ? { document: clone(args.document), structuredStale: false } : {}),
     templateId: 'hired-default',
+    pageSize: 'a4',
+    orientation: 'portrait',
     sourceRevisionId: null,
     createdAt: now,
     updatedAt: now,
   };
-  return { version: 1, privacy: 'private', archivedAt: null, watched: false, originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
+  return { version: 1, privacy: 'private', archivedAt: null, watched: false, defaultTemplateId: 'hired-default', viewZoom: 75, originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
 }
 
 export function activeResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {
@@ -250,7 +262,7 @@ export function selectResumeRevision(family: CanvasResumeFamily, revisionId: str
 
 export function updateActiveResume(
   family: CanvasResumeFamily,
-  patch: Partial<Pick<CanvasResumeRevision, 'title' | 'markdown' | 'templateId' | 'document' | 'structuredStale'>>,
+  patch: Partial<Pick<CanvasResumeRevision, 'title' | 'markdown' | 'templateId' | 'pageSize' | 'orientation' | 'document' | 'structuredStale'>>,
   now = new Date().toISOString(),
 ): CanvasResumeFamily {
   const active = activeResumeRevision(family);
@@ -266,6 +278,16 @@ export function updateActiveResume(
       }
       : revision),
   };
+}
+
+/** Presentation can change on Original without weakening its immutable content contract. */
+export function updateActiveResumePresentation(
+  family: CanvasResumeFamily,
+  patch: Partial<Pick<CanvasResumeRevision, 'templateId' | 'pageSize' | 'orientation'>>,
+  now = new Date().toISOString(),
+): CanvasResumeFamily {
+  const active = activeResumeRevision(family);
+  return { ...family, revisions: family.revisions.map((revision) => revision.id === active.id ? { ...revision, ...patch, updatedAt: now } : revision) };
 }
 
 export function restoreResumeAsNew(
@@ -285,7 +307,7 @@ export function promoteResumeToMaster(family: CanvasResumeFamily, revisionId: st
 
 export function updateResumeFamilySettings(
   family: CanvasResumeFamily,
-  patch: Partial<Pick<CanvasResumeFamily, 'privacy' | 'archivedAt' | 'watched'>>,
+  patch: Partial<Pick<CanvasResumeFamily, 'privacy' | 'archivedAt' | 'watched' | 'defaultTemplateId' | 'viewZoom'>>,
 ): CanvasResumeFamily {
   return { ...family, ...patch };
 }
@@ -302,6 +324,26 @@ export function deleteResumeRevision(family: CanvasResumeFamily, revisionId: str
   };
 }
 
+/** Copy one revision into a new independent family whose source is immutable. */
+export function detachResumeRevision(
+  family: CanvasResumeFamily,
+  revisionId: string,
+  options: { now?: string; idFactory?: () => string } = {},
+): CanvasResumeFamily | null {
+  const source = family.revisions.find((revision) => revision.id === revisionId);
+  if (!source) return null;
+  const now = options.now ?? new Date().toISOString();
+  const originalId = (options.idFactory ?? id)();
+  const original: CanvasResumeRevision = {
+    ...clone(source), id: originalId, kind: 'original', sourceRevisionId: null, createdAt: now, updatedAt: now,
+  };
+  return {
+    version: 1, privacy: 'private', archivedAt: null, watched: false,
+    defaultTemplateId: source.templateId, viewZoom: family.viewZoom,
+    originalRevisionId: originalId, activeRevisionId: originalId, masterRevisionId: originalId, revisions: [original],
+  };
+}
+
 export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily | null {
   const value = data.resumeFamily;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -314,7 +356,10 @@ export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily
     return typeof row.id === 'string' && (row.kind === 'original' || row.kind === 'derived')
       && typeof row.title === 'string' && typeof row.markdown === 'string'
       && RESUME_TEMPLATE_IDS.includes(row.templateId as ResumeTemplateId);
-  });
+  }).map((revision) => ({ ...revision,
+    pageSize: ['letter', 'legal', 'a4'].includes(String(revision.pageSize)) ? revision.pageSize : 'a4',
+    orientation: ['portrait', 'landscape'].includes(String(revision.orientation)) ? revision.orientation : 'portrait',
+  }));
   if (!revisions.length || !revisions.some((revision) => revision.id === family.originalRevisionId)) return null;
   const activeRevisionId = revisions.some((revision) => revision.id === family.activeRevisionId) ? family.activeRevisionId : family.originalRevisionId;
   const masterRevisionId = revisions.some((revision) => revision.id === family.masterRevisionId) ? family.masterRevisionId : family.originalRevisionId;
@@ -322,7 +367,10 @@ export function resumeFamilyFromNode(data: CreationNodeData): CanvasResumeFamily
     ? family.privacy as CanvasResumeFamily['privacy'] : 'private';
   return {
     version: 1, privacy, archivedAt: typeof family.archivedAt === 'string' ? family.archivedAt : null,
-    watched: family.watched === true, originalRevisionId: family.originalRevisionId, activeRevisionId, masterRevisionId, revisions,
+    watched: family.watched === true,
+    defaultTemplateId: RESUME_TEMPLATE_IDS.includes(family.defaultTemplateId as ResumeTemplateId) ? family.defaultTemplateId as ResumeTemplateId : 'hired-default',
+    viewZoom: typeof family.viewZoom === 'number' && family.viewZoom >= 40 && family.viewZoom <= 125 ? family.viewZoom : 75,
+    originalRevisionId: family.originalRevisionId, activeRevisionId, masterRevisionId, revisions,
   };
 }
 

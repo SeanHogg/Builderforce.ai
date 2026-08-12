@@ -190,7 +190,7 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
       )}
 
       {m.relatedSurface && (
-        <RelatedArticles surface={m.relatedSurface} heading={t('relatedReading')} />
+        <RelatedArticles surface={m.relatedSurface} heading={t('relatedReading')} embedded />
       )}
 
       {/* LAYOUT ONLY.
@@ -250,7 +250,7 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
         .rm-card { display: flex; flex-direction: column; gap: var(--space-2); text-decoration: none; }
         .rm-card-icon { font-size: var(--font-size-section); }
 
-        .rm-faq { max-width: var(--content-narrow); margin-left: auto; margin-right: auto; }
+        .rm-faq { width: 100%; }
         .rm-faq-list { display: flex; flex-direction: column; gap: var(--space-3); }
         .rm-faq-item { padding-left: var(--space-5); padding-right: var(--space-5); }
         .rm-faq-q {

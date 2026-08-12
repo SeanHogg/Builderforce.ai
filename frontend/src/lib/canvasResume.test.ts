@@ -4,6 +4,7 @@ import {
   createResumeFamily,
   deriveResume,
   deleteResumeRevision,
+  detachResumeRevision,
   initializeResumeFromPatch,
   originalResumeRevision,
   promoteResumeToMaster,
@@ -13,6 +14,7 @@ import {
   resumeDocumentFromJson,
   selectResumeRevision,
   updateActiveResume,
+  updateActiveResumePresentation,
   updateResumeFamilySettings,
 } from './canvasResume';
 
@@ -36,6 +38,13 @@ describe('Canvas resume lineage', () => {
     expect(updateActiveResume(family, { markdown: '# Replaced' })).toEqual(family);
   });
 
+  it('allows presentation changes on Original while protecting its content', () => {
+    const family = createResumeFamily({ title: 'Original', markdown: '# Keep me', idFactory: ids('original') });
+    const presented = updateActiveResumePresentation(family, { templateId: 'risk-asphalt', pageSize: 'legal', orientation: 'landscape' });
+    expect(activeResumeRevision(presented)).toMatchObject({ markdown: '# Keep me', templateId: 'risk-asphalt', pageSize: 'legal', orientation: 'landscape' });
+    expect(updateActiveResume(presented, { markdown: '# Replaced' })).toEqual(presented);
+  });
+
   it('restores as a new head and promotes without changing source revisions', () => {
     const original = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
     const first = deriveResume(original, 'First', { idFactory: ids('first') });
@@ -48,8 +57,8 @@ describe('Canvas resume lineage', () => {
 
   it('persists privacy, archive, and watch settings on the family', () => {
     const family = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
-    const updated = updateResumeFamilySettings(family, { privacy: 'recruiter_only', archivedAt: '2026-08-11T04:00:00Z', watched: true });
-    expect(updated).toMatchObject({ privacy: 'recruiter_only', archivedAt: '2026-08-11T04:00:00Z', watched: true });
+    const updated = updateResumeFamilySettings(family, { privacy: 'recruiter_only', archivedAt: '2026-08-11T04:00:00Z', watched: true, defaultTemplateId: 'executive-taupe', viewZoom: 90 });
+    expect(updated).toMatchObject({ privacy: 'recruiter_only', archivedAt: '2026-08-11T04:00:00Z', watched: true, defaultTemplateId: 'executive-taupe', viewZoom: 90 });
     expect(family).toMatchObject({ privacy: 'private', archivedAt: null, watched: false });
   });
 
@@ -61,6 +70,16 @@ describe('Canvas resume lineage', () => {
     const deleted = deleteResumeRevision(second, 'second');
     expect(deleted.revisions.map((revision) => revision.id)).toEqual(['original', 'first']);
     expect(deleted.activeRevisionId).toBe('original');
+  });
+
+  it('detaches a derived revision into an independent immutable family', () => {
+    const original = createResumeFamily({ title: 'Original', markdown: '# One', idFactory: ids('original') });
+    const derived = updateActiveResume(deriveResume(original, 'Tailored', { idFactory: ids('derived') }), { templateId: 'risk-asphalt', document: { basics: { name: 'Tailored' } } });
+    const detached = detachResumeRevision(derived, 'derived', { now: '2026-08-11T05:00:00Z', idFactory: ids('detached') })!;
+    expect(detached.revisions).toHaveLength(1);
+    expect(activeResumeRevision(detached)).toMatchObject({ id: 'detached', kind: 'original', sourceRevisionId: null, templateId: 'risk-asphalt' });
+    expect(detached.defaultTemplateId).toBe('risk-asphalt');
+    expect(originalResumeRevision(derived).markdown).toBe('# One');
   });
 
   it('turns an agent content rewrite into a derivative patch', () => {
