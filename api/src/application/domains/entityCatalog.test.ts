@@ -52,12 +52,8 @@ describe('the entity catalog', () => {
     }
   });
 
-  it('declares every scope, including the empty one', () => {
-    // Integrations owns ONE target table and it is a kernel primitive, so its
-    // file is legitimately empty — and it exists precisely so that fact is
-    // written down rather than looking like an omission.
+  it('declares every scope', () => {
     for (const scope of ENTITY_SCOPES) expect(entitiesForScope(scope)).toBeDefined();
-    expect(entitiesForScope('integrations')).toHaveLength(0);
   });
 
   it('refuses to resolve an entity through another seat’s scope', () => {

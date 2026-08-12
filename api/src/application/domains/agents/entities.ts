@@ -30,6 +30,15 @@ import {
   modelLocks,
   workflowActions,
 } from '../../../infrastructure/database/schema/agents';
+import {
+  webSearchDocuments,
+  webSearchFrontier,
+  webSearchRequests,
+  webSearchRequestUrls,
+  webSearchRobots,
+  webSearchSources,
+  webSearchTerms,
+} from '../../../infrastructure/database/schema/search';
 import { defineDomainEntities, entity } from '../entityDefinition';
 
 export const AGENTS_ENTITIES = defineDomainEntities('agents', [
@@ -59,4 +68,12 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   entity(executionLimits, { readOnly: true }),
   entity(agentContextContributions, { readOnly: true }),
   entity(agentOutboundInspections, { readOnly: true }),
+  /** Search crawl state and the derived index are maintained by the crawler. */
+  entity(webSearchSources, { readOnly: true }),
+  entity(webSearchFrontier, { readOnly: true }),
+  entity(webSearchRobots, { readOnly: true, global: true }),
+  entity(webSearchDocuments, { readOnly: true }),
+  entity(webSearchTerms, { readOnly: true }),
+  entity(webSearchRequests, { readOnly: true }),
+  entity(webSearchRequestUrls, { readOnly: true }),
 ]);
