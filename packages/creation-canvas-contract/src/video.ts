@@ -161,3 +161,25 @@ export function removeCanvasVideoClip(timeline: CanvasVideoTimeline, clipId: str
   return { ...timeline, clips: timeline.clips.filter((clip) => clip.id !== clipId) };
 }
 
+/** Split one editable clip at an absolute playhead without changing its media source. */
+export function splitCanvasVideoClip(timeline: CanvasVideoTimeline, clipId: string, atSeconds: number, idFactory: () => string = () => crypto.randomUUID()): CanvasVideoTimeline {
+  const source = timeline.clips.find((clip) => clip.id === clipId);
+  if (!source) return timeline;
+  const offset = atSeconds - source.startSeconds;
+  if (!Number.isFinite(offset) || offset < 0.04 || offset > source.durationSeconds - 0.04) return timeline;
+  const left = { ...source, durationSeconds: offset };
+  const right = { ...source, id: idFactory(), startSeconds: atSeconds, durationSeconds: source.durationSeconds - offset, trimStartSeconds: source.trimStartSeconds + offset, label: `${source.label} · 2` };
+  return { ...timeline, clips: timeline.clips.flatMap((clip) => clip.id === clipId ? [left, right] : [clip]) };
+}
+
+/** Reorder clips inside a track and ripple their start positions sequentially. */
+export function moveCanvasVideoClip(timeline: CanvasVideoTimeline, clipId: string, delta: -1 | 1): CanvasVideoTimeline {
+  const source = timeline.clips.find((clip) => clip.id === clipId); if (!source) return timeline;
+  const trackClips = timeline.clips.filter((clip) => clip.track === source.track).sort((a, b) => a.startSeconds - b.startSeconds);
+  const index = trackClips.findIndex((clip) => clip.id === clipId); const destination = index + delta;
+  if (index < 0 || destination < 0 || destination >= trackClips.length) return timeline;
+  [trackClips[index], trackClips[destination]] = [trackClips[destination]!, trackClips[index]!];
+  let cursor = source.track === 'visual' ? 0 : Math.min(...trackClips.map((clip) => clip.startSeconds));
+  const rippled = new Map(trackClips.map((clip) => { const next = { ...clip, startSeconds: cursor }; cursor += clip.durationSeconds; return [clip.id, next]; }));
+  return { ...timeline, clips: timeline.clips.map((clip) => rippled.get(clip.id) ?? clip) };
+}

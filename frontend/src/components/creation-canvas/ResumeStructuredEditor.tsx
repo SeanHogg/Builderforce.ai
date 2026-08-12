@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import { RESUME_SECTION_ORDER, type CanvasResumeDocument, type CanvasResumeEducation, type CanvasResumeSkill, type CanvasResumeWork, type ResumeSectionId } from '@/lib/canvasResume';
@@ -32,6 +33,7 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
   const t = useTranslations('creationCanvas.resumeEditor');
   const translate = t as unknown as (key: string, values?: Record<string, string | number>) => string;
   const basics = document.basics ?? {};
+  const [deletedEntry, setDeletedEntry] = useState<{ section: SectionName; index: number; row: unknown } | null>(null);
   const configuredOrder = document.builderforceLayout?.sectionOrder ?? [];
   const sectionOrder = [...configuredOrder.filter((id): id is ResumeSectionId => RESUME_SECTION_ORDER.includes(id as ResumeSectionId)), ...RESUME_SECTION_ORDER].filter((id, index, all) => all.indexOf(id) === index);
   const hiddenSections = new Set(document.builderforceLayout?.hiddenSections ?? []);
@@ -64,7 +66,18 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
     rows[index] = row;
     onChange({ ...document, [section]: rows });
   };
-  const remove = (section: SectionName, index: number) => onChange({ ...document, [section]: ((document[section] as unknown[] | undefined) ?? []).filter((_, rowIndex) => rowIndex !== index) });
+  const remove = (section: SectionName, index: number) => {
+    const rows = (document[section] as unknown[] | undefined) ?? [];
+    setDeletedEntry({ section, index, row: rows[index] });
+    onChange({ ...document, [section]: rows.filter((_, rowIndex) => rowIndex !== index) });
+  };
+  const undoDelete = () => {
+    if (!deletedEntry) return;
+    const rows = [...((document[deletedEntry.section] as unknown[] | undefined) ?? [])];
+    rows.splice(Math.min(deletedEntry.index, rows.length), 0, deletedEntry.row);
+    onChange({ ...document, [deletedEntry.section]: rows });
+    setDeletedEntry(null);
+  };
   const move = (section: SectionName, index: number, delta: number) => {
     const rows = [...((document[section] as unknown[] | undefined) ?? [])];
     const destination = index + delta;
@@ -91,6 +104,7 @@ export function ResumeStructuredEditor({ document, onChange }: { document: Canva
   </label>;
 
   return <div className={styles.resumeStructuredEditor}>
+    {deletedEntry && <div className={styles.resumeUndoDelete} role="status"><span>{t('entryDeleted')}</span><button type="button" onClick={undoDelete}>{t('undoDelete')}</button><button type="button" aria-label={t('dismissUndo')} onClick={() => setDeletedEntry(null)}>×</button></div>}
     <details><summary>{t('sectionLayout')}</summary><div className={styles.resumeSectionLayout}>
       {sectionOrder.map((section, index) => <div key={section}>
         <label><input type="checkbox" checked={!hiddenSections.has(section)} onChange={() => toggleSection(section)} /> <span>{translate(SECTION_LABEL_KEYS[section])}</span></label>

@@ -13622,6 +13622,9 @@
       "projectMedia": "项目媒体网址（每行一个）",
       "privateReference": "在预览和导出中隐藏此推荐人",
       "media": "媒体",
+      "entryDeleted": "简历条目已删除",
+      "undoDelete": "撤销",
+      "dismissUndo": "关闭撤销提示",
       "oneColumn": "单栏",
       "twoColumns": "双栏",
       "template_hired-default": "Hired 默认",
@@ -13687,6 +13690,9 @@
       "trim": "裁剪",
       "volume": "音量",
       "removeClip": "移除 {name}",
+      "moveClipEarlier": "将 {name} 前移",
+      "moveClipLater": "将 {name} 后移",
+      "splitClip": "在播放头处分割 {name}",
       "emptyTrack": "没有片段"
     },
     "comparison": {

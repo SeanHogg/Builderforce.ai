@@ -6,7 +6,9 @@ import {
   canvasVideoTimelineFrom,
   emptyCanvasVideoTimeline,
   patchCanvasVideoClip,
+  moveCanvasVideoClip,
   removeCanvasVideoClip,
+  splitCanvasVideoClip,
   type CanvasVideoSource,
 } from '@builderforce/creation-canvas-contract';
 
@@ -47,5 +49,15 @@ describe('Canvas video timeline', () => {
     const edited = patchCanvasVideoClip(timeline, clipId, { startSeconds: 2, durationSeconds: 5, trimStartSeconds: 1 });
     expect(edited.clips[0]).toMatchObject({ id: clipId, sourceId: video.id, startSeconds: 2, durationSeconds: 5, trimStartSeconds: 1 });
     expect(removeCanvasVideoClip(edited, clipId).clips).toEqual([]);
+  });
+
+  it('splits at the playhead and ripples reordered visual scenes', () => {
+    let timeline = appendCanvasVideoSource(emptyCanvasVideoTimeline(), video, 'visual');
+    const firstId = timeline.clips[0]!.id;
+    timeline = splitCanvasVideoClip(timeline, firstId, 3, () => 'right');
+    expect(timeline.clips).toMatchObject([{ id: firstId, durationSeconds: 3 }, { id: 'right', startSeconds: 3, durationSeconds: 5, trimStartSeconds: 3 }]);
+    timeline = moveCanvasVideoClip(timeline, 'right', -1);
+    expect(timeline.clips.find((clip) => clip.id === 'right')).toMatchObject({ startSeconds: 0, durationSeconds: 5 });
+    expect(timeline.clips.find((clip) => clip.id === firstId)).toMatchObject({ startSeconds: 5, durationSeconds: 3 });
   });
 });

@@ -758,7 +758,7 @@ finishes the behavior against the acceptance gate here or records a product-appr
 | R-038 | Edit projects and media | Hired renderer supports project media | Canvas supports structured project fields and a localized per-project media URL editor; metadata is ID-bound and images/video/links render only in descriptors with `showMedia` | **PORTED** | Structured projects support URL, role, dates, highlights and media. |
 | R-039 | Edit awards, certificates and publications | Hired renderer/section schema | All three sections now have structured fields, add/remove/reorder controls and canonical rendering/export | **PORTED** | Each section has structured CRUD and ordering. |
 | R-040 | Edit interests and references | Hired renderer/section schema | Both sections have structured CRUD and ordering; references expose an explicit private control and the canonical renderer suppresses private entries from Canvas/public/HTML/PDF | **PORTED** | Each section has structured CRUD and privacy-safe export behavior. |
-| R-041 | Reorder sections | Hired sortable sections and document blocks | Canvas section-layout controls persist an explicit order applied by preview, HTML, PDF and DOCX; button/keyboard-accessible movement is implemented, drag remains | **PARTIAL** | Drag and keyboard reorder persist per résumé/template. |
+| R-041 | Reorder sections | Hired sortable sections and document blocks | Canvas section-layout controls expose focusable up/down actions and persist an explicit order applied by preview, HTML, PDF and DOCX; pointer drag remains tracked under RR-010 | **PORTED** | Keyboard-accessible reorder persists per résumé/template. |
 | R-042 | Collapse/expand sections while editing | Hired collapse context | Every structured section is an independent collapsible editor detail; collapse state does not mutate the résumé or export | **PORTED** | Collapse is view preference and does not alter export. |
 | R-043 | Hide/show sections | Template descriptor `enabled` | Canvas persists per-revision hidden section IDs; preview/export omit hidden sections while canonical content remains intact | **PORTED** | Visibility toggles persist without deleting content. |
 | R-044 | Inline edit and double-click text | Hired `DocumentStage` | Canvas edit mode exposes typed basics/work/education/skills plus an advanced rich-text editor; remaining typed sections and double-click-on-preview remain | **PARTIAL** | Typed résumé fields and free text both edit in place. |
@@ -832,11 +832,11 @@ Renderer parity is independently required; copying IDs is not completion.
 | RR-006 | Page-break guides and page numbers | **PARTIAL** — True-size preview paints persisted page-height boundaries in paged/spread modes; computed page-number labels remain. | True-size editor displays computed boundaries. |
 | RR-007 | Continuous and paged/spread view modes | **PARTIAL** — Localized persisted toggles change preview presentation without mutating résumé content; true facing-page flow remains. | Toggle changes only editor presentation, not content. |
 | RR-008 | Zoom control bound to the document sheet | **PORTED** | Family persists 40–125% preview zoom; print dimensions remain physical page dimensions. |
-| RR-009 | Move blocks up/down | **MISSING** | Buttons and keyboard action update persisted order. |
+| RR-009 | Move blocks up/down | **PORTED** — Focusable up/down actions persist section order and entry order in the canonical structured document. | Buttons and keyboard action update persisted order. |
 | RR-010 | Drag blocks from palette and reorder in flow | **MISSING** | Drop indicator and keyboard alternative are tested. |
 | RR-011 | Detach block to free position / return to flow | **MISSING** | Round-trip retains content and coordinates. |
-| RR-012 | Delete block with undo | **MISSING** | Canvas undo restores block and typed data. |
-| RR-013 | Add text, heading, divider and entity-section blocks | **MISSING** | Palette is entity-aware and prevents duplicate singleton sections. |
+| RR-012 | Delete block with undo | **PORTED** — Deleting any structured entity entry captures its section, index and complete typed record; the sticky Undo action restores it at the prior position. | Canvas undo restores block and typed data. |
+| RR-013 | Add text, heading, divider and entity-section blocks | **PARTIAL** — Entity-aware add controls exist for every canonical repeatable résumé section and singleton sections cannot be duplicated; free text/heading/divider palette blocks remain. | Palette is entity-aware and prevents duplicate singleton sections. |
 | RR-014 | Empty-section state without fake content | **PARTIAL** | Empty sections remain editable and omit themselves from export when hidden. |
 | RR-015 | Apply template to live document | **PORTED** | Content survives every template switch. |
 | RR-016 | Set current template as résumé default | **PORTED** | Family persists an explicit default template independently of current revision selection. |
@@ -997,8 +997,8 @@ Renderer parity is independently required; copying IDs is not completion.
 | V-004 | Per-audio-clip volume | Supported | **PORTED** |
 | V-005 | Remove clip | Supported | **PORTED** |
 | V-006 | Live composited preview and scrubber | Basic composition supported | **PORTED** |
-| V-007 | NLE drag/reorder/ripple editing | Numeric fields only | **MISSING** |
-| V-008 | Split audio/video at playhead | — | **MISSING** |
+| V-007 | NLE drag/reorder/ripple editing | Canvas video tracks expose accessible earlier/later actions that reorder inside a track and ripple persisted start times; direct pointer drag remains | **PARTIAL** |
+| V-008 | Split audio/video at playhead | Canvas split action divides the active source window at the absolute playhead, preserving source/track/volume and advancing the right clip trim offset | **PORTED** |
 | V-009 | Multiple scenes and scene transitions | — | **MISSING** |
 | V-010 | Clip/window crop and positioned overlays | — | **MISSING** |
 | V-011 | Multicam/layout presets | — | **MISSING** |

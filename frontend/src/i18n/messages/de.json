@@ -13622,6 +13622,9 @@
       "projectMedia": "Projektmedien-URLs (eine pro Zeile)",
       "privateReference": "Diese Referenz in Vorschau und Exporten privat halten",
       "media": "Medien",
+      "entryDeleted": "Lebenslaufeintrag gelöscht",
+      "undoDelete": "Rückgängig",
+      "dismissUndo": "Rückgängig-Hinweis schließen",
       "oneColumn": "Eine Spalte",
       "twoColumns": "Zwei Spalten",
       "template_hired-default": "Hired Standard",
@@ -13687,6 +13690,9 @@
       "trim": "Schnitt",
       "volume": "Lautstärke",
       "removeClip": "{name} entfernen",
+      "moveClipEarlier": "{name} nach vorne verschieben",
+      "moveClipLater": "{name} nach hinten verschieben",
+      "splitClip": "{name} am Abspielkopf teilen",
       "emptyTrack": "Keine Clips"
     },
     "comparison": {

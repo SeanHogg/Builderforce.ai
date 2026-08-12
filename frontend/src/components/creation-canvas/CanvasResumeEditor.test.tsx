@@ -93,6 +93,21 @@ describe('CanvasResumeEditor', () => {
     expect(activeResumeRevision(patch.resumeFamily).document?.customExtension).toEqual({ retained: true });
   });
 
+  it('restores a deleted structured entry with its complete typed data', () => {
+    const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' }, work: [{ id: 'work-1', name: 'Engine Co', position: 'Engineer', highlights: ['Built it'] }] }, idFactory: () => 'original' });
+    const family = deriveResume(original, 'Editable', { idFactory: () => 'derived' });
+    const onEdit = vi.fn();
+    const { rerender } = render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove entry' }));
+    const removed = onEdit.mock.calls.at(-1)?.[0]?.resumeFamily as CanvasResumeFamily;
+    expect(activeResumeRevision(removed).document?.work).toEqual([]);
+    rerender(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(removed) }} onEdit={onEdit} />);
+    fireEvent.click(screen.getByText('Undo', { selector: 'button' }));
+    const restored = onEdit.mock.calls.at(-1)?.[0]?.resumeFamily as CanvasResumeFamily;
+    expect(activeResumeRevision(restored).document?.work).toEqual([{ id: 'work-1', name: 'Engine Co', position: 'Engineer', highlights: ['Built it'] }]);
+  });
+
   it('detaches a selected derivative as an independent résumé family', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' } }, idFactory: () => 'original' });
     const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });

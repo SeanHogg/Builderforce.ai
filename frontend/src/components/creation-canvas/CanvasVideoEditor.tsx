@@ -8,7 +8,9 @@ import {
   canvasVideoSourcesFrom,
   canvasVideoTimelineFrom,
   patchCanvasVideoClip,
+  moveCanvasVideoClip,
   removeCanvasVideoClip,
+  splitCanvasVideoClip,
   type CanvasVideoClip,
   type CanvasVideoSource,
   type CanvasVideoTrackKind,
@@ -212,6 +214,7 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
             <label>{t('length')}<input disabled={!editable} type="number" min="0.1" step="0.1" value={clip.durationSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { durationSeconds: Number(event.target.value) }))} /></label>
             <label>{t('trim')}<input disabled={!editable} type="number" min="0" step="0.1" value={clip.trimStartSeconds} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { trimStartSeconds: Number(event.target.value) }))} /></label>
             {track !== 'visual' && <label>{t('volume')}<input disabled={!editable} type="range" min="0" max="2" step="0.05" value={clip.volume} onChange={(event) => commit(patchCanvasVideoClip(timeline, clip.id, { volume: Number(event.target.value) }))} /></label>}
+            <div className={styles.clipActions}><button disabled={!editable} type="button" aria-label={t('moveClipEarlier', { name: clip.label })} onClick={() => commit(moveCanvasVideoClip(timeline, clip.id, -1))}>←</button><button disabled={!editable} type="button" aria-label={t('moveClipLater', { name: clip.label })} onClick={() => commit(moveCanvasVideoClip(timeline, clip.id, 1))}>→</button><button disabled={!editable || playhead <= clip.startSeconds || playhead >= clip.startSeconds + clip.durationSeconds} type="button" aria-label={t('splitClip', { name: clip.label })} onClick={() => commit(splitCanvasVideoClip(timeline, clip.id, playhead))}>✂</button></div>
             <button disabled={!editable} type="button" aria-label={t('removeClip', { name: clip.label })} onClick={() => commit(removeCanvasVideoClip(timeline, clip.id))}>×</button>
           </article>)}
           {!timeline.clips.some((clip) => clip.track === track) && <span className={styles.emptyTrack}>{t('emptyTrack')}</span>}

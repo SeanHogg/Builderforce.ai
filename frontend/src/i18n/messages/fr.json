@@ -13622,6 +13622,9 @@
       "projectMedia": "URL des médias du projet (une par ligne)",
       "privateReference": "Garder cette référence privée dans l’aperçu et les exports",
       "media": "Média",
+      "entryDeleted": "Entrée du CV supprimée",
+      "undoDelete": "Annuler",
+      "dismissUndo": "Fermer l’annulation",
       "oneColumn": "Une colonne",
       "twoColumns": "Deux colonnes",
       "template_hired-default": "Hired par défaut",
@@ -13687,6 +13690,9 @@
       "trim": "Rognage",
       "volume": "Volume",
       "removeClip": "Supprimer {name}",
+      "moveClipEarlier": "Déplacer {name} plus tôt",
+      "moveClipLater": "Déplacer {name} plus tard",
+      "splitClip": "Scinder {name} à la tête de lecture",
       "emptyTrack": "Aucun clip"
     },
     "comparison": {

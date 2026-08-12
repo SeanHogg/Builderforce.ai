@@ -26,6 +26,8 @@
 .clip label { display: grid; gap: 2px; color: var(--canvas-muted); font-size: var(--font-size-field-label); }
 .clip input[type='number'] { width: 100%; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); }
 .clip button { align-self: center; border: 0; background: transparent; color: var(--canvas-muted); cursor: pointer; }
+.clipActions { display:flex; align-self:center; gap:2px; }
+.clipActions button { min-width:1.5rem; min-height:1.5rem; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); }
 .emptyTrack { align-self: center; color: var(--canvas-muted); font-size: var(--font-size-field-label); padding-inline: var(--space-2); }
 @container (max-width: 700px) {
   .editor { min-width: 18rem; }

@@ -13623,6 +13623,9 @@
       "projectMedia": "Project media URLs (one per line)",
       "privateReference": "Keep this reference private in preview and exports",
       "media": "Media",
+      "entryDeleted": "Résumé entry deleted",
+      "undoDelete": "Undo",
+      "dismissUndo": "Dismiss undo",
       "oneColumn": "One column",
       "twoColumns": "Two columns",
       "template_hired-default": "Hired default",
@@ -13688,6 +13691,9 @@
       "trim": "Trim",
       "volume": "Volume",
       "removeClip": "Remove {name}",
+      "moveClipEarlier": "Move {name} earlier",
+      "moveClipLater": "Move {name} later",
+      "splitClip": "Split {name} at playhead",
       "emptyTrack": "No clips"
     },
     "comparison": {
