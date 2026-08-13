@@ -1,3 +1,40 @@
+## RESOLVED 2026-08-13 - `/sales` opens as a slide-out panel, and the panel can finally name a page the builder registry has never heard of
+
+`/sales` replaced the board instead of opening over it. Both its own doc comments said otherwise -
+`app/sales/page.tsx` and `SalesHubClient` each state the route "opens as a slide-out panel over the board
+(see `workbenchPolicy`)" - and `workbenchPolicy` said the opposite, because `FULL_WIDTH_PATTERNS` still
+carried `/^\/sales(?:\/|$)/` from when `/sales` **was** the launcher that provisioned a workspace, seeded
+the prescriptive canvas and redirected. The launcher moved to `/sales/canvas`; the pattern did not move
+with it. So an associate consulting a referral link lost the canvas they were selling from - PRD 21 §0's
+one corollary ("a route may change what is on screen; it may never unmount the stage") broken for the one
+account type whose whole job is the board.
+
+- **`lib/workbenchPolicy.ts` - `/^\/sales\/.+/`, not `/^\/sales(?:\/|$)/`.** The hub is a workbench; its
+  two sub-routes stay full-width, because `/sales/canvas` and `/sales/referral-claim` provision and
+  redirect, and a redirect has nothing to put in a panel.
+- **`SalesHubClient` names itself in the panel** through the chrome its own shell already publishes
+  (`usePublishReferenceChrome` / `usePublishReferenceSelect` / `useReferenceRailActive`) - the seam
+  `/dashboard` uses for exactly this. Its six sub-views become the panel's index rail, as VIEWS rather than
+  anchors, and the inline tab bar stands down when the rail is showing so the same six choices do not
+  render twice. Without it the header read **"Panel"**: `/sales` is not a builder nav group, and the
+  footer's "Sell Builderforce" hands *any* signed-in person there.
+- **`findActiveGroup(pathname, groups = NAV_GROUPS)`** - the registry is now a parameter. It resolved
+  against the BUILDER rows only, so for a sales or freelancer account "which destination am I on" had no
+  answer at all, and each consumer had patched the symptom locally: the Sidebar carried a hand-rolled
+  second copy of the prefix match as a fallback (which disagreed with the shared one - no `/settings`
+  exact-match carve-out), and `useShellIndex` blanked the index for freelancers outright to stop it
+  offering tenant-only tabs. Both patches are deleted, not kept beside the fix.
+- **One `useNavGroups()`** (in `lib/destinations/useDestinations.ts`, which already composed it) - account
+  type applied, disabled navigation features filtered - now shared by `Sidebar`, `useDestinations` and
+  `ShellIndex`. A fourth account type is one edit rather than three. It went into an existing `'use client'`
+  module deliberately: a new file would have pushed the architecture ratchet one further over a baseline
+  it is already over from another in-flight change set.
+
+Guarded by `workbenchPolicy.test.ts` (the hub docks, the launchers do not, the width is `wide`) and by
+`unifiedMenu.test.ts` (an associate resolves on `/sales`, a freelancer on `/freelancer/timecard`, a builder
+still resolves without being told which groups - and the builder registry still answers `undefined` for
+`/sales`, which is the defect the parameter exists to keep out).
+
 ## RESOLVED 2026-08-13 - `check:design-scale` back to green: the version/legal strip moved corner, and the ratchet that guards it was already red
 
 Moving the version + Terms/Privacy strip out of the sidebar and into the frame's bottom-right corner ran

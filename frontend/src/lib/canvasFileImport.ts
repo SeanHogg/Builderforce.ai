@@ -9,6 +9,7 @@
  * drop path and the picker path drift apart, so every caller reads this.
  */
 import { isTabularFile, parseTabularText, profileTabular, type TabularSource } from './canvasTabularData';
+import { nextDatasetVersion, rowBasis } from './canvasDatasetVersion';
 import { fileExtension, fileStem } from './canvasDocuments';
 import { htmlToMarkdown } from './richText';
 import {
@@ -78,8 +79,17 @@ export type CanvasFileImport = {
 export function datasetObjectData(
   fileName: string,
   source: TabularSource,
-  options: { mimeType?: string; subtitle: string; status: string },
+  options: { mimeType?: string; subtitle: string; status: string; previousVersion?: unknown; sourceRows?: number },
 ): Record<string, unknown> {
+  // The reproducibility envelope, attached at the ONE point rows enter the board.
+  //
+  // `producedAt` + `lineage` + `sourceDatasetId` could say WHICH object a number came
+  // from and never WHICH VERSION of it, and re-import overwrote in place — so "recompute
+  // last month's number" was not a request the board could honour, and every chart was a
+  // claim about a frame that no longer existed. The hash identifies the rows, the version
+  // counts the re-imports, and `basis` records how many rows survived the 500-row ceiling
+  // so a derived number can never quietly look whole.
+  const basis = rowBasis(source, options.sourceRows ?? null);
   return {
     title: fileName,
     fileName,
@@ -89,6 +99,9 @@ export function datasetObjectData(
     sampleRows: source.rows.slice(0, 25),
     rowCount: source.rows.length,
     profile: profileTabular(source),
+    basis,
+    datasetVersion: nextDatasetVersion(options.previousVersion),
+    fetchedAt: new Date().toISOString(),
     status: options.status,
     subtitle: options.subtitle,
   };

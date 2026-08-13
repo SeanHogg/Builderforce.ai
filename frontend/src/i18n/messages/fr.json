@@ -14600,7 +14600,9 @@
       "auditRule_lazyLoading": "Les images hors écran se chargent immédiatement",
       "auditRule_inlineStyleWeight": "Feuille de style en ligne volumineuse",
       "auditRule_viewportMeta": "Aucun viewport adaptatif déclaré",
-      "formulaErrors": "{count, plural, one {# erreur de formule} other {# erreurs de formule}} — la première en {first}"
+      "formulaErrors": "{count, plural, one {# erreur de formule} other {# erreurs de formule}} — la première en {first}",
+      "confidenceInterval": "IC 95 % {interval}",
+      "sampleSize": "n = {count}"
     },
     "editor": {
       "toolbar": "Mise en forme",

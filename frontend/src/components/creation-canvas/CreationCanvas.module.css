@@ -2811,3 +2811,34 @@
   .specMatrix td { min-width:72px; }
   .specBars li { grid-template-columns:minmax(40px,34%) 1fr auto; }
 }
+
+/* ── Derived-number provenance and the evaluation gate ──────────────────────────
+   Both answer "can I trust this number". The basis notice is deliberately quiet —
+   it appears only when there IS a caveat, so it reads as information rather than
+   as chrome. The gate badge is loud, because it is a decision.
+
+   Every colour is a semantic tone token, so both themes resolve; the layout wraps
+   and the badge's reason text is allowed to run to several lines on a narrow card
+   rather than being clipped, since a truncated reason is a reason nobody acts on. */
+.basisNotice {
+  grid-column:1/-1; margin:4px 0 0; padding:4px 7px;
+  border-radius:var(--radius-sm);
+  background:var(--tone-warning-bg); color:var(--tone-warning-ink);
+  font-size:8px; line-height:1.4; font-variant-numeric:tabular-nums;
+}
+.gateBadge {
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px;
+  margin:5px 0; padding:5px 8px; border-radius:var(--radius-sm);
+  background:var(--tone-info-bg); color:var(--tone-info-ink);
+  border-left:2px solid var(--tone-info-mark);
+  font-size:8px; line-height:1.45;
+}
+.gateBadge strong { font-size:9px; font-weight:700; }
+.gateBadge span { opacity:.9; }
+.gateBadge[data-gate-status='pass'] { background:var(--tone-success-bg); color:var(--tone-success-ink); border-left-color:var(--tone-success-mark); }
+.gateBadge[data-gate-status='warn'] { background:var(--tone-warning-bg); color:var(--tone-warning-ink); border-left-color:var(--tone-warning-mark); }
+.gateBadge[data-gate-status='block'] { background:var(--tone-danger-bg); color:var(--tone-danger-ink); border-left-color:var(--tone-danger-mark); }
+
+@media(max-width:760px){
+  .gateBadge { flex-direction:column; gap:2px; }
+}

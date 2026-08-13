@@ -14600,7 +14600,9 @@
       "auditRule_lazyLoading": "Bilder außerhalb des Sichtbereichs laden sofort",
       "auditRule_inlineStyleWeight": "Großes eingebettetes Stylesheet",
       "auditRule_viewportMeta": "Kein responsives Viewport deklariert",
-      "formulaErrors": "{count, plural, one {# Formelfehler} other {# Formelfehler}} — erster bei {first}"
+      "formulaErrors": "{count, plural, one {# Formelfehler} other {# Formelfehler}} — erster bei {first}",
+      "confidenceInterval": "95%-KI {interval}",
+      "sampleSize": "n = {count}"
     },
     "editor": {
       "toolbar": "Formatierung",

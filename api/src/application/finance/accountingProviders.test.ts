@@ -74,7 +74,7 @@ describe('foldTransactionsToMonths', () => {
       transaction({ amount: -500, status: 'pending' }),
       transaction({ id: 't2', amount: -100 }),
     ]);
-    expect(folded[0].outflow).toBe(100);
+    expect(folded).toEqual([{ month: '2026-07', currency: 'USD', inflow: 0, outflow: 100, net: -100 }]);
   });
 
   it('keeps currencies apart rather than adding a euro to a dollar', () => {

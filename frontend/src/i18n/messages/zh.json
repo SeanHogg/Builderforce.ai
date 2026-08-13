@@ -14600,7 +14600,9 @@
       "auditRule_lazyLoading": "首屏之外的图片未延迟加载",
       "auditRule_inlineStyleWeight": "内联样式表过大",
       "auditRule_viewportMeta": "未声明响应式视口",
-      "formulaErrors": "{count} 个公式错误 — 首个位于 {first}"
+      "formulaErrors": "{count} 个公式错误 — 首个位于 {first}",
+      "confidenceInterval": "95% 置信区间 {interval}",
+      "sampleSize": "样本量 n = {count}"
     },
     "editor": {
       "toolbar": "格式",

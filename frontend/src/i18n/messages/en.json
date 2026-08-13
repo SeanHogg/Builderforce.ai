@@ -14601,7 +14601,9 @@
       "auditRule_lazyLoading": "Below-the-fold images load eagerly",
       "auditRule_inlineStyleWeight": "Large inline stylesheet",
       "auditRule_viewportMeta": "No responsive viewport declared",
-      "formulaErrors": "{count, plural, one {# formula error} other {# formula errors}} — first at {first}"
+      "formulaErrors": "{count, plural, one {# formula error} other {# formula errors}} — first at {first}",
+      "confidenceInterval": "95% CI {interval}",
+      "sampleSize": "n = {count}"
     },
     "editor": {
       "toolbar": "Formatting",

@@ -65,6 +65,9 @@ import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websi
 import { CanvasVideoEditor } from './CanvasVideoEditor';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
 import { SpecObjectBody } from './SpecObjectBody';
+// One provenance line and one gate badge, rendered by every body that shows a derived
+// number — see the header there for why a truncated number is worse than a blank one.
+import { BasisNotice, EvaluationGateBadge } from './DerivedProvenance';
 import { allSpecObjectSpecs } from '@/lib/specObjects';
 // Importing a vocabulary registers it with the spec primitive, which is what makes its
 // kinds resolvable here — and in the palette, the AI contract and the empty-shell rule —
@@ -1518,6 +1521,10 @@ function EvaluationBody({ data, onOpen }: { data: CreationNodeData; onOpen?: () 
   return (
     <div className={styles.evaluationBody}>
       <div className={styles.verdict}>{String(data.verdict || t('evaluationReady'))}</div>
+      {/* The gate reads the same fields the tool handlers refuse on, so what a person
+          sees on the card and what the model is told when it tries to publish cannot
+          disagree — one evaluator, three consumers. */}
+      <EvaluationGateBadge data={data as Record<string, unknown>} />
       {(gaps.length ? gaps : [t('gapMessageMatch'), t('gapPrimaryAction'), t('gapDeliveryTiming')]).map((gap, index) => <div key={`${gap}-${index}`}><b>{index ? '△' : '✓'} {gap}</b><p>{recommendations[index] || (index ? t('askBrainResolution') : authoredText(data) || t('evidenceOnCanvas'))}</p></div>)}
       <button type="button" className="nodrag nowheel" onClick={(event) => { event.stopPropagation(); onOpen?.(); }}>{Array.isArray(data.testResults) && data.testResults.length ? t('reviewTestResults') : t('reviewEvaluationStep')}</button>
     </div>
