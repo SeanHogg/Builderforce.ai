@@ -3,9 +3,18 @@
  *
  * Two responsibilities that belong together because neither is meaningful alone:
  *
- *  1. **Connect / describe / disconnect** a destination — the write side of
- *     {@link payoutConnections}, with the credential sealed by the same
- *     `credentialCrypto` every other connection uses.
+ *  1. **Connect / describe / disconnect** a destination — a `connections` row
+ *     with `capability = 'payout'`, its credential sealed into the sibling
+ *     `credentials` row by the same `credentialCrypto` every connection uses.
+ *
+ *     There is no `payout_connections` table. A payout destination is a
+ *     connected third party with a sealed credential, a status and a reconnect
+ *     story, which is the kernel `connections` primitive exactly (PRD 20 §6.2) —
+ *     the same one `youtubePublishing` reads. Two things payout needs that the
+ *     kernel's own indexes do not give it are held as partial unique indexes in
+ *     migration 0459: uniqueness keyed by USER rather than tenant (money follows
+ *     the person — an associate in two workspaces has one bank account), and a
+ *     single default destination.
  *  2. **Pay** — take what a person has EARNED (their own domain's fact), subtract
  *     what has already been PAID (the ledger), and move the difference through
  *     their connected provider.
@@ -22,7 +31,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { ledgerEntries, payoutConnections } from '../../infrastructure/database/schema';
+import { connections, credentials, ledgerEntries } from '../../infrastructure/database/schema';
 import { credentialSecret, decryptCredentials, encryptCredentials } from '../integrations/credentialCrypto';
 import { createPayout as createWebhookPayout, isPayoutsConfigured } from '../integrations/payments';
 import {
@@ -67,17 +76,50 @@ export interface PayoutBalance {
   availableCents: number;
 }
 
-function view(row: typeof payoutConnections.$inferSelect): PayoutAccountView {
+/** The kernel capability that makes a `connections` row a payout destination. */
+const PAYOUT = 'payout';
+
+/**
+ * The purpose of the sealed secret. A payout credential is a stored vendor
+ * credential rather than an OAuth grant — typed bank fields for `bank`, an API
+ * credential for the rest — so it takes the kernel's existing `api_key` purpose.
+ */
+const PAYOUT_SECRET = 'api_key';
+
+type ConnectionRow = typeof connections.$inferSelect;
+
+/**
+ * The three facts a payout destination has that a mailbox does not.
+ *
+ * They live in the kernel's `config` rather than in three added columns, because
+ * a column every other capability leaves null is how a shared table turns back
+ * into six. `isDefault` is still enforced as data — migration 0459 puts a partial
+ * unique index on this exact expression.
+ */
+interface PayoutConfig {
+  currency?: string | null;
+  country?: string | null;
+  isDefault?: boolean;
+}
+
+const payoutConfig = (row: ConnectionRow): PayoutConfig => (row.config ?? {}) as PayoutConfig;
+
+/** SQL for "this row is the default", shared by the ordering and the lookup so
+ *  the predicate and the partial index can never drift apart. */
+const IS_DEFAULT = sql`coalesce(${connections.config}->>'isDefault', 'false') = 'true'`;
+
+function view(row: ConnectionRow): PayoutAccountView {
+  const config = payoutConfig(row);
   return {
     id: row.id,
-    provider: row.provider as PayoutProviderName,
-    label: row.accountLabel,
-    currency: row.currency,
-    country: row.country,
+    provider: row.vendor as PayoutProviderName,
+    label: row.displayName,
+    currency: config.currency ?? null,
+    country: config.country ?? null,
     status: row.status,
-    isDefault: row.isDefault,
+    isDefault: config.isDefault === true,
     lastError: row.lastError,
-    lastPayoutAtISO: row.lastPayoutAt ? row.lastPayoutAt.toISOString() : null,
+    lastPayoutAtISO: row.lastSyncedAt ? row.lastSyncedAt.toISOString() : null,
     connectedAtISO: row.createdAt.toISOString(),
   };
 }
@@ -85,11 +127,12 @@ function view(row: typeof payoutConnections.$inferSelect): PayoutAccountView {
 export class PayoutAccountService {
   constructor(private readonly db: Db, private readonly env: Env) {}
 
-  /** Every destination this person has connected, default first. */
+  /** Every destination this person has connected, default first. Deliberately
+   *  NOT tenant-scoped: one person, one set of bank details, every workspace. */
   async list(userId: string): Promise<PayoutAccountView[]> {
-    const rows = await this.db.select().from(payoutConnections)
-      .where(eq(payoutConnections.userId, userId))
-      .orderBy(desc(payoutConnections.isDefault), desc(payoutConnections.createdAt));
+    const rows = await this.db.select().from(connections)
+      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT)))
+      .orderBy(desc(IS_DEFAULT), desc(connections.createdAt));
     return rows.map(view);
   }
 
@@ -117,61 +160,105 @@ export class PayoutAccountService {
       input.tenantId,
     );
 
+    // Reconnecting must not silently demote a destination that was already the
+    // default, so the existing flag is carried forward rather than reset.
+    const [current] = await this.db.select({ config: connections.config }).from(connections)
+      .where(and(
+        eq(connections.userId, input.userId),
+        eq(connections.capability, PAYOUT),
+        eq(connections.vendor, input.provider),
+      )).limit(1);
+    const wasDefault = ((current?.config ?? {}) as PayoutConfig).isDefault === true;
+
     const values = {
       tenantId: input.tenantId,
       userId: input.userId,
-      provider: input.provider,
-      accountLabel: summary.label.slice(0, 255),
-      currency: summary.currency,
-      country: summary.country,
-      externalAccountId: input.credential.externalAccountId ?? null,
-      credentialEnc: sealed.enc,
-      credentialIv: sealed.iv,
+      vendor: input.provider,
+      capability: PAYOUT,
+      displayName: summary.label.slice(0, 255),
+      externalAccount: (input.credential.externalAccountId ?? '').slice(0, 320),
+      config: { currency: summary.currency, country: summary.country, isDefault: wasDefault } satisfies PayoutConfig,
       status: 'connected',
       lastError: null,
       updatedAt: new Date(),
     };
 
-    const [row] = await this.db.insert(payoutConnections).values(values)
-      .onConflictDoUpdate({ target: [payoutConnections.userId, payoutConnections.provider], set: values })
+    const [row] = await this.db.insert(connections).values(values)
+      .onConflictDoUpdate({
+        target: [connections.userId, connections.vendor],
+        targetWhere: eq(connections.capability, PAYOUT),
+        set: values,
+      })
       .returning();
     if (!row) return null;
+
+    // The secret rides in its own row so the listing read never pulls ciphertext.
+    await this.db.insert(credentials).values({
+      tenantId: input.tenantId,
+      connectionId: row.id,
+      purpose: PAYOUT_SECRET,
+      secretEnc: sealed.enc,
+      secretIv: sealed.iv,
+      status: 'active',
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [credentials.tenantId, credentials.connectionId, credentials.purpose],
+      set: { secretEnc: sealed.enc, secretIv: sealed.iv, status: 'active', updatedAt: new Date() },
+    });
 
     // The FIRST destination is the default whether or not anyone asked: a person
     // with exactly one connected account and no default would be told they have
     // nowhere to be paid, which is false.
-    const existing = await this.db.select({ id: payoutConnections.id }).from(payoutConnections)
-      .where(and(eq(payoutConnections.userId, input.userId), eq(payoutConnections.isDefault, true))).limit(1);
-    if (!input.makeDefault && existing.length > 0) return view(row);
+    const [existing] = await this.db.select({ id: connections.id }).from(connections)
+      .where(and(eq(connections.userId, input.userId), eq(connections.capability, PAYOUT), IS_DEFAULT)).limit(1);
+    if (!input.makeDefault && existing) return view(row);
     return (await this.setDefault(input.userId, row.id)) ?? view(row);
   }
 
   /** Exactly one default, enforced by clearing the others first (the partial
    *  unique index is the backstop, not the mechanism). */
   async setDefault(userId: string, id: number): Promise<PayoutAccountView | null> {
-    await this.db.update(payoutConnections).set({ isDefault: false, updatedAt: new Date() })
-      .where(and(eq(payoutConnections.userId, userId), eq(payoutConnections.isDefault, true)));
-    const [row] = await this.db.update(payoutConnections).set({ isDefault: true, updatedAt: new Date() })
-      .where(and(eq(payoutConnections.userId, userId), eq(payoutConnections.id, id))).returning();
+    const setFlag = (value: boolean) => ({
+      config: sql`jsonb_set(coalesce(${connections.config}, '{}'::jsonb), '{isDefault}', ${value ? 'true' : 'false'}::jsonb)`,
+      updatedAt: new Date(),
+    });
+    // Clear before setting: the partial unique index would refuse the moment two
+    // rows claimed the flag, which is the point of having it.
+    await this.db.update(connections).set(setFlag(false))
+      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT), IS_DEFAULT));
+    const [row] = await this.db.update(connections).set(setFlag(true))
+      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT), eq(connections.id, id)))
+      .returning();
     return row ? view(row) : null;
   }
 
   /** Remove a destination. Any payout already sent through it stays in the
    *  ledger — deleting where money went is not a thing this offers. */
   async disconnect(userId: string, id: number): Promise<boolean> {
-    const rows = await this.db.delete(payoutConnections)
-      .where(and(eq(payoutConnections.userId, userId), eq(payoutConnections.id, id))).returning({ id: payoutConnections.id });
+    // The sealed credential goes with it: `credentials.connectionId` cascades.
+    const rows = await this.db.delete(connections)
+      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT), eq(connections.id, id)))
+      .returning({ id: connections.id });
     if (rows.length === 0) return false;
     // Promote whatever is left, so removing the default never leaves a person
     // with connected accounts and nowhere to be paid.
-    const [next] = await this.db.select({ id: payoutConnections.id }).from(payoutConnections)
-      .where(eq(payoutConnections.userId, userId)).orderBy(desc(payoutConnections.createdAt)).limit(1);
+    const [next] = await this.db.select({ id: connections.id }).from(connections)
+      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT)))
+      .orderBy(desc(connections.createdAt)).limit(1);
     if (next) await this.setDefault(userId, next.id);
     return true;
   }
 
-  private async openCredential(row: typeof payoutConnections.$inferSelect): Promise<PayoutCredential | null> {
-    const blob = await decryptCredentials(row.credentialEnc, row.credentialIv, credentialSecret(this.env), row.tenantId);
+  private async openCredential(row: ConnectionRow): Promise<PayoutCredential | null> {
+    const [secret] = await this.db.select({ enc: credentials.secretEnc, iv: credentials.secretIv })
+      .from(credentials)
+      .where(and(
+        eq(credentials.connectionId, row.id),
+        eq(credentials.tenantId, row.tenantId),
+        eq(credentials.purpose, PAYOUT_SECRET),
+      )).limit(1);
+    if (!secret) return null;
+    const blob = await decryptCredentials(secret.enc, secret.iv, credentialSecret(this.env), row.tenantId);
     if (!blob) return null;
     return blob as unknown as PayoutCredential;
   }
@@ -247,17 +334,17 @@ export class PayoutAccountService {
     }
     const currency = (input.currency ?? 'USD').toUpperCase();
 
-    const [row] = await this.db.select().from(payoutConnections)
-      .where(and(eq(payoutConnections.userId, input.userId), eq(payoutConnections.isDefault, true))).limit(1);
+    const [row] = await this.db.select().from(connections)
+      .where(and(eq(connections.userId, input.userId), eq(connections.capability, PAYOUT), IS_DEFAULT)).limit(1);
 
     let result: PayoutResult;
     let providerName = 'webhook';
 
     if (row) {
-      const provider = getPayoutProvider(row.provider);
+      const provider = getPayoutProvider(row.vendor);
       const credential = provider ? await this.openCredential(row) : null;
       if (!provider) {
-        result = { ok: false, error: `Unknown payout provider "${row.provider}"`, retryable: false };
+        result = { ok: false, error: `Unknown payout provider "${row.vendor}"`, retryable: false };
       } else if (!credential) {
         result = { ok: false, error: 'Payout credential could not be opened — reconnect the account', retryable: false };
       } else {
@@ -272,11 +359,13 @@ export class PayoutAccountService {
           amountCents: input.amountCents, currency, reference: input.reference, memo: input.memo,
         });
       }
-      await this.db.update(payoutConnections)
+      // `lastSyncedAt` IS "when money last left here" for a payout connection —
+      // the kernel's word for the last successful use of the connection.
+      await this.db.update(connections)
         .set(result.ok
-          ? { lastPayoutAt: new Date(), lastError: null, updatedAt: new Date() }
+          ? { lastSyncedAt: new Date(), lastError: null, updatedAt: new Date() }
           : { lastError: result.error.slice(0, 500), updatedAt: new Date() })
-        .where(eq(payoutConnections.id, row.id));
+        .where(eq(connections.id, row.id));
     } else if (isPayoutsConfigured(this.env)) {
       const legacy = await createWebhookPayout(this.env, {
         invoiceId: input.reference, amountCents: input.amountCents, currency,

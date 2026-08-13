@@ -194,51 +194,9 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 
 
 // ═══ payouts (migration 0459) ═══
-/**
- * Where an earner's money goes — one row per person per payout provider.
- *
- * The SIXTH connection of the same shape (mailbox, drive, calendar, board,
- * connector, payout), and it sits here for the reason this file exists: a payout
- * destination is a connected third party with a sealed credential, an expiry and
- * a reconnect state, which is the paragraph above written once more.
- *
- * Two things it does NOT share with the mailbox rows, both deliberate:
- *
- *   • It is keyed by USER, not by tenant+user. Money follows the person — a sales
- *     associate who is a member of two workspaces has one bank account, and
- *     making them re-enter it per workspace would be a second copy of one fact.
- *     `tenantId` is kept for the encryption scope and for scoping the audit, not
- *     as part of the key.
- *   • `isDefault` picks the destination when several are connected. Enforced by a
- *     partial unique index rather than by application code, because "two rows
- *     both say they are the default" is a data question.
- */
-export const payoutConnections = pgTable('payout_connections', {
-  id:           serial('id').primaryKey(),
-  /** The encryption scope for the sealed credential; NOT part of the identity. */
-  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  /** users.id. No FK, matching the sibling connection tables — a deleted user's
-   *  destination fails closed rather than cascading away the payout audit. */
-  userId:       varchar('user_id', { length: 64 }).notNull(),
-  /** 'stripe' | 'paypal' | 'bank' | 'wise' — a value, never a table. */
-  provider:     varchar('provider', { length: 24 }).notNull(),
-  /** Masked, safe to render: "Chase •••• 4321", "ada@example.com". */
-  accountLabel: varchar('account_label', { length: 255 }).notNull().default(''),
-  currency:     varchar('currency', { length: 8 }),
-  country:      varchar('country', { length: 8 }),
-  /** The vendor's id for the connected account (`acct_…`, a PayPal payer id). */
-  externalAccountId: varchar('external_account_id', { length: 128 }),
-  /** Sealed credential blob — token set for OAuth, typed fields otherwise. */
-  credentialEnc: text('credential_enc').notNull(),
-  credentialIv:  varchar('credential_iv', { length: 64 }).notNull(),
-  /** 'connected' | 'expired' | 'revoked' — same vocabulary as every sibling. */
-  status:       varchar('status', { length: 16 }).notNull().default('connected'),
-  isDefault:    boolean('is_default').notNull().default(false),
-  lastError:    text('last_error'),
-  lastPayoutAt: timestamp('last_payout_at'),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_payout_connections_user_provider').on(t.userId, t.provider),
-  index('idx_payout_connections_user').on(t.userId, t.status),
-]);
+// A payout destination has NO table here. It is a `connections` row with
+// capability='payout' and a `credentials` row holding the sealed credential —
+// the kernel primitive, reached through PayoutAccountService. It was briefly a
+// `payout_connections` table whose own comment called it "the SIXTH connection
+// of the same shape"; `check-shape-lint` is the reason that sentence is now an
+// argument against the table rather than a note beside it.
