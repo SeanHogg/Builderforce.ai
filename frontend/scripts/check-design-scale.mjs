@@ -183,6 +183,11 @@ const COLOUR_EXEMPT = [
   /^lib\/vanillaDefaults\.ts$/,
 
   // ---- Colour that is not ours to theme ---------------------------------
+  // A consumer that cannot read a variable: `<input type="color">` takes a
+  // literal `#rrggbb` and nothing else, so the pen tray's swatch states the hex
+  // of the default stroke token until the author picks a colour of their own —
+  // which we then persist as THEIR value. One constant, `DRAWING_FALLBACK_HEX`.
+  /^components\/creation-canvas\/CreationCanvas\.tsx$/,
   // Third-party BRAND marks. WhatsApp green is WhatsApp's; it does not flip
   // because the viewer picked light mode.
   /^app\/agents\/integrations\/page\.tsx$/,

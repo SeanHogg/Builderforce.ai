@@ -88,12 +88,12 @@ export function BookingClient({ token }: { token: string }) {
         display: 'grid',
         placeItems: 'center',
         padding: 'clamp(16px, 5vw, 48px)',
-        background: 'var(--bg-deep, #0b0d10)',
-        color: 'var(--text-primary, #f5f7fa)',
+        background: 'var(--bg-deep)',
+        color: 'var(--text-primary)',
       }}
     >
       <div style={{ width: '100%', maxWidth: '32rem', display: 'grid', gap: '1rem' }}>
-        {status === 'loading' && <p style={{ color: 'var(--text-secondary, #9aa4b2)' }}>{t('loading')}</p>}
+        {status === 'loading' && <p style={{ color: 'var(--text-secondary)' }}>{t('loading')}</p>}
 
         {status === 'invalid' && (
           <section style={card()}>
@@ -118,17 +118,17 @@ export function BookingClient({ token }: { token: string }) {
           <section style={card()}>
             <h1 style={heading()}>{t('title')}</h1>
             <p style={body()}>{t('intro', { timezone })}</p>
-            <p style={{ ...body(), color: 'var(--text-secondary, #9aa4b2)' }}>
+            <p style={{ ...body(), color: 'var(--text-secondary)' }}>
               {t('duration', { count: view?.durationMinutes ?? 30 })}
             </p>
 
             {error && (
-              <p role="alert" style={{ ...body(), color: 'var(--error, #d64545)' }}>{error}</p>
+              <p role="alert" style={{ ...body(), color: 'var(--error)' }}>{error}</p>
             )}
 
             {slots.length === 0 ? (
               <>
-                <h2 style={{ ...heading(), fontSize: '1rem' }}>{t('none')}</h2>
+                <h2 style={{ ...heading(), fontSize: 'var(--font-size-card-title)' }}>{t('none')}</h2>
                 <p style={body()}>{t('noneDetail')}</p>
               </>
             ) : (
@@ -148,10 +148,10 @@ export function BookingClient({ token }: { token: string }) {
                       // anything else.
                       minHeight: '2.75rem',
                       padding: '0.75rem 1rem',
-                      borderRadius: 'var(--radius-md, 10px)',
-                      border: '1px solid var(--border, #2a2f37)',
-                      background: busy === slot.startISO ? 'var(--surface-2, #1b1f26)' : 'var(--surface, #14171c)',
-                      color: 'var(--text-primary, #f5f7fa)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border)',
+                      background: busy === slot.startISO ? 'var(--surface-2)' : 'var(--surface)',
+                      color: 'var(--text-primary)',
                       font: 'inherit',
                       cursor: busy ? 'progress' : 'pointer',
                       textAlign: 'left',
@@ -170,23 +170,25 @@ export function BookingClient({ token }: { token: string }) {
 }
 
 /** Inline styles rather than a module: this page is deliberately self-contained, and
- *  every value is a theme token with a literal fallback so both themes are covered even
- *  on a surface that never mounts the app shell that normally defines them. */
+ *  every value is a theme token, so it follows the viewer's theme like everything else.
+ *  It used to carry a DARK literal beside each token as a fallback — which was the one
+ *  way this page could have rendered dark-on-dark in light mode, since the root layout
+ *  loads `globals.css` on every route and the tokens have never been absent. */
 function card(): React.CSSProperties {
   return {
     display: 'grid',
     gap: '0.75rem',
     padding: 'clamp(16px, 4vw, 28px)',
-    borderRadius: 'var(--radius-lg, 14px)',
-    border: '1px solid var(--border, #2a2f37)',
-    background: 'var(--surface, #14171c)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
   };
 }
 
 function heading(): React.CSSProperties {
-  return { margin: 0, fontSize: 'clamp(1.15rem, 4vw, 1.5rem)', color: 'var(--text-primary, #f5f7fa)' };
+  return { margin: 0, fontSize: 'clamp(1.15rem, 4vw, 1.5rem)', color: 'var(--text-primary)' };
 }
 
 function body(): React.CSSProperties {
-  return { margin: 0, lineHeight: 1.5, color: 'var(--text-primary, #f5f7fa)' };
+  return { margin: 0, lineHeight: 1.5, color: 'var(--text-primary)' };
 }

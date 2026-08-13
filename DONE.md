@@ -1,3 +1,27 @@
+## RESOLVED 2026-08-13 - `check:design-scale` back to green: the version/legal strip moved corner, and the ratchet that guards it was already red
+
+Moving the version + Terms/Privacy strip out of the sidebar and into the frame's bottom-right corner ran
+through `npm run check:design-scale`, which was **already failing on committed code** - three ratchets over
+baseline at `a15a1485c`. A red guard hides every later regression ([[build-guard-ratchets]]), so the move
+could not be verified until it was green again.
+
+- **`app/book/[token]/BookingClient.tsx` - 15 dead literal fallbacks and one typed font size.** Every
+  colour was written `var(--token, #darkhex)`. The root layout loads `globals.css` on every route, so the
+  tokens have never been absent and the fallbacks were dead - and had one ever fired, the page would have
+  rendered a DARK sheet at a light-mode viewer, which is the exact bug the fallback was there to prevent.
+  Fallbacks dropped; `fontSize: '1rem'` on the no-slots heading now names its role, `var(--font-size-card-title)`.
+- **`lib/markdownPipeline.ts` - KaTeX `errorColor`.** `var(--error-text, #ef4444)` -> `var(--error-text)`;
+  KaTeX writes the string into an inline style, where the variable resolves.
+- **Two unsnapped corners.** `.katex-error` (4px, `globals.css`) and `.dataGridFormulaErrors` (5px,
+  `CreationCanvas.module.css`) -> `var(--radius-sm)`. Both are inline error chips; the scale is 6/8/12/16/pill.
+- **`CreationCanvas.tsx` exempted, with its reason.** `DRAWING_FALLBACK_HEX` feeds an `<input type="color">`,
+  which takes a literal `#rrggbb` and nothing else - the guard's own stated exemption (a consumer that cannot
+  read a variable, holding a colour the AUTHOR picks and we persist). Added to `COLOUR_EXEMPT` in
+  `scripts/check-design-scale.mjs` rather than papered over with a baseline bump.
+
+`0 literal-hex files, 1 off-scale radius, 3827 literal font sizes, 0 public column literals - all four at
+baseline.` No baseline was raised.
+
 ## RESOLVED 2026-08-13 - "What is the canvas missing for a Recruiter?": the funnel before the hire, and the money after it
 
 A recruiter's review of the Creation Canvas found eight gaps, and all eight are now closed. The structural

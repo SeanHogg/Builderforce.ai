@@ -31,5 +31,5 @@ import type { PluggableList } from 'unified';
 export const MARKDOWN_REMARK_PLUGINS: PluggableList = [remarkGfm, remarkMath];
 
 export const MARKDOWN_REHYPE_PLUGINS: PluggableList = [
-  [rehypeKatex, { throwOnError: false, errorColor: 'var(--error-text, #ef4444)', strict: false }],
+  [rehypeKatex, { throwOnError: false, errorColor: 'var(--error-text)', strict: false }],
 ];

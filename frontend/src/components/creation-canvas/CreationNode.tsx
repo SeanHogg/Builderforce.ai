@@ -1491,7 +1491,24 @@ function FileBody({ data }: { data: CreationNodeData }) {
 
 function KpiBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
-  return <div className={styles.kpis}><div><small>{data.title}</small><strong>{String(data.value ?? '—')}{data.unit ? ` ${String(data.unit)}` : ''}</strong><em>{data.trend ? String(data.trend) : data.target != null ? t('targetValue', { value: String(data.target) }) : ''}</em></div></div>;
+  // The interval renders WITH the value rather than under it: a point estimate and its
+  // uncertainty read as one number or the reader takes the first and leaves.
+  const low = typeof data.ciLow === 'number' ? data.ciLow : null;
+  const high = typeof data.ciHigh === 'number' ? data.ciHigh : null;
+  const interval = low != null && high != null ? `${low} – ${high}` : null;
+  const sampleSize = typeof data.sampleSize === 'number' ? data.sampleSize : null;
+  return (
+    <div className={styles.kpis}>
+      <div>
+        <small>{data.title}</small>
+        <strong>{String(data.value ?? '—')}{data.unit ? ` ${String(data.unit)}` : ''}</strong>
+        {interval && <em>{t('confidenceInterval', { interval })}</em>}
+        <em>{data.trend ? String(data.trend) : data.target != null ? t('targetValue', { value: String(data.target) }) : ''}</em>
+        {sampleSize != null && <em>{t('sampleSize', { count: sampleSize })}</em>}
+      </div>
+      <BasisNotice basis={data.basis} />
+    </div>
+  );
 }
 
 function EvaluationBody({ data, onOpen }: { data: CreationNodeData; onOpen?: () => void }) {

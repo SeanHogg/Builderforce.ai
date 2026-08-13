@@ -2030,7 +2030,7 @@
 .dataGridFormulaErrors {
   margin: 4px 0 0;
   padding: 4px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   line-height: 1.35;
   color: var(--danger-text);

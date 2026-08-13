@@ -5187,6 +5187,6 @@ select.input option {
 .katex-error {
   color: var(--error-text);
   background: var(--error-bg, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0 2px;
 }

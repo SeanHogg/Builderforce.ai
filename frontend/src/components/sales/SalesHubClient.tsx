@@ -35,6 +35,11 @@ import { SalesReportView } from '@/components/sales/SalesReportView';
 import { InboxClient } from '@/app/inbox/InboxClient';
 import { MEDIA_KIT } from '@/lib/content';
 import {
+  usePublishReferenceChrome,
+  usePublishReferenceSelect,
+  useReferenceRailActive,
+} from '@/lib/referenceChrome';
+import {
   salesApi,
   type SalesLead,
   type SalesReport,
@@ -135,6 +140,22 @@ export default function SalesHubClient() {
     { id: 'inbox', label: t('tab.inbox'), icon: '✉️', href: '/sales?sub=inbox' },
     { id: 'kit', label: t('tab.kit'), icon: '🗂', href: '/sales?sub=kit' },
   ];
+
+  // The hub names ITSELF in the panel, exactly as `/dashboard` does. Neither is a
+  // nav group for every account — the rail row exists only in `SALES_NAV_GROUPS`,
+  // and the footer's "Sell Builderforce" hands ANY signed-in person here — so
+  // without this the panel header read "Panel" for everyone but an associate.
+  // Its six sub-views become the index rail; they are VIEWS rather than anchors
+  // (one is in the DOM at a time), so the rail switches instead of scrolling.
+  usePublishReferenceChrome({
+    title: t('title'),
+    sections: subTabs.map(({ id, label }) => ({ id, label })),
+    activeId: sub,
+  });
+  usePublishReferenceSelect((id) => router.push(id ? `/sales?sub=${id}` : '/sales'));
+  // In the panel the rail IS this bar, so rendering it inline would be the same
+  // six choices twice. Standalone there is no rail and it is the only switcher.
+  const railHasTabs = useReferenceRailActive();
 
   const referral = referralUrl(codes.referralCode);
   const sales = referralUrl(codes.salesCode);
@@ -299,7 +320,7 @@ export default function SalesHubClient() {
     <PageContainer width="full" style={{ padding: '24px 28px' }}>
       <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
       <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 18px' }}>{t('intro')}</p>
-      <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
+      {!railHasTabs && <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />}
       {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</p>}
       {sub === 'leads' ? renderLeads()
         : sub === 'reports' ? (report ? <SalesReportView report={report} window={window_} onWindowChange={setWindow} /> : <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)' }}>{t('loading')}</p>)

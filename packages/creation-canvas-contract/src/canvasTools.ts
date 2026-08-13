@@ -126,6 +126,25 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   'canvas_run_data_quality',
   'canvas_define_metric',
   'canvas_trace_lineage',
+  // ── Data science: analysis, model comparison, evaluation, governance ─────────
+  // Every one is pure computation over the visitor's OWN board, which is what makes
+  // them guest-safe on the same reasoning as the data-architecture set above.
+  //
+  // `canvas_run_notebook` deserves its own note: it EXECUTES code, which sounds like
+  // the least guest-safe thing here and is the opposite. The kernel is a Web Worker
+  // with `fetch`, `XMLHttpRequest`, `importScripts` and `WebSocket` deleted from its
+  // global scope before any cell compiles, the rows are structured-cloned in, and it
+  // is terminated on a hard timeout. A cell can compute and cannot reach the network,
+  // the DOM or the session — so it is strictly more contained than a tool that calls
+  // an API. Gating it would make "analyse this CSV" require an account, which is the
+  // single most common thing a visitor arrives wanting to do.
+  'canvas_run_notebook',
+  'canvas_compare_runs',
+  'canvas_sample_for_labels',
+  'canvas_forecast_series',
+  // Governance is authored locally and enforced locally. A guest who declares that a
+  // dataset may not be used for training should see that refusal honoured.
+  'canvas_set_data_use',
   // ── QA ───────────────────────────────────────────────────────────────────────
   // "Create automation tests for my website" is answered ENTIRELY in the visitor's own
   // browser: route discovery is a regex over HTML the model already fetched with
@@ -211,6 +230,12 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_list_data_sources',
   'canvas_add_data_source',
   'canvas_query_data_source',
+  // Reads this workspace's fine-tuning runs (`/api/ide/training/*`) — a tenant
+  // resource with a tenant credential, so a guest has no runs to read. This is the
+  // tool that closes the loop a `build` object of modality "finetune" opens: without
+  // it the board launches a training run and can never see the loss curve or the
+  // scorecard it produced.
+  'canvas_read_training_run',
   // ── The recruiter's funnel (`/api/hiring/*`) ─────────────────────────────────
   // Account-required for the same reason `canvas_read_domain` is: every one reads or
   // writes tenant hiring data. The Recruiter built-in agent ships a good bio and, until
